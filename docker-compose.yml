@@ -1,0 +1,181 @@
+networks:
+  obs:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true
+
+volumes:
+  kafka:
+  prometheus:
+  grafana:
+  alertmanager:
+
+services:
+  kafka:
+    image: apache/kafka:4.1.1
+    container_name: kafka
+    hostname: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 6
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka:/var/lib/kafka/data
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - obs
+      - backend
+
+  otel-agent:
+    image: otel/opentelemetry-collector-contrib:0.145.0
+    command: ["--config=/etc/otel/agent.yaml"]
+    volumes:
+      - ./configs/otel-agent.yaml:/etc/otel/agent.yaml:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [obs]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    restart: unless-stopped
+
+  otel-ingester:
+    image: otel/opentelemetry-collector-contrib:0.145.0
+    command: ["--config=/etc/otel/ingester.yaml"]
+    volumes:
+      - ./configs/otel-ingester.yaml:/etc/otel/ingester.yaml:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    deploy:
+      replicas: 2
+    expose:
+      - "8889"
+    networks: [backend]
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: -config.file=/etc/loki/loki.yaml
+    volumes:
+      - ./configs/loki.yaml:/etc/loki/loki.yaml:ro
+    expose:
+      - "3100"
+    networks: [backend]
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.4.1
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./configs/tempo.yaml:/etc/tempo/tempo.yaml:ro
+    expose:
+      - "3200"
+      - "4317"
+    networks: [backend]
+    restart: unless-stopped
+
+  beobservant:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      GRAFANA_PASSWORD: "${GRAFANA_PASSWORD:-admin}"
+    ports:
+      - "4319:4319"
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    networks:
+      - obs
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4319/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    volumes:
+      - ./configs/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - ./configs/rules/alerts.yaml:/etc/prometheus/alerts.yml:ro
+      - prometheus:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    depends_on:
+      - beobservant
+      - alertmanager
+    expose:
+      - "9090"
+    networks: [backend]
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    volumes:
+      - ./configs/alertmanager.yaml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    expose:
+      - "9093"
+    networks: [backend]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.1
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:-admin}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./configs/grafana/grafana-datasource.yaml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - grafana:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - obs
+      - backend
+    restart: unless-stopped

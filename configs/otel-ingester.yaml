@@ -1,0 +1,56 @@
+receivers:
+  kafka:
+    brokers: ["kafka:9092"]
+    protocol_version: "2.0.0"
+    logs:
+      topics: ["otel-logs"]
+      encoding: otlp_proto
+    traces:
+      topics: ["otel-traces"]
+      encoding: otlp_proto
+    metrics:
+      topics: ["otel-metrics"]
+      encoding: otlp_proto
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+exporters:
+  debug:
+    verbosity: normal
+
+  otlphttp/loki:
+    endpoint: "http://loki:3100/otlp"
+    tls:
+      insecure: true
+    
+  otlp/tempo:
+    endpoint: "tempo:4317"
+    tls:
+      insecure: true
+
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+service:
+  pipelines:
+    logs:
+      receivers: [kafka]
+      processors: [memory_limiter]
+      exporters: [debug, otlphttp/loki]
+    
+    traces:
+      receivers: [kafka]
+      processors: [memory_limiter]
+      exporters: [debug, otlp/tempo]
+
+    metrics:
+      receivers: [kafka]
+      processors: [memory_limiter]
+      exporters: [debug, prometheus]
+
+  telemetry:
+    logs:
+      level: info

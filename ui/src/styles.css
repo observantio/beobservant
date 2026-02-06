@@ -1,0 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:wght@400;700&family=Ubuntu:wght@300;400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root,
+  :root[data-theme='light'],
+  body[data-theme='light'] {
+    /* Light Theme Colors */
+    --sre-bg: #f8fafc;
+    --sre-bg-alt: #f1f5f9;
+    --sre-bg-card: #ffffff;
+    --sre-surface: #ffffff;
+    --sre-surface-light: #f8fafc;
+    --sre-border: #e2e8f0;
+    --sre-text: #1e293b;
+    --sre-text-muted: #64748b;
+    --sre-text-subtle: #94a3b8;
+    color-scheme: light;
+  }
+
+  .dark,
+  :root[data-theme='dark'],
+  body[data-theme='dark'] {
+    /* Dark Theme Colors */
+    --sre-bg: #0a0e1a;
+    --sre-bg-alt: #0f1420;
+    --sre-bg-card: #1a1f2e;
+    --sre-surface: #1a1f2e;
+    --sre-surface-light: #252b3d;
+    --sre-border: #2a3142;
+    --sre-text: #e6edf3;
+    --sre-text-muted: #8b93a8;
+    --sre-text-subtle: #656d84;
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
+  body {
+    background: linear-gradient(to bottom, var(--sre-bg), var(--sre-bg-alt), var(--sre-bg));
+    color: var(--sre-text);
+    @apply font-mono antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    overflow-y: auto;
+  }
+
+  #root {
+    overflow-x: hidden;
+  }
+
+  * {
+    @apply box-border;
+  }
+}
+
+@layer components {
+  /* Legacy support - can be removed once all components use Tailwind */
+  .app {
+    @apply min-h-screen;
+  }
+
+  .container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .glow {
+    text-shadow: 0 0 10px currentColor;
+  }
+}
+
