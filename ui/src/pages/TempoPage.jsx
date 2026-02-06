@@ -386,7 +386,7 @@ const TraceTimeline = ({ trace, onClose }) => {
           </button>
         </div>
         
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+        <div className="p-6 overflow-y-auto overflow-x-hidden max-h-[calc(90vh-80px)]">
           <div className="bg-sre-surface/50 border border-sre-border rounded-lg p-4 mb-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
@@ -422,9 +422,9 @@ const TraceTimeline = ({ trace, onClose }) => {
               return (
                 <div key={span.spanId || span.spanID || idx} className="group relative" style={{ paddingLeft: `${depth * 20}px` }}>
                   <div className="flex items-center gap-3">
-                    <div className="min-w-[200px] max-w-[200px]">
-                      <div className="text-sm font-semibold text-sre-text truncate">{span.operationName}</div>
-                      <div className="text-xs text-sre-text-muted truncate">{span.serviceName}</div>
+                    <div className="min-w-[160px] max-w-[220px] break-words whitespace-normal">
+                      <div className="text-sm font-semibold text-sre-text break-words whitespace-normal">{span.operationName}</div>
+                      <div className="text-xs text-sre-text-muted break-words whitespace-normal">{span.serviceName}</div>
                     </div>
                     
                     <div className="flex-1 relative h-8 bg-sre-surface rounded border border-sre-border">
@@ -447,13 +447,13 @@ const TraceTimeline = ({ trace, onClose }) => {
                             const k = t?.key || t?.k || `tag${idx2}`
                             const v = t?.value ?? t?.v ?? t?.val ?? t
                             return (
-                              <span key={k + idx2} className="text-[10px] px-2 py-0.5 bg-sre-surface border border-sre-border rounded text-sre-text-muted">
+                              <span key={k + idx2} className="text-[10px] px-2 py-0.5 bg-sre-surface border border-sre-border rounded text-sre-text-muted break-words whitespace-normal" style={{ maxWidth: 'calc(100% - 240px)' }}>
                                 {k}: {typeof v === 'object' ? JSON.stringify(v) : String(v)}
                               </span>
                             )
                           })
                         : Object.entries(span.tags).slice(0, 5).map(([key, value]) => (
-                            <span key={key} className="text-[10px] px-2 py-0.5 bg-sre-surface border border-sre-border rounded text-sre-text-muted">
+                            <span key={key} className="text-[10px] px-2 py-0.5 bg-sre-surface border border-sre-border rounded text-sre-text-muted break-words whitespace-normal" style={{ maxWidth: 'calc(100% - 240px)' }}>
                               {key}: {typeof value === 'object' ? JSON.stringify(value) : String(value)}
                             </span>
                           ))}
