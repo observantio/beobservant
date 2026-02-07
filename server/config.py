@@ -63,6 +63,5 @@ class Constants:
     SERVICE_ALERTMANAGER: str = "AlertManager"
     SERVICE_GRAFANA: str = "Grafana"
 
-
 config = Config()
 constants = Constants()

@@ -1,8 +1,8 @@
 """AlertManager service for alert operations."""
 import httpx
 import logging
-from typing import List, Optional, Dict, Any
-from datetime import datetime
+from typing import List, Optional, Dict
+from datetime import datetime, timezone, timedelta
 
 from models.alertmanager_models import (
     Alert, AlertGroup, Silence, SilenceCreate, 
@@ -48,7 +48,6 @@ class AlertManagerService:
         """
         params = {}
         
-        # Build filter parameter
         filters = []
         if filter_labels:
             for key, value in filter_labels.items():
@@ -124,7 +123,6 @@ class AlertManagerService:
         """
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                # Convert to dict and handle aliases
                 alert_data = [alert.model_dump(by_alias=True) for alert in alerts]
                 
                 response = await client.post(
@@ -297,13 +295,16 @@ class AlertManagerService:
             for k, v in filter_labels.items()
         ]
         
-        now = datetime.utcnow()
-        end = datetime.utcnow().replace(second=now.second + 60)
+        now = datetime.now(timezone.utc)
+        end = now + timedelta(seconds=60)
+        
+        starts_at = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        ends_at = end.replace(microsecond=0).isoformat().replace("+00:00", "Z")
         
         silence = SilenceCreate(
             matchers=matchers,
-            startsAt=now.isoformat() + "Z",
-            endsAt=end.isoformat() + "Z",
+            startsAt=starts_at,
+            endsAt=ends_at,
             createdBy="beobservant",
             comment="Alert deletion via API"
         )

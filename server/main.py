@@ -1,4 +1,5 @@
-"""beObservant - Observability Control Plane.
+"""
+BeObservant - Observability Control Plane.
 
 A FastAPI server that provides a unified API for managing and querying
 observability backends: Tempo (traces), Loki (logs), AlertManager (alerts),
@@ -39,7 +40,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request, 
@@ -54,7 +54,6 @@ async def validation_exception_handler(
         },
     )
 
-
 @app.exception_handler(Exception)
 async def general_exception_handler(
     request: Request, 
@@ -66,7 +65,6 @@ async def general_exception_handler(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": constants.ERROR_INTERNAL},
     )
-
 
 app.include_router(tempo_router.router)
 app.include_router(loki_router.router)
@@ -91,7 +89,6 @@ async def root() -> dict:
         "health": "/health"
     }
 
-
 @app.get("/health", tags=["health"])
 async def health() -> dict:
     """Health check endpoint for monitoring and load balancers."""
@@ -100,7 +97,6 @@ async def health() -> dict:
         "service": constants.APP_NAME,
         "version": constants.APP_VERSION
     }
-
 
 if __name__ == "__main__":
     import uvicorn
