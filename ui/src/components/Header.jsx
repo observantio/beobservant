@@ -1,13 +1,9 @@
-import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { Button } from './ui'
 import ThemeToggle from './ThemeToggle'
 
 export default function Header() {
-
   return (
-    <>
-      <header className="sticky top-0 z-50 bg-sre-surface/80 backdrop-blur-xl border-b border-sre-border shadow-lg">
+    <header className="sticky top-0 z-50 bg-sre-surface/80 backdrop-blur-xl border-b border-sre-border shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo & Brand */}
@@ -164,7 +160,5 @@ export default function Header() {
           </NavLink>
         </div>
       </header>
-
-    </>
   )
 }

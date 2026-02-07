@@ -137,6 +137,12 @@ export function Badge({ children, variant = 'default', className, ...props }) {
     )
 }
 
+Badge.propTypes = {
+  children: PropTypes.node.isRequired,
+  variant: PropTypes.oneOf(['default', 'success', 'warning', 'error', 'info', 'neon']),
+  className: PropTypes.string,
+}
+
 /**
  * Input component with SRE styling
  */
@@ -167,6 +173,20 @@ export function Input({ label, error, helperText, className, ...props }) {
       )}
     </div>
   )
+}
+
+Checkbox.propTypes = {
+  label: PropTypes.string,
+  error: PropTypes.string,
+  helperText: PropTypes.string,
+  className: PropTypes.string,
+}
+
+Input.propTypes = {
+  label: PropTypes.string,
+  error: PropTypes.string,
+  helperText: PropTypes.string,
+  className: PropTypes.string,
 }
 
 /**
@@ -201,6 +221,14 @@ export function Select({ label, error, helperText, children, className, ...props
       )}
     </div>
   )
+}
+
+Select.propTypes = {
+  label: PropTypes.string,
+  error: PropTypes.string,
+  helperText: PropTypes.string,
+  children: PropTypes.node.isRequired,
+  className: PropTypes.string,
 }
 
 /**
@@ -245,6 +273,15 @@ export function MetricCard({ label, value, trend, status, icon, className }) {
   )
 }
 
+MetricCard.propTypes = {
+  label: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  trend: PropTypes.string,
+  status: PropTypes.oneOf(['success', 'warning', 'error', 'info']),
+  icon: PropTypes.node,
+  className: PropTypes.string,
+}
+
 /**
  * Code block component with syntax highlighting
  */
@@ -261,6 +298,12 @@ export function CodeBlock({ children, language = 'json', className }) {
       <code className={`language-${language}`}>{children}</code>
     </pre>
   )
+}
+
+CodeBlock.propTypes = {
+  children: PropTypes.node.isRequired,
+  language: PropTypes.string,
+  className: PropTypes.string,
 }
 
 /**
@@ -302,6 +345,14 @@ export function Alert({ children, variant = 'info', title, onClose, className })
   )
 }
 
+Alert.propTypes = {
+  children: PropTypes.node.isRequired,
+  variant: PropTypes.oneOf(['info', 'success', 'warning', 'error']),
+  title: PropTypes.string,
+  onClose: PropTypes.func,
+  className: PropTypes.string,
+}
+
 /**
  * Loading spinner component
  */
@@ -338,11 +389,16 @@ export function Spinner({ size = 'md', className }) {
   )
 }
 
+Spinner.propTypes = {
+  size: PropTypes.oneOf(['sm', 'md', 'lg']),
+  className: PropTypes.string,
+}
+
 /**
  * Simple sparkline chart using SVG
  */
 export function Sparkline({ data = [], width = 200, height = 40, stroke = 'currentColor', strokeWidth = 2, fill = 'none', className }) {
-  if (!data || !data.length) {
+  if (!data?.length) {
     return (
       <div className={clsx('flex items-center justify-center text-xs text-sre-text-muted', className)} style={{width, height}}>
         no data
@@ -352,7 +408,7 @@ export function Sparkline({ data = [], width = 200, height = 40, stroke = 'curre
 
   const values = data
     .map(d => (typeof d === 'number' ? d : (d?.[1] ?? d)))
-    .map(v => Number(v))
+    .map(Number)
     .filter(v => Number.isFinite(v))
 
   if (!values.length) {
@@ -375,7 +431,7 @@ export function Sparkline({ data = [], width = 200, height = 40, stroke = 'curre
     return `${x},${y}`
   }).join(' ')
 
-  const areaPoints = fill !== 'none' ? `0,${height} ${points} ${width},${height}` : points
+  const areaPoints = fill === 'none' ? points : `0,${height} ${points} ${width},${height}`
 
   return (
     <svg width={width} height={height} className={className} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
@@ -398,6 +454,16 @@ export function Sparkline({ data = [], width = 200, height = 40, stroke = 'curre
   )
 }
 
+Sparkline.propTypes = {
+  data: PropTypes.arrayOf(PropTypes.oneOfType([PropTypes.number, PropTypes.array])),
+  width: PropTypes.number,
+  height: PropTypes.number,
+  stroke: PropTypes.string,
+  strokeWidth: PropTypes.number,
+  fill: PropTypes.string,
+  className: PropTypes.string,
+}
+
 /**
  * Modal component for dialogs and overlays
  */
@@ -412,8 +478,6 @@ export function Modal({
   closeOnOverlayClick = true,
   className
 }) {
-  if (!isOpen) return null
-
   const sizes = {
     sm: 'max-w-md',
     md: 'max-w-2xl',
@@ -451,10 +515,18 @@ export function Modal({
     }
   }, [isOpen, onClose])
 
+  if (!isOpen) return null
+
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black animate-fade-in"
+    <dialog
+      open
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fade-in"
       onClick={handleOverlayClick}
+      onCancel={(e) => { e.preventDefault(); if (closeOnOverlayClick) onClose?.() }}
+      onKeyDown={(e) => { if (e.key === 'Escape' && closeOnOverlayClick) { e.preventDefault(); onClose?.() } }}
+      tabIndex={-1}
+      aria-modal="true"
+      aria-labelledby={title ? "modal-title" : undefined}
     >
       <div 
         className={clsx(
@@ -468,7 +540,7 @@ export function Modal({
         {/* Header */}
         {(title || showCloseButton) && (
           <div className="flex items-center justify-between px-6 py-4 border-sre-border">
-            <h2 className="text-xl font-bold text-sre-text">{title}</h2>
+            <h2 id="modal-title" className="text-xl font-bold text-sre-text">{title}</h2>
             {showCloseButton && (
               <button
                 onClick={onClose}
@@ -495,8 +567,20 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </dialog>
   )
+}
+
+Modal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  title: PropTypes.string,
+  children: PropTypes.node.isRequired,
+  footer: PropTypes.node,
+  size: PropTypes.oneOf(['sm', 'md', 'lg', 'xl', 'full']),
+  showCloseButton: PropTypes.bool,
+  closeOnOverlayClick: PropTypes.bool,
+  className: PropTypes.string,
 }
 
 /**
@@ -552,6 +636,18 @@ export function ConfirmDialog({
   )
 }
 
+ConfirmDialog.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onConfirm: PropTypes.func.isRequired,
+  title: PropTypes.string,
+  message: PropTypes.string.isRequired,
+  confirmText: PropTypes.string,
+  cancelText: PropTypes.string,
+  variant: PropTypes.oneOf(['primary', 'secondary', 'success', 'danger', 'ghost']),
+  loading: PropTypes.bool,
+}
+
 /**
  * Textarea component with SRE styling
  */
@@ -583,6 +679,14 @@ export function Textarea({ label, error, helperText, className, rows = 4, ...pro
       )}
     </div>
   )
+}
+
+Textarea.propTypes = {
+  label: PropTypes.string,
+  error: PropTypes.string,
+  helperText: PropTypes.string,
+  className: PropTypes.string,
+  rows: PropTypes.number,
 }
 
 /**

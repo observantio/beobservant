@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { fetchHealth, getAlerts } from '../api'
-import { Card, Badge, MetricCard, CodeBlock, Spinner } from './ui'
+import { Card, Badge, MetricCard, Spinner } from './ui'
 
 export default function Dashboard({ info }) {
   const [health, setHealth] = useState(null)
@@ -14,7 +14,6 @@ export default function Dashboard({ info }) {
       .catch(() => setHealth(null))
       .finally(() => setLoading(false))
 
-    // fetch active alerts count
     setLoadingAlerts(true)
     getAlerts()
       .then((data) => {

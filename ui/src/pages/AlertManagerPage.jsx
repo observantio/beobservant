@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import PropTypes from 'prop-types'
 import {
   getAlerts, getSilences, createSilence, deleteSilence,
   getAlertRules, createAlertRule, updateAlertRule, deleteAlertRule,
@@ -161,6 +162,13 @@ const RuleEditor = ({ rule, channels, onSave, onCancel }) => {
       </div>
     </form>
   )
+}
+
+RuleEditor.propTypes = {
+  rule: PropTypes.object,
+  channels: PropTypes.array,
+  onSave: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
 }
 
 const ChannelEditor = ({ channel, onSave, onCancel }) => {
@@ -334,6 +342,12 @@ const ChannelEditor = ({ channel, onSave, onCancel }) => {
   )
 }
 
+ChannelEditor.propTypes = {
+  channel: PropTypes.object,
+  onSave: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
+}
+
 const SilenceForm = ({ onSave, onCancel }) => {
   const [matchers, setMatchers] = useState([{ name: 'alertname', value: '', isRegex: false, isEqual: true }])
   const [duration, setDuration] = useState('1')
@@ -356,7 +370,7 @@ const SilenceForm = ({ onSave, onCancel }) => {
   const handleSubmit = (e) => {
     e.preventDefault()
     const startsAt = new Date().toISOString()
-    const endsAt = new Date(Date.now() + parseInt(duration) * 60 * 60 * 1000).toISOString()
+    const endsAt = new Date(Date.now() + Number.parseInt(duration) * 60 * 60 * 1000).toISOString()
     
     onSave({
       matchers,
@@ -427,6 +441,11 @@ const SilenceForm = ({ onSave, onCancel }) => {
       </div>
     </form>
   )
+}
+
+SilenceForm.propTypes = {
+  onSave: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
 }
 
 export default function AlertManagerPage() {

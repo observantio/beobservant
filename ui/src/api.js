@@ -123,24 +123,25 @@ export async function testNotificationChannel(channelId) {
 
 // Loki
 export async function queryLogs({ query, limit = 100, start, end, direction = 'backward', step }) {
-  const qs = []
-  qs.push(`query=${encodeURIComponent(query)}`)
-  qs.push(`limit=${limit}`)
-  if (start) qs.push(`start=${start}`)
-  if (end) qs.push(`end=${end}`)
-  if (direction) qs.push(`direction=${encodeURIComponent(direction)}`)
-  if (step) qs.push(`step=${step}`)
-  return request(`/api/loki/query?${qs.join('&')}`)
+  const params = new URLSearchParams()
+  params.append('query', query)
+  params.append('limit', limit.toString())
+  if (start) params.append('start', start)
+  if (end) params.append('end', end)
+  if (direction) params.append('direction', direction)
+  if (step) params.append('step', step)
+  return request(`/api/loki/query?${params.toString()}`)
 }
 export async function getLabels() {
   return request('/api/loki/labels')
 }
 export async function getLabelValues(label, { query, start, end } = {}) {
-  const qs = []
-  if (query) qs.push(`query=${encodeURIComponent(query)}`)
-  if (start) qs.push(`start=${start}`)
-  if (end) qs.push(`end=${end}`)
-  return request(`/api/loki/label/${encodeURIComponent(label)}/values${qs.length ? `?${qs.join('&')}` : ''}`)
+  const params = new URLSearchParams()
+  if (query) params.append('query', query)
+  if (start) params.append('start', start)
+  if (end) params.append('end', end)
+  const queryString = params.toString()
+  return request(`/api/loki/label/${encodeURIComponent(label)}/values${queryString ? `?${queryString}` : ''}`)
 }
 export async function searchLogs({ pattern, labels, start, end, limit = 100 }) {
   return request('/api/loki/search', {
@@ -157,20 +158,20 @@ export async function filterLogs({ labels, filters, start, end, limit = 100 }) {
   })
 }
 export async function aggregateLogs(query, { start, end, step = 60 } = {}) {
-  const qs = []
-  qs.push(`query=${encodeURIComponent(query)}`)
-  qs.push(`step=${step}`)
-  if (start) qs.push(`start=${start}`)
-  if (end) qs.push(`end=${end}`)
-  return request(`/api/loki/aggregate?${qs.join('&')}`)
+  const params = new URLSearchParams()
+  params.append('query', query)
+  params.append('step', step.toString())
+  if (start) params.append('start', start)
+  if (end) params.append('end', end)
+  return request(`/api/loki/aggregate?${params.toString()}`)
 }
 export async function getLogVolume(query, { start, end, step = 300 } = {}) {
-  const qs = []
-  qs.push(`query=${encodeURIComponent(query)}`)
-  qs.push(`step=${step}`)
-  if (start) qs.push(`start=${start}`)
-  if (end) qs.push(`end=${end}`)
-  return request(`/api/loki/volume?${qs.join('&')}`)
+  const params = new URLSearchParams()
+  params.append('query', query)
+  params.append('step', step.toString())
+  if (start) params.append('start', start)
+  if (end) params.append('end', end)
+  return request(`/api/loki/volume?${params.toString()}`)
 }
 
 // Tempo
@@ -194,7 +195,8 @@ export async function getTrace(traceID) {
 
 // Grafana
 export async function searchDashboards(q = '') {
-  return request(`/api/grafana/dashboards/search${q ? `?query=${encodeURIComponent(q)}` : ''}`)
+  const url = q ? `/api/grafana/dashboards/search?query=${encodeURIComponent(q)}` : '/api/grafana/dashboards/search'
+  return request(url)
 }
 export async function getDashboard(uid) {
   return request(`/api/grafana/dashboards/${encodeURIComponent(uid)}`)

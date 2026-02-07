@@ -1,4 +1,4 @@
-import React from 'react'
+import PropTypes from 'prop-types'
 import { useTheme } from '../contexts/ThemeContext'
 
 export default function ThemeToggle({ className = '' }) {
@@ -45,4 +45,12 @@ export default function ThemeToggle({ className = '' }) {
       )}
     </button>
   )
+}
+
+ThemeToggle.propTypes = {
+  className: PropTypes.string,
+}
+
+ThemeToggle.propTypes = {
+  className: PropTypes.string,
 }
