@@ -4,13 +4,11 @@ import logging
 import uuid
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-
 from models.alertmanager_models import (
     AlertRule, AlertRuleCreate, NotificationChannel, NotificationChannelCreate
 )
 
 logger = logging.getLogger(__name__)
-
 
 class StorageService:
     """Service for persisting alert rules and notification channels."""

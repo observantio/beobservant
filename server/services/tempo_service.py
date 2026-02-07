@@ -2,13 +2,16 @@
 import httpx
 import logging
 from typing import List, Optional, Dict, Any
-
 from models.tempo_models import Trace, TraceQuery, TraceResponse, Span
 from config import config
 from middleware.resilience import with_retry, with_timeout
 
 logger = logging.getLogger(__name__)
 
+# Constants for service tag keys used across the module
+SERVICE_NAME_KEY = "service.name"
+SERVICE_ALIAS_KEY = "service"
+SERVICE_KEYS = [SERVICE_NAME_KEY, SERVICE_ALIAS_KEY]
 
 class TempoService:
     """Service for interacting with Tempo tracing backend."""
@@ -116,7 +119,7 @@ class TempoService:
                 services = []
                 if "tagNames" in data:
                     for tag in data["tagNames"]:
-                        if tag in ["service.name", "service"]:
+                        if tag in SERVICE_KEYS:
                             values_response = await client.get(
                                 f"{self.tempo_url}/api/search/tag/{tag}/values"
                             )
@@ -148,7 +151,7 @@ class TempoService:
             for span in trace.spans:
                 operations.add(span.operation_name)
         
-        return sorted(list(operations))
+        return sorted(operations)
     
     async def get_trace_metrics(
         self,
@@ -210,7 +213,7 @@ class TempoService:
         
         tags = {}
         if query.service:
-            tags["service.name"] = query.service
+            tags[SERVICE_NAME_KEY] = query.service
         if query.operation:
             tags["name"] = query.operation
         if query.tags:
@@ -250,8 +253,8 @@ class TempoService:
         for batch in data.get("batches", []):
             resource_attrs = self._parse_attributes(batch.get("resource", {}).get("attributes", []))
             service_name = (
-                resource_attrs.get("service.name")
-                or resource_attrs.get("service")
+                resource_attrs.get(SERVICE_NAME_KEY)
+                or resource_attrs.get(SERVICE_ALIAS_KEY)
                 or resource_attrs.get("serviceName")
                 or "unknown"
             )
@@ -297,9 +300,9 @@ class TempoService:
             tags.append({"key": key, "value": value})
 
         # ensure service name is present in attributes/tags for UI parsing
-        if service_name and "service.name" not in attr_map:
-            attr_map["service.name"] = service_name
-            tags.append({"key": "service.name", "value": service_name})
+        if service_name and SERVICE_NAME_KEY not in attr_map:
+            attr_map[SERVICE_NAME_KEY] = service_name
+            tags.append({"key": SERVICE_NAME_KEY, "value": service_name})
 
         if resource_attrs:
             for rk, rv in resource_attrs.items():

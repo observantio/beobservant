@@ -1,14 +1,13 @@
 """Notification service for sending alerts through various channels."""
 import httpx
 import logging
-import json
-from typing import Dict, Any, List, Optional
+from typing import Optional
 from datetime import datetime
 
 from models.alertmanager_models import NotificationChannel, Alert, ChannelType
 
 logger = logging.getLogger(__name__)
-
+NO_VALUE = "(none)"
 
 class NotificationService:
     """Service for sending notifications through various channels."""
@@ -38,7 +37,7 @@ class NotificationService:
         
         try:
             if channel.type == ChannelType.EMAIL:
-                return await self._send_email(channel, alert, action)
+                return self._send_email(channel, alert, action)
             elif channel.type == ChannelType.SLACK:
                 return await self._send_slack(channel, alert, action)
             elif channel.type == ChannelType.TEAMS:
@@ -56,13 +55,11 @@ class NotificationService:
             logger.error(f"Error sending notification via {channel.name}: {e}")
             return False
     
-    async def _send_email(self, channel: NotificationChannel, alert: Alert, action: str) -> bool:
+    def _send_email(self, channel: NotificationChannel, alert: Alert, action: str) -> bool:
         """Send email notification."""
         config = channel.config
         
         subject = f"[{action.upper()}] {alert.labels.get('alertname', 'Alert')}"
-        body = self._format_alert_body(alert, action)
-        
         logger.info(f"Email notification: {config.get('to')} - {subject}")
         logger.info(f"Would send email via SMTP: {config.get('smtp_host')}:{config.get('smtp_port')}")
         
@@ -101,12 +98,12 @@ class NotificationService:
                     },
                     {
                         "title": "Summary",
-                        "value": summary or "(none)",
+                        "value": summary or NO_VALUE,
                         "short": False
                     },
                     {
                         "title": "Description",
-                        "value": description or "(none)",
+                        "value": description or NO_VALUE,
                         "short": False
                     }
                 ],
@@ -147,8 +144,8 @@ class NotificationService:
                     {"name": "Severity", "value": self._get_label(alert, 'severity', 'unknown')},
                     {"name": "Status", "value": action},
                     {"name": "Started", "value": alert.starts_at},
-                    {"name": "Summary", "value": summary or "(none)"},
-                    {"name": "Description", "value": description or "(none)"}
+                    {"name": "Summary", "value": summary or NO_VALUE},
+                    {"name": "Description", "value": description or NO_VALUE}
                 ]
             }]
         }
@@ -235,7 +232,7 @@ class NotificationService:
             logger.error("Opsgenie API key not configured")
             return False
         
-        url = f"https://api.opsgenie.com/v2/alerts"
+        url = "https://api.opsgenie.com/v2/alerts"
         headers = {"Authorization": f"GenieKey {api_key}"}
         
         summary = self._get_annotation(alert, "summary")

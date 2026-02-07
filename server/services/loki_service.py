@@ -3,15 +3,13 @@ import httpx
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-import json
 
 from models import (
     LogQuery, LogResponse, LogLabelsResponse, 
-    LogLabelValuesResponse, LogDirection
+    LogLabelValuesResponse
 )
 
 logger = logging.getLogger(__name__)
-
 
 class LokiService:
     """Service for interacting with Loki logging backend."""

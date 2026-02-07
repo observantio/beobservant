@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 import base64
 
 from models.grafana_models import (
-    Dashboard, DashboardCreate, DashboardUpdate, DashboardSearchResult,
+    DashboardCreate, DashboardUpdate, DashboardSearchResult,
     Datasource, DatasourceCreate, DatasourceUpdate, Folder
 )
 from config import config
@@ -32,7 +32,6 @@ class GrafanaService:
         """
         self.grafana_url = grafana_url.rstrip('/')
         self.timeout = config.DEFAULT_TIMEOUT
-        
         credentials = f"{username}:{password}"
         encoded = base64.b64encode(credentials.encode()).decode()
         self.auth_header = f"Basic {encoded}"
