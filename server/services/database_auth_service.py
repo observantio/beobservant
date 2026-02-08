@@ -1,0 +1,660 @@
+"""Database-backed authentication service with enterprise IAM."""
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Optional, List, Dict, Any
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_
+
+try:
+    from db_models import User, Tenant, Group, Permission, AuditLog
+except Exception:
+    
+    import importlib.util
+    import os
+    import sys
+
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    db_models_path = os.path.join(repo_root, "db_models.py")
+    if os.path.exists(db_models_path):
+        spec = importlib.util.spec_from_file_location("db_models", db_models_path)
+        db_models = importlib.util.module_from_spec(spec)
+        sys.modules["db_models"] = db_models
+        spec.loader.exec_module(db_models)
+        from db_models import User, Tenant, Group, Permission, AuditLog
+    else:
+        raise
+from models.auth_models import (
+    User as UserSchema, UserCreate, UserUpdate, UserPasswordUpdate, Role,
+    Group as GroupSchema, GroupCreate, GroupUpdate, Token, TokenData, ROLE_PERMISSIONS,
+    PermissionInfo
+)
+from config import config
+from database import get_db_session
+
+logger = logging.getLogger(__name__)
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+class DatabaseAuthService:
+    """Enterprise authentication service using PostgreSQL."""
+    
+    def __init__(self):
+        self._initialized = False
+    
+    def _lazy_init(self):
+        """Lazy initialization to ensure database is ready."""
+        if not self._initialized:
+            try:
+                self._ensure_default_setup()
+                self._initialized = True
+            except Exception as e:
+                logger.warning(f"Failed to initialize auth service: {e}")
+    
+    def _ensure_default_setup(self):
+        """Ensure default tenant, permissions, and admin user exist."""
+        try:
+            with get_db_session() as db:
+                
+                default_tenant = db.query(Tenant).filter_by(name="default").first()
+                if not default_tenant:
+                    default_tenant = Tenant(
+                        name="default",
+                        display_name="Default Organization",
+                        is_active=True
+                    )
+                    db.add(default_tenant)
+                    db.flush()
+                    logger.info("Created default tenant")
+                
+                
+                self._ensure_permissions(db)
+                
+                
+                admin_user = db.query(User).filter_by(
+                    tenant_id=default_tenant.id,
+                    username=config.DEFAULT_ADMIN_USERNAME
+                ).first()
+                
+                if not admin_user:
+                    admin_user = User(
+                        tenant_id=default_tenant.id,
+                        username=config.DEFAULT_ADMIN_USERNAME,
+                        email=config.DEFAULT_ADMIN_EMAIL,
+                        full_name="System Administrator",
+                        role=Role.ADMIN,
+                        is_active=True,
+                        is_superuser=True,
+                        hashed_password=self.hash_password(config.DEFAULT_ADMIN_PASSWORD)
+                    )
+                    db.add(admin_user)
+                    db.flush()
+                    
+                    
+                    all_permissions = db.query(Permission).all()
+                    admin_user.permissions.extend(all_permissions)
+                    
+                    logger.info(f"Created default admin user: {config.DEFAULT_ADMIN_USERNAME}")
+                
+                db.commit()
+        except Exception as e:
+            logger.error(f"Error setting up defaults: {e}")
+    
+    def _ensure_permissions(self, db: Session):
+        """Create all predefined permissions."""
+        permission_defs = [
+            
+            ("read:alerts", "Read Alerts", "View alert rules and active alerts", "alerts", "read"),
+            ("write:alerts", "Write Alerts", "Create and update alert rules", "alerts", "write"),
+            ("delete:alerts", "Delete Alerts", "Delete alert rules", "alerts", "delete"),
+            
+            
+            ("read:channels", "Read Channels", "View notification channels", "channels", "read"),
+            ("write:channels", "Write Channels", "Create and update notification channels", "channels", "write"),
+            ("delete:channels", "Delete Channels", "Delete notification channels", "channels", "delete"),
+            
+            
+            ("read:logs", "Read Logs", "Query and view logs", "logs", "read"),
+            
+            
+            ("read:traces", "Read Traces", "Query and view traces", "traces", "read"),
+            
+            
+            ("read:dashboards", "Read Dashboards", "View Grafana dashboards", "dashboards", "read"),
+            ("write:dashboards", "Write Dashboards", "Create and update dashboards", "dashboards", "write"),
+            ("delete:dashboards", "Delete Dashboards", "Delete dashboards", "dashboards", "delete"),
+            
+            
+            ("manage:users", "Manage Users", "Create, update, and delete users", "users", "manage"),
+            ("read:users", "Read Users", "View user information", "users", "read"),
+            
+            
+            ("manage:groups", "Manage Groups", "Create, update, and delete groups", "groups", "manage"),
+            ("read:groups", "Read Groups", "View group information", "groups", "read"),
+            
+            
+            ("manage:tenants", "Manage Tenants", "Manage tenant settings", "tenants", "manage"),
+        ]
+        
+        for name, display_name, description, resource_type, action in permission_defs:
+            if not db.query(Permission).filter_by(name=name).first():
+                perm = Permission(
+                    name=name,
+                    display_name=display_name,
+                    description=description,
+                    resource_type=resource_type,
+                    action=action
+                )
+                db.add(perm)
+        
+        db.flush()
+    
+    def hash_password(self, password: str) -> str:
+        return pwd_context.hash(password)
+    
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        return pwd_context.verify(plain_password, hashed_password)
+    
+    def create_access_token(self, user: User) -> Token:
+        """Create JWT access token for user."""
+        expires_delta = timedelta(minutes=config.JWT_EXPIRATION_MINUTES)
+        expire = datetime.now(timezone.utc) + expires_delta
+
+        user_id = getattr(user, "id", None)
+        if not user_id:
+            raise ValueError("User ID is required to create access token")
+
+        with get_db_session() as db:
+            db_user = db.query(User).options(
+                joinedload(User.groups).joinedload(Group.permissions),
+                joinedload(User.permissions)
+            ).filter_by(id=user_id).first()
+
+            if not db_user:
+                raise ValueError("User not found")
+
+            permissions = self._collect_permissions(db_user)
+            group_ids = [g.id for g in db_user.groups] if db_user.groups else []
+
+            to_encode = {
+                "sub": db_user.id,
+                "username": db_user.username,
+                "tenant_id": db_user.tenant_id,
+                "role": db_user.role,
+                "is_superuser": db_user.is_superuser,
+                "permissions": [p for p in permissions],
+                "group_ids": group_ids,
+                "exp": expire
+            }
+        
+        encoded_jwt = jwt.encode(to_encode, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
+        
+        return Token(
+            access_token=encoded_jwt,
+            token_type="bearer",
+            expires_in=config.JWT_EXPIRATION_MINUTES * 60
+        )
+    
+    def decode_token(self, token: str) -> Optional[TokenData]:
+        """Decode and validate JWT token."""
+        try:
+            payload = jwt.decode(token, config.JWT_SECRET_KEY, algorithms=[config.JWT_ALGORITHM])
+            user_id: str = payload.get("sub")
+            username: str = payload.get("username")
+            tenant_id: str = payload.get("tenant_id")
+            role: str = payload.get("role")
+            is_superuser: bool = payload.get("is_superuser", False)
+            permissions: List[str] = payload.get("permissions", [])
+            group_ids: List[str] = payload.get("group_ids", [])
+            
+            if user_id is None or username is None:
+                return None
+            
+            return TokenData(
+                user_id=user_id,
+                username=username,
+                tenant_id=tenant_id,
+                role=Role(role),
+                is_superuser=is_superuser,
+                permissions=permissions,
+                group_ids=group_ids
+            )
+        except JWTError as e:
+            logger.error(f"JWT decode error: {e}")
+            return None
+    
+    def get_user_permissions(self, user: User) -> List[str]:
+        """Get all permissions for a user (role + direct + group permissions)."""
+        user_id = getattr(user, "id", None)
+        if not user_id:
+            return []
+
+        with get_db_session() as db:
+            db_user = db.query(User).options(
+                joinedload(User.groups).joinedload(Group.permissions),
+                joinedload(User.permissions)
+            ).filter_by(id=user_id).first()
+            if not db_user:
+                return []
+            return self._collect_permissions(db_user)
+
+    def get_user_direct_permissions(self, user: User) -> List[str]:
+        """Get direct permissions explicitly assigned to a user."""
+        user_id = getattr(user, "id", None)
+        if not user_id:
+            return []
+
+        with get_db_session() as db:
+            db_user = db.query(User).options(joinedload(User.permissions)).filter_by(id=user_id).first()
+            if not db_user:
+                return []
+            return [p.name for p in (db_user.permissions or [])]
+
+    def _collect_permissions(self, user: User) -> List[str]:
+        """Collect permissions with priority: User direct > Group > Role."""
+        permissions = set()
+        user_direct_perms = set()
+        group_perms = set()
+
+        
+        user_direct_perms.update([p.name for p in user.permissions])
+
+        
+        for group in user.groups:
+            if group.is_active:
+                group_perms.update([p.name for p in group.permissions])
+
+        
+        role_perms = ROLE_PERMISSIONS.get(Role(user.role), [])
+        role_perm_names = set([p.value for p in role_perms])
+
+        
+        permissions = role_perm_names.union(group_perms).union(user_direct_perms)
+
+        return list(permissions)
+
+    def _to_user_schema(self, user: User) -> UserSchema:
+        return UserSchema(
+            id=user.id,
+            tenant_id=user.tenant_id,
+            username=user.username,
+            email=user.email,
+            full_name=user.full_name,
+            role=Role(user.role),
+            group_ids=[g.id for g in (user.groups or [])],
+            is_active=user.is_active,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            last_login=user.last_login,
+            needs_password_change=getattr(user, 'needs_password_change', False)
+        )
+
+    def _to_group_schema(self, group: Group) -> GroupSchema:
+        permissions = [
+            PermissionInfo(
+                id=p.id,
+                name=p.name,
+                display_name=p.display_name,
+                description=p.description,
+                resource_type=p.resource_type,
+                action=p.action
+            )
+            for p in (group.permissions or [])
+        ]
+        return GroupSchema(
+            id=group.id,
+            tenant_id=group.tenant_id,
+            name=group.name,
+            description=group.description,
+            created_at=group.created_at,
+            updated_at=group.updated_at,
+            permissions=permissions
+        )
+    
+    def authenticate_user(self, username: str, password: str) -> Optional[User]:
+        """Authenticate user with username and password."""
+        self._lazy_init()
+        with get_db_session() as db:
+            user = db.query(User).filter_by(username=username).first()
+            
+            if not user:
+                return None
+            
+            if not self.verify_password(password, user.hashed_password):
+                return None
+            
+            if not user.is_active:
+                return None
+            
+            
+            if user.username == config.DEFAULT_ADMIN_USERNAME and self.verify_password(config.DEFAULT_ADMIN_PASSWORD, user.hashed_password):
+                user.needs_password_change = True
+            
+            
+            user.last_login = datetime.now(timezone.utc)
+            db.commit()
+            
+            
+            user = db.query(User).options(
+                joinedload(User.tenant),
+                joinedload(User.groups).joinedload(Group.permissions),
+                joinedload(User.permissions)
+            ).filter_by(id=user.id).first()
+            
+            
+            if user:
+                _ = user.id
+                _ = user.username
+                _ = user.email
+                _ = user.role
+                _ = user.tenant_id
+                _ = user.is_superuser
+                _ = user.is_active
+                _ = user.tenant.name if user.tenant else None
+                
+                for group in user.groups:
+                    _ = group.id
+                    _ = group.name
+                    _ = group.is_active
+                    
+                    for perm in group.permissions:
+                        _ = perm.name
+                        _ = perm.description
+                
+                for perm in user.permissions:
+                    _ = perm.name
+                    _ = perm.description
+                
+                
+                db.expunge(user)
+            
+            return user
+    
+    def get_user_by_id(self, user_id: str) -> Optional[UserSchema]:
+        """Get user by ID with relationships."""
+        self._lazy_init()
+        with get_db_session() as db:
+            user = db.query(User).options(
+                joinedload(User.groups),
+                joinedload(User.permissions)
+            ).filter_by(id=user_id).first()
+            if not user:
+                return None
+            return self._to_user_schema(user)
+    
+    def get_user_by_username(self, username: str) -> Optional[UserSchema]:
+        """Get user by username."""
+        with get_db_session() as db:
+            user = db.query(User).filter_by(username=username).first()
+            if not user:
+                return None
+            return self._to_user_schema(user)
+    
+    def create_user(self, user_create: UserCreate, tenant_id: str, creator_id: str = None) -> UserSchema:
+        """Create a new user."""
+        with get_db_session() as db:
+            
+            if db.query(User).filter_by(username=user_create.username).first():
+                raise ValueError("Username already exists")
+            
+            if db.query(User).filter_by(email=user_create.email).first():
+                raise ValueError("Email already exists")
+            
+            user = User(
+                tenant_id=tenant_id,
+                username=user_create.username,
+                email=user_create.email,
+                full_name=user_create.full_name,
+                role=user_create.role,
+                is_active=user_create.is_active,
+                hashed_password=self.hash_password(user_create.password),
+                needs_password_change=True  
+            )
+            
+            
+            if user_create.group_ids:
+                groups = db.query(Group).filter(
+                    and_(
+                        Group.id.in_(user_create.group_ids),
+                        Group.tenant_id == tenant_id
+                    )
+                ).all()
+                user.groups.extend(groups)
+            
+            db.add(user)
+            db.flush()
+            
+            
+            if creator_id:
+                self._log_audit(db, tenant_id, creator_id, "create_user", "users", user.id, {
+                    "username": user.username,
+                    "role": user.role
+                })
+            
+            db.commit()
+            return self._to_user_schema(user)
+    
+    def list_users(self, tenant_id: str) -> List[UserSchema]:
+        """List all users in a tenant."""
+        with get_db_session() as db:
+            users = db.query(User).options(joinedload(User.groups)).filter_by(tenant_id=tenant_id).all()
+            return [self._to_user_schema(user) for user in users]
+    
+    def update_user(self, user_id: str, user_update: UserUpdate, tenant_id: str, updater_id: str = None) -> Optional[UserSchema]:
+        """Update user information."""
+        with get_db_session() as db:
+            user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
+            
+            if not user:
+                return None
+            
+            update_data = user_update.model_dump(exclude_unset=True)
+            
+            for field, value in update_data.items():
+                if field == 'group_ids' and value is not None:
+                    
+                    groups = db.query(Group).filter(
+                        and_(
+                            Group.id.in_(value),
+                            Group.tenant_id == tenant_id
+                        )
+                    ).all()
+                    user.groups = groups
+                else:
+                    setattr(user, field, value)
+            
+            user.updated_at = datetime.now(timezone.utc)
+            
+            if updater_id:
+                self._log_audit(db, tenant_id, updater_id, "update_user", "users", user_id, update_data)
+            
+            db.commit()
+            return self._to_user_schema(user)
+    
+    def delete_user(self, user_id: str, tenant_id: str, deleter_id: str = None) -> bool:
+        """Delete a user."""
+        with get_db_session() as db:
+            user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
+            
+            if not user:
+                return False
+            
+            if deleter_id:
+                self._log_audit(db, tenant_id, deleter_id, "delete_user", "users", user_id, {
+                    "username": user.username
+                })
+            
+            db.delete(user)
+            db.commit()
+            return True
+    
+    def create_group(self, group_create: GroupCreate, tenant_id: str, creator_id: str = None) -> GroupSchema:
+        """Create a new group."""
+        with get_db_session() as db:
+            group = Group(
+                tenant_id=tenant_id,
+                name=group_create.name,
+                description=group_create.description,
+                is_active=True
+            )
+            
+            db.add(group)
+            db.flush()
+            
+            if creator_id:
+                self._log_audit(db, tenant_id, creator_id, "create_group", "groups", group.id, {
+                    "name": group.name
+                })
+            
+            db.commit()
+            db.refresh(group)
+            
+            _ = list(group.permissions)
+            return self._to_group_schema(group)
+    
+    def list_groups(self, tenant_id: str) -> List[GroupSchema]:
+        """List all groups in a tenant."""
+        with get_db_session() as db:
+            groups = db.query(Group).options(joinedload(Group.permissions)).filter_by(tenant_id=tenant_id).all()
+            return [self._to_group_schema(group) for group in groups]
+    
+    def get_group(self, group_id: str, tenant_id: str) -> Optional[GroupSchema]:
+        """Get a specific group."""
+        with get_db_session() as db:
+            group = db.query(Group).options(joinedload(Group.permissions)).filter_by(id=group_id, tenant_id=tenant_id).first()
+            if not group:
+                return None
+            return self._to_group_schema(group)
+    
+    def delete_group(self, group_id: str, tenant_id: str, deleter_id: str = None) -> bool:
+        """Delete a group."""
+        with get_db_session() as db:
+            group = db.query(Group).filter_by(id=group_id, tenant_id=tenant_id).first()
+            
+            if not group:
+                return False
+            
+            if deleter_id:
+                self._log_audit(db, tenant_id, deleter_id, "delete_group", "groups", group_id, {
+                    "name": group.name
+                })
+            
+            db.delete(group)
+            db.commit()
+            return True
+
+    def update_group(self, group_id: str, group_update: GroupUpdate, tenant_id: str, updater_id: str = None) -> Optional[GroupSchema]:
+        """Update group information."""
+        with get_db_session() as db:
+            group = db.query(Group).filter_by(id=group_id, tenant_id=tenant_id).first()
+            if not group:
+                return None
+
+            update_data = group_update.model_dump(exclude_unset=True)
+            for field, value in update_data.items():
+                setattr(group, field, value)
+
+            group.updated_at = datetime.now(timezone.utc)
+
+            if updater_id:
+                self._log_audit(db, tenant_id, updater_id, "update_group", "groups", group_id, update_data)
+
+            db.commit()
+            db.refresh(group)
+            _ = list(group.permissions)
+            return self._to_group_schema(group)
+    
+    def update_user_permissions(self, user_id: str, permission_names: List[str], tenant_id: str) -> bool:
+        """Update user's direct permissions."""
+        with get_db_session() as db:
+            user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
+            if not user:
+                return False
+            
+            
+            permissions = db.query(Permission).filter(Permission.name.in_(permission_names)).all()
+            user.permissions = permissions
+            
+            db.commit()
+            return True
+    
+    def update_group_permissions(self, group_id: str, permission_names: List[str], tenant_id: str) -> bool:
+        """Update group's permissions."""
+        with get_db_session() as db:
+            group = db.query(Group).filter_by(id=group_id, tenant_id=tenant_id).first()
+            if not group:
+                return False
+            
+            
+            permissions = db.query(Permission).filter(Permission.name.in_(permission_names)).all()
+            group.permissions = permissions
+            
+            db.commit()
+            return True
+    
+    def list_all_permissions(self) -> List[Dict[str, Any]]:
+        """List all available permissions."""
+        with get_db_session() as db:
+            permissions = db.query(Permission).order_by(Permission.resource_type, Permission.action).all()
+            return [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "display_name": p.display_name,
+                    "description": p.description,
+                    "resource_type": p.resource_type,
+                    "action": p.action
+                }
+                for p in permissions
+            ]
+    
+    def update_password(self, user_id: str, password_update: UserPasswordUpdate, tenant_id: str) -> bool:
+        """Update user password."""
+        with get_db_session() as db:
+            user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
+            
+            if not user:
+                return False
+            
+            if not self.verify_password(password_update.current_password, user.hashed_password):
+                return False
+            
+            
+            if len(password_update.new_password) < 8:
+                raise ValueError("Password must be at least 8 characters long")
+            
+            user.hashed_password = self.hash_password(password_update.new_password)
+            user.needs_password_change = False  
+            db.commit()
+            return True
+    
+    def delete_user(self, user_id: str, tenant_id: str, deleter_id: str = None) -> bool:
+        """Delete a user."""
+        with get_db_session() as db:
+            user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
+            
+            if not user:
+                return False
+            
+            if deleter_id:
+                self._log_audit(db, tenant_id, deleter_id, "delete_user", "users", user_id, {
+                    "username": user.username
+                })
+            
+            db.delete(user)
+            db.commit()
+            return True
+    
+    def _log_audit(self, db: Session, tenant_id: str, user_id: str, action: str, 
+                   resource_type: str, resource_id: str, details: Dict[str, Any]):
+        """Log an audit entry."""
+        log = AuditLog(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=details
+        )
+        db.add(log)

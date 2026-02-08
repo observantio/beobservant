@@ -14,15 +14,29 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
 from config import config, constants
-from routers import tempo_router, loki_router, alertmanager_router, grafana_router
+from routers import tempo_router, loki_router, alertmanager_router, grafana_router, auth_router
+from database import init_database, init_db
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL.upper()),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(levelname)s'
 )
 logger = logging.getLogger("beobservant")
+
+try:
+    logger.info(f"Connecting to database: {config.DATABASE_URL.split('@')[-1]}")
+    init_database(config.DATABASE_URL, config.LOG_LEVEL == "debug")
+    init_db()
+    logger.info("✓ Database initialized successfully")
+    
+    from routers.auth_router import auth_service
+    auth_service._lazy_init()
+    logger.info("✓ Auth service initialized")
+except Exception as e:
+    logger.error(f"Failed to initialize database: {e}", exc_info=True)
+    logger.warning("Continuing without database - using fallback JSON storage")
 
 app = FastAPI(
     title=constants.APP_NAME,
@@ -66,6 +80,7 @@ async def general_exception_handler(
         content={"detail": constants.ERROR_INTERNAL},
     )
 
+app.include_router(auth_router.router)
 app.include_router(tempo_router.router)
 app.include_router(loki_router.router)
 app.include_router(alertmanager_router.router)

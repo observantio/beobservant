@@ -112,24 +112,57 @@ class TempoService:
         """
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                response = await client.get(
-                    f"{self.tempo_url}/api/search/tags"
-                )
+                response = await client.get(f"{self.tempo_url}/api/search/tags")
                 response.raise_for_status()
                 data = response.json()
+                logger.debug(f"Tempo /api/search/tags response: {data}")
+
                 services = []
-                if "tagNames" in data:
-                    for tag in data["tagNames"]:
-                        if tag in SERVICE_KEYS:
-                            values_response = await client.get(
-                                f"{self.tempo_url}/api/search/tag/{tag}/values"
-                            )
-                            values_response.raise_for_status()
-                            values_data = values_response.json()
-                            if "tagValues" in values_data:
-                                services.extend(values_data["tagValues"])
-                
-                return list(set(services))
+
+                tag_names = []
+                if isinstance(data, dict):
+                    if "tagNames" in data and isinstance(data["tagNames"], list):
+                        tag_names = data["tagNames"]
+                    elif "data" in data and isinstance(data["data"], dict) and "tagNames" in data["data"]:
+                        tag_names = data["data"]["tagNames"]
+                elif isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict) and "tagName" in item:
+                            tag_names.append(item.get("tagName"))
+
+                for tag in tag_names:
+                    if tag in SERVICE_KEYS:
+                        try:
+                            values_resp = await client.get(f"{self.tempo_url}/api/search/tag/{tag}/values")
+                            values_resp.raise_for_status()
+                            values_data = values_resp.json()
+                            logger.debug(f"Tempo /api/search/tag/{tag}/values response: {values_data}")
+
+                            if isinstance(values_data, dict):
+                                if "tagValues" in values_data and isinstance(values_data["tagValues"], list):
+                                    services.extend(values_data["tagValues"])
+                                elif "values" in values_data and isinstance(values_data["values"], list):
+                                    services.extend(values_data["values"])
+                                elif "data" in values_data and isinstance(values_data["data"], list):
+                                    services.extend(values_data["data"])
+                            elif isinstance(values_data, list):
+                                services.extend(values_data)
+                        except httpx.HTTPError as ve:
+                            logger.warning(f"Failed to fetch tag values for {tag}: {ve}")
+
+                if not services:
+                    logger.debug("No services found from tag endpoints, attempting to infer from recent traces")
+                    try:
+                        search_resp = await self.search_traces(TraceQuery(limit=50))
+                        for trace in search_resp.data:
+                            for span in trace.spans:
+                                if span.service_name:
+                                    services.append(span.service_name)
+                    except Exception as ie:
+                        logger.warning(f"Failed to infer services from traces: {ie}")
+
+                normalized = [s for s in map(str, services) if s]
+                return sorted(set(normalized))
                 
             except httpx.HTTPError as e:
                 logger.error(f"Error fetching services: {e}")

@@ -115,101 +115,147 @@ class StorageService:
             return json.loads(decrypted)
         return json.loads(content)
     
-    def get_alert_rules(self) -> List[AlertRule]:
-        """Get all alert rules.
-        
-        Returns:
-            List of alert rules
-        """
+    def get_alert_rules(self, tenant_id: str, user_id: str, group_ids: List[str] = None) -> List[AlertRule]:
         try:
+            logger.info(f"Getting alert rules for user {user_id}, tenant {tenant_id}, group_ids={group_ids}")
             data = self._deserialize(self.rules_file.read_text())
-            return [AlertRule(**rule) for rule in data]
+            accessible_rules = []
+            for rule in data:
+                if rule.get("tenant_id") != tenant_id:
+                    continue
+                
+                visibility = rule.get("visibility", "private")
+                rule_id = rule.get("id", "unknown")
+                shared_group_ids = rule.get("shared_group_ids", [])
+                
+                logger.debug(f"Rule {rule_id}: visibility={visibility}, shared_group_ids={shared_group_ids}, created_by={rule.get('created_by')}")
+                
+                if rule.get("created_by") == user_id:
+                    logger.debug(f"Rule {rule_id} accessible (owner)")
+                    accessible_rules.append(rule)
+                
+                elif visibility == "tenant":
+                    logger.debug(f"Rule {rule_id} accessible (tenant-wide)")
+                    accessible_rules.append(rule)
+                
+                elif visibility == "group" and group_ids:
+                    if any(gid in shared_group_ids for gid in group_ids):
+                        logger.debug(f"Rule {rule_id} accessible (group match)")
+                        accessible_rules.append(rule)
+                    else:
+                        logger.debug(f"Rule {rule_id} NOT accessible (no group match)")
+            
+            logger.info(f"Returning {len(accessible_rules)} accessible rules out of {len([r for r in data if r.get('tenant_id') == tenant_id])} total")
+            return [AlertRule(**rule) for rule in accessible_rules]
         except Exception as e:
             logger.error(f"Error loading alert rules: {e}")
             return []
     
-    def get_alert_rule(self, rule_id: str) -> Optional[AlertRule]:
-        """Get a specific alert rule by ID.
-        
-        Args:
-            rule_id: Rule ID
-            
-        Returns:
-            Alert rule or None
-        """
-        rules = self.get_alert_rules()
+    def get_alert_rule(self, rule_id: str, tenant_id: str, user_id: str, group_ids: List[str] = None) -> Optional[AlertRule]:
+        rules = self.get_alert_rules(tenant_id, user_id, group_ids)
         for rule in rules:
             if rule.id == rule_id:
                 return rule
         return None
     
-    def create_alert_rule(self, rule_create: AlertRuleCreate) -> AlertRule:
-        """Create a new alert rule.
-        
-        Args:
-            rule_create: Rule creation data
-            
-        Returns:
-            Created alert rule
-        """
-        rules = self.get_alert_rules()
+    def create_alert_rule(self, rule_create: AlertRuleCreate, tenant_id: str, user_id: str, group_ids: List[str] = None) -> AlertRule:
+        data = self._deserialize(self.rules_file.read_text())
         
         new_rule = AlertRule(
             id=str(uuid.uuid4()),
             **rule_create.model_dump()
         )
         
-        rules.append(new_rule)
-        self._save_rules(rules)
+        rule_dict = new_rule.model_dump()
+        rule_dict["tenant_id"] = tenant_id
+        rule_dict["created_by"] = user_id
+        rule_dict["group_ids"] = group_ids or []  
         
-        logger.info(f"Created alert rule: {new_rule.name} ({new_rule.id})")
+        rule_dict["visibility"] = rule_create.visibility
+        rule_dict["shared_group_ids"] = rule_create.shared_group_ids
+        
+        data.append(rule_dict)
+        self.rules_file.write_text(self._serialize(data))
+        
+        logger.info(f"Created alert rule: {new_rule.name} ({new_rule.id}) for tenant {tenant_id} with visibility={rule_create.visibility}")
         return new_rule
     
-    def update_alert_rule(self, rule_id: str, rule_update: AlertRuleCreate) -> Optional[AlertRule]:
-        """Update an existing alert rule.
+    def update_alert_rule(self, rule_id: str, rule_update: AlertRuleCreate, tenant_id: str, user_id: str, group_ids: List[str] = None) -> Optional[AlertRule]:
+        data = self._deserialize(self.rules_file.read_text())
         
-        Args:
-            rule_id: Rule ID
-            rule_update: Updated rule data
-            
-        Returns:
-            Updated alert rule or None
-        """
-        rules = self.get_alert_rules()
-        
-        for i, rule in enumerate(rules):
-            if rule.id == rule_id:
+        for i, rule in enumerate(data):
+            if rule["id"] == rule_id and rule.get("tenant_id") == tenant_id:
+                
+                visibility = rule.get("visibility", "private")
+                has_access = False
+                
+                if rule.get("created_by") == user_id:
+                    has_access = True
+                elif visibility == "group" and group_ids:
+                    shared_groups = rule.get("shared_group_ids", [])
+                    if any(gid in shared_groups for gid in group_ids):
+                        has_access = True
+                elif visibility == "tenant":
+                    has_access = True
+                
+                if not has_access:
+                    return None
+                
                 updated_rule = AlertRule(
                     id=rule_id,
                     **rule_update.model_dump()
                 )
-                rules[i] = updated_rule
-                self._save_rules(rules)
+                rule_dict = updated_rule.model_dump()
+                rule_dict["tenant_id"] = tenant_id
+                rule_dict["created_by"] = rule.get("created_by")
+                rule_dict["group_ids"] = rule.get("group_ids", [])
+                rule_dict["visibility"] = rule_update.visibility
+                rule_dict["shared_group_ids"] = rule_update.shared_group_ids
+                
+                data[i] = rule_dict
+                self.rules_file.write_text(self._serialize(data))
                 logger.info(f"Updated alert rule: {updated_rule.name} ({rule_id})")
                 return updated_rule
         
         return None
     
-    def delete_alert_rule(self, rule_id: str) -> bool:
-        """Delete an alert rule.
+    def delete_alert_rule(self, rule_id: str, tenant_id: str, user_id: str, group_ids: List[str] = None) -> bool:
+        data = self._deserialize(self.rules_file.read_text())
         
-        Args:
-            rule_id: Rule ID
-            
-        Returns:
-            True if deleted, False if not found
-        """
-        rules = self.get_alert_rules()
-        original_count = len(rules)
+        # Find the rule and check access
+        rule_to_delete = None
+        for rule in data:
+            if rule["id"] == rule_id and rule.get("tenant_id") == tenant_id:
+                rule_to_delete = rule
+                break
         
-        rules = [r for r in rules if r.id != rule_id]
+        if not rule_to_delete:
+            return False
         
-        if len(rules) < original_count:
-            self._save_rules(rules)
-            logger.info(f"Deleted alert rule: {rule_id}")
-            return True
+        # Check if user has permission to delete
+        visibility = rule_to_delete.get("visibility", "private")
+        has_access = False
         
-        return False
+        # Owner can always delete
+        if rule_to_delete.get("created_by") == user_id:
+            has_access = True
+        # Group members can delete group-visible rules
+        elif visibility == "group" and group_ids:
+            shared_groups = rule_to_delete.get("shared_group_ids", [])
+            if any(gid in shared_groups for gid in group_ids):
+                has_access = True
+        # Tenant-wide rules can be deleted by any tenant member
+        elif visibility == "tenant":
+            has_access = True
+        
+        if not has_access:
+            return False
+        
+        # Remove the rule
+        data = [r for r in data if r["id"] != rule_id]
+        self.rules_file.write_text(self._serialize(data))
+        logger.info(f"Deleted alert rule: {rule_id}")
+        return True
     
     def _save_rules(self, rules: List[AlertRule]):
         """Save rules to file.
@@ -220,29 +266,44 @@ class StorageService:
         data = [rule.model_dump() for rule in rules]
         self.rules_file.write_text(self._serialize(data))
     
-    def get_notification_channels(self) -> List[NotificationChannel]:
-        """Get all notification channels.
-        
-        Returns:
-            List of notification channels
-        """
+    def get_notification_channels(self, tenant_id: str, user_id: str, group_ids: List[str] = None) -> List[NotificationChannel]:
         try:
+            logger.info(f"Getting notification channels for user {user_id}, tenant {tenant_id}, group_ids={group_ids}")
             data = self._deserialize(self.channels_file.read_text())
-            return [NotificationChannel(**channel) for channel in data]
+            accessible_channels = []
+            for ch in data:
+                if ch.get("tenant_id") != tenant_id:
+                    continue
+                
+                visibility = ch.get("visibility", "private")
+                channel_id = ch.get("id", "unknown")
+                shared_group_ids = ch.get("shared_group_ids", [])
+                
+                logger.debug(f"Channel {channel_id}: visibility={visibility}, shared_group_ids={shared_group_ids}, created_by={ch.get('created_by')}")
+                
+                if ch.get("created_by") == user_id:
+                    logger.debug(f"Channel {channel_id} accessible (owner)")
+                    accessible_channels.append(ch)
+                
+                elif visibility == "tenant":
+                    logger.debug(f"Channel {channel_id} accessible (tenant-wide)")
+                    accessible_channels.append(ch)
+                
+                elif visibility == "group" and group_ids:
+                    if any(gid in shared_group_ids for gid in group_ids):
+                        logger.debug(f"Channel {channel_id} accessible (group match)")
+                        accessible_channels.append(ch)
+                    else:
+                        logger.debug(f"Channel {channel_id} NOT accessible (no group match)")
+            
+            logger.info(f"Returning {len(accessible_channels)} accessible channels out of {len([c for c in data if c.get('tenant_id') == tenant_id])} total")
+            return [NotificationChannel(**channel) for channel in accessible_channels]
         except Exception as e:
             logger.error(f"Error loading notification channels: {e}")
             return []
     
-    def get_notification_channel(self, channel_id: str) -> Optional[NotificationChannel]:
-        """Get a specific notification channel by ID.
-        
-        Args:
-            channel_id: Channel ID
-            
-        Returns:
-            Notification channel or None
-        """
-        channels = self.get_notification_channels()
+    def get_notification_channel(self, channel_id: str, tenant_id: str, user_id: str, group_ids: List[str] = None) -> Optional[NotificationChannel]:
+        channels = self.get_notification_channels(tenant_id, user_id, group_ids)
         for channel in channels:
             if channel.id == channel_id:
                 return channel
@@ -250,98 +311,118 @@ class StorageService:
     
     def create_notification_channel(
         self,
-        channel_create: NotificationChannelCreate
+        channel_create: NotificationChannelCreate,
+        tenant_id: str,
+        user_id: str,
+        group_ids: List[str] = None
     ) -> NotificationChannel:
-        """Create a new notification channel.
-        
-        Args:
-            channel_create: Channel creation data
-            
-        Returns:
-            Created notification channel
-        """
-        channels = self.get_notification_channels()
+        data = self._deserialize(self.channels_file.read_text())
         
         new_channel = NotificationChannel(
             id=str(uuid.uuid4()),
             **channel_create.model_dump()
         )
         
-        channels.append(new_channel)
-        self._save_channels(channels)
+        channel_dict = new_channel.model_dump()
+        channel_dict["tenant_id"] = tenant_id
+        channel_dict["created_by"] = user_id
+        channel_dict["group_ids"] = group_ids or []  
         
-        logger.info(f"Created notification channel: {new_channel.name} ({new_channel.id})")
+        channel_dict["visibility"] = channel_create.visibility
+        channel_dict["shared_group_ids"] = channel_create.shared_group_ids
+        
+        data.append(channel_dict)
+        self.channels_file.write_text(self._serialize(data))
+        
+        logger.info(f"Created notification channel: {new_channel.name} ({new_channel.id}) for tenant {tenant_id} with visibility={channel_create.visibility}")
         return new_channel
     
     def update_notification_channel(
         self,
         channel_id: str,
-        channel_update: NotificationChannelCreate
+        channel_update: NotificationChannelCreate,
+        tenant_id: str,
+        user_id: str,
+        group_ids: List[str] = None
     ) -> Optional[NotificationChannel]:
-        """Update an existing notification channel.
+        data = self._deserialize(self.channels_file.read_text())
         
-        Args:
-            channel_id: Channel ID
-            channel_update: Updated channel data
-            
-        Returns:
-            Updated notification channel or None
-        """
-        channels = self.get_notification_channels()
-        
-        for i, channel in enumerate(channels):
-            if channel.id == channel_id:
+        for i, channel in enumerate(data):
+            if channel["id"] == channel_id and channel.get("tenant_id") == tenant_id:
+                
+                visibility = channel.get("visibility", "private")
+                has_access = False
+                
+                if channel.get("created_by") == user_id:
+                    has_access = True
+                elif visibility == "group" and group_ids:
+                    shared_groups = channel.get("shared_group_ids", [])
+                    if any(gid in shared_groups for gid in group_ids):
+                        has_access = True
+                elif visibility == "tenant":
+                    has_access = True
+                
+                if not has_access:
+                    return None
+                
                 updated_channel = NotificationChannel(
                     id=channel_id,
                     **channel_update.model_dump()
                 )
-                channels[i] = updated_channel
-                self._save_channels(channels)
+                channel_dict = updated_channel.model_dump()
+                channel_dict["tenant_id"] = tenant_id
+                channel_dict["created_by"] = channel.get("created_by")
+                channel_dict["group_ids"] = channel.get("group_ids", [])
+                channel_dict["visibility"] = channel_update.visibility
+                channel_dict["shared_group_ids"] = channel_update.shared_group_ids
+                
+                data[i] = channel_dict
+                self.channels_file.write_text(self._serialize(data))
                 logger.info(f"Updated notification channel: {updated_channel.name} ({channel_id})")
                 return updated_channel
         
         return None
     
-    def delete_notification_channel(self, channel_id: str) -> bool:
-        """Delete a notification channel.
+    def delete_notification_channel(self, channel_id: str, tenant_id: str, user_id: str, group_ids: List[str] = None) -> bool:
+        data = self._deserialize(self.channels_file.read_text())
         
-        Args:
-            channel_id: Channel ID
-            
-        Returns:
-            True if deleted, False if not found
-        """
-        channels = self.get_notification_channels()
-        original_count = len(channels)
+        # Find the channel and check access
+        channel_to_delete = None
+        for channel in data:
+            if channel["id"] == channel_id and channel.get("tenant_id") == tenant_id:
+                channel_to_delete = channel
+                break
         
-        channels = [c for c in channels if c.id != channel_id]
+        if not channel_to_delete:
+            return False
         
-        if len(channels) < original_count:
-            self._save_channels(channels)
-            logger.info(f"Deleted notification channel: {channel_id}")
-            return True
+        # Check if user has permission to delete
+        visibility = channel_to_delete.get("visibility", "private")
+        has_access = False
         
-        return False
-    
-    def _save_channels(self, channels: List[NotificationChannel]):
-        """Save channels to file.
+        # Owner can always delete
+        if channel_to_delete.get("created_by") == user_id:
+            has_access = True
+        # Group members can delete group-visible channels
+        elif visibility == "group" and group_ids:
+            shared_groups = channel_to_delete.get("shared_group_ids", [])
+            if any(gid in shared_groups for gid in group_ids):
+                has_access = True
+        # Tenant-wide channels can be deleted by any tenant member
+        elif visibility == "tenant":
+            has_access = True
         
-        Args:
-            channels: List of channels to save
-        """
-        data = [channel.model_dump() for channel in channels]
+        if not has_access:
+            return False
+        
+        # Remove the channel
+        data = [c for c in data if c["id"] != channel_id]
         self.channels_file.write_text(self._serialize(data))
+        logger.info(f"Deleted notification channel: {channel_id}")
+        return True
     
-    def test_notification_channel(self, channel_id: str) -> Dict[str, Any]:
-        """Test a notification channel.
-        
-        Args:
-            channel_id: Channel ID to test
-            
-        Returns:
-            Test result
-        """
-        channel = self.get_notification_channel(channel_id)
+    def test_notification_channel(self, channel_id: str, tenant_id: str, user_id: str, group_ids: List[str] = None) -> Dict[str, Any]:
+        channel = self.get_notification_channel(channel_id, tenant_id, user_id, group_ids)
         if not channel:
             return {"success": False, "error": "Channel not found"}
         

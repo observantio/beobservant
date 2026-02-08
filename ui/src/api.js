@@ -3,21 +3,53 @@
  */
 import { API_BASE } from './utils/constants'
 
-/**
- * Make an HTTP request to the API
- * @param {string} path - API endpoint path
- * @param {object} opts - Fetch options
- * @returns {Promise<any>} Response data
-*/
+let authToken = null
+
+export function setAuthToken(token) {
+  authToken = token
+}
 
 async function request(path, opts = {}) {
   const headers = opts.headers || {}
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`
+  }
   opts.headers = headers
 
   const res = await fetch(`${API_BASE}${path}`, opts)
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(text || res.statusText)
+    // Emit an api-error event so global UI can show toasts
+    try {
+      const body = (text && text.startsWith('{')) ? JSON.parse(text) : { message: text }
+      window.dispatchEvent(new CustomEvent('api-error', { detail: { status: res.status, body } }))
+    } catch (e) {
+      const fallbackBody = { message: text || res.statusText }
+      window.dispatchEvent(new CustomEvent('api-error', { detail: { status: res.status, body: fallbackBody } }))
+      // ensure body is available below
+      var body = fallbackBody
+    }
+
+    // Only auto-redirect to login when we receive 401 from non-auth endpoints
+    if (res.status === 401 && path !== '/api/auth/login') {
+      authToken = null
+      localStorage.removeItem('auth_token')
+      window.location.href = '/login'
+    }
+
+    const err = new Error(text || res.statusText)
+    err.status = res.status
+    // attach parsed body (if available) for callers to inspect
+    try {
+      if (typeof body !== 'undefined') {
+        err.body = body
+      } else if (text && text.startsWith('{')) {
+        err.body = JSON.parse(text)
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+    throw err
   }
   const ct = res.headers.get('content-type') || ''
   if (ct.includes('application/json')) return await res.json()
@@ -31,6 +63,110 @@ export async function fetchInfo() {
 export async function fetchHealth() {
   return request(`/health`)
 }
+
+export async function login(username, password) {
+  return request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  })
+}
+
+export async function register(username, email, password, full_name) {
+  return request('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, email, password, full_name })
+  })
+}
+
+export async function getCurrentUser() {
+  return request('/api/auth/me')
+}
+
+export async function getUsers() {
+  return request('/api/auth/users')
+}
+
+export async function createUser(user) {
+  return request('/api/auth/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user)
+  })
+}
+
+export async function updateUser(userId, user) {
+  return request(`/api/auth/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user)
+  })
+}
+
+export async function deleteUser(userId) {
+  return request(`/api/auth/users/${userId}`, {
+    method: 'DELETE'
+  })
+}
+
+export async function getGroups() {
+  return request('/api/auth/groups')
+}
+
+export async function createGroup(group) {
+  return request('/api/auth/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(group)
+  })
+}
+
+export async function updateGroup(groupId, group) {
+  return request(`/api/auth/groups/${groupId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(group)
+  })
+}
+
+export async function deleteGroup(groupId) {
+  return request(`/api/auth/groups/${groupId}`, {
+    method: 'DELETE'
+  })
+}
+
+// Permission Management
+export async function getPermissions() {
+  return request('/api/auth/permissions')
+}
+
+export async function updateUserPermissions(userId, permissions) {
+  return request(`/api/auth/users/${userId}/permissions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(permissions)
+  })
+}
+
+export async function updateGroupPermissions(groupId, permissions) {
+  return request(`/api/auth/groups/${groupId}/permissions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(permissions)
+  })
+}
+
+export async function updateUserPassword(userId, passwords) {
+  return request(`/api/auth/users/${userId}/password`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(passwords)
+  })
+}
+
+// Alias for backward compatibility
+export const updatePassword = updateUserPassword
 
 // AlertManager
 export async function getAlerts() {
@@ -202,15 +338,17 @@ export async function searchDashboards(q = '') {
 export async function getDashboard(uid) {
   return request(`/api/grafana/dashboards/${encodeURIComponent(uid)}`)
 }
-export async function createDashboard(payload) {
-  return request('/api/grafana/dashboards', {
+export async function createDashboard(payload, queryParams = '') {
+  const url = queryParams ? `/api/grafana/dashboards?${queryParams}` : '/api/grafana/dashboards'
+  return request(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   })
 }
-export async function updateDashboard(uid, payload) {
-  return request(`/api/grafana/dashboards/${encodeURIComponent(uid)}`, {
+export async function updateDashboard(uid, payload, queryParams = '') {
+  const url = queryParams ? `/api/grafana/dashboards/${encodeURIComponent(uid)}?${queryParams}` : `/api/grafana/dashboards/${encodeURIComponent(uid)}`
+  return request(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -228,15 +366,17 @@ export async function getDatasources() {
 export async function getDatasource(uid) {
   return request(`/api/grafana/datasources/uid/${encodeURIComponent(uid)}`)
 }
-export async function createDatasource(payload) {
-  return request('/api/grafana/datasources', {
+export async function createDatasource(payload, queryParams = '') {
+  const url = queryParams ? `/api/grafana/datasources?${queryParams}` : '/api/grafana/datasources'
+  return request(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   })
 }
-export async function updateDatasource(uid, payload) {
-  return request(`/api/grafana/datasources/${encodeURIComponent(uid)}`, {
+export async function updateDatasource(uid, payload, queryParams = '') {
+  const url = queryParams ? `/api/grafana/datasources/${encodeURIComponent(uid)}?${queryParams}` : `/api/grafana/datasources/${encodeURIComponent(uid)}`
+  return request(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)

@@ -42,7 +42,7 @@ class TraceQuery(BaseModel):
     tags: Optional[Dict[str, str]] = Field(None, description="Tags to filter traces")
     start: Optional[int] = Field(None, description="Start time in microseconds")
     end: Optional[int] = Field(None, description="End time in microseconds")
-    min_duration: Optional[str] = Field(None, alias="minDuration", description="Minimum duration filter (e.g., '100ms')")
+    min_duration: Optional[str] = Field(None, alias="minDuration", description="Minimum duration filter (e.g., '0ms')")
     max_duration: Optional[str] = Field(None, alias="maxDuration", description="Maximum duration filter (e.g., '1s')")
     limit: int = Field(100, ge=1, le=1000, description="Maximum number of traces to return")
     

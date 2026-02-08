@@ -69,7 +69,7 @@ export default function LogQueryForm({
             <div>
               <label className="block text-sm font-medium text-sre-text mb-2">
                 <span>Label</span>
-                <select value={selectedLabel} onChange={(e)=>{setSelectedLabel(e.target.value); setSelectedValue(''); onLabelChange?.(e.target.value)}} className="mt-2 w-full px-3 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary">
+                <select value={selectedLabel} onChange={(e)=>{setSelectedLabel(e.target.value); setSelectedValue(''); onLabelChange?.(e.target.value)}} className="mt-2 w-full px-3 pr-10 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary">
                   <option value="">-- Select label --</option>
                   {labels?.map(l=> <option key={l} value={l}>{l}</option>)}
                 </select>
@@ -79,7 +79,7 @@ export default function LogQueryForm({
             <div>
               <label className="block text-sm font-medium text-sre-text mb-2">
                 <span>Value</span>
-                <select value={selectedValue} onChange={(e)=>setSelectedValue(e.target.value)} disabled={!selectedLabel} className="mt-2 w-full px-3 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary">
+                <select value={selectedValue} onChange={(e)=>setSelectedValue(e.target.value)} disabled={!selectedLabel} className="mt-2 w-full px-3 pr-10 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary">
                   <option value="">{loadingValues?.[selectedLabel] ? 'Loading...' : '-- Select value --'}</option>
                   {selectedLabel && !loadingValues?.[selectedLabel] && (
                     <option value="__any__">Any value</option>
@@ -99,7 +99,7 @@ export default function LogQueryForm({
             <div>
               <label className="block text-sm font-medium text-sre-text mb-2">
                 <span>Time Range</span>
-                <select value={rangeMinutes} onChange={(e)=>setRangeMinutes(Number(e.target.value))} className="mt-2 w-full px-3 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary">
+                <select value={rangeMinutes} onChange={(e)=>setRangeMinutes(Number(e.target.value))} className="mt-2 w-full px-3 pr-10 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary">
                   <option value={5}>Last 5 minutes</option>
                   <option value={15}>Last 15 minutes</option>
                   <option value={60}>Last 1 hour</option>
@@ -113,7 +113,7 @@ export default function LogQueryForm({
             <div>
               <label className="block text-sm font-medium text-sre-text mb-2">
                 <span>Max Logs</span>
-                <select value={maxLogs} onChange={(e)=>setMaxLogs(Number(e.target.value))} className="mt-2 w-full px-3 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary">
+                <select value={maxLogs} onChange={(e)=>setMaxLogs(Number(e.target.value))} className="mt-2 w-full px-3 pr-10 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary">
                   <option value={50}>50</option>
                   <option value={100}>100</option>
                   <option value={500}>500</option>

@@ -4,16 +4,15 @@ from .tempo_models import *
 from .loki_models import *
 from .alertmanager_models import *
 from .grafana_models import *
+from .auth_models import *
 
 __all__ = [
-    # Tempo models
     "TraceQuery",
     "TraceResponse",
     "Trace",
     "Span",
     "SpanAttribute",
     
-    # Loki models
     "LogQuery",
     "LogResponse",
     "LogStream",
@@ -23,7 +22,6 @@ __all__ = [
     "LogFilterRequest",
     "LogSearchRequest",
     
-    # AlertManager models
     "Alert",
     "AlertGroup",
     "AlertStatus",
@@ -31,11 +29,23 @@ __all__ = [
     "SilenceCreate",
     "Receiver",
     
-    # Grafana models
     "Dashboard",
     "DashboardCreate",
     "DashboardUpdate",
     "Datasource",
     "DatasourceCreate",
     "DatasourceUpdate",
+    
+    "User",
+    "UserCreate",
+    "UserUpdate",
+    "UserInDB",
+    "Token",
+    "TokenData",
+    "LoginRequest",
+    "RegisterRequest",
+    "Group",
+    "GroupCreate",
+    "Role",
+    "Permission",
 ]

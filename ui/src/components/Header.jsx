@@ -1,12 +1,19 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useState, useRef, useEffect } from 'react'
+import { useAuth } from '../contexts/AuthContext'
+import PropTypes from 'prop-types'
 import ThemeToggle from './ThemeToggle'
+import { Badge } from './ui'
+import ChangePasswordModal from './ChangePasswordModal'
 
 export default function Header() {
+  const { user, logout, hasPermission } = useAuth()
+  const [showChangePassword, setShowChangePassword] = useState(false)
+
   return (
     <header className="sticky top-0 z-50 bg-sre-surface/80 backdrop-blur-xl border-b border-sre-border shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo & Brand */}
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -16,16 +23,12 @@ export default function Header() {
                 </div>
                 <div>
                   <div className="text-xl font-bold font-mono text-sre-text tracking-tight">
-                    BeObservant
-                  </div>
-                  <div className="text-xs text-sre-text-muted font-medium hidden sm:block">
-                   Observing your entire Infrastructure
+                    Be Observant
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Navigation */}
             <nav className="hidden md:flex items-center gap-1" aria-label="Main navigation">
               <NavLink
                 to="/"
@@ -39,18 +42,21 @@ export default function Header() {
               >
                 Dashboard
               </NavLink>
-              <NavLink
-                to="/tempo"
-                className={({ isActive }) =>
-                  `px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? 'bg-sre-primary/10 text-sre-primary shadow-glow-sm'
-                      : 'text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light'
-                  }`
-                }
-              >
-                Tempo
-              </NavLink>
+                {hasPermission('read:traces') && (
+                <NavLink
+                  to="/tempo"
+                  className={({ isActive }) =>
+                    `px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'bg-sre-primary/10 text-sre-primary shadow-glow-sm'
+                        : 'text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light'
+                    }`
+                  }
+                >
+                  Tempo
+                </NavLink>
+                )}
+              {hasPermission('read:logs') && (
               <NavLink
                 to="/loki"
                 className={({ isActive }) =>
@@ -63,6 +69,8 @@ export default function Header() {
               >
                 Loki
               </NavLink>
+              )}
+              {hasPermission('read:alerts') && (
               <NavLink
                 to="/alertmanager"
                 className={({ isActive }) =>
@@ -75,6 +83,8 @@ export default function Header() {
               >
                 AlertManager
               </NavLink>
+              )}
+              {hasPermission('read:dashboards') && (
               <NavLink
                 to="/grafana"
                 className={({ isActive }) =>
@@ -87,11 +97,21 @@ export default function Header() {
               >
                 Grafana
               </NavLink>
+              )}
+              {/* Users and Groups moved into user dropdown */}
             </nav>
 
-            {/* Theme Toggle */}
-            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
               <ThemeToggle />
+
+              <div className="relative">
+                <UserMenu user={user} logout={logout} hasPermission={hasPermission} openChangePassword={() => setShowChangePassword(true)} />
+                <ChangePasswordModal
+                  isOpen={showChangePassword}
+                  onClose={() => setShowChangePassword(false)}
+                  userId={user?.id}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -110,6 +130,7 @@ export default function Header() {
           >
             Dashboard
           </NavLink>
+          {hasPermission('read:traces') && (
           <NavLink
             to="/tempo"
             className={({ isActive }) =>
@@ -122,6 +143,8 @@ export default function Header() {
           >
             Tempo
           </NavLink>
+          )}
+          {hasPermission('read:logs') && (
           <NavLink
             to="/loki"
             className={({ isActive }) =>
@@ -134,6 +157,8 @@ export default function Header() {
           >
             Loki
           </NavLink>
+          )}
+          {hasPermission('read:alerts') && (
           <NavLink
             to="/alertmanager"
             className={({ isActive }) =>
@@ -146,6 +171,8 @@ export default function Header() {
           >
             AlertManager
           </NavLink>
+          )}
+          {hasPermission('read:dashboards') && (
           <NavLink
             to="/grafana"
             className={({ isActive }) =>
@@ -158,7 +185,79 @@ export default function Header() {
           >
             Grafana
           </NavLink>
+          )}
         </div>
       </header>
   )
 }
+
+function UserMenu({ user, logout, hasPermission, openChangePassword }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const onClick = (e) => {
+      if (!ref.current) return
+      if (!ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('click', onClick)
+    return () => document.removeEventListener('click', onClick)
+  }, [])
+
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    setOpen(false)
+    logout()
+    navigate('/login')
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-sre-surface-light"
+        aria-haspopup="true"
+        aria-expanded={open}
+      >
+        <Badge variant={user?.role === 'admin' ? 'error' : 'info'}>{user?.role || 'user'}</Badge>
+        <span className="hidden sm:block text-sre-text">{user?.username}</span>
+        <svg className="w-4 h-4 text-sre-text-muted" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 011.08 1.04l-4.25 4.25a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 w-44 bg-sre-bg-card border border-sre-border rounded shadow-lg z-50 py-1">
+          {hasPermission('manage:users') && (
+            <NavLink to="/users" className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50" onClick={() => setOpen(false)}>
+              Users
+            </NavLink>
+          )}
+          {hasPermission('manage:groups') && (
+            <NavLink to="/groups" className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50" onClick={() => setOpen(false)}>
+              Groups
+            </NavLink>
+          )}
+
+          <div className="border-t border-sre-border my-1" />
+
+          <button onClick={() => { setOpen(false); openChangePassword?.(); }} className="w-full text-left px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50">
+            Update Password
+          </button>
+
+          <button onClick={handleLogout} className="w-full text-left px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50">
+            Logout
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+UserMenu.propTypes = {
+  user: PropTypes.object,
+  logout: PropTypes.func.isRequired,
+  hasPermission: PropTypes.func.isRequired
+}
+

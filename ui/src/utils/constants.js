@@ -80,7 +80,7 @@ export const DEFAULT_QUERY_LIMITS = {
 
 // Duration range defaults (in nanoseconds)
 export const DEFAULT_DURATION_RANGE = {
-  min: 100000000, // 100ms
+  min: 0, // 0ms (allow timeline minimum to be zero)
   max: 5000000000, // 5s
   step: 50000000, // 50ms
 }

@@ -3,6 +3,7 @@
  * Reusable UI components with SRE-themed styling
  */
 import React from 'react'
+import { createPortal } from 'react-dom'
 import PropTypes from 'prop-types'
 import clsx from 'clsx'
 
@@ -77,8 +78,8 @@ export function Card({ children, className, title, subtitle, action, ...props })
   return (
     <div
       className={clsx(
-        'bg-sre-surface/50 backdrop-blur-sm border border-sre-border rounded-xl p-6',
-        'shadow-lg hover:shadow-xl transition-all duration-300',
+        'bg-sre-surface/50 rounded-xl',
+        'transition-all duration-300',
         'hover:border-sre-border/80',
         className
       )}
@@ -104,6 +105,46 @@ Card.propTypes = {
   title: PropTypes.string,
   subtitle: PropTypes.string,
   action: PropTypes.node,
+}
+
+/**
+ * Card subcomponents for composition
+ */
+export function CardHeader({ children, className, ...props }) {
+  return (
+    <div className={clsx('px-6 py-4 border-b border-sre-border/30', className)} {...props}>
+      {children}
+    </div>
+  )
+}
+
+export function CardContent({ children, className, ...props }) {
+  return (
+    <div className={clsx('px-6 py-4', className)} {...props}>
+      {children}
+    </div>
+  )
+}
+
+export function CardTitle({ children, className, ...props }) {
+  return (
+    <h3 className={clsx('text-lg font-semibold text-sre-text', className)} {...props}>{children}</h3>
+  )
+}
+
+CardHeader.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+}
+
+CardContent.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
+}
+
+CardTitle.propTypes = {
+  children: PropTypes.node,
+  className: PropTypes.string,
 }
 
 /**
@@ -202,7 +243,7 @@ export function Select({ label, error, helperText, children, className, ...props
       )}
       <select
         className={clsx(
-          'w-full px-4 pr-8 py-2 bg-sre-surface border border-sre-border rounded-lg',
+          'w-full px-4 pr-10 py-2 bg-sre-surface border border-sre-border rounded-lg',
           'text-sre-text',
           'focus:outline-none focus:ring-2 focus:ring-sre-primary focus:border-transparent',
           'transition-all duration-200 cursor-pointer',
@@ -240,6 +281,7 @@ export function MetricCard({ label, value, trend, status, icon, className }) {
     warning: 'text-sre-warning',
     error: 'text-sre-error',
     info: 'text-sre-primary',
+    default: 'text-sre-text',
   }
   
   return (
@@ -253,12 +295,12 @@ export function MetricCard({ label, value, trend, status, icon, className }) {
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm text-sre-text-muted mb-1">{label}</p>
-          <p className={clsx(
+          <div className={clsx(
             'text-2xl font-mono font-bold',
             status ? statusColors[status] : 'text-sre-text'
           )}>
             {value}
-          </p>
+          </div>
           {trend && (
             <p className="text-xs text-sre-text-subtle mt-1">{trend}</p>
           )}
@@ -275,9 +317,9 @@ export function MetricCard({ label, value, trend, status, icon, className }) {
 
 MetricCard.propTypes = {
   label: PropTypes.string.isRequired,
-  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  value: PropTypes.node.isRequired,
   trend: PropTypes.string,
-  status: PropTypes.oneOf(['success', 'warning', 'error', 'info']),
+  status: PropTypes.oneOf(['success', 'warning', 'error', 'info', 'default']),
   icon: PropTypes.node,
   className: PropTypes.string,
 }
@@ -350,6 +392,22 @@ Alert.propTypes = {
   variant: PropTypes.oneOf(['info', 'success', 'warning', 'error']),
   title: PropTypes.string,
   onClose: PropTypes.func,
+  className: PropTypes.string,
+}
+
+/**
+ * Small helper to render descriptive text inside an Alert
+ */
+export function AlertDescription({ children, className, ...props }) {
+  return (
+    <div className={clsx('text-sm text-sre-text-muted', className)} {...props}>
+      {children}
+    </div>
+  )
+}
+
+AlertDescription.propTypes = {
+  children: PropTypes.node.isRequired,
   className: PropTypes.string,
 }
 
@@ -493,11 +551,15 @@ export function Modal({
   }
 
   const contentRef = React.useRef(null)
+  // keep a ref to the latest onClose to avoid re-running the effect
+  // on every render when parent re-creates the onClose callback.
+  const onCloseRef = React.useRef(onClose)
+  React.useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
   React.useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
-        onClose?.()
+        onCloseRef.current?.()
       }
     }
 
@@ -510,7 +572,12 @@ export function Modal({
       document.documentElement.style.overflow = 'hidden'
       // focus modal content to avoid focus landing on backdrop
       setTimeout(() => {
-        contentRef.current?.focus()
+        try {
+          contentRef.current?.focus({ preventScroll: true })
+        } catch (e) {
+          console.warn("Failed to focus modal content:", e)
+          contentRef.current?.focus()
+        }
       }, 0)
     }
 
@@ -519,35 +586,31 @@ export function Modal({
       document.body.style.overflow = prevBodyOverflow
       document.documentElement.style.overflow = prevHtmlOverflow
     }
-  }, [isOpen, onClose])
+  }, [isOpen])
 
   if (!isOpen) return null
 
-  return (
-    <dialog
-      open
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+  const content = (
+    <div
+      className="fixed inset-0 flex items-center justify-center p-4 animate-fade-in bg-transparent overflow-y-auto"
+      role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "modal-title" : undefined}
+      onClick={handleOverlayClick}
+      style={{ zIndex: 9999 }}
     >
-      {/* backdrop/button captures overlay clicks on an interactive element */}
-      <button
-        type="button"
-        aria-label="Close dialog"
-        onClick={handleOverlayClick}
-        className="absolute inset-0  z-40 border-0 p-0 m-0"
-      />
       <div 
         className={clsx(
-          'bg-sre-bg-card rounded-xl shadow-2xl w-full max-h-[90vh] flex flex-col',
+          'relative bg-sre-bg-card rounded-xl shadow-2xl w-full mx-auto',
           'border border-sre-border/50',
           'animate-slide-up',
+          'flex flex-col',
           sizes[size],
           className
         )}
+        style={{ zIndex: 10000, maxHeight: 'calc(100vh - 4rem)' }}
         ref={contentRef}
         tabIndex={-1}
-        style={{zIndex: 50}}
       >
         {/* Header */}
         {(title || showCloseButton) && (
@@ -579,8 +642,10 @@ export function Modal({
           </div>
         )}
       </div>
-    </dialog>
+    </div>
   )
+
+  return createPortal(content, document.body)
 }
 
 Modal.propTypes = {
@@ -706,8 +771,8 @@ Textarea.propTypes = {
  */
 export function Checkbox({ label, error, helperText, className, ...props }) {
   return (
-    <div className="w-full">
-      <div className="flex items-center gap-2">
+    <div >
+      <div className="flex mt-1 gap-2">
         <input
           type="checkbox"
           className={clsx(

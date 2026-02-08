@@ -525,7 +525,7 @@ export default function LokiPage() {
             <span>Auto-refresh</span>
           </label>
           {autoRefresh && (
-            <select value={refreshInterval} onChange={(e)=>setRefreshInterval(Number(e.target.value))} className="px-2 py-1 bg-sre-surface border border-sre-border rounded text-sm text-sre-text">
+            <select value={refreshInterval} onChange={(e)=>setRefreshInterval(Number(e.target.value))} className="px-2 pr-10 py-1 bg-sre-surface border border-sre-border rounded text-sm text-sre-text">
               <option value={10}>10s</option>
               <option value={30}>30s</option>
               <option value={60}>60s</option>

@@ -6,7 +6,8 @@ import {
   getNotificationChannels, createNotificationChannel, updateNotificationChannel,
   deleteNotificationChannel, testNotificationChannel, testAlertRule
 } from '../api'
-import { Card, Button, Select, Alert, Badge, Spinner, ConfirmDialog } from '../components/ui'
+import { Card, Button, Select, Alert, Badge, Spinner } from '../components/ui'
+import ConfirmModal from '../components/ConfirmModal'
 import RuleEditor from '../components/alertmanager/RuleEditor'
 import ChannelEditor from '../components/alertmanager/ChannelEditor'
 import SilenceForm from '../components/alertmanager/SilenceForm'
@@ -59,6 +60,17 @@ export default function AlertManagerPage() {
 
   const [testDialog, setTestDialog] = useState({ isOpen: false, title: '', message: '' })
 
+  // Centralized API error handling for this page.
+  // Permission errors (403) are already shown globally via toast; avoid duplicating them here.
+  function handleApiError(e) {
+    if (!e) return
+    // If permission error, toast already shown globally
+    if (e.status === 403) return
+    // If this is the test notification failure, it's already shown as a toast
+    if (e.message && e.message.includes('Error sending test notification')) return
+    setError(e.message || String(e))
+  }
+
   async function loadData() {
     setLoading(true)
     setError(null)
@@ -74,7 +86,7 @@ export default function AlertManagerPage() {
       setRules(rulesData)
       setChannels(channelsData)
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     } finally {
       setLoading(false)
     }
@@ -95,7 +107,7 @@ export default function AlertManagerPage() {
       setShowRuleEditor(false)
       setEditingRule(null)
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     }
   }
 
@@ -112,7 +124,7 @@ export default function AlertManagerPage() {
           await loadData()
           setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
         } catch (e) {
-          setError(e.message)
+          handleApiError(e)
           setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
         }
       }
@@ -131,7 +143,7 @@ export default function AlertManagerPage() {
       setShowChannelEditor(false)
       setEditingChannel(null)
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     }
   }
 
@@ -148,7 +160,7 @@ export default function AlertManagerPage() {
           await loadData()
           setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
         } catch (e) {
-          setError(e.message)
+          handleApiError(e)
           setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
         }
       }
@@ -160,7 +172,7 @@ export default function AlertManagerPage() {
       const result = await testNotificationChannel(channelId)
       setTestDialog({ isOpen: true, title: 'Test Notification', message: result.message || 'Test notification sent' })
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     }
   }
 
@@ -169,7 +181,7 @@ export default function AlertManagerPage() {
       const result = await testAlertRule(ruleId)
       setTestDialog({ isOpen: true, title: 'Success', message: result.message || 'We have invoked a test alert, please check your alerting system.' })
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     }
   }
 
@@ -179,7 +191,7 @@ export default function AlertManagerPage() {
       await loadData()
       setShowSilenceForm(false)
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     }
   }
 
@@ -196,7 +208,7 @@ export default function AlertManagerPage() {
           await loadData()
           setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
         } catch (e) {
-          setError(e.message)
+          handleApiError(e)
           setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
         }
       }
@@ -625,24 +637,24 @@ export default function AlertManagerPage() {
         </>
       )}
 
-      <ConfirmDialog
+      <ConfirmModal
         isOpen={testDialog.isOpen}
         title={testDialog.title}
         message={testDialog.message}
         onConfirm={() => setTestDialog({ isOpen: false, title: '', message: '' })}
+        onCancel={() => setTestDialog({ isOpen: false, title: '', message: '' })}
         confirmText="OK"
-        variant="success"
-        onClose={() => setTestDialog({ isOpen: false, title: '', message: '' })}
+        variant="primary"
       />
 
-      <ConfirmDialog
+      <ConfirmModal
         isOpen={confirmDialog.isOpen}
         title={confirmDialog.title}
         message={confirmDialog.message}
         onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })}
         confirmText={confirmDialog.confirmText}
         variant={confirmDialog.variant}
-        onClose={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })}
       />
     </div>
   )

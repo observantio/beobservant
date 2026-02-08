@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import { fetchTempoServices, searchTraces, getTrace } from '../api'
 import { Card, Button, Select, Input, Alert, Badge, Spinner } from '../components/ui'
 import ServiceGraph from '../components/tempo/ServiceGraph'
@@ -24,9 +25,28 @@ export default function TempoPage() {
     return span.status?.code === 'ERROR' || span.tags?.some(tag => tag.key === 'error' && tag.value === true)
   }
 
+  const { isAuthenticated, loading: authLoading } = useAuth()
+
+  // Load services only after authentication is ready to ensure auth token is set
   useEffect(() => {
-    loadServices()
-  }, [])
+    if (isAuthenticated && !authLoading) {
+      loadServices()
+    }
+  }, [isAuthenticated, authLoading])
+
+  // If backend doesn't return services, derive them from loaded traces
+  useEffect(() => {
+    if ((!services || services.length === 0) && traces?.data?.length) {
+      const discovered = new Set()
+      traces.data.forEach(t => {
+        (t.spans || []).forEach(s => {
+          const name = getServiceName(s)
+          if (name) discovered.add(name)
+        })
+      })
+      if (discovered.size) setServices(Array.from(discovered).sort((a, b) => a.localeCompare(b)))
+    }
+  }, [traces])
 
   async function loadServices() {
     try {
@@ -58,6 +78,16 @@ export default function TempoPage() {
       })
 
       setTraces(res)
+      if ((!services || services.length === 0) && res?.data?.length) {
+        const discovered = new Set()
+        res.data.forEach(t => {
+          (t.spans || []).forEach(s => {
+            const name = getServiceName(s)
+            if (name) discovered.add(name)
+          })
+        })
+        if (discovered.size) setServices(Array.from(discovered).sort())
+      }
     } catch (e) {
       setError(e.message)
     } finally {
@@ -195,9 +225,13 @@ export default function TempoPage() {
               onChange={(e) => setService(e.target.value)}
             >
               <option value="">-- All Services --</option>
-              {services.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
+              {services && services.length > 0 ? (
+                services.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))
+              ) : (
+                <option disabled>No services available</option>
+              )}
             </Select>
 
             <Input
@@ -284,7 +318,7 @@ export default function TempoPage() {
             <Button type="button" variant="ghost" onClick={() => {
               setService('')
               setOperation('')
-              setDurationRange([100000000, 5000000000])
+              setDurationRange([DEFAULT_DURATION_RANGE.min, DEFAULT_DURATION_RANGE.max])
               setStatusFilter('all')
             }}>
               Clear Filters

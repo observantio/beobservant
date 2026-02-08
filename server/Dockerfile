@@ -26,6 +26,8 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels /wheels/* && \
 
 COPY main.py ./
 COPY config.py ./
+COPY database.py ./
+COPY db_models.py ./
 COPY middleware/ ./middleware/
 COPY models/ ./models/
 COPY routers/ ./routers/

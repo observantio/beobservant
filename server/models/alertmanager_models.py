@@ -24,6 +24,12 @@ class RuleSeverity(str, Enum):
     WARNING = "warning"
     CRITICAL = "critical"
 
+class Visibility(str, Enum):
+    """Visibility/sharing scope for resources."""
+    PRIVATE = "private"  # Only visible to creator
+    GROUP = "group"      # Visible to specified groups
+    TENANT = "tenant"    # Visible to all users in tenant
+
 class AlertStatus(BaseModel):
     """Alert status information."""
     state: AlertState = Field(..., description="Current state of the alert")
@@ -94,9 +100,12 @@ class NotificationChannel(BaseModel):
     type: ChannelType = Field(..., description="Channel type")
     enabled: bool = Field(True, description="Whether the channel is enabled")
     config: Dict[str, Any] = Field(..., description="Channel-specific configuration")
+    visibility: Visibility = Field(Visibility.PRIVATE, description="Visibility scope")
+    shared_group_ids: List[str] = Field(default_factory=list, alias="sharedGroupIds", description="Group IDs this channel is shared with (when visibility=group)")
     
     class Config:
         use_enum_values = True
+        populate_by_name = True
 
 class NotificationChannelCreate(BaseModel):
     """Create a notification channel."""
@@ -104,9 +113,12 @@ class NotificationChannelCreate(BaseModel):
     type: ChannelType = Field(..., description="Channel type")
     enabled: bool = Field(True, description="Whether the channel is enabled")
     config: Dict[str, Any] = Field(..., description="Channel-specific configuration")
+    visibility: Visibility = Field(Visibility.PRIVATE, description="Visibility scope")
+    shared_group_ids: List[str] = Field(default_factory=list, alias="sharedGroupIds", description="Group IDs to share with")
     
     class Config:
         use_enum_values = True
+        populate_by_name = True
 
 class AlertRule(BaseModel):
     """Alert rule definition."""
@@ -120,6 +132,8 @@ class AlertRule(BaseModel):
     enabled: bool = Field(True, description="Whether the rule is enabled")
     group: str = Field("default", description="Rule group name")
     notification_channels: List[str] = Field(default_factory=list, alias="notificationChannels", description="List of notification channel IDs to send alerts to. If empty, sends to all channels.")
+    visibility: Visibility = Field(Visibility.PRIVATE, description="Visibility scope")
+    shared_group_ids: List[str] = Field(default_factory=list, alias="sharedGroupIds", description="Group IDs this rule is shared with (when visibility=group)")
     
     class Config:
         use_enum_values = True
@@ -136,6 +150,8 @@ class AlertRuleCreate(BaseModel):
     enabled: bool = Field(True, description="Whether the rule is enabled")
     group: str = Field("default", description="Rule group name")
     notification_channels: List[str] = Field(default_factory=list, alias="notificationChannels", description="List of notification channel IDs. Empty means all channels.")
+    visibility: Visibility = Field(Visibility.PRIVATE, description="Visibility scope")
+    shared_group_ids: List[str] = Field(default_factory=list, alias="sharedGroupIds", description="Group IDs to share with")
     
     class Config:
         use_enum_values = True

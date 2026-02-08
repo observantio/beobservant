@@ -2,11 +2,12 @@ import  { useState, useEffect } from 'react'
 import {
   searchDashboards, createDashboard, updateDashboard, deleteDashboard,
   getDatasources, createDatasource, updateDatasource, deleteDatasource,
-  getFolders, createFolder, deleteFolder
+  getFolders, createFolder, deleteFolder, getGroups
 } from '../api'
 import {  Button, Input, Alert, Modal, ConfirmDialog, Select, Checkbox } from '../components/ui'
 import GrafanaTabs from '../components/grafana/GrafanaTabs'
 import GrafanaContent from '../components/grafana/GrafanaContent'
+import { useAuth } from '../contexts/AuthContext'
 
 const GRAFANA_URL = import.meta.env.VITE_GRAFANA_URL || 'https://localhost/grafana'
 
@@ -55,14 +56,30 @@ function openInGrafana(path) {
 
 
 export default function GrafanaPage() { // NOSONAR
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('dashboards')
   const [dashboards, setDashboards] = useState([])
   const [datasources, setDatasources] = useState([])
   const [folders, setFolders] = useState([])
+  const [groups, setGroups] = useState([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+
+  // Centralized API error handling for this page.
+  // Permission errors (403) are already shown globally via toast; avoid duplicating them here.
+  function handleApiError(e) {
+    if (!e) return
+    if (e.status === 403) return // already shown in toast
+
+    const msg = e.message || String(e || '')
+    const lower = msg.toLowerCase()
+    // Suppress Grafana 'not found / access denied / update failed' messages as toasts already show them
+    if (lower.includes('not found') && (lower.includes('access denied') || lower.includes('update failed'))) return
+
+    setError(msg)
+  }
 
   // Dashboard editor state
   const [showDashboardEditor, setShowDashboardEditor] = useState(false)
@@ -73,6 +90,8 @@ export default function GrafanaPage() { // NOSONAR
     folderId: 0,
     refresh: '30s',
     datasourceUid: '',
+    visibility: 'private',
+    sharedGroupIds: [],
   })
 
   // Datasource editor state
@@ -84,6 +103,8 @@ export default function GrafanaPage() { // NOSONAR
     url: '',
     isDefault: false,
     access: 'proxy',
+    visibility: 'private',
+    sharedGroupIds: [],
   })
 
   // Folder creator state
@@ -101,7 +122,17 @@ export default function GrafanaPage() { // NOSONAR
 
   useEffect(() => {
     loadData()
+    loadGroups()
   }, [activeTab])
+
+  async function loadGroups() {
+    try {
+      const groupsData = await getGroups().catch(() => [])
+      setGroups(groupsData)
+    } catch (e) {
+      console.error('Failed to load groups:', e)
+    }
+  }
 
   async function loadData() {
     setLoading(true)
@@ -124,7 +155,7 @@ export default function GrafanaPage() { // NOSONAR
         setFolders(foldersData)
       }
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     } finally {
       setLoading(false)
     }
@@ -138,7 +169,7 @@ export default function GrafanaPage() { // NOSONAR
       const res = await searchDashboards(query)
       setDashboards(res)
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     } finally {
       setLoading(false)
     }
@@ -153,6 +184,8 @@ export default function GrafanaPage() { // NOSONAR
         folderId: dashboard.folderId || 0,
         refresh: dashboard.refresh || '30s',
         datasourceUid: '',
+        visibility: 'private',
+        sharedGroupIds: [],
       })
     } else {
       setEditingDashboard(null)
@@ -162,6 +195,8 @@ export default function GrafanaPage() { // NOSONAR
         folderId: 0,
         refresh: '30s',
         datasourceUid: '',
+        visibility: 'private',
+        sharedGroupIds: [],
       })
     }
     setShowDashboardEditor(true)
@@ -208,19 +243,27 @@ export default function GrafanaPage() { // NOSONAR
         overwrite: !!editingDashboard,
       }
 
+      // Build query params for visibility
+      const params = new URLSearchParams({
+        visibility: dashboardForm.visibility,
+      })
+      if (dashboardForm.visibility === 'group' && dashboardForm.sharedGroupIds.length > 0) {
+        dashboardForm.sharedGroupIds.forEach(gid => params.append('shared_group_ids', gid))
+      }
+
       if (editingDashboard) {
         payload.dashboard.uid = editingDashboard.uid
-        await updateDashboard(editingDashboard.uid, payload)
+        await updateDashboard(editingDashboard.uid, payload, params.toString())
         setSuccess('Dashboard updated successfully')
       } else {
-        await createDashboard(payload)
+        await createDashboard(payload, params.toString())
         setSuccess('Dashboard created successfully')
       }
 
       setShowDashboardEditor(false)
       loadData()
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     }
   }
 
@@ -238,7 +281,7 @@ export default function GrafanaPage() { // NOSONAR
           setSuccess('Dashboard deleted successfully')
           loadData()
         } catch (e) {
-          setError(e.message)
+          handleApiError(e)
         }
       }
     })
@@ -253,6 +296,8 @@ export default function GrafanaPage() { // NOSONAR
         url: datasource.url || '',
         isDefault: datasource.isDefault || false,
         access: datasource.access || 'proxy',
+        visibility: 'private',
+        sharedGroupIds: [],
       })
     } else {
       setEditingDatasource(null)
@@ -262,6 +307,8 @@ export default function GrafanaPage() { // NOSONAR
         url: '',
         isDefault: false,
         access: 'proxy',
+        visibility: 'private',
+        sharedGroupIds: [],
       })
     }
     setShowDatasourceEditor(true)
@@ -280,18 +327,26 @@ export default function GrafanaPage() { // NOSONAR
         jsonData: {},
       }
 
+      // Build query params for visibility
+      const params = new URLSearchParams({
+        visibility: datasourceForm.visibility,
+      })
+      if (datasourceForm.visibility === 'group' && datasourceForm.sharedGroupIds.length > 0) {
+        datasourceForm.sharedGroupIds.forEach(gid => params.append('shared_group_ids', gid))
+      }
+
       if (editingDatasource) {
-        await updateDatasource(editingDatasource.uid, payload)
+        await updateDatasource(editingDatasource.uid, payload, params.toString())
         setSuccess('Datasource updated successfully')
       } else {
-        await createDatasource(payload)
+        await createDatasource(payload, params.toString())
         setSuccess('Datasource created successfully')
       }
 
       setShowDatasourceEditor(false)
       loadData()
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     }
   }
 
@@ -309,7 +364,7 @@ export default function GrafanaPage() { // NOSONAR
           setSuccess('Datasource deleted successfully')
           loadData()
         } catch (e) {
-          setError(e.message)
+          handleApiError(e)
         }
       }
     })
@@ -327,7 +382,7 @@ export default function GrafanaPage() { // NOSONAR
       setFolderName('')
       loadData()
     } catch (e) {
-      setError(e.message)
+      handleApiError(e)
     }
   }
 
@@ -345,7 +400,7 @@ export default function GrafanaPage() { // NOSONAR
           setSuccess('Folder deleted successfully')
           loadData()
         } catch (e) {
-          setError(e.message)
+          handleApiError(e)
         }
       }
     })
@@ -492,6 +547,54 @@ export default function GrafanaPage() { // NOSONAR
             <option value="30m">30 minutes</option>
             <option value="1h">1 hour</option>
           </Select>
+
+          <div className="border-t border-sre-border pt-4">
+            <Select
+              label="Visibility"
+              value={dashboardForm.visibility}
+              onChange={(e) => {
+                setDashboardForm({ ...dashboardForm, visibility: e.target.value, sharedGroupIds: [] })
+              }}
+              helperText="Control who can access this dashboard"
+            >
+              <option value="private">Private (Only me)</option>
+              <option value="group">Shared with Groups</option>
+              <option value="tenant">Tenant-wide (Everyone in organization)</option>
+            </Select>
+
+            {dashboardForm.visibility === 'group' && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-sre-text mb-2">
+                  Shared Groups
+                </label>
+                <div className="space-y-2 max-h-40 overflow-y-auto border border-sre-border rounded p-3">
+                  {groups.map(group => (
+                    <Checkbox
+                      key={group.id}
+                      label={group.name}
+                      checked={dashboardForm.sharedGroupIds.includes(group.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setDashboardForm({
+                            ...dashboardForm,
+                            sharedGroupIds: [...dashboardForm.sharedGroupIds, group.id]
+                          })
+                        } else {
+                          setDashboardForm({
+                            ...dashboardForm,
+                            sharedGroupIds: dashboardForm.sharedGroupIds.filter(id => id !== group.id)
+                          })
+                        }
+                      }}
+                    />
+                  ))}
+                  {groups.length === 0 && (
+                    <p className="text-sm text-sre-text-muted">No groups available</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
 
@@ -566,6 +669,54 @@ export default function GrafanaPage() { // NOSONAR
             checked={datasourceForm.isDefault}
             onChange={(e) => setDatasourceForm({ ...datasourceForm, isDefault: e.target.checked })}
           />
+
+          <div className="border-t border-sre-border pt-4">
+            <Select
+              label="Visibility"
+              value={datasourceForm.visibility}
+              onChange={(e) => {
+                setDatasourceForm({ ...datasourceForm, visibility: e.target.value, sharedGroupIds: [] })
+              }}
+              helperText="Control who can access this datasource"
+            >
+              <option value="private">Private (Only me)</option>
+              <option value="group">Shared with Groups</option>
+              <option value="tenant">Tenant-wide (Everyone in organization)</option>
+            </Select>
+
+            {datasourceForm.visibility === 'group' && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-sre-text mb-2">
+                  Shared Groups
+                </label>
+                <div className="space-y-2 max-h-40 overflow-y-auto border border-sre-border rounded p-3">
+                  {groups.map(group => (
+                    <Checkbox
+                      key={group.id}
+                      label={group.name}
+                      checked={datasourceForm.sharedGroupIds.includes(group.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setDatasourceForm({
+                            ...datasourceForm,
+                            sharedGroupIds: [...datasourceForm.sharedGroupIds, group.id]
+                          })
+                        } else {
+                          setDatasourceForm({
+                            ...datasourceForm,
+                            sharedGroupIds: datasourceForm.sharedGroupIds.filter(id => id !== group.id)
+                          })
+                        }
+                      }}
+                    />
+                  ))}
+                  {groups.length === 0 && (
+                    <p className="text-sm text-sre-text-muted">No groups available</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
 

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { Button, Input, Select } from '../ui'
+import { getGroups } from '../../api'
 
 export default function RuleEditor({ rule, channels, onSave, onCancel }) {
   const [formData, setFormData] = useState(rule || {
@@ -12,12 +13,42 @@ export default function RuleEditor({ rule, channels, onSave, onCancel }) {
     annotations: { summary: '', description: '' },
     enabled: true,
     group: 'default',
-    notificationChannels: []
+    notificationChannels: [],
+    visibility: 'private',
+    sharedGroupIds: []
   })
+  const [groups, setGroups] = useState([])
+  const [selectedGroups, setSelectedGroups] = useState(new Set(rule?.sharedGroupIds || []))
+
+  useEffect(() => {
+    loadGroups()
+  }, [])
+
+  const loadGroups = async () => {
+    try {
+      const groupsData = await getGroups()
+      setGroups(groupsData)
+    } catch (error) {
+      console.error('Error loading groups:', error)
+    }
+  }
+
+  const toggleGroup = (groupId) => {
+    const newGroups = new Set(selectedGroups)
+    if (newGroups.has(groupId)) {
+      newGroups.delete(groupId)
+    } else {
+      newGroups.add(groupId)
+    }
+    setSelectedGroups(newGroups)
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onSave(formData)
+    onSave({
+      ...formData,
+      sharedGroupIds: Array.from(selectedGroups)
+    })
   }
 
   return (
@@ -146,6 +177,68 @@ export default function RuleEditor({ rule, channels, onSave, onCancel }) {
           className="w-4 h-4"
         />
         <label htmlFor="enabled" className="text-sm text-sre-text">Enable this rule</label>
+      </div>
+
+      {/* Visibility Settings */}
+      <div className="border-t border-sre-border pt-4 space-y-3">
+        <div>
+          <label className="block text-sm font-semibold text-sre-text mb-2">
+            <span className="material-icons text-sm align-middle mr-1">visibility</span>
+            Visibility
+          </label>
+          <Select
+            value={formData.visibility || 'private'}
+            onChange={(e) => {
+              const newVisibility = e.target.value
+              setFormData({ ...formData, visibility: newVisibility })
+              if (newVisibility !== 'group') {
+                setSelectedGroups(new Set())
+              }
+            }}
+          >
+            <option value="private">Private - Only visible to me</option>
+            <option value="group">Group - Share with specific groups</option>
+            <option value="tenant">Tenant - Visible to all users in tenant</option>
+          </Select>
+          <p className="text-xs text-sre-text-muted mt-1">
+            {formData.visibility === 'private' && 'Only you can view and edit this rule'}
+            {formData.visibility === 'group' && 'Users in selected groups can view this rule'}
+            {formData.visibility === 'tenant' && 'All users in your organization can view this rule'}
+          </p>
+        </div>
+
+        {/* Group Sharing - only show when visibility is 'group' */}
+        {formData.visibility === 'group' && groups.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-sre-text mb-2">
+              Share with Groups
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 border border-sre-border rounded bg-sre-surface">
+              {groups.map((group) => (
+                <label
+                  key={group.id}
+                  className="flex items-center gap-2 p-2 bg-sre-bg-alt rounded cursor-pointer hover:bg-sre-accent/10 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedGroups.has(group.id)}
+                    onChange={() => toggleGroup(group.id)}
+                    className="w-4 h-4"
+                  />
+                  <div className="flex-1 text-sm">
+                    <div className="font-medium text-sre-text">{group.name}</div>
+                    {group.description && (
+                      <div className="text-xs text-sre-text-muted truncate">{group.description}</div>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-sre-text-muted mt-2">
+              {selectedGroups.size} group{selectedGroups.size === 1 ? '' : 's'} selected
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end gap-2">

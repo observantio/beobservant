@@ -1,5 +1,5 @@
 """AlertManager API router."""
-from fastapi import APIRouter, HTTPException, Query, Body, Request, status
+from fastapi import APIRouter, HTTPException, Query, Body, Request, status, Depends
 from typing import Optional, List, Dict
 import logging
 
@@ -14,6 +14,22 @@ from services.notification_service import NotificationService
 from config import constants
 from models.alertmanager_models import AlertStatus, AlertState
 from datetime import datetime, timezone
+from models.auth_models import TokenData, Permission
+
+# Import auth dependencies
+try:
+    from routers.auth_router import require_permission
+except ImportError:
+    # Fallback if auth not available
+    def get_current_user():
+        return None
+    def require_permission(permission):
+        def _deny():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service unavailable"
+            )
+        return _deny
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +130,8 @@ async def get_alerts(
     active: Optional[bool] = Query(None, description="Filter active alerts"),
     silenced: Optional[bool] = Query(None, description="Filter silenced alerts"),
     inhibited: Optional[bool] = Query(None, description="Filter inhibited alerts"),
-    filter_labels: Optional[str] = Query(None, description='Label filters as JSON string, e.g. {"severity":"critical"}')
+    filter_labels: Optional[str] = Query(None, description='Label filters as JSON string, e.g. {"severity":"critical"}'),
+    current_user: TokenData = Depends(require_permission(Permission.READ_ALERTS))
 ):
     """Get all alerts with optional filters.
     
@@ -139,7 +156,8 @@ async def get_alerts(
 
 @router.get("/alerts/groups", response_model=List[AlertGroup])
 async def get_alert_groups(
-    filter_labels: Optional[str] = Query(None, description='Label filters as JSON string')
+    filter_labels: Optional[str] = Query(None, description='Label filters as JSON string'),
+    current_user: TokenData = Depends(require_permission(Permission.READ_ALERTS))
 ):
     """Get alert groups.
     
@@ -158,7 +176,10 @@ async def get_alert_groups(
 
 
 @router.post("/alerts")
-async def post_alerts(alerts: List[Alert] = Body(..., description="List of alerts to post")):
+async def post_alerts(
+    alerts: List[Alert] = Body(..., description="List of alerts to post"),
+    current_user: TokenData = Depends(require_permission(Permission.WRITE_ALERTS))
+):
     """Post new alerts to AlertManager.
     
     Creates or updates alerts in AlertManager. Used for testing or manual alert creation.
@@ -171,7 +192,8 @@ async def post_alerts(alerts: List[Alert] = Body(..., description="List of alert
 
 @router.delete("/alerts")
 async def delete_alerts(
-    filter_labels: str = Query(..., description='Label filters as JSON string, e.g. {"alertname":"test"}')
+    filter_labels: str = Query(..., description='Label filters as JSON string, e.g. {"alertname":"test"}'),
+    current_user: TokenData = Depends(require_permission(Permission.DELETE_ALERTS))
 ):
     """Delete alerts matching the filter.
     
@@ -194,7 +216,8 @@ async def delete_alerts(
 
 @router.get("/silences", response_model=List[Silence])
 async def get_silences(
-    filter_labels: Optional[str] = Query(None, description='Label filters as JSON string')
+    filter_labels: Optional[str] = Query(None, description='Label filters as JSON string'),
+    current_user: TokenData = Depends(require_permission(Permission.READ_ALERTS))
 ):
     """Get all silences.
     
@@ -213,7 +236,10 @@ async def get_silences(
 
 
 @router.get("/silences/{silence_id}", response_model=Silence)
-async def get_silence(silence_id: str):
+async def get_silence(
+    silence_id: str,
+    current_user: TokenData = Depends(require_permission(Permission.READ_ALERTS))
+):
     """Get a specific silence by ID.
     
     Returns detailed information about a single silence.
@@ -225,7 +251,10 @@ async def get_silence(silence_id: str):
 
 
 @router.post("/silences", response_model=Dict[str, str])
-async def create_silence(silence: SilenceCreate = Body(..., description="Silence configuration")):
+async def create_silence(
+    silence: SilenceCreate = Body(..., description="Silence configuration"),
+    current_user: TokenData = Depends(require_permission(Permission.WRITE_ALERTS))
+):
     """Create a new silence.
     
     Creates a silence that will suppress alerts matching the specified matchers.
@@ -239,7 +268,8 @@ async def create_silence(silence: SilenceCreate = Body(..., description="Silence
 @router.put("/silences/{silence_id}", response_model=Dict[str, str])
 async def update_silence(
     silence_id: str,
-    silence: SilenceCreate = Body(..., description="Updated silence configuration")
+    silence: SilenceCreate = Body(..., description="Updated silence configuration"),
+    current_user: TokenData = Depends(require_permission(Permission.WRITE_ALERTS))
 ):
     """Update an existing silence.
     
@@ -252,7 +282,10 @@ async def update_silence(
 
 
 @router.delete("/silences/{silence_id}")
-async def delete_silence(silence_id: str):
+async def delete_silence(
+    silence_id: str,
+    current_user: TokenData = Depends(require_permission(Permission.DELETE_ALERTS))
+):
     """Delete a silence.
     
     Immediately expires the specified silence.
@@ -264,7 +297,7 @@ async def delete_silence(silence_id: str):
 
 
 @router.get("/status", response_model=AlertManagerStatus)
-async def get_status():
+async def get_status(current_user: TokenData = Depends(require_permission(Permission.READ_ALERTS))):
     """Get AlertManager status.
     
     Returns AlertManager version, configuration, and cluster information.
@@ -276,7 +309,7 @@ async def get_status():
 
 
 @router.get("/receivers", response_model=List[str])
-async def get_receivers():
+async def get_receivers(current_user: TokenData = Depends(require_permission(Permission.READ_ALERTS))):
     """Get list of configured receivers.
     
     Returns names of all alert receivers configured in AlertManager.
@@ -286,63 +319,84 @@ async def get_receivers():
 
 
 @router.get("/rules", response_model=List[AlertRule])
-async def get_alert_rules():
+async def get_alert_rules(current_user: TokenData = Depends(require_permission(Permission.READ_ALERTS))):
     """Get all alert rules.
     
-    Returns all configured alert rules.
+    Returns all configured alert rules accessible to the user.
     """
-    rules = storage_service.get_alert_rules()
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    rules = storage_service.get_alert_rules(tenant_id, user_id, group_ids)
     return rules
 
 
 @router.get("/rules/{rule_id}", response_model=AlertRule)
-async def get_alert_rule(rule_id: str):
+async def get_alert_rule(rule_id: str, current_user: TokenData = Depends(require_permission(Permission.READ_ALERTS))):
     """Get a specific alert rule by ID.
     
     Returns detailed information about a single alert rule.
     """
-    rule = storage_service.get_alert_rule(rule_id)
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    rule = storage_service.get_alert_rule(rule_id, tenant_id, user_id, group_ids)
     if not rule:
         raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found")
     return rule
 
 
 @router.post("/rules", response_model=AlertRule, status_code=status.HTTP_201_CREATED)
-async def create_alert_rule(rule: AlertRuleCreate = Body(..., description="Alert rule configuration")):
+async def create_alert_rule(
+    rule: AlertRuleCreate = Body(..., description="Alert rule configuration"),
+    current_user: TokenData = Depends(require_permission(Permission.WRITE_ALERTS))
+):
     """Create a new alert rule.
     
     Creates a new alert rule that will be evaluated by Prometheus.
+    Supports visibility settings: private, group, or tenant.
     """
-    created_rule = storage_service.create_alert_rule(rule)
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    created_rule = storage_service.create_alert_rule(rule, tenant_id, user_id, group_ids)
     return created_rule
 
 
 @router.put("/rules/{rule_id}", response_model=AlertRule)
 async def update_alert_rule(
     rule_id: str,
-    rule: AlertRuleCreate = Body(..., description="Updated rule configuration")
+    rule: AlertRuleCreate = Body(..., description="Updated rule configuration"),
+    current_user: TokenData = Depends(require_permission(Permission.WRITE_ALERTS))
 ):
     """Update an existing alert rule.
     
     Updates the configuration of an existing alert rule.
+    Can update visibility settings and shared groups.
     """
-    updated_rule = storage_service.update_alert_rule(rule_id, rule)
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    updated_rule = storage_service.update_alert_rule(rule_id, rule, tenant_id, user_id, group_ids)
     if not updated_rule:
-        raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found")
+        raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found or access denied")
     return updated_rule
 
 
 @router.post("/rules/{rule_id}/test")
-async def test_alert_rule(rule_id: str):
+async def test_alert_rule(rule_id: str, current_user: TokenData = Depends(require_permission(Permission.WRITE_ALERTS))):
     """Send a test notification for an alert rule to its configured channels.
 
     This does not require Prometheus evaluation and is meant for validation.
     """
-    rule = storage_service.get_alert_rule(rule_id)
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    rule = storage_service.get_alert_rule(rule_id, tenant_id, user_id, group_ids)
     if not rule:
         raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found")
 
-    channels = storage_service.get_notification_channels()
+    channels = storage_service.get_notification_channels(tenant_id, user_id, group_ids)
     if rule.notification_channels:
         channels = [c for c in channels if c.id in rule.notification_channels]
 
@@ -384,34 +438,43 @@ async def test_alert_rule(rule_id: str):
 
 
 @router.delete("/rules/{rule_id}")
-async def delete_alert_rule(rule_id: str):
+async def delete_alert_rule(rule_id: str, current_user: TokenData = Depends(require_permission(Permission.DELETE_ALERTS))):
     """Delete an alert rule.
     
-    Removes an alert rule from the configuration.
+    Removes an alert rule from the configuration. Only the owner can delete.
     """
-    success = storage_service.delete_alert_rule(rule_id)
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    success = storage_service.delete_alert_rule(rule_id, tenant_id, user_id, group_ids)
     if not success:
-        raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found")
+        raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found or access denied")
     return {"status": "success", "message": f"Alert rule {rule_id} deleted"}
 
 
 @router.get("/channels", response_model=List[NotificationChannel])
-async def get_notification_channels():
+async def get_notification_channels(current_user: TokenData = Depends(require_permission(Permission.READ_CHANNELS))):
     """Get all notification channels.
     
-    Returns all configured notification channels.
+    Returns all configured notification channels accessible to the user.
     """
-    channels = storage_service.get_notification_channels()
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    channels = storage_service.get_notification_channels(tenant_id, user_id, group_ids)
     return channels
 
 
 @router.get("/channels/{channel_id}", response_model=NotificationChannel)
-async def get_notification_channel(channel_id: str):
+async def get_notification_channel(channel_id: str, current_user: TokenData = Depends(require_permission(Permission.READ_CHANNELS))):
     """Get a specific notification channel by ID.
     
     Returns detailed information about a single notification channel.
     """
-    channel = storage_service.get_notification_channel(channel_id)
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    channel = storage_service.get_notification_channel(channel_id, tenant_id, user_id, group_ids)
     if not channel:
         raise HTTPException(status_code=404, detail=f"Notification channel {channel_id} not found")
     return channel
@@ -419,50 +482,66 @@ async def get_notification_channel(channel_id: str):
 
 @router.post("/channels", response_model=NotificationChannel, status_code=status.HTTP_201_CREATED)
 async def create_notification_channel(
-    channel: NotificationChannelCreate = Body(..., description="Notification channel configuration")
+    channel: NotificationChannelCreate = Body(..., description="Notification channel configuration"),
+    current_user: TokenData = Depends(require_permission(Permission.WRITE_CHANNELS))
 ):
     """Create a new notification channel.
     
     Creates a new notification channel for alert delivery.
+    Supports visibility settings: private, group, or tenant.
     """
-    created_channel = storage_service.create_notification_channel(channel)
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    created_channel = storage_service.create_notification_channel(channel, tenant_id, user_id, group_ids)
     return created_channel
 
 
 @router.put("/channels/{channel_id}", response_model=NotificationChannel)
 async def update_notification_channel(
     channel_id: str,
-    channel: NotificationChannelCreate = Body(..., description="Updated channel configuration")
+    channel: NotificationChannelCreate = Body(..., description="Updated channel configuration"),
+    current_user: TokenData = Depends(require_permission(Permission.WRITE_CHANNELS))
 ):
     """Update an existing notification channel.
     
     Updates the configuration of an existing notification channel.
+    Can update visibility settings and shared groups.
     """
-    updated_channel = storage_service.update_notification_channel(channel_id, channel)
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    updated_channel = storage_service.update_notification_channel(channel_id, channel, tenant_id, user_id, group_ids)
     if not updated_channel:
-        raise HTTPException(status_code=404, detail=f"Notification channel {channel_id} not found")
+        raise HTTPException(status_code=404, detail=f"Notification channel {channel_id} not found or access denied")
     return updated_channel
 
 
 @router.delete("/channels/{channel_id}")
-async def delete_notification_channel(channel_id: str):
+async def delete_notification_channel(channel_id: str, current_user: TokenData = Depends(require_permission(Permission.DELETE_CHANNELS))):
     """Delete a notification channel.
     
-    Removes a notification channel from the configuration.
+    Removes a notification channel from the configuration. Only the owner can delete.
     """
-    success = storage_service.delete_notification_channel(channel_id)
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    success = storage_service.delete_notification_channel(channel_id, tenant_id, user_id, group_ids)
     if not success:
-        raise HTTPException(status_code=404, detail=f"Notification channel {channel_id} not found")
+        raise HTTPException(status_code=404, detail=f"Notification channel {channel_id} not found or access denied")
     return {"status": "success", "message": f"Notification channel {channel_id} deleted"}
 
 
 @router.post("/channels/{channel_id}/test")
-async def test_notification_channel(channel_id: str):
+async def test_notification_channel(channel_id: str, current_user: TokenData = Depends(require_permission(Permission.WRITE_CHANNELS))):
     """Test a notification channel.
     
     Sends a test notification through the specified channel.
     """
-    channel = storage_service.get_notification_channel(channel_id)
+    tenant_id = current_user.tenant_id
+    user_id = current_user.user_id
+    group_ids = getattr(current_user, 'group_ids', []) or []
+    channel = storage_service.get_notification_channel(channel_id, tenant_id, user_id, group_ids)
     if not channel:
         raise HTTPException(status_code=404, detail=f"Notification channel {channel_id} not found")
     

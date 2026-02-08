@@ -1,5 +1,5 @@
 """Loki API router."""
-from fastapi import APIRouter, Query, Body, Depends, Request
+from fastapi import APIRouter, Query, Body, Depends, Request, HTTPException, status
 from typing import Optional
 import re
 
@@ -9,6 +9,18 @@ from models.loki_models import (
 )
 from services.loki_service import LokiService
 from config import config
+from models.auth_models import Permission, TokenData
+
+try:
+    from routers.auth_router import require_permission
+except ImportError:
+    def require_permission(permission):
+        def _deny():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service unavailable"
+            )
+        return _deny
 
 START_TIME_DESC = "Start time in nanoseconds"
 END_TIME_DESC = "End time in nanoseconds"
@@ -33,7 +45,8 @@ async def query_logs(
     start: Optional[int] = Query(None, description=START_TIME_DESC),
     end: Optional[int] = Query(None, description=END_TIME_DESC),
     direction: LogDirection = Query(LogDirection.BACKWARD, description="Query direction"),
-    step: Optional[int] = Query(None, description="Query resolution step in seconds")
+    step: Optional[int] = Query(None, description="Query resolution step in seconds"),
+    current_user: TokenData = Depends(require_permission(Permission.READ_LOGS))
 ) -> LogResponse:
     log_query = LogQuery(
         query=query,
@@ -52,7 +65,8 @@ async def query_logs(
 async def query_logs_instant(
     request: Request,
     query: str = Query(..., description="LogQL query string"),
-    time: Optional[int] = Query(None, description="Query time in nanoseconds")
+    time: Optional[int] = Query(None, description="Query time in nanoseconds"),
+    current_user: TokenData = Depends(require_permission(Permission.READ_LOGS))
 ):
     """Query logs at a specific point in time.
     
@@ -66,7 +80,8 @@ async def query_logs_instant(
 async def get_labels(
     request: Request,
     start: Optional[int] = Query(None, description=START_TIME_DESC),
-    end: Optional[int] = Query(None, description=END_TIME_DESC)
+    end: Optional[int] = Query(None, description=END_TIME_DESC),
+    current_user: TokenData = Depends(require_permission(Permission.READ_LOGS))
 ):
     """Get all available log labels.
     
@@ -82,7 +97,8 @@ async def get_label_values(
     label: str,
     start: Optional[int] = Query(None, description=START_TIME_DESC),
     end: Optional[int] = Query(None, description=END_TIME_DESC),
-    query: Optional[str] = Query(None, description="Optional LogQL query filter")
+    query: Optional[str] = Query(None, description="Optional LogQL query filter"),
+    current_user: TokenData = Depends(require_permission(Permission.READ_LOGS))
 ):
     """Get all values for a specific label.
     
@@ -96,7 +112,8 @@ async def get_label_values(
 @router.post("/search")
 async def search_logs(
     request: Request,
-    payload: LogSearchRequest = Body(..., description="Log search request")
+    payload: LogSearchRequest = Body(..., description="Log search request"),
+    current_user: TokenData = Depends(require_permission(Permission.READ_LOGS))
 ):
     """Search logs by text pattern with optional label filters.
     
@@ -115,7 +132,8 @@ async def search_logs(
 @router.post("/filter")
 async def filter_logs(
     request: Request,
-    payload: LogFilterRequest = Body(..., description="Log filtering request")
+    payload: LogFilterRequest = Body(..., description="Log filtering request"),
+    current_user: TokenData = Depends(require_permission(Permission.READ_LOGS))
 ):
     """Filter logs by labels and optional text filters.
     
@@ -138,7 +156,8 @@ async def aggregate_logs(
     query: str = Query(..., description="LogQL aggregation query"),
     start: Optional[int] = Query(None, description=START_TIME_DESC),
     end: Optional[int] = Query(None, description=END_TIME_DESC),
-    step: int = Query(60, ge=1, description="Query resolution step in seconds")
+    step: int = Query(60, ge=1, description="Query resolution step in seconds"),
+    current_user: TokenData = Depends(require_permission(Permission.READ_LOGS))
 ):
     """Aggregate logs using LogQL aggregation functions.
     
@@ -155,7 +174,8 @@ async def get_log_volume(
     query: str = Query(..., description="LogQL selector query"),
     start: Optional[int] = Query(None, description=START_TIME_DESC),
     end: Optional[int] = Query(None, description=END_TIME_DESC),
-    step: int = Query(300, ge=1, description="Time step in seconds")
+    step: int = Query(300, ge=1, description="Time step in seconds"),
+    current_user: TokenData = Depends(require_permission(Permission.READ_LOGS))
 ):
     """Get log volume over time.
     

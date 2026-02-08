@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchHealth, getAlerts } from '../api'
+import { fetchHealth, getAlerts, searchTraces, getLogVolume } from '../api'
 import { Card, Badge, MetricCard, Spinner } from './ui'
 import PropTypes from 'prop-types'
 
@@ -8,20 +8,87 @@ export default function Dashboard({ info }) {
   const [loading, setLoading] = useState(true)
   const [alertCount, setAlertCount] = useState(null)
   const [loadingAlerts, setLoadingAlerts] = useState(true)
+  const [traceCount, setTraceCount] = useState(null)
+  const [traceErrorCount, setTraceErrorCount] = useState(null)
+  const [loadingTraces, setLoadingTraces] = useState(true)
+  const [logVolume, setLogVolume] = useState(null)
+  const [loadingLogs, setLoadingLogs] = useState(true)
 
   useEffect(() => {
-    fetchHealth()
-      .then(setHealth)
-      .catch(() => setHealth(null))
-      .finally(() => setLoading(false))
+    // Health
+    ;(async () => {
+      try {
+        const res = await fetchHealth()
+        setHealth(res)
+      } catch (e) {
+        setHealth(null)
+      } finally {
+        if (typeof setLoading === 'function') setLoading(false)
+      }
+    })()
 
-    setLoadingAlerts(true)
-    getAlerts()
-      .then((data) => {
+    // Alerts
+    ;(async () => {
+      try {
+        if (typeof setLoadingAlerts === 'function') setLoadingAlerts(true)
+        const data = await getAlerts()
         setAlertCount(Array.isArray(data) ? data.length : 0)
-      })
-      .catch(() => setAlertCount(0))
-      .finally(() => setLoadingAlerts(false))
+      } catch (e) {
+        setAlertCount(0)
+      } finally {
+        if (typeof setLoadingAlerts === 'function') setLoadingAlerts(false)
+      }
+    })()
+
+    // Fetch recent traces (last 1 hour) and count errors
+    ;(async () => {
+      try {
+        // Tempo expects microseconds for start/end
+        const endUs = Date.now() * 1000 // ms -> µs
+        const startUs = endUs - (60 * 60 * 1000000) // last 1 hour in µs
+        const res = await searchTraces({ start: Math.floor(startUs), end: Math.floor(endUs), limit: 1000 })
+        const traces = res?.data || []
+        setTraceCount(traces.length)
+        const errors = traces.filter(t => (t.spans || []).some(s => s.status?.code === 'ERROR' || s.tags?.some(tag => tag.key === 'error' && tag.value === true))).length
+        setTraceErrorCount(errors)
+      } catch (e) {
+        setTraceCount(0)
+        setTraceErrorCount(0)
+      } finally {
+        if (typeof setLoadingTraces === 'function') setLoadingTraces(false)
+      }
+    })()
+
+    // Fetch log volume for last 1 hour (use catch-all Loki query)
+    ;(async () => {
+      try {
+        // use nanoseconds for Loki API and request 1h window with 60s step
+        const endNs = Date.now() * 1000000 // ms -> ns
+        const startNs = endNs - (60 * 60 * 1000000000) // last 1 hour in ns
+        const vol = await getLogVolume('{service_name=~".+"}', { start: Math.floor(startNs), end: Math.floor(endNs), step: 60 })
+        // vol.data may contain series; try to sum values
+        let total = 0
+        try {
+          if (vol && vol.data && Array.isArray(vol.data.result)) {
+            vol.data.result.forEach(series => {
+              if (Array.isArray(series.values)) {
+                series.values.forEach(v => {
+                  const val = Number(v[1])
+                  if (!Number.isNaN(val)) total += val
+                })
+              }
+            })
+          }
+        } catch (ex) {
+          total = null
+        }
+        setLogVolume(total)
+      } catch (e) {
+        setLogVolume(null)
+      } finally {
+        if (typeof setLoadingLogs === 'function') setLoadingLogs(false)
+      }
+    })()
   }, [])
 
   const statusBadge = (status) => {
@@ -120,9 +187,31 @@ export default function Dashboard({ info }) {
             }
           />
           <MetricCard
+            label="Traces (last 1h)"
+            value={loadingTraces ? <Spinner size="sm" /> : (traceCount !== null ? String(traceCount) : 'N/A')}
+            trend={traceErrorCount > 0 ? `${traceErrorCount} with errors` : (traceCount > 0 ? 'No errors' : 'No traces')}
+            status={traceErrorCount > 0 ? 'warning' : (traceCount > 0 ? 'success' : 'default')}
+            icon={
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18" />
+              </svg>
+            }
+          />
+          <MetricCard
+            label="Logs (last 1h)"
+            value={loadingLogs ? <Spinner size="sm" /> : (logVolume !== null ? String(logVolume) : 'N/A')}
+            trend={logVolume > 0 ? 'Log volume detected' : 'No logs'}
+            status={logVolume > 0 ? 'success' : 'default'}
+            icon={
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18M3 6h18M3 18h18" />
+              </svg>
+            }
+          />
+          <MetricCard
             label="Active Services"
-            value="4"
-            trend="All operational"
+            value={String(services.length)}
+            trend={services.length ? `${services.length} connected` : 'No services connected'}
             status="success"
             icon={
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,34 +222,6 @@ export default function Dashboard({ info }) {
         </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Service Info */}
-        <Card
-          title="Service Information"
-          subtitle="Core service details"
-          className="lg:col-span-1"
-        >
-          <div className="space-y-4">
-            <div>
-              <div className="text-sm text-sre-text-muted mb-1">Service Name</div>
-              <div className="text-lg font-mono font-semibold text-sre-text">
-                {info?.service || 'beObservant'}
-              </div>
-            </div>
-            <div>
-              <div className="text-sm text-sre-text-muted mb-1">Version</div>
-              <div className="text-lg font-mono font-semibold text-sre-primary">
-                {info?.version || 'v1.0.0'}
-              </div>
-            </div>
-            <div>
-              <div className="text-sm text-sre-text-muted mb-1">Health Status</div>
-              <div className="flex items-center gap-2 mt-2">
-                {statusBadge(health?.status)}
-              </div>
-            </div>
-          </div>
-        </Card>
-        
         {/* Connected Services */}
         <Card
           title="Connected Services"
