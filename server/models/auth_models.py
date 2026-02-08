@@ -3,6 +3,8 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, EmailStr
 
+from config import config
+
 class Role(str, Enum):
     ADMIN = "admin"
     USER = "user"
@@ -83,6 +85,7 @@ class UserBase(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     full_name: Optional[str] = None
+    org_id: str = Field(default=config.DEFAULT_ORG_ID, max_length=100, description="Organization ID for multi-tenant observability")
     role: Role = Role.USER
     group_ids: List[str] = Field(default_factory=list)
     is_active: bool = True
@@ -95,6 +98,7 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
+    org_id: Optional[str] = None
     role: Optional[Role] = None
     group_ids: Optional[List[str]] = None
     is_active: Optional[bool] = None
@@ -105,6 +109,28 @@ class UserPasswordUpdate(BaseModel):
     new_password: str = Field(..., min_length=8)
 
 
+class ApiKeyBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class ApiKeyCreate(ApiKeyBase):
+    key: Optional[str] = Field(None, min_length=3, max_length=200, description="Optional custom API key value")
+
+
+class ApiKeyUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    is_enabled: Optional[bool] = None
+
+
+class ApiKey(ApiKeyBase):
+    id: str
+    key: str
+    is_default: bool = False
+    is_enabled: bool = True
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
 class User(UserBase):
     id: str
     tenant_id: str
@@ -112,6 +138,7 @@ class User(UserBase):
     updated_at: datetime
     last_login: Optional[datetime] = None
     needs_password_change: bool = False
+    api_keys: List[ApiKey] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -131,6 +158,7 @@ class TokenData(BaseModel):
     user_id: str
     username: str
     tenant_id: str
+    org_id: str  # Organization ID for multi-tenant observability
     role: Role
     is_superuser: bool = False
     permissions: List[str]  # Changed to List[str] for flexibility
@@ -157,9 +185,11 @@ class UserResponse(BaseModel):
     role: Role
     group_ids: List[str]
     is_active: bool
+    org_id: str
     tenant_id: str
     created_at: datetime
     last_login: Optional[datetime]
     permissions: List[Permission]
     direct_permissions: List[str] = Field(default_factory=list)
     needs_password_change: bool = False
+    api_keys: List[ApiKey] = Field(default_factory=list)

@@ -10,7 +10,6 @@ from models import (
     LogLabelValuesResponse
 )
 from middleware.resilience import with_retry, with_timeout
-from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +159,7 @@ class LokiService:
     
     @with_retry()
     @with_timeout()
-    async def query_logs(self, query: LogQuery, tenant_id: str = config.DEFAULT_ORG_ID) -> LogResponse:
+    async def query_logs(self, query: LogQuery, tenant_id: str = "default") -> LogResponse:
         """Query logs using LogQL.
         
         Args:
@@ -215,7 +214,7 @@ class LokiService:
     
     @with_retry()
     @with_timeout()
-    async def query_logs_instant(self, query_str: str, time: Optional[int] = None, tenant_id: str = config.DEFAULT_ORG_ID) -> LogResponse:
+    async def query_logs_instant(self, query_str: str, time: Optional[int] = None, tenant_id: str = "default") -> LogResponse:
         """Query logs at a specific point in time.
         
         Args:
@@ -273,7 +272,7 @@ class LokiService:
     
     @with_retry()
     @with_timeout()
-    async def get_labels(self, start: Optional[int] = None, end: Optional[int] = None, tenant_id: str = config.DEFAULT_ORG_ID) -> LogLabelsResponse:
+    async def get_labels(self, start: Optional[int] = None, end: Optional[int] = None, tenant_id: str = "default") -> LogLabelsResponse:
         """Get all available log labels.
         
         Args:
@@ -295,8 +294,7 @@ class LokiService:
             try:
                 response = await client.get(
                     f"{self.loki_url}/loki/api/v1/labels",
-                    params=params,
-                    headers=headers
+                    params=params
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -318,7 +316,7 @@ class LokiService:
         start: Optional[int] = None,
         end: Optional[int] = None,
         query: Optional[str] = None,
-        tenant_id: str = config.DEFAULT_ORG_ID
+        tenant_id: str = "default"
     ) -> LogLabelValuesResponse:
         """Get values for a specific label.
         
@@ -345,8 +343,7 @@ class LokiService:
             try:
                 response = await client.get(
                     f"{self.loki_url}/loki/api/v1/label/{label}/values",
-                    params=params,
-                    headers=headers
+                    params=params
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -371,7 +368,7 @@ class LokiService:
         start: Optional[int] = None,
         end: Optional[int] = None,
         step: int = 60,
-        tenant_id: str = config.DEFAULT_ORG_ID
+        tenant_id: str = "default"
     ) -> Dict[str, Any]:
         """Aggregate logs using LogQL aggregation queries.
         
@@ -432,7 +429,7 @@ class LokiService:
         start: Optional[int] = None,
         end: Optional[int] = None,
         step: int = 300,
-        tenant_id: str = config.DEFAULT_ORG_ID
+        tenant_id: str = "default"
     ) -> Dict[str, Any]:
         """Get log volume over time.
         
@@ -446,32 +443,8 @@ class LokiService:
             Log volume data over time
         """
         
-        candidates = [query_str]
-        candidates.extend(self._build_service_fallback_queries(query_str))
-        if "service_name" in query_str or "service.name" in query_str:
-            candidates.append(query_str.replace("service_name", "service"))
-            candidates.append(query_str.replace("service.name", "service"))
-            candidates.append('{service=~".+"}')
-        candidates.append("{}")
-
-        candidates = list(dict.fromkeys(candidates))
-
-        last_result: Dict[str, Any] = {
-            "status": "success",
-            "data": {"result": []},
-            "query": query_str,
-            "step": step
-        }
-
-        for candidate in candidates:
-            volume_query = f'sum(count_over_time({candidate}[{step}s]))'
-            result = await self.aggregate_logs(volume_query, start, end, step, tenant_id=tenant_id)
-            last_result = result
-            data = result.get("data") if isinstance(result, dict) else None
-            if isinstance(data, dict) and data.get("result"):
-                return result
-
-        return last_result
+        volume_query = f'sum(count_over_time({query_str}[{step}s]))'
+        return await self.aggregate_logs(volume_query, start, end, step)
     
     @with_retry()
     @with_timeout()
@@ -482,7 +455,7 @@ class LokiService:
         start: Optional[int] = None,
         end: Optional[int] = None,
         limit: int = 100,
-        tenant_id: str = config.DEFAULT_ORG_ID
+        tenant_id: str = "default"
     ) -> LogResponse:
         """Search logs by text pattern.
         
@@ -518,7 +491,7 @@ class LokiService:
         start: Optional[int] = None,
         end: Optional[int] = None,
         limit: int = 100,
-        tenant_id: str = config.DEFAULT_ORG_ID
+        tenant_id: str = "default"
     ) -> LogResponse:
         """Filter logs by labels and optional text filters.
         

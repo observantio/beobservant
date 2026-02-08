@@ -3,6 +3,8 @@ from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field
 from enum import Enum
 
+from config import config
+
 class AlertState(str, Enum):
     """Alert state enum."""
     UNPROCESSED = "unprocessed"
@@ -130,7 +132,7 @@ class AlertRule(BaseModel):
     labels: Dict[str, str] = Field(default_factory=dict, description="Additional labels")
     annotations: Dict[str, str] = Field(default_factory=dict, description="Annotations with description, summary, etc.")
     enabled: bool = Field(True, description="Whether the rule is enabled")
-    group: str = Field("default", description="Rule group name")
+    group: str = Field(config.DEFAULT_RULE_GROUP, description="Rule group name")
     notification_channels: List[str] = Field(default_factory=list, alias="notificationChannels", description="List of notification channel IDs to send alerts to. If empty, sends to all channels.")
     visibility: Visibility = Field(Visibility.PRIVATE, description="Visibility scope")
     shared_group_ids: List[str] = Field(default_factory=list, alias="sharedGroupIds", description="Group IDs this rule is shared with (when visibility=group)")
@@ -148,7 +150,7 @@ class AlertRuleCreate(BaseModel):
     labels: Dict[str, str] = Field(default_factory=dict, description="Additional labels")
     annotations: Dict[str, str] = Field(default_factory=dict, description="Annotations")
     enabled: bool = Field(True, description="Whether the rule is enabled")
-    group: str = Field("default", description="Rule group name")
+    group: str = Field(config.DEFAULT_RULE_GROUP, description="Rule group name")
     notification_channels: List[str] = Field(default_factory=list, alias="notificationChannels", description="List of notification channel IDs. Empty means all channels.")
     visibility: Visibility = Field(Visibility.PRIVATE, description="Visibility scope")
     shared_group_ids: List[str] = Field(default_factory=list, alias="sharedGroupIds", description="Group IDs to share with")

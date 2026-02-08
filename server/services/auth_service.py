@@ -9,7 +9,8 @@ from jose import JWTError, jwt
 
 from models.auth_models import (
     User, UserInDB, UserCreate, UserUpdate, UserPasswordUpdate,
-    Group, GroupCreate, GroupUpdate, Token, TokenData, Role, Permission, ROLE_PERMISSIONS
+    Group, GroupCreate, GroupUpdate, Token, TokenData, Role, Permission, ROLE_PERMISSIONS,
+    ApiKey, ApiKeyCreate, ApiKeyUpdate
 )
 from config import config
 
@@ -32,6 +33,55 @@ class AuthService:
         if not self.groups_file.exists():
             self.groups_file.write_text(json.dumps([], indent=2))
 
+    def _ensure_user_api_keys(self, user_dict: Dict[str, Any]) -> bool:
+        """Ensure user has API key metadata and a default key."""
+        updated = False
+        now = datetime.now(timezone.utc).isoformat()
+        default_key_value = user_dict.get("org_id") or config.DEFAULT_ORG_ID
+
+        api_keys = user_dict.get("api_keys")
+        if api_keys is None:
+            api_keys = []
+            updated = True
+
+        default_key = next((k for k in api_keys if k.get("is_default")), None)
+        if not default_key:
+            default_key = {
+                "id": str(uuid.uuid4()),
+                "name": "Default",
+                "key": default_key_value,
+                "is_default": True,
+                "is_enabled": True,
+                "created_at": now,
+                "updated_at": now
+            }
+            api_keys.insert(0, default_key)
+            updated = True
+        else:
+            if default_key.get("key") != default_key_value:
+                default_key["key"] = default_key_value
+                default_key["updated_at"] = now
+                updated = True
+
+        selected_ids = user_dict.get("selected_api_key_ids")
+        if selected_ids is None:
+            user_dict["selected_api_key_ids"] = [default_key["id"]]
+            updated = True
+        else:
+            if default_key["id"] not in selected_ids:
+                selected_ids.append(default_key["id"])
+                updated = True
+
+        selected_ids = user_dict.get("selected_api_key_ids", [])
+        for key in api_keys:
+            desired_enabled = key["id"] in selected_ids
+            if key.get("is_enabled") != desired_enabled:
+                key["is_enabled"] = desired_enabled
+                updated = True
+
+        user_dict["api_keys"] = api_keys
+        return updated
+
     def _ensure_default_admin(self):
         users = self._load_users()
         if not any(u.get("role") == Role.ADMIN for u in users):
@@ -46,6 +96,7 @@ class AuthService:
                 "username": admin_username,
                 "email": admin_email,
                 "full_name": "System Administrator",
+                "org_id": config.DEFAULT_ORG_ID,
                 "role": Role.ADMIN,
                 "group_ids": [],
                 "is_active": True,
@@ -54,13 +105,21 @@ class AuthService:
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "last_login": None
             }
+            self._ensure_user_api_keys(admin_user)
             users.append(admin_user)
             self._save_users(users)
             logger.info("Created default admin user (username: admin, password: admin123)")
 
     def _load_users(self) -> List[Dict[str, Any]]:
         try:
-            return json.loads(self.users_file.read_text())
+            users = json.loads(self.users_file.read_text())
+            updated = False
+            for user in users:
+                if self._ensure_user_api_keys(user):
+                    updated = True
+            if updated:
+                self._save_users(users)
+            return users
         except Exception as e:
             logger.error(f"Error loading users: {e}")
             return []
@@ -94,6 +153,7 @@ class AuthService:
             "sub": user.id,
             "username": user.username,
             "tenant_id": user.tenant_id,
+            "org_id": user.org_id,
             "role": user.role,
             "permissions": [p.value for p in permissions],
             "exp": expire
@@ -113,6 +173,7 @@ class AuthService:
             user_id: str = payload.get("sub")
             username: str = payload.get("username")
             tenant_id: str = payload.get("tenant_id")
+            org_id: str = payload.get("org_id", config.DEFAULT_ORG_ID)
             role: str = payload.get("role")
             permissions: List[str] = payload.get("permissions", [])
             group_ids: List[str] = payload.get("group_ids", [])
@@ -124,6 +185,7 @@ class AuthService:
                 user_id=user_id,
                 username=username,
                 tenant_id=tenant_id,
+                org_id=org_id,
                 role=Role(role),
                 permissions=[Permission(p) for p in permissions],
                 group_ids=group_ids
@@ -176,6 +238,7 @@ class AuthService:
             "username": user_create.username,
             "email": user_create.email,
             "full_name": user_create.full_name,
+            "org_id": getattr(user_create, "org_id", None) or config.DEFAULT_ORG_ID,
             "role": user_create.role,
             "group_ids": user_create.group_ids,
             "is_active": user_create.is_active,
@@ -184,6 +247,7 @@ class AuthService:
             "updated_at": now.isoformat(),
             "last_login": None
         }
+        self._ensure_user_api_keys(user_dict)
         
         users.append(user_dict)
         self._save_users(users)
@@ -204,6 +268,8 @@ class AuthService:
         
         update_data = user_update.model_dump(exclude_unset=True)
         user_dict.update(update_data)
+        if "org_id" in update_data:
+            self._ensure_user_api_keys(user_dict)
         user_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
         
         self._save_users(users)
@@ -234,6 +300,99 @@ class AuthService:
             self._save_users(users)
             return True
         return False
+
+    def list_api_keys(self, user_id: str) -> List[ApiKey]:
+        users = self._load_users()
+        user_dict = next((u for u in users if u["id"] == user_id), None)
+        if not user_dict:
+            return []
+        return [ApiKey(**key) for key in user_dict.get("api_keys", [])]
+
+    def create_api_key(self, user_id: str, key_create: ApiKeyCreate) -> Optional[ApiKey]:
+        users = self._load_users()
+        user_dict = next((u for u in users if u["id"] == user_id), None)
+        if not user_dict:
+            return None
+
+        now = datetime.now(timezone.utc).isoformat()
+        new_key_value = key_create.key or str(uuid.uuid4())
+        api_key = {
+            "id": str(uuid.uuid4()),
+            "name": key_create.name,
+            "key": new_key_value,
+            "is_default": False,
+            "is_enabled": True,
+            "created_at": now,
+            "updated_at": now
+        }
+
+        user_dict.setdefault("api_keys", []).append(api_key)
+        user_dict.setdefault("selected_api_key_ids", []).append(api_key["id"])
+        self._save_users(users)
+
+        return ApiKey(**api_key)
+
+    def update_api_key(self, user_id: str, key_id: str, key_update: ApiKeyUpdate) -> Optional[ApiKey]:
+        users = self._load_users()
+        user_dict = next((u for u in users if u["id"] == user_id), None)
+        if not user_dict:
+            return None
+
+        api_keys = user_dict.get("api_keys", [])
+        key_dict = next((k for k in api_keys if k["id"] == key_id), None)
+        if not key_dict:
+            return None
+
+        if key_update.name is not None:
+            key_dict["name"] = key_update.name
+
+        if key_update.is_enabled is not None:
+            if key_dict.get("is_default") and not key_update.is_enabled:
+                raise ValueError("Default key cannot be disabled")
+
+            key_dict["is_enabled"] = key_update.is_enabled
+            selected_ids = user_dict.get("selected_api_key_ids", [])
+            if key_update.is_enabled:
+                if key_id not in selected_ids:
+                    selected_ids.append(key_id)
+            else:
+                if key_id in selected_ids and len(selected_ids) == 1:
+                    raise ValueError("At least one API key must be enabled")
+                if key_id in selected_ids:
+                    selected_ids.remove(key_id)
+            user_dict["selected_api_key_ids"] = selected_ids
+
+        key_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self._save_users(users)
+        return ApiKey(**key_dict)
+
+    def delete_api_key(self, user_id: str, key_id: str) -> bool:
+        users = self._load_users()
+        user_dict = next((u for u in users if u["id"] == user_id), None)
+        if not user_dict:
+            return False
+
+        api_keys = user_dict.get("api_keys", [])
+        key_dict = next((k for k in api_keys if k["id"] == key_id), None)
+        if not key_dict:
+            return False
+        if key_dict.get("is_default"):
+            raise ValueError("Default key cannot be deleted")
+
+        api_keys = [k for k in api_keys if k["id"] != key_id]
+        user_dict["api_keys"] = api_keys
+
+        selected_ids = user_dict.get("selected_api_key_ids", [])
+        if key_id in selected_ids:
+            selected_ids.remove(key_id)
+        if not selected_ids:
+            default_key = next((k for k in api_keys if k.get("is_default")), None)
+            if default_key:
+                selected_ids = [default_key["id"]]
+                default_key["is_enabled"] = True
+        user_dict["selected_api_key_ids"] = selected_ids
+        self._save_users(users)
+        return True
 
     def create_group(self, group_create: GroupCreate, tenant_id: str) -> Group:
         groups = self._load_groups()

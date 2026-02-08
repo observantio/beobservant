@@ -12,7 +12,7 @@ import { useAuth } from '../contexts/AuthContext'
 const GRAFANA_URL = import.meta.env.VITE_GRAFANA_URL || 'https://localhost/grafana'
 
 const DATASOURCE_TYPES = [
-  { value: 'prometheus', label: 'Prometheus', icon: (
+  { value: 'prometheus', label: 'Mimir (Prometheus-compatible)', icon: (
     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
       <rect x="3" y="11" width="4" height="10" rx="1" />
       <rect x="9" y="7" width="4" height="14" rx="1" />
@@ -105,6 +105,7 @@ export default function GrafanaPage() { // NOSONAR
     access: 'proxy',
     visibility: 'private',
     sharedGroupIds: [],
+    apiKeyId: '',
   })
 
   // Folder creator state
@@ -298,8 +299,10 @@ export default function GrafanaPage() { // NOSONAR
         access: datasource.access || 'proxy',
         visibility: 'private',
         sharedGroupIds: [],
+        apiKeyId: '',
       })
     } else {
+      const defaultKey = (user?.api_keys || []).find((k) => k.is_default) || (user?.api_keys || [])[0]
       setEditingDatasource(null)
       setDatasourceForm({
         name: '',
@@ -309,6 +312,7 @@ export default function GrafanaPage() { // NOSONAR
         access: 'proxy',
         visibility: 'private',
         sharedGroupIds: [],
+        apiKeyId: defaultKey?.id || '',
       })
     }
     setShowDatasourceEditor(true)
@@ -317,6 +321,14 @@ export default function GrafanaPage() { // NOSONAR
   async function saveDatasource() {
     setError(null)
     setSuccess(null)
+    
+    // Validate org_id for multi-tenant datasources
+    const isMultiTenantType = ['prometheus', 'loki', 'tempo'].includes(datasourceForm.type)
+    if (!editingDatasource && isMultiTenantType && !datasourceForm.apiKeyId) {
+      setError('API key is required for Prometheus, Loki, and Tempo datasources')
+      return
+    }
+    
     try {
       const payload = {
         name: datasourceForm.name,
@@ -325,6 +337,12 @@ export default function GrafanaPage() { // NOSONAR
         access: datasourceForm.access,
         isDefault: datasourceForm.isDefault,
         jsonData: {},
+      }
+      
+      // Add org_id to payload for new multi-tenant datasources
+      if (!editingDatasource && isMultiTenantType) {
+        const selectedKey = (user?.api_keys || []).find((k) => k.id === datasourceForm.apiKeyId)
+        payload.org_id = selectedKey?.key || user?.org_id || 'default'
       }
 
       // Build query params for visibility
@@ -414,9 +432,11 @@ export default function GrafanaPage() { // NOSONAR
   return (
     <div className="animate-fade-in">
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-sre-text mb-2">Grafana Dashboard Manager</h1>
-          <p className="text-sre-text-muted">Manage dashboards, datasources, and folders with powerful SRE tooling</p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-3xl font-bold text-sre-text mb-2"><span className="material-icons text-blue-600 text-3xl align-middle">analytics</span> Grafana Manager</h1>
+            <p className="text-sre-text-muted">Manage dashboards, datasources, and folders with powerful SRE tooling</p>
+          </div>
         </div>
         <Button
           onClick={() => openInGrafana('/')}
@@ -627,7 +647,7 @@ export default function GrafanaPage() { // NOSONAR
             label="Datasource Name *"
             value={datasourceForm.name}
             onChange={(e) => setDatasourceForm({ ...datasourceForm, name: e.target.value })}
-            placeholder="My Prometheus"
+            placeholder="My Mimir"
             required
           />
 
@@ -649,7 +669,7 @@ export default function GrafanaPage() { // NOSONAR
             label="URL *"
             value={datasourceForm.url}
             onChange={(e) => setDatasourceForm({ ...datasourceForm, url: e.target.value })}
-            placeholder="http://prometheus:9090"
+            placeholder="http://mimir:9009/prometheus"
             helperText="The URL where the datasource is accessible"
             required
           />
@@ -663,6 +683,28 @@ export default function GrafanaPage() { // NOSONAR
             <option value="proxy">Server (Proxy)</option>
             <option value="direct">Browser (Direct)</option>
           </Select>
+
+          {!editingDatasource && ['prometheus', 'loki', 'tempo'].includes(datasourceForm.type) && (
+            <div className="">
+              <Select
+                label="API Key *"
+                value={datasourceForm.apiKeyId}
+                onChange={(e) => setDatasourceForm({ ...datasourceForm, apiKeyId: e.target.value })}
+                required
+                helperText="Select which API key to use for multi-tenant data isolation."
+              >
+                {(user?.api_keys || []).map((key) => (
+                  <option key={key.id} value={key.id}>
+                    {key.name}
+                  </option>
+                ))}
+              </Select>
+              <div className="mt-2 text-xs text-sre-text-muted">
+                <span className="material-icons text-sm align-middle mr-1">info</span>
+                This datasource will only query data tagged with this API key in {datasourceForm.type === 'prometheus' ? 'Mimir' : datasourceForm.type === 'loki' ? 'Loki' : 'Tempo'}.
+              </div>
+            </div>
+          )}
 
           <Checkbox
             label="Set as default datasource"

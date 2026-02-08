@@ -14,6 +14,7 @@ class Config:
     LOKI_URL: str = os.getenv("LOKI_URL", "http://loki:3100")
     ALERTMANAGER_URL: str = os.getenv("ALERTMANAGER_URL", "http://alertmanager:9093")
     GRAFANA_URL: str = os.getenv("GRAFANA_URL", "http://grafana:3000")
+    MIMIR_URL: str = os.getenv("MIMIR_URL", "http://mimir:9009")
     
     # Grafana credentials
     GRAFANA_USERNAME: str = os.getenv("GRAFANA_USERNAME", "admin")
@@ -52,6 +53,13 @@ class Config:
     DEFAULT_ADMIN_PASSWORD: str = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
     DEFAULT_ADMIN_EMAIL: str = os.getenv("DEFAULT_ADMIN_EMAIL", "admin@example.com")
     DEFAULT_ADMIN_TENANT: str = os.getenv("DEFAULT_ADMIN_TENANT", "default")
+    
+    # Multi-tenancy
+    DEFAULT_ORG_ID: str = os.getenv("DEFAULT_ORG_ID", "default")
+
+    # Alerting and notifications defaults
+    DEFAULT_RULE_GROUP: str = os.getenv("DEFAULT_RULE_GROUP", "default")
+    DEFAULT_SLACK_CHANNEL: str = os.getenv("DEFAULT_SLACK_CHANNEL", "default")
 
 
 class Constants:

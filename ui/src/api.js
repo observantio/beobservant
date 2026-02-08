@@ -4,33 +4,65 @@
 import { API_BASE } from './utils/constants'
 
 let authToken = null
+let userOrgIds = ['default']
+let isPromotingOrgId = false
 
 export function setAuthToken(token) {
   authToken = token
 }
 
-async function request(path, opts = {}) {
-  const headers = opts.headers || {}
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`
+export function setUserOrgIds(orgIds) {
+  if (Array.isArray(orgIds) && orgIds.length > 0) {
+    userOrgIds = orgIds
+  } else if (typeof orgIds === 'string' && orgIds) {
+    userOrgIds = [orgIds]
+  } else {
+    userOrgIds = ['default']
   }
-  opts.headers = headers
+}
 
-  const res = await fetch(`${API_BASE}${path}`, opts)
+export function getUserOrgIds() {
+  return userOrgIds && userOrgIds.length > 0 ? userOrgIds : ['default']
+}
+
+async function promoteOrgId(orgId) {
+  if (!authToken || !orgId || isPromotingOrgId) return
+  if (userOrgIds[0] === orgId) return
+  isPromotingOrgId = true
+  try {
+    await fetch(`${API_BASE}/api/auth/me`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ org_id: orgId })
+    })
+    userOrgIds = [orgId, ...userOrgIds.filter((id) => id !== orgId)]
+  } catch (e) {
+    // ignore promotion errors
+  } finally {
+    isPromotingOrgId = false
+  }
+}
+
+async function requestWithHeaders(path, opts = {}, headers = {}) {
+  const merged = { ...headers, ...(opts.headers || {}) }
+  if (authToken) {
+    merged['Authorization'] = `Bearer ${authToken}`
+  }
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers: merged })
   if (!res.ok) {
     const text = await res.text()
-    // Emit an api-error event so global UI can show toasts
     try {
       const body = (text && text.startsWith('{')) ? JSON.parse(text) : { message: text }
       window.dispatchEvent(new CustomEvent('api-error', { detail: { status: res.status, body } }))
     } catch (e) {
       const fallbackBody = { message: text || res.statusText }
       window.dispatchEvent(new CustomEvent('api-error', { detail: { status: res.status, body: fallbackBody } }))
-      // ensure body is available below
       var body = fallbackBody
     }
 
-    // Only auto-redirect to login when we receive 401 from non-auth endpoints
     if (res.status === 401 && path !== '/api/auth/login') {
       authToken = null
       localStorage.removeItem('auth_token')
@@ -39,7 +71,6 @@ async function request(path, opts = {}) {
 
     const err = new Error(text || res.statusText)
     err.status = res.status
-    // attach parsed body (if available) for callers to inspect
     try {
       if (typeof body !== 'undefined') {
         err.body = body
@@ -51,9 +82,37 @@ async function request(path, opts = {}) {
     }
     throw err
   }
+
   const ct = res.headers.get('content-type') || ''
   if (ct.includes('application/json')) return await res.json()
   return await res.text()
+}
+
+async function request(path, opts = {}) {
+  const isLokiTempo = path.includes('/api/loki') || path.includes('/api/tempo')
+  const isAlertmanager = path.includes('/api/alertmanager')
+
+  if (isLokiTempo && userOrgIds && userOrgIds.length > 0) {
+    let lastError = null
+    for (const orgId of userOrgIds) {
+      try {
+        const res = await requestWithHeaders(path, opts, { 'X-Scope-OrgID': orgId })
+        if (orgId !== userOrgIds[0]) {
+          promoteOrgId(orgId)
+        }
+        return res
+      } catch (e) {
+        lastError = e
+      }
+    }
+    throw lastError
+  }
+
+  if (isAlertmanager && userOrgIds && userOrgIds.length > 0) {
+    return requestWithHeaders(path, opts, { 'X-Scope-OrgID': userOrgIds.join('|') })
+  }
+
+  return requestWithHeaders(path, opts)
 }
 
 // Health & Info
@@ -82,6 +141,40 @@ export async function register(username, email, password, full_name) {
 
 export async function getCurrentUser() {
   return request('/api/auth/me')
+}
+
+export async function updateCurrentUser(updates) {
+  return request('/api/auth/me', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates)
+  })
+}
+
+export async function listApiKeys() {
+  return request('/api/auth/api-keys')
+}
+
+export async function createApiKey(payload) {
+  return request('/api/auth/api-keys', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function updateApiKey(keyId, payload) {
+  return request(`/api/auth/api-keys/${keyId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function deleteApiKey(keyId) {
+  return request(`/api/auth/api-keys/${keyId}`, {
+    method: 'DELETE'
+  })
 }
 
 export async function getUsers() {
@@ -163,6 +256,10 @@ export async function updateUserPassword(userId, passwords) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(passwords)
   })
+}
+
+export async function getActiveAgents() {
+  return request('/api/agents/active')
 }
 
 // Alias for backward compatibility

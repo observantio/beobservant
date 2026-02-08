@@ -1,6 +1,8 @@
 server:
   http_listen_port: 3200
 
+multitenancy_enabled: true
+
 distributor:
   receivers:
     otlp:
@@ -25,7 +27,9 @@ metrics_generator:
   storage:
     path: /tmp/tempo/generator/wal
     remote_write:
-      - url: http://prometheus:9090/api/v1/write
+      - url: http://mimir:9009/api/v1/push
+        headers:
+          X-Scope-OrgID: ${MIMIR_TENANT_ID}
         send_exemplars: true
 
 storage:

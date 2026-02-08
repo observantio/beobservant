@@ -36,7 +36,7 @@ export const ALERT_SEVERITIES = [
 
 // Datasource types
 export const DATASOURCE_TYPES = [
-  { value: 'prometheus', label: 'Prometheus' },
+  { value: 'prometheus', label: 'Mimir (Prometheus-compatible)' },
   { value: 'loki', label: 'Loki' },
   { value: 'tempo', label: 'Tempo' },
   { value: 'graphite', label: 'Graphite' },

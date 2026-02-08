@@ -32,6 +32,13 @@ router = APIRouter(
 loki_service = LokiService()
 
 
+def _resolve_tenant_id(request: Request, current_user: TokenData) -> str:
+    header_value = request.headers.get("x-scope-orgid") or request.headers.get("X-Scope-OrgID")
+    if header_value:
+        return header_value
+    return getattr(current_user, 'org_id', config.DEFAULT_ORG_ID)
+
+
 @router.get(
     "/query",
     response_model=LogResponse,
@@ -57,7 +64,8 @@ async def query_logs(
         step=step
     )
     
-    result = await loki_service.query_logs(log_query)
+    tenant_id = _resolve_tenant_id(request, current_user)
+    result = await loki_service.query_logs(log_query, tenant_id=tenant_id)
     return result
 
 
@@ -72,7 +80,8 @@ async def query_logs_instant(
     
     Returns logs matching the query at the specified timestamp (or now if not provided).
     """
-    result = await loki_service.query_logs_instant(query, time)
+    tenant_id = _resolve_tenant_id(request, current_user)
+    result = await loki_service.query_logs_instant(query, time, tenant_id=tenant_id)
     return result
 
 
@@ -87,7 +96,8 @@ async def get_labels(
     
     Returns a list of label names that can be used in queries.
     """
-    result = await loki_service.get_labels(start, end)
+    tenant_id = _resolve_tenant_id(request, current_user)
+    result = await loki_service.get_labels(start, end, tenant_id=tenant_id)
     return result
 
 
@@ -104,8 +114,9 @@ async def get_label_values(
     
     Returns all unique values for the given label within the time range.
     """
+    tenant_id = _resolve_tenant_id(request, current_user)
     effective_query = query
-    result = await loki_service.get_label_values(label, start, end, effective_query)
+    result = await loki_service.get_label_values(label, start, end, effective_query, tenant_id=tenant_id)
     return result
 
 
@@ -119,12 +130,14 @@ async def search_logs(
     
     Searches for logs containing the specified pattern, optionally filtered by labels.
     """
+    tenant_id = _resolve_tenant_id(request, current_user)
     result = await loki_service.search_logs_by_pattern(
         pattern=payload.pattern,
         labels=payload.labels or {},
         start=payload.start,
         end=payload.end,
         limit=payload.limit,
+        tenant_id=tenant_id
     )
     return result
 
@@ -140,12 +153,14 @@ async def filter_logs(
     Apply label-based filtering with optional additional text filters.
     Example labels: {"app": "nginx", "level": "error"}
     """
+    tenant_id = _resolve_tenant_id(request, current_user)
     result = await loki_service.filter_logs(
         labels=payload.labels or {},
         filters=payload.filters,
         start=payload.start,
         end=payload.end,
         limit=payload.limit,
+        tenant_id=tenant_id
     )
     return result
 
@@ -164,7 +179,8 @@ async def aggregate_logs(
     Supports aggregation functions like rate(), count_over_time(), bytes_over_time(), etc.
     Example: rate({app="nginx"}[5m])
     """
-    result = await loki_service.aggregate_logs(query, start, end, step)
+    tenant_id = _resolve_tenant_id(request, current_user)
+    result = await loki_service.aggregate_logs(query, start, end, step, tenant_id=tenant_id)
     return result
 
 
@@ -181,5 +197,6 @@ async def get_log_volume(
     
     Returns the number of log entries over time for the given query.
     """
-    result = await loki_service.get_log_volume(query, start, end, step)
+    tenant_id = _resolve_tenant_id(request, current_user)
+    result = await loki_service.get_log_volume(query, start, end, step, tenant_id=tenant_id)
     return result

@@ -22,6 +22,8 @@ export function AuthProvider({ children }) {
     try {
       const userData = await api.getCurrentUser()
       setUser(userData)
+      const enabledKeys = (userData.api_keys || []).filter((k) => k.is_enabled).map((k) => k.key)
+      api.setUserOrgIds(enabledKeys.length > 0 ? enabledKeys : [userData.org_id || 'default'])
     } catch (error) {
       logout()
     } finally {
@@ -56,10 +58,18 @@ export function AuthProvider({ children }) {
       try {
         const userData = await api.getCurrentUser()
         setUser(userData)
+        const enabledKeys = (userData.api_keys || []).filter((k) => k.is_enabled).map((k) => k.key)
+        api.setUserOrgIds(enabledKeys.length > 0 ? enabledKeys : [userData.org_id || 'default'])
       } catch (error) {
         console.error('Failed to refresh user:', error)
       }
     }
+  }
+
+  const updateUser = (userData) => {
+    setUser(userData)
+    const enabledKeys = (userData.api_keys || []).filter((k) => k.is_enabled).map((k) => k.key)
+    api.setUserOrgIds(enabledKeys.length > 0 ? enabledKeys : [userData.org_id || 'default'])
   }
 
   const value = {
@@ -70,6 +80,7 @@ export function AuthProvider({ children }) {
     register,
     logout,
     refreshUser,
+    updateUser,
     isAuthenticated: !!token && !!user,
     hasPermission: (permission) => user?.permissions?.includes(permission) || false
   }

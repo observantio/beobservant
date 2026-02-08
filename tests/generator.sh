@@ -6,6 +6,7 @@ DURATION="30s"
 RATE=5
 MODE="all"
 INSECURE=true
+TENANT_ID="${TENANT_ID:-default}"
 
 # verify essential dependencies are available
 _required=(docker sleep head od tr awk openssl)
@@ -41,7 +42,7 @@ safe_sleep() {
 }
 
 TG_IMG="ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest"
-DOCKER_RUN="docker run --rm --network host"
+DOCKER_RUN="docker run --rm --network host -e OTEL_RESOURCE_ATTRIBUTES=tenant_id=${TENANT_ID}"
 
 SERVICES=("frontend-web" "api-gateway" "auth-service" "order-service" "payment-service" "inventory-service" "notification-worker")
 

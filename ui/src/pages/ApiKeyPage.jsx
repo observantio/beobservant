@@ -1,0 +1,369 @@
+import { useState, useEffect, useMemo } from 'react'
+import { Card, Input, Button, Alert, Badge, Select } from '../components/ui'
+import { useAuth } from '../contexts/AuthContext'
+import * as api from '../api'
+
+const buildOtelYaml = (apiKey) => `receivers:
+  hostmetrics:
+    collection_interval: 1s
+    scrapers:
+      cpu:
+
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+  
+  resource:
+    attributes:
+      - key: tenant_id
+        value: "${apiKey}"
+        action: upsert
+
+exporters:
+  otlphttp/loki:
+    endpoint: "http://loki:3100/otlp"
+    headers:
+      X-Scope-OrgID: "${apiKey}"
+    tls:
+      insecure: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 5m
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
+
+  otlp/tempo:
+    endpoint: "tempo:4317"
+    headers:
+      X-Scope-OrgID: "${apiKey}"
+    tls:
+      insecure: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 5m
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
+
+  prometheusremotewrite/mimir:
+    endpoint: "http://mimir:9009/api/v1/push"
+    headers:
+      X-Scope-OrgID: "${apiKey}"
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 5m
+
+  debug:
+    verbosity: normal
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource]
+      exporters: [otlphttp/loki, debug]
+
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource]
+      exporters: [otlp/tempo, debug]
+
+    metrics:
+      receivers: [hostmetrics, otlp]
+      processors: [memory_limiter, resource]
+      exporters: [prometheusremotewrite/mimir, debug]
+
+  telemetry:
+    logs:
+      level: info
+`
+
+export default function ApiKeyPage() {
+  const { user, updateUser } = useAuth()
+  const [orgId, setOrgId] = useState('default')
+  const [apiKeys, setApiKeys] = useState([])
+  const [yamlKeyId, setYamlKeyId] = useState('')
+  const [newKeyName, setNewKeyName] = useState('')
+  const [newKeyValue, setNewKeyValue] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState(null)
+  const [error, setError] = useState(null)
+  const [showKeyId, setShowKeyId] = useState(null)
+
+  useEffect(() => {
+    if (user) {
+      setOrgId(user.org_id || 'default')
+      setApiKeys(user.api_keys || [])
+      const enabled = (user.api_keys || []).filter((k) => k.is_enabled)
+      const initialKey = enabled[0] || (user.api_keys || [])[0]
+      setYamlKeyId(initialKey?.id || '')
+    }
+  }, [user])
+
+  const refreshUser = async () => {
+    const updatedUser = await api.getCurrentUser()
+    updateUser(updatedUser)
+    setApiKeys(updatedUser.api_keys || [])
+    const enabled = (updatedUser.api_keys || []).filter((k) => k.is_enabled)
+    const initialKey = enabled[0] || (updatedUser.api_keys || [])[0]
+    setYamlKeyId(initialKey?.id || '')
+  }
+
+  const handleSaveOrgId = async (e) => {
+    e.preventDefault()
+    setError(null)
+    setMessage(null)
+    setLoading(true)
+    try {
+      await api.updateCurrentUser({ org_id: orgId })
+      await refreshUser()
+      setMessage('Default API key updated successfully.')
+    } catch (err) {
+      setError(err.body?.detail || err.message || 'Failed to update default API key')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateKey = async (e) => {
+    e.preventDefault()
+    setError(null)
+    setMessage(null)
+    if (!newKeyName.trim()) {
+      setError('Key name is required')
+      return
+    }
+    setLoading(true)
+    try {
+      await api.createApiKey({ name: newKeyName.trim(), key: newKeyValue.trim() || undefined })
+      setNewKeyName('')
+      setNewKeyValue('')
+      await refreshUser()
+      setMessage('API key created successfully.')
+    } catch (err) {
+      setError(err.body?.detail || err.message || 'Failed to create API key')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleToggleKey = async (key) => {
+    setError(null)
+    setMessage(null)
+    try {
+      await api.updateApiKey(key.id, { is_enabled: !key.is_enabled })
+      await refreshUser()
+    } catch (err) {
+      setError(err.body?.detail || err.message || 'Failed to update API key')
+    }
+  }
+
+  const handleDeleteKey = async (key) => {
+    setError(null)
+    setMessage(null)
+    try {
+      await api.deleteApiKey(key.id)
+      await refreshUser()
+      setMessage('API key deleted successfully.')
+    } catch (err) {
+      setError(err.body?.detail || err.message || 'Failed to delete API key')
+    }
+  }
+
+  const handleCopy = async (value, successMessage) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setMessage(successMessage)
+    } catch (err) {
+      setError('Failed to copy to clipboard')
+    }
+  }
+
+  const handleDownloadYaml = (content) => {
+    const blob = new Blob([content], { type: 'text/yaml' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'otel-agent.yaml'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const yamlKey = useMemo(() => apiKeys.find((k) => k.id === yamlKeyId) || apiKeys[0], [apiKeys, yamlKeyId])
+  const yamlContent = useMemo(() => buildOtelYaml(yamlKey?.key || orgId || 'default'), [yamlKey, orgId])
+
+  const enabledCount = apiKeys.filter((k) => k.is_enabled).length
+
+  return (
+    <div className="animate-fade-in max-w-6xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-3xl font-semibold text-sre-text mb-2 flex items-center gap-3">
+          <span className="material-icons text-sre-primary text-3xl">key</span>
+          <span>API Keys</span>
+        </h1>
+        <p className="text-sre-text-muted max-w-2xl">Manage tenant keys for logs, traces and metrics. Use keys to isolate datasets per product or team.</p>
+      </div>
+
+      {message && (
+        <Alert variant="success" className="mb-6">
+          {message}
+        </Alert>
+      )}
+
+      {error && (
+        <Alert variant="error" className="mb-6">
+          <strong>Error:</strong> {error}
+        </Alert>
+      )}
+
+      <div className="space-y-8">
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card title="Default API Key" subtitle="Default tenant identifier used by public agents" className="p-4 border border-sre-border rounded-lg shadow-sm bg-sre-surface">
+            <form onSubmit={handleSaveOrgId} className="flex gap-3 items-start">
+              <Input
+                value={orgId}
+                onChange={(e) => setOrgId(e.target.value)}
+                placeholder="e.g., default or team-prod"
+                required
+              />
+              <div className="flex flex-col gap-2">
+                <Button type="submit" loading={loading} className="whitespace-nowrap">Save</Button>
+                <Button type="button" variant="ghost" onClick={() => setOrgId(user?.org_id || 'default')}>Reset</Button>
+              </div>
+            </form>
+          </Card>
+
+          <Card title="Add API Key" subtitle="Create a new tenant key or save an existing one" className="p-4 border border-sre-border rounded-lg shadow-sm bg-sre-surface">
+            <form onSubmit={handleCreateKey} className="grid gap-4">
+              <Input
+                label="Key Name"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder="e.g., XYZ Product"
+                required
+              />
+              <Input
+                label="Key Value (optional)"
+                value={newKeyValue}
+                onChange={(e) => setNewKeyValue(e.target.value)}
+                placeholder="Leave empty to auto-generate"
+              />
+              <div className="flex justify-end">
+                <Button type="submit" loading={loading}>Add Key</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+
+        <Card title={`API Keys (${apiKeys.length})`} subtitle={`Enabled: ${enabledCount}`} className="p-4 rounded-lg border border-sre-border shadow-sm bg-sre-surface">
+          {apiKeys.length === 0 ? (
+            <div className="p-4 text-sm text-sre-text-muted">No API keys found.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-sre-surface text-sre-text-muted text-xs uppercase tracking-wide">
+                    <th className="py-3 px-4">Name</th>
+                    <th className="py-3 px-4">Key</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {apiKeys.map((key) => (
+                    <tr key={key.id} className="align-top hover:bg-sre-background">
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-sre-text">{key.name}</div>
+                        {key.is_default && <div className="text-xs text-sre-text-muted">Default</div>}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-sre-text-muted break-all">
+                        <div className="flex items-center gap-3">
+                          <div className="font-mono text-xs">
+                            {showKeyId === key.id ? key.key : (key.key ? `${key.key.slice(0, 6)}...${key.key.slice(-4)}` : '-')}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => setShowKeyId(showKeyId === key.id ? null : key.id)}>
+                              {showKeyId === key.id ? 'Hide' : 'Show'}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleCopy(key.key, 'API key copied to clipboard')}>
+                              Copy
+                            </Button>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={key.is_enabled}
+                            disabled={key.is_default}
+                            onChange={() => handleToggleKey(key)}
+                          />
+                          <div className="text-sm">
+                            {key.is_enabled ? <span className="text-green-600">Enabled</span> : <span className="text-sre-text-muted">Disabled</span>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          {!key.is_default && (
+                            <Button size="sm" variant="danger" onClick={() => handleDeleteKey(key)}>Delete</Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
+        <Card title="OTEL Agent YAML" className="p-4 mt-6 border border-sre-border rounded-lg shadow-sm bg-sre-surface" subtitle="Prefilled configuration for your agent">
+          <div className="space-y-3">
+            <Select
+              label="Select API Key for Agent"
+              value={yamlKeyId}
+              onChange={(e) => setYamlKeyId(e.target.value)}
+            >
+              {apiKeys.map((key) => (
+                <option key={key.id} value={key.id}>
+                  {key.name} {key.is_default ? '(Default)' : ''}
+                </option>
+              ))}
+            </Select>
+
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={() => handleCopy(yamlContent, 'OTEL YAML copied to clipboard')}>Copy YAML</Button>
+              <Button variant="secondary" onClick={() => handleDownloadYaml(yamlContent)}>Download YAML</Button>
+            </div>
+
+            <div className="bg-sre-background p-3 rounded border border-sre-border text-xs overflow-auto max-h-72">
+              <pre className="whitespace-pre-wrap break-words text-sre-text"><code>{yamlContent}</code></pre>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
+}

@@ -1,27 +1,38 @@
 apiVersion: 1
 
 datasources:
-  - name: Prometheus
+  - name: Mimir
+    uid: mimir
     type: prometheus
     access: proxy
-    url: http://prometheus:9090
+    url: http://mimir:9009/prometheus
     isDefault: true
     editable: true
     jsonData:
       timeInterval: 15s
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: ${MIMIR_TENANT_ID}
 
   - name: Loki
+    uid: loki
     type: loki
     access: proxy
     url: http://loki:3100
     editable: true
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: ${MIMIR_TENANT_ID}
 
   - name: Tempo
+    uid: tempo
     type: tempo
     access: proxy
     url: http://tempo:3200
     editable: true
     jsonData:
+      httpHeaderName1: X-Scope-OrgID
       tracesToLogsV2:
         datasourceUid: loki
         spanStartTimeShift: '-1h'
@@ -29,8 +40,10 @@ datasources:
         filterByTraceID: true
         filterBySpanID: false
       tracesToMetrics:
-        datasourceUid: prometheus
+        datasourceUid: mimir
       serviceMap:
-        datasourceUid: prometheus
+        datasourceUid: mimir
       nodeGraph:
         enabled: true
+    secureJsonData:
+      httpHeaderValue1: ${MIMIR_TENANT_ID}

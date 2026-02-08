@@ -3,10 +3,12 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from config import config
 from models.auth_models import (
     LoginRequest, RegisterRequest, Token, UserResponse,
     UserCreate, UserUpdate, UserPasswordUpdate,
-    Group, GroupCreate, GroupUpdate, TokenData, Permission, ROLE_PERMISSIONS
+    Group, GroupCreate, GroupUpdate, TokenData, Permission, ROLE_PERMISSIONS,
+    ApiKey, ApiKeyCreate, ApiKeyUpdate
 )
 try:
     from services.database_auth_service import DatabaseAuthService
@@ -51,6 +53,11 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive"
         )
+
+    try:
+        token_data.org_id = getattr(user, "org_id", token_data.org_id)
+    except Exception:
+        pass
     
     return token_data
 
@@ -116,7 +123,7 @@ async def register(register_request: RegisterRequest):
             full_name=register_request.full_name
         )
         
-        user = auth_service.create_user(user_create, tenant_id="default")
+        user = auth_service.create_user(user_create, tenant_id=config.DEFAULT_ORG_ID)
         
         permissions = ROLE_PERMISSIONS.get(user.role, [])
         
@@ -157,6 +164,93 @@ async def get_current_user_info(current_user: TokenData = Depends(get_current_us
             else []
         )
     )
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_current_user_info(
+    user_update: UserUpdate,
+    current_user: TokenData = Depends(get_current_user)
+):
+    update_data = user_update.model_dump(exclude_unset=True)
+    for field in ("role", "group_ids", "is_active"):
+        update_data.pop(field, None)
+    user_update = UserUpdate(**update_data)
+    try:
+        updated_user = auth_service.update_user(
+            current_user.user_id,
+            user_update,
+            current_user.tenant_id,
+            updater_id=current_user.user_id
+        ) if hasattr(auth_service, "update_user") else None
+    except TypeError:
+        updated_user = auth_service.update_user(
+            current_user.user_id,
+            user_update,
+            current_user.tenant_id
+        )
+
+    if not updated_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=USER_NOT_FOUND)
+
+    permissions = (
+        auth_service.get_user_permissions(updated_user)
+        if hasattr(auth_service, "get_user_permissions")
+        else current_user.permissions
+    )
+    return UserResponse(
+        **updated_user.model_dump(exclude={"hashed_password"}),
+        permissions=permissions,
+        direct_permissions=(
+            auth_service.get_user_direct_permissions(updated_user)
+            if hasattr(auth_service, "get_user_direct_permissions")
+            else []
+        )
+    )
+
+
+@router.get("/api-keys", response_model=List[ApiKey])
+async def list_api_keys(current_user: TokenData = Depends(get_current_user)):
+    return auth_service.list_api_keys(current_user.user_id)
+
+
+@router.post("/api-keys", response_model=ApiKey)
+async def create_api_key(
+    key_create: ApiKeyCreate,
+    current_user: TokenData = Depends(get_current_user)
+):
+    try:
+        try:
+            return auth_service.create_api_key(current_user.user_id, current_user.tenant_id, key_create)
+        except TypeError:
+            return auth_service.create_api_key(current_user.user_id, key_create)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.patch("/api-keys/{key_id}", response_model=ApiKey)
+async def update_api_key(
+    key_id: str,
+    key_update: ApiKeyUpdate,
+    current_user: TokenData = Depends(get_current_user)
+):
+    try:
+        return auth_service.update_api_key(current_user.user_id, key_id, key_update)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/api-keys/{key_id}")
+async def delete_api_key(
+    key_id: str,
+    current_user: TokenData = Depends(get_current_user)
+):
+    try:
+        success = auth_service.delete_api_key(current_user.user_id, key_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+    return {"message": "API key deleted"}
 
 
 @router.get("/users", response_model=List[UserResponse])

@@ -3,8 +3,7 @@ networks:
     driver: bridge
 
 volumes:
-  kafka:
-  prometheus:
+  mimir:
   grafana:
   alertmanager:
   beobservant_data:
@@ -15,7 +14,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: beobservant
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-1234567890}
       POSTGRES_DB: beobservant
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
     volumes:
@@ -28,67 +27,24 @@ services:
       retries: 5
     restart: unless-stopped
 
-  kafka:
-    image: apache/kafka:4.1.1
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: 'PLAINTEXT://:9092,CONTROLLER://:9093'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
-      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_NUM_PARTITIONS: 6
-      KAFKA_LOG_DIRS: /var/lib/kafka/data
-    volumes:
-      - kafka:/var/lib/kafka/data
-    ports:
-      - "9092:9092"
-    healthcheck:
-      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    networks: [obs]
-    restart: unless-stopped
-
   otel-agent:
-    image: otel/opentelemetry-collector-contrib:0.96.0
+    image: otel/opentelemetry-collector-contrib:0.145.0
     command: ["--config=/etc/otel/agent.yaml"]
     volumes:
       - ./configs/otel-agent.yaml:/etc/otel/agent.yaml:ro
     environment:
-      OTEL_AGENT_query_logsKEY: "${OTEL_AGENT_API_KEY:-public}"
+      OTEL_AGENT_API_KEY: "${OTEL_AGENT_API_KEY:-public}"
     depends_on:
-      kafka:
-        condition: service_healthy
-    networks: [obs]
-    ports:
-      - "4317:4317"
-      - "4318:4318"
-    restart: unless-stopped
-
-  otel-ingester:
-    image: otel/opentelemetry-collector-contrib:0.96.0
-    command: ["--config=/etc/otel/ingester.yaml"]
-    volumes:
-      - ./configs/otel-ingester.yaml:/etc/otel/ingester.yaml:ro
-    depends_on:
-      kafka:
-        condition: service_healthy
       loki:
         condition: service_started
       tempo:
         condition: service_started
-      beobservant:
+      mimir:
         condition: service_started
-    deploy:
-      replicas: 2
     networks: [obs]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
     restart: unless-stopped
 
   loki:
@@ -121,7 +77,7 @@ services:
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
       STORAGE_DIR: "/data/beobservant"
       DATA_ENCRYPTION_KEY: "${DATA_ENCRYPTION_KEY:-}"
-      DATABASE_URL: "postgresql://beobservant:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/beobservant"
+      DATABASE_URL: "postgresql://beobservant:${POSTGRES_PASSWORD:-1234567890}@postgres:5432/beobservant"
       JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change-this-secret-key-in-production}"
       DEFAULT_ADMIN_USERNAME: "${DEFAULT_ADMIN_USERNAME:-admin}"
       DEFAULT_ADMIN_PASSWORD: "${DEFAULT_ADMIN_PASSWORD:-admin123}"
@@ -151,23 +107,17 @@ services:
       retries: 3
       start_period: 10s
 
-  prometheus:
-    image: prom/prometheus:v2.51.0
+  mimir:
+    image: grafana/mimir:2.12.0
+    command: ["-config.file=/etc/mimir/mimir.yaml"]
     volumes:
-      - ./configs/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
-      - ./configs/rules/alerts.yaml:/etc/prometheus/alerts.yml:ro
-      - prometheus:/prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=30d"
-      - "--web.enable-lifecycle"
+      - ./configs/mimir.yaml:/etc/mimir/mimir.yaml:ro
+      - mimir:/data
     depends_on:
-      - beobservant
       - alertmanager
     networks: [obs]
     ports:
-      - "9090:9090"
+      - "9009:9009"
     restart: unless-stopped
 
   alertmanager:
@@ -189,13 +139,14 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:-admin}"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_INSTALL_PLUGINS: ""
+      MIMIR_TENANT_ID: "${MIMIR_TENANT_ID:-default}"
     volumes:
       - ./configs/grafana/grafana-datasource.yaml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - grafana:/var/lib/grafana
     ports:
       - "3000:3000"
     depends_on:
-      - prometheus
+      - mimir
       - loki
       - tempo
     networks: [obs]

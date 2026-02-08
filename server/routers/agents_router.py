@@ -1,12 +1,22 @@
 """Agents router for OTLP heartbeat and agent listing."""
 import logging
-from typing import Dict, Any
+import asyncio
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Any, List
 
-from fastapi import APIRouter, Request, status
+import httpx
+from fastapi import APIRouter, Request, status, Depends
 from fastapi.responses import JSONResponse
 
 from models.agent_models import AgentHeartbeat
 from services.agent_service import AgentService
+from services.loki_service import LokiService
+from services.tempo_service import TempoService
+from models.tempo_models import TraceQuery
+from models.auth_models import TokenData
+from config import config
+
+from routers.auth_router import get_current_user, auth_service
 
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceRequest
@@ -19,6 +29,8 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 _otlp_router = APIRouter(tags=["otlp"])
 
 agent_service = AgentService()
+loki_service = LokiService()
+tempo_service = TempoService()
 
 
 def _any_value_to_python(value) -> Any:
@@ -63,6 +75,116 @@ def _update_agents_from_resources(resources, signal: str) -> int:
 async def list_agents():
     """List known OTLP agents."""
     return [agent.model_dump() for agent in agent_service.list_agents()]
+
+
+async def _key_activity(key_value: str) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    # Use same 1-hour window as dashboard
+    start_ns = int((now - timedelta(hours=1)).timestamp() * 1_000_000_000)
+    end_ns = int(now.timestamp() * 1_000_000_000)
+    start_us = int((now - timedelta(hours=1)).timestamp() * 1_000_000)
+    end_us = int(now.timestamp() * 1_000_000)
+
+    logs_active = False
+    traces_active = False
+    metrics_active = False
+    logs_count = 0
+    traces_count = 0
+    metrics_count = 0
+
+    try:
+        vol = await loki_service.get_log_volume("{service_name=~\".+\"}", start=start_ns, end=end_ns, step=60, tenant_id=key_value)
+        if vol and getattr(vol, "data", None):
+            for series in vol.data.result:
+                for value in series.values:
+                    try:
+                        logs_count += int(float(value[1]))
+                    except Exception:
+                        continue
+        logs_active = logs_count > 0
+    except Exception:
+        logs_active = False
+
+    try:
+        query = TraceQuery(start=start_us, end=end_us, limit=1000)
+        res = await tempo_service.search_traces(query, tenant_id=key_value)
+        traces_count = res.total if res else 0
+        traces_active = traces_count > 0
+    except Exception:
+        traces_active = False
+
+    try:
+        async with httpx.AsyncClient(timeout=config.DEFAULT_TIMEOUT) as client:
+            resp = await client.get(
+                f"{config.MIMIR_URL.rstrip('/')}/prometheus/api/v1/query",
+                params={"query": "count({__name__=~\".+\"})"},
+                headers={"X-Scope-OrgID": key_value}
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            result = payload.get("data", {}).get("result", [])
+            if result:
+                try:
+                    metrics_count = int(float(result[0].get("value", [0, 0])[1]))
+                except Exception:
+                    metrics_count = 0
+            metrics_active = metrics_count > 0
+    except Exception:
+        metrics_active = False
+
+    return {
+        "logs_active": logs_active,
+        "traces_active": traces_active,
+        "metrics_active": metrics_active,
+        "logs_count": logs_count,
+        "traces_count": traces_count,
+        "metrics_count": metrics_count,
+    }
+
+
+@router.get("/active")
+async def list_active_agents(current_user: TokenData = Depends(get_current_user)):
+    """List activity per API key assigned to the user."""
+    api_keys = auth_service.list_api_keys(current_user.user_id)
+
+    tasks: List[asyncio.Task] = []
+    for key in api_keys:
+        tasks.append(asyncio.create_task(_key_activity(key.key)))
+
+    results = await asyncio.gather(*tasks, return_exceptions=True) if tasks else []
+
+    activity = []
+    recent_agents = agent_service.list_agents()
+    for key, result in zip(api_keys, results):
+        if isinstance(result, Exception):
+            activity.append({
+                "name": key.name,
+                "is_enabled": key.is_enabled,
+                "active": False,
+                "success": False,
+                "clean": False,
+                "host_names": [],
+                "logs_active": False,
+                "traces_active": False,
+                "metrics_active": False,
+                "logs_count": 0,
+                "traces_count": 0
+            })
+            continue
+
+        active = bool(result.get("logs_active") or result.get("traces_active") or result.get("metrics_active"))
+        host_names = sorted({a.host_name for a in recent_agents if a.tenant_id == key.key and a.host_name})
+        activity.append({
+            "name": key.name,
+            "is_enabled": key.is_enabled,
+            "active": active,
+            "success": active,
+            "clean": active,
+            "host_names": host_names,
+            **result
+        })
+
+    return activity
 
 
 @router.post("/heartbeat")

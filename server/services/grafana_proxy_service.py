@@ -10,6 +10,7 @@ from models.grafana_models import (
     DashboardCreate, DashboardUpdate, DashboardSearchResult,
     Datasource, DatasourceCreate, DatasourceUpdate
 )
+from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -51,15 +52,15 @@ class GrafanaProxyService:
         if not dashboard:
             return None
         
-        # Owner always has full access
+        
         if dashboard.created_by == user_id:
             return dashboard
         
-        # For writes, only owner can modify
+        
         if require_write:
             return None
         
-        # Check visibility for read access
+        
         if dashboard.visibility == "tenant":
             return dashboard
         elif dashboard.visibility == "group":
@@ -102,17 +103,17 @@ class GrafanaProxyService:
         
         logger.info(f"Checking access for datasource {datasource_uid}: created_by={datasource.created_by}, user_id={user_id}, require_write={require_write}")
         
-        # Owner always has full access
+        
         if datasource.created_by == user_id:
             logger.info(f"User {user_id} is owner of datasource {datasource_uid}")
             return datasource
         
-        # For writes, only owner can modify
+        
         if require_write:
             logger.warning(f"User {user_id} denied write access to datasource {datasource_uid} (not owner)")
             return None
         
-        # Check visibility for read access
+        
         if datasource.visibility == "tenant":
             return datasource
         elif datasource.visibility == "group":
@@ -140,18 +141,18 @@ class GrafanaProxyService:
         Returns:
             Tuple of (List of accessible Grafana dashboard UIDs, allow_all_system_dashboards)
         """
-        # Build query for accessible dashboards
+        
         query = db.query(GrafanaDashboard).filter(
             GrafanaDashboard.tenant_id == tenant_id
         )
         
-        # Filter by visibility
+        
         conditions = [
-            GrafanaDashboard.created_by == user_id,  # Owner
-            GrafanaDashboard.visibility == "tenant"   # Tenant-wide
+            GrafanaDashboard.created_by == user_id,  
+            GrafanaDashboard.visibility == "tenant"   
         ]
         
-        # Add group visibility if user has groups
+        
         if group_ids:
             conditions.append(
                 and_(
@@ -163,7 +164,7 @@ class GrafanaProxyService:
         query = query.filter(or_(*conditions))
         dashboards = query.all()
         
-        # Return owned dashboards + flag to allow system dashboards
+        
         return [d.grafana_uid for d in dashboards], True
     
     def _get_accessible_datasource_uids(
@@ -184,18 +185,18 @@ class GrafanaProxyService:
         Returns:
             Tuple of (List of accessible Grafana datasource UIDs, allow_all_system_datasources)
         """
-        # Build query for accessible datasources
+        
         query = db.query(GrafanaDatasource).filter(
             GrafanaDatasource.tenant_id == tenant_id
         )
         
-        # Filter by visibility
+        
         conditions = [
-            GrafanaDatasource.created_by == user_id,  # Owner
-            GrafanaDatasource.visibility == "tenant"   # Tenant-wide
+            GrafanaDatasource.created_by == user_id,  
+            GrafanaDatasource.visibility == "tenant"   
         ]
         
-        # Add group visibility if user has groups
+        
         if group_ids:
             conditions.append(
                 and_(
@@ -207,8 +208,8 @@ class GrafanaProxyService:
         query = query.filter(or_(*conditions))
         datasources = query.all()
         
-        # Return owned datasources + flag to allow system datasources
-        # System datasources are those without ownership records (default datasources)
+        
+        
         return [d.grafana_uid for d in datasources], True
     
     async def search_dashboards(
@@ -235,29 +236,26 @@ class GrafanaProxyService:
         Returns:
             List of accessible dashboards
         """
-        # Get all dashboards from Grafana
+        
         all_dashboards = await self.grafana_service.search_dashboards(
             query=query,
             tag=tag,
             starred=starred
         )
         
-        # Get accessible dashboard UIDs and system flag
+        
         accessible_uids, allow_system = self._get_accessible_dashboard_uids(
             db, user_id, tenant_id, group_ids
         )
         
-        # Get all registered dashboard UIDs
+        
         all_registered_uids = {dash.grafana_uid for dash in db.query(GrafanaDashboard).all()}
         
-        # Filter dashboards
+        
         filtered_dashboards = []
         for d in all_dashboards:
-            # Allow if owned by user
-            if d.uid in accessible_uids:
-                filtered_dashboards.append(d)
-            # Allow if system dashboard (not registered) and system access allowed
-            elif allow_system and d.uid not in all_registered_uids:
+            
+            if d.uid in accessible_uids or (allow_system and d.uid not in all_registered_uids):
                 filtered_dashboards.append(d)
         
         logger.info(f"User {user_id} has access to {len(filtered_dashboards)}/{len(all_dashboards)} dashboards")
@@ -283,21 +281,21 @@ class GrafanaProxyService:
         Returns:
             Dashboard data if accessible, None otherwise
         """
-        # Check if it's a registered dashboard
+        
         db_dashboard = db.query(GrafanaDashboard).filter(
             GrafanaDashboard.grafana_uid == uid
         ).first()
         
-        # If registered, check access
+        
         if db_dashboard:
             if not self._check_dashboard_access(db, uid, user_id, tenant_id, group_ids):
                 logger.warning(f"User {user_id} denied access to dashboard {uid}")
                 return None
-        # If not registered, it's a system dashboard - allow access
+        
         else:
             logger.info(f"Allowing access to system dashboard {uid} for user {user_id}")
         
-        # Get dashboard from Grafana
+        
         return await self.grafana_service.get_dashboard(uid)
     
     async def create_dashboard(
@@ -325,14 +323,14 @@ class GrafanaProxyService:
             Created dashboard info or None if error
         """
         try:
-            # Create in Grafana
+            
             result = await self.grafana_service.create_dashboard(dashboard_create)
             
             if not result:
                 logger.error("Failed to create dashboard in Grafana")
                 return None
             
-            # Extract dashboard info
+            
             dashboard_data = result.get("dashboard", {})
             uid = result.get("uid") or dashboard_data.get("uid")
             
@@ -340,7 +338,7 @@ class GrafanaProxyService:
                 logger.error("No UID in dashboard creation response")
                 return result
             
-            # Determine folder UID: prefer response values, else resolve from provided folderId
+            
             folder_uid = (
                 result.get("folderUid")
                 or dashboard_data.get("folderUid")
@@ -348,21 +346,20 @@ class GrafanaProxyService:
             )
 
             if not folder_uid:
-                # Try resolving from the provided folderId on the create payload
+                
                 folder_id = getattr(dashboard_create, "folder_id", None)
                 try:
                     if folder_id:
                         folders = await self.grafana_service.get_folders()
                         for f in folders:
-                            # Folder.id from model may be int
+                            
                             if f.id == folder_id:
                                 folder_uid = f.uid
                                 break
                 except Exception:
-                    # If folder resolution fails, leave folder_uid as None
-                    folder_uid = folder_uid
-
-            # Store ownership in database
+                    logger.warning(f"Failed to resolve folder UID for folderId {folder_id}: ", exc_info=True)
+                    
+            
             db_dashboard = GrafanaDashboard(
                 tenant_id=tenant_id,
                 created_by=user_id,
@@ -374,7 +371,7 @@ class GrafanaProxyService:
                 tags=dashboard_data.get("tags", [])
             )
             
-            # Add shared groups if visibility is group
+            
             if visibility == "group" and shared_group_ids:
                 groups = db.query(Group).filter(
                     Group.id.in_(shared_group_ids),
@@ -418,7 +415,7 @@ class GrafanaProxyService:
         Returns:
             Updated dashboard info or None if error
         """
-        # Check write access (only owner can update)
+        
         db_dashboard = self._check_dashboard_access(
             db, uid, user_id, tenant_id, group_ids, require_write=True
         )
@@ -427,22 +424,22 @@ class GrafanaProxyService:
             logger.warning(f"User {user_id} denied write access to dashboard {uid}")
             return None
         
-        # Update in Grafana
+        
         result = await self.grafana_service.update_dashboard(uid, dashboard_update)
         
         if not result:
             return None
         
-        # Update metadata in database
+        
         dashboard_data = result.get("dashboard", {})
         db_dashboard.title = dashboard_data.get("title", db_dashboard.title)
         db_dashboard.tags = dashboard_data.get("tags", [])
         
-        # Update visibility if provided
+        
         if visibility:
             db_dashboard.visibility = visibility
             
-            # Update shared groups
+            
             if visibility == "group" and shared_group_ids is not None:
                 db_dashboard.shared_groups.clear()
                 if shared_group_ids:
@@ -452,7 +449,7 @@ class GrafanaProxyService:
                     ).all()
                     db_dashboard.shared_groups.extend(groups)
             elif visibility != "group":
-                # Clear shared groups if not group visibility
+                
                 db_dashboard.shared_groups.clear()
         
         db.commit()
@@ -480,7 +477,7 @@ class GrafanaProxyService:
         Returns:
             True if successful, False otherwise
         """
-        # Check write access (only owner can delete)
+        
         db_dashboard = self._check_dashboard_access(
             db, uid, user_id, tenant_id, group_ids, require_write=True
         )
@@ -489,18 +486,18 @@ class GrafanaProxyService:
             logger.warning(f"User {user_id} denied delete access to dashboard {uid}")
             return False
         
-        # Delete from Grafana
+        
         success = await self.grafana_service.delete_dashboard(uid)
         
         if success:
-            # Remove from database
+            
             db.delete(db_dashboard)
             db.commit()
             logger.info(f"Deleted dashboard {uid} by user {user_id}")
         
         return success
     
-    # Datasource methods
+    
     
     async def get_datasources(
         self,
@@ -520,25 +517,15 @@ class GrafanaProxyService:
         Returns:
             List of accessible datasources
         """
-        # Get all datasources from Grafana
         all_datasources = await self.grafana_service.get_datasources()
-        
-        # Get accessible datasource UIDs and system flag
         accessible_uids, allow_system = self._get_accessible_datasource_uids(
             db, user_id, tenant_id, group_ids
         )
         
-        # Get all registered datasource UIDs
         all_registered_uids = {ds.grafana_uid for ds in db.query(GrafanaDatasource).all()}
-        
-        # Filter datasources
         filtered_datasources = []
         for ds in all_datasources:
-            # Allow if owned by user
-            if ds.uid in accessible_uids:
-                filtered_datasources.append(ds)
-            # Allow if system datasource (not registered) and system access allowed
-            elif allow_system and ds.uid not in all_registered_uids:
+            if ds.uid in accessible_uids or (allow_system and ds.uid not in all_registered_uids):
                 filtered_datasources.append(ds)
         
         logger.info(f"User {user_id} has access to {len(filtered_datasources)}/{len(all_datasources)} datasources")
@@ -564,21 +551,21 @@ class GrafanaProxyService:
         Returns:
             Datasource if accessible, None otherwise
         """
-        # Check if it's a registered datasource
+        
         db_datasource = db.query(GrafanaDatasource).filter(
             GrafanaDatasource.grafana_uid == uid
         ).first()
         
-        # If registered, check access
+        
         if db_datasource:
             if not self._check_datasource_access(db, uid, user_id, tenant_id, group_ids):
                 logger.warning(f"User {user_id} denied access to datasource {uid}")
                 return None
-        # If not registered, it's a system datasource - allow access
+        
         else:
             logger.info(f"Allowing access to system datasource {uid} for user {user_id}")
         
-        # Get datasource from Grafana
+        
         return await self.grafana_service.get_datasource(uid)
     
     async def create_datasource(
@@ -606,14 +593,54 @@ class GrafanaProxyService:
             Created datasource or None if error
         """
         try:
-            # Create in Grafana
+            if datasource_create.type in {"prometheus", "loki", "tempo"}:
+                org_id = getattr(datasource_create, 'org_id', None) or config.DEFAULT_ORG_ID
+                json_data = dict(datasource_create.json_data or {})
+                secure_json_data = dict(datasource_create.secure_json_data or {})
+
+                json_data.setdefault("httpHeaderName1", "X-Scope-OrgID")
+                secure_json_data.setdefault("httpHeaderValue1", org_id)
+
+                datasource_create = datasource_create.model_copy(
+                    update={
+                        "json_data": json_data,
+                        "secure_json_data": secure_json_data
+                    }
+                )
+                
+                logger.info(f"Creating multi-tenant datasource {datasource_create.name} with org_id={org_id}")
+
+            
+            if visibility == "group":
+                if not shared_group_ids:
+                    logger.warning(f"Datasource create: visibility='group' but no shared_group_ids provided by user {user_id}")
+                    raise ValueError("No groups provided for group visibility")
+
+                
+                groups = db.query(Group).filter(
+                    Group.id.in_(shared_group_ids),
+                    Group.tenant_id == tenant_id
+                ).all()
+                found_ids = {g.id for g in groups}
+
+                
+                missing = set(shared_group_ids) - found_ids
+                if missing:
+                    logger.warning(f"Datasource create: some group ids not found in tenant {tenant_id}: {missing}")
+                    raise ValueError(f"Invalid group ids for tenant: {missing}")
+
+                
+                not_member = [gid for gid in shared_group_ids if gid not in (group_ids or [])]
+                if not_member:
+                    logger.warning(f"User {user_id} attempted to share datasource with groups they don't belong to: {not_member}")
+                    raise ValueError(f"User not member of groups: {not_member}")
+
             datasource = await self.grafana_service.create_datasource(datasource_create)
             
             if not datasource:
                 logger.error("Failed to create datasource in Grafana")
                 return None
             
-            # Store ownership in database
             db_datasource = GrafanaDatasource(
                 tenant_id=tenant_id,
                 created_by=user_id,
@@ -624,8 +651,8 @@ class GrafanaProxyService:
                 visibility=visibility
             )
             
-            # Add shared groups if visibility is group
             if visibility == "group" and shared_group_ids:
+                
                 groups = db.query(Group).filter(
                     Group.id.in_(shared_group_ids),
                     Group.tenant_id == tenant_id
@@ -668,7 +695,7 @@ class GrafanaProxyService:
         Returns:
             Updated datasource or None if error
         """
-        # Check write access (only owner can update)
+        
         db_datasource = self._check_datasource_access(
             db, uid, user_id, tenant_id, group_ids, require_write=True
         )
@@ -677,32 +704,62 @@ class GrafanaProxyService:
             logger.warning(f"User {user_id} denied write access to datasource {uid}")
             return None
         
-        # Update in Grafana
+        
+        # Ensure tenant header is set for scoped datasources when org_id is provided
+        if db_datasource.type in {"prometheus", "loki", "tempo"}:
+            org_id = getattr(datasource_update, "org_id", None)
+            if org_id is not None:
+                json_data = dict(datasource_update.json_data or {})
+                secure_json_data = dict(datasource_update.secure_json_data or {})
+                json_data.setdefault("httpHeaderName1", "X-Scope-OrgID")
+                secure_json_data["httpHeaderValue1"] = org_id
+                datasource_update = datasource_update.model_copy(
+                    update={
+                        "json_data": json_data,
+                        "secure_json_data": secure_json_data
+                    }
+                )
+
         datasource = await self.grafana_service.update_datasource(uid, datasource_update)
         
         if not datasource:
             return None
         
-        # Update metadata in database
+        
         db_datasource.name = datasource.name
         db_datasource.type = datasource.type
         
-        # Update visibility if provided
+        
         if visibility:
-            db_datasource.visibility = visibility
             
-            # Update shared groups
             if visibility == "group" and shared_group_ids is not None:
+                if not shared_group_ids:
+                    logger.warning(f"Datasource update: visibility='group' but no shared_group_ids provided by user {user_id}")
+                    return None
+
+                groups = db.query(Group).filter(
+                    Group.id.in_(shared_group_ids),
+                    Group.tenant_id == tenant_id
+                ).all()
+                found_ids = {g.id for g in groups}
+                missing = set(shared_group_ids) - found_ids
+                if missing:
+                    logger.warning(f"Datasource update: some group ids not found in tenant {tenant_id}: {missing}")
+                    return None
+
+                not_member = [gid for gid in shared_group_ids if gid not in (group_ids or [])]
+                if not_member:
+                    logger.warning(f"User {user_id} attempted to share datasource with groups they don't belong to: {not_member}")
+                    return None
+
+                db_datasource.visibility = visibility
                 db_datasource.shared_groups.clear()
-                if shared_group_ids:
-                    groups = db.query(Group).filter(
-                        Group.id.in_(shared_group_ids),
-                        Group.tenant_id == tenant_id
-                    ).all()
-                    db_datasource.shared_groups.extend(groups)
-            elif visibility != "group":
-                # Clear shared groups if not group visibility
-                db_datasource.shared_groups.clear()
+                db_datasource.shared_groups.extend(groups)
+            else:
+                db_datasource.visibility = visibility
+                
+                if visibility != "group":
+                    db_datasource.shared_groups.clear()
         
         db.commit()
         
@@ -729,7 +786,7 @@ class GrafanaProxyService:
         Returns:
             True if successful, False otherwise
         """
-        # Check write access (only owner can delete)
+        
         db_datasource = self._check_datasource_access(
             db, uid, user_id, tenant_id, group_ids, require_write=True
         )
@@ -738,11 +795,11 @@ class GrafanaProxyService:
             logger.warning(f"User {user_id} denied delete access to datasource {uid}")
             return False
         
-        # Delete from Grafana
+        
         success = await self.grafana_service.delete_datasource(uid)
         
         if success:
-            # Remove from database
+            
             db.delete(db_datasource)
             db.commit()
             logger.info(f"Deleted datasource {uid} by user {user_id}")

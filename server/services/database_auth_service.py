@@ -1,5 +1,6 @@
 """Database-backed authentication service with enterprise IAM."""
 import logging
+import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 from passlib.context import CryptContext
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
 
 try:
-    from db_models import User, Tenant, Group, Permission, AuditLog
+    from db_models import User, Tenant, Group, Permission, AuditLog, UserApiKey
 except Exception:
     
     import importlib.util
@@ -22,13 +23,13 @@ except Exception:
         db_models = importlib.util.module_from_spec(spec)
         sys.modules["db_models"] = db_models
         spec.loader.exec_module(db_models)
-        from db_models import User, Tenant, Group, Permission, AuditLog
+        from db_models import User, Tenant, Group, Permission, AuditLog, UserApiKey
     else:
         raise
 from models.auth_models import (
     User as UserSchema, UserCreate, UserUpdate, UserPasswordUpdate, Role,
     Group as GroupSchema, GroupCreate, GroupUpdate, Token, TokenData, ROLE_PERMISSIONS,
-    PermissionInfo
+    PermissionInfo, ApiKey, ApiKeyCreate, ApiKeyUpdate
 )
 from config import config
 from database import get_db_session
@@ -57,10 +58,10 @@ class DatabaseAuthService:
         try:
             with get_db_session() as db:
                 
-                default_tenant = db.query(Tenant).filter_by(name="default").first()
+                default_tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
                 if not default_tenant:
                     default_tenant = Tenant(
-                        name="default",
+                        name=config.DEFAULT_ADMIN_TENANT,
                         display_name="Default Organization",
                         is_active=True
                     )
@@ -83,6 +84,7 @@ class DatabaseAuthService:
                         username=config.DEFAULT_ADMIN_USERNAME,
                         email=config.DEFAULT_ADMIN_EMAIL,
                         full_name="System Administrator",
+                        org_id=config.DEFAULT_ORG_ID,
                         role=Role.ADMIN,
                         is_active=True,
                         is_superuser=True,
@@ -96,6 +98,8 @@ class DatabaseAuthService:
                     admin_user.permissions.extend(all_permissions)
                     
                     logger.info(f"Created default admin user: {config.DEFAULT_ADMIN_USERNAME}")
+
+                self._ensure_default_api_key(db, admin_user)
                 
                 db.commit()
         except Exception as e:
@@ -149,6 +153,27 @@ class DatabaseAuthService:
                 db.add(perm)
         
         db.flush()
+
+    def _ensure_default_api_key(self, db: Session, user: User):
+        """Ensure a default API key exists for the user."""
+        if not user:
+            return
+        existing_default = db.query(UserApiKey).filter_by(user_id=user.id, is_default=True).first()
+        if existing_default:
+            if existing_default.key != (user.org_id or config.DEFAULT_ORG_ID):
+                existing_default.key = user.org_id or config.DEFAULT_ORG_ID
+                existing_default.updated_at = datetime.now(timezone.utc)
+            return
+
+        default_key = UserApiKey(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            name="Default",
+            key=user.org_id or config.DEFAULT_ORG_ID,
+            is_default=True,
+            is_enabled=True
+        )
+        db.add(default_key)
     
     def hash_password(self, password: str) -> str:
         return pwd_context.hash(password)
@@ -181,9 +206,10 @@ class DatabaseAuthService:
                 "sub": db_user.id,
                 "username": db_user.username,
                 "tenant_id": db_user.tenant_id,
+                "org_id": db_user.org_id,
                 "role": db_user.role,
                 "is_superuser": db_user.is_superuser,
-                "permissions": [p for p in permissions],
+                "permissions": list(permissions),
                 "group_ids": group_ids,
                 "exp": expire
             }
@@ -203,6 +229,7 @@ class DatabaseAuthService:
             user_id: str = payload.get("sub")
             username: str = payload.get("username")
             tenant_id: str = payload.get("tenant_id")
+            org_id: str = payload.get("org_id", config.DEFAULT_ORG_ID)
             role: str = payload.get("role")
             is_superuser: bool = payload.get("is_superuser", False)
             permissions: List[str] = payload.get("permissions", [])
@@ -215,6 +242,7 @@ class DatabaseAuthService:
                 user_id=user_id,
                 username=username,
                 tenant_id=tenant_id,
+                org_id=org_id,
                 role=Role(role),
                 is_superuser=is_superuser,
                 permissions=permissions,
@@ -253,7 +281,6 @@ class DatabaseAuthService:
 
     def _collect_permissions(self, user: User) -> List[str]:
         """Collect permissions with priority: User direct > Group > Role."""
-        permissions = set()
         user_direct_perms = set()
         group_perms = set()
 
@@ -267,7 +294,7 @@ class DatabaseAuthService:
 
         
         role_perms = ROLE_PERMISSIONS.get(Role(user.role), [])
-        role_perm_names = set([p.value for p in role_perms])
+        role_perm_names = {p.value for p in role_perms}
 
         
         permissions = role_perm_names.union(group_perms).union(user_direct_perms)
@@ -275,19 +302,33 @@ class DatabaseAuthService:
         return list(permissions)
 
     def _to_user_schema(self, user: User) -> UserSchema:
+        api_keys = [self._to_api_key_schema(key) for key in (getattr(user, "api_keys", []) or [])]
         return UserSchema(
             id=user.id,
             tenant_id=user.tenant_id,
             username=user.username,
             email=user.email,
             full_name=user.full_name,
+            org_id=user.org_id,
             role=Role(user.role),
             group_ids=[g.id for g in (user.groups or [])],
             is_active=user.is_active,
             created_at=user.created_at,
             updated_at=user.updated_at,
             last_login=user.last_login,
-            needs_password_change=getattr(user, 'needs_password_change', False)
+            needs_password_change=getattr(user, 'needs_password_change', False),
+            api_keys=api_keys
+        )
+
+    def _to_api_key_schema(self, key: UserApiKey) -> ApiKey:
+        return ApiKey(
+            id=key.id,
+            name=key.name,
+            key=key.key,
+            is_default=key.is_default,
+            is_enabled=key.is_enabled,
+            created_at=key.created_at,
+            updated_at=key.updated_at
         )
 
     def _to_group_schema(self, group: Group) -> GroupSchema:
@@ -377,7 +418,8 @@ class DatabaseAuthService:
         with get_db_session() as db:
             user = db.query(User).options(
                 joinedload(User.groups),
-                joinedload(User.permissions)
+                joinedload(User.permissions),
+                joinedload(User.api_keys)
             ).filter_by(id=user_id).first()
             if not user:
                 return None
@@ -386,7 +428,7 @@ class DatabaseAuthService:
     def get_user_by_username(self, username: str) -> Optional[UserSchema]:
         """Get user by username."""
         with get_db_session() as db:
-            user = db.query(User).filter_by(username=username).first()
+            user = db.query(User).options(joinedload(User.api_keys)).filter_by(username=username).first()
             if not user:
                 return None
             return self._to_user_schema(user)
@@ -406,6 +448,7 @@ class DatabaseAuthService:
                 username=user_create.username,
                 email=user_create.email,
                 full_name=user_create.full_name,
+                org_id=getattr(user_create, 'org_id', None) or config.DEFAULT_ORG_ID,
                 role=user_create.role,
                 is_active=user_create.is_active,
                 hashed_password=self.hash_password(user_create.password),
@@ -424,6 +467,8 @@ class DatabaseAuthService:
             
             db.add(user)
             db.flush()
+
+            self._ensure_default_api_key(db, user)
             
             
             if creator_id:
@@ -438,7 +483,7 @@ class DatabaseAuthService:
     def list_users(self, tenant_id: str) -> List[UserSchema]:
         """List all users in a tenant."""
         with get_db_session() as db:
-            users = db.query(User).options(joinedload(User.groups)).filter_by(tenant_id=tenant_id).all()
+            users = db.query(User).options(joinedload(User.groups), joinedload(User.api_keys)).filter_by(tenant_id=tenant_id).all()
             return [self._to_user_schema(user) for user in users]
     
     def update_user(self, user_id: str, user_update: UserUpdate, tenant_id: str, updater_id: str = None) -> Optional[UserSchema]:
@@ -465,6 +510,9 @@ class DatabaseAuthService:
                     setattr(user, field, value)
             
             user.updated_at = datetime.now(timezone.utc)
+
+            if 'org_id' in update_data:
+                self._ensure_default_api_key(db, user)
             
             if updater_id:
                 self._log_audit(db, tenant_id, updater_id, "update_user", "users", user_id, update_data)
@@ -486,6 +534,77 @@ class DatabaseAuthService:
                 })
             
             db.delete(user)
+            db.commit()
+            return True
+
+    def list_api_keys(self, user_id: str) -> List[ApiKey]:
+        self._lazy_init()
+        with get_db_session() as db:
+            keys = db.query(UserApiKey).filter_by(user_id=user_id).order_by(UserApiKey.created_at.asc()).all()
+            return [self._to_api_key_schema(k) for k in keys]
+
+    def create_api_key(self, user_id: str, tenant_id: str, key_create: ApiKeyCreate) -> ApiKey:
+        self._lazy_init()
+        with get_db_session() as db:
+            user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
+            if not user:
+                raise ValueError("User not found")
+
+            key_value = key_create.key or str(uuid.uuid4())
+            api_key = UserApiKey(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                name=key_create.name,
+                key=key_value,
+                is_default=False,
+                is_enabled=True
+            )
+            db.add(api_key)
+            db.commit()
+            db.refresh(api_key)
+            return self._to_api_key_schema(api_key)
+
+    def update_api_key(self, user_id: str, key_id: str, key_update: ApiKeyUpdate) -> ApiKey:
+        self._lazy_init()
+        with get_db_session() as db:
+            api_key = db.query(UserApiKey).filter_by(id=key_id, user_id=user_id).first()
+            if not api_key:
+                raise ValueError("API key not found")
+
+            if key_update.name is not None:
+                api_key.name = key_update.name
+
+            if key_update.is_enabled is not None:
+                if api_key.is_default and not key_update.is_enabled:
+                    raise ValueError("Default key cannot be disabled")
+                api_key.is_enabled = key_update.is_enabled
+                db.flush()
+                enabled_count = db.query(UserApiKey).filter_by(user_id=user_id, is_enabled=True).count()
+                if enabled_count == 0:
+                    raise ValueError("At least one API key must be enabled")
+
+            api_key.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(api_key)
+            return self._to_api_key_schema(api_key)
+
+    def delete_api_key(self, user_id: str, key_id: str) -> bool:
+        self._lazy_init()
+        with get_db_session() as db:
+            api_key = db.query(UserApiKey).filter_by(id=key_id, user_id=user_id).first()
+            if not api_key:
+                return False
+            if api_key.is_default:
+                raise ValueError("Default key cannot be deleted")
+
+            db.delete(api_key)
+            db.flush()
+
+            enabled_count = db.query(UserApiKey).filter_by(user_id=user_id, is_enabled=True).count()
+            if enabled_count == 0:
+                default_key = db.query(UserApiKey).filter_by(user_id=user_id, is_default=True).first()
+                if default_key:
+                    default_key.is_enabled = True
             db.commit()
             return True
     

@@ -6,6 +6,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship, declarative_base
 import uuid
 
+from config import config
+
 Base = declarative_base()
 
 USERS_ID = 'users.id'
@@ -97,6 +99,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(200))
+    org_id = Column(String(100), nullable=False, default=config.DEFAULT_ORG_ID, index=True)  # Tenant ID for Mimir/Loki/Tempo
     role = Column(String(20), nullable=False, default='user', index=True)  # admin, user, viewer
     is_active = Column(Boolean, default=True, nullable=False)
     is_superuser = Column(Boolean, default=False, nullable=False)
@@ -109,6 +112,7 @@ class User(Base):
     tenant = relationship('Tenant', back_populates='users')
     groups = relationship('Group', secondary=user_groups, back_populates='members')
     permissions = relationship('Permission', secondary=user_permissions, back_populates='users')
+    api_keys = relationship('UserApiKey', back_populates='user', cascade=CASCADE_ALL_DELETE_ORPHAN)
     created_rules = relationship('AlertRule', foreign_keys='AlertRule.created_by', back_populates='creator')
     created_channels = relationship('NotificationChannel', foreign_keys='NotificationChannel.created_by', back_populates='creator')
 
@@ -143,6 +147,29 @@ class Group(Base):
     )
 
 
+class UserApiKey(Base):
+    """API keys for observability tenants."""
+    __tablename__ = 'user_api_keys'
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    tenant_id = Column(String, ForeignKey(TENANTS_ID, ondelete='CASCADE'), nullable=False, index=True)
+    user_id = Column(String, ForeignKey(USERS_ID, ondelete='CASCADE'), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    key = Column(String(200), nullable=False, index=True)
+    is_default = Column(Boolean, default=False, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user = relationship('User', back_populates='api_keys')
+
+    __table_args__ = (
+        Index('idx_user_api_keys_user', 'user_id'),
+        Index('idx_user_api_keys_tenant', 'tenant_id'),
+        Index('idx_user_api_keys_enabled', 'is_enabled'),
+    )
+
+
 class Permission(Base):
     """Permission model for fine-grained access control."""
     __tablename__ = 'permissions'
@@ -172,7 +199,7 @@ class AlertRule(Base):
     tenant_id = Column(String, ForeignKey(TENANTS_ID, ondelete='CASCADE'), nullable=False, index=True)
     created_by = Column(String, ForeignKey(USERS_ID, ondelete=ONDELETE_SET_NULL))
     name = Column(String(200), nullable=False, index=True)
-    group = Column(String(100), nullable=False, default='default')
+    group = Column(String(100), nullable=False, default=config.DEFAULT_RULE_GROUP)
     expr = Column(Text, nullable=False)
     duration = Column(String(20), nullable=False, default='5m')
     severity = Column(String(20), nullable=False, default='warning', index=True)

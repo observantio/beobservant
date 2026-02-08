@@ -22,6 +22,7 @@ const GrafanaPage = lazy(() => import('./pages/GrafanaPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const UsersPage = lazy(() => import('./pages/UsersPage'))
 const GroupsPage = lazy(() => import('./pages/GroupsPage'))
+const ApiKeyPage = lazy(() => import('./pages/ApiKeyPage'))
 
 function PageLoader() {
   return (
@@ -130,6 +131,11 @@ function AppContent() {
             <Route path="/groups" element={
               <ProtectedRoute>
                 <GroupsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/apikey" element={
+              <ProtectedRoute>
+                <ApiKeyPage />
               </ProtectedRoute>
             } />
           </Routes>

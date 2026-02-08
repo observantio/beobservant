@@ -5,6 +5,7 @@ from typing import Optional
 from datetime import datetime
 
 from models.alertmanager_models import NotificationChannel, Alert, ChannelType
+from config import config
 
 logger = logging.getLogger(__name__)
 NO_VALUE = "(none)"
@@ -67,8 +68,8 @@ class NotificationService:
     
     async def _send_slack(self, channel: NotificationChannel, alert: Alert, action: str) -> bool:
         """Send Slack notification."""
-        config = channel.config
-        webhook_url = config.get('webhook_url') or config.get('webhookUrl')
+        channel_config = channel.config
+        webhook_url = channel_config.get('webhook_url') or channel_config.get('webhookUrl')
         
         if not webhook_url:
             logger.error("Slack webhook URL not configured")
@@ -115,13 +116,15 @@ class NotificationService:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(webhook_url, json=payload)
             response.raise_for_status()
-            logger.info(f"Slack notification sent to {config.get('channel', 'default')}")
+            logger.info(
+                f"Slack notification sent to {channel_config.get('channel', config.DEFAULT_SLACK_CHANNEL)}"
+            )
             return True
     
     async def _send_teams(self, channel: NotificationChannel, alert: Alert, action: str) -> bool:
         """Send Microsoft Teams notification."""
-        config = channel.config
-        webhook_url = config.get('webhook_url') or config.get('webhookUrl')
+        channel_config = channel.config
+        webhook_url = channel_config.get('webhook_url') or channel_config.get('webhookUrl')
         
         if not webhook_url:
             logger.error("Teams webhook URL not configured")
