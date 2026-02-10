@@ -6,7 +6,9 @@ import { useNavigate } from 'react-router-dom'
 import { useToast } from '../contexts/ToastContext'
 import PermissionEditor from '../components/PermissionEditor'
 import ConfirmModal from '../components/ConfirmModal'
+import HelpTooltip from '../components/HelpTooltip'
 import * as api from '../api'
+import { USER_ROLES } from '../utils/constants'
 
 export default function UsersPage() {
   const toast = useToast();
@@ -50,12 +52,11 @@ export default function UsersPage() {
     } catch (error) {
       setUsers([])
       setGroups([])
-      toast.error('Error loading data: ' + (error?.message || 'Unknown error'));
-      console.error('Error loading data:', error)
+      toast.error('Error loading data: ' + (error?.message || 'Unknown error'))
     } finally {
       setLoading(false)
     }
-  }, [canManageUsers, currentUser, toast])
+  }, [canManageUsers, toast])
 
   useEffect(() => {
     loadData()
@@ -122,8 +123,7 @@ export default function UsersPage() {
     try {
       await api.updateUser(editingUser.id, updates)
     } catch (error) {
-      toast.error('Error updating permissions: ' + (error?.message || 'Unknown error'));
-      console.error('Error updating permissions:', error);
+      toast.error('Error updating permissions: ' + (error?.message || 'Unknown error'))
       throw error
     }
   }
@@ -177,12 +177,15 @@ export default function UsersPage() {
 
       {/* Search Bar */}
       <Card className="mb-6">
-        <Input
-          placeholder="Search users by username, email, or name..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full"
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Search users by username, email, or name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1"
+          />
+          <HelpTooltip text="Search users by their username, email address, or full name. The search is case-insensitive and matches partial strings." />
+        </div>
       </Card>
 
       <Card
@@ -209,42 +212,42 @@ export default function UsersPage() {
                 else if (u.role === 'user') roleVariant = 'info';
                 const initials = (u.full_name || u.username || 'U').split(' ').map(s => s[0]).join('').substring(0,2).toUpperCase();
                 return (
-                <Card key={u.id} className="p-0 rounded-lg border border-sre-border shadow-sm bg-sre-surface hover:shadow-md transition-all overflow-hidden">
-                  <div className="flex items-start gap-4 p-4">
-                    <div className="w-12 h-12 flex-none rounded-md bg-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold text-sm border border-sre-border">
-                      {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="truncate">
-                          <div className="font-semibold text-sre-text truncate">{u.username}</div>
-                          {u.full_name && <div className="text-xs text-sre-text-muted">{u.full_name}</div>}
-                          <div className="text-xs text-sre-text-muted">{u.email}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={roleVariant} className="ml-2">{u.role}</Badge>
-                          {!u.is_active && <Badge variant="warning" className="ml-2">Inactive</Badge>}
-                          {u.group_ids?.length > 0 && <Badge variant="success" className="ml-2">{u.group_ids.length} group{u.group_ids.length > 1 ? 's' : ''}</Badge>}
-                        </div>
+                <Card key={u.id} className="p-0 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 border-sre-border/50 hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm rounded-lg">
+                  <div className="p-4">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 flex-none rounded-md bg-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold text-sm border border-sre-border">
+                        {initials}
                       </div>
-                      <div className="mt-3 flex gap-2 items-center justify-start w-full">
-                        <Button variant="ghost" size="sm" className="py-0.5 px-2 text-xs flex items-center gap-2" onClick={() => openEditUser(u)} aria-label={`Edit ${u.username}`}>
-                          <span className="material-icons text-sm" aria-hidden>edit</span>
-                          <span className="leading-none">Edit</span>
-                        </Button>
-                        <Button variant="ghost" size="sm" className="py-0.5 px-2 text-xs text-blue-500 flex items-center gap-2" onClick={() => handleEditPermissions(u)} aria-label={`Edit permissions for ${u.username}`}>
-                          <span className="material-icons text-sm" aria-hidden>manage_accounts</span>
-                          <span className="leading-none">Permissions</span>
-                        </Button>
-                        {u.id !== currentUser?.id && (
-                          <div className="ml-2">
-                            <Button variant="ghost" size="sm" className="py-0.5 px-2 text-xs text-red-500 flex items-center gap-2" onClick={() => handleDeleteUser(u.id)} aria-label={`Delete ${u.username}`}>
-                              <span className="material-icons text-sm" aria-hidden>delete</span>
-                              <span className="leading-none">Delete</span>
-                            </Button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="truncate">
+                            <div className="font-semibold text-sre-text truncate">{u.username}</div>
+                            {u.full_name && <div className="text-xs text-sre-text-muted">{u.full_name}</div>}
+                            <div className="text-xs text-sre-text-muted">{u.email}</div>
                           </div>
-                        )}
+                          <div className="flex items-center gap-2">
+                            <Badge variant={roleVariant} className="ml-2">{u.role}</Badge>
+                            {!u.is_active && <Badge variant="warning" className="ml-2">Inactive</Badge>}
+                            {u.group_ids?.length > 0 && <Badge variant="success" className="ml-2">{u.group_ids.length} group{u.group_ids.length > 1 ? 's' : ''}</Badge>}
+                          </div>
+                        </div>
                       </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2 items-center">
+                      <Button variant="ghost" size="sm" className="flex items-center gap-1.5 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors" onClick={() => openEditUser(u)} aria-label={`Edit ${u.username}`}>
+                        <span className="material-icons text-sm" aria-hidden>edit</span>
+                        <span>Edit</span>
+                      </Button>
+                      <Button variant="ghost" size="sm" className="flex items-center gap-1.5 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors" onClick={() => handleEditPermissions(u)} aria-label={`Edit permissions for ${u.username}`}>
+                        <span className="material-icons text-sm" aria-hidden>manage_accounts</span>
+                        <span>Permissions</span>
+                      </Button>
+                      {u.id !== currentUser?.id && (
+                        <Button variant="ghost" size="sm" className="flex items-center gap-1.5 hover:bg-red-500/10 hover:text-red-500 transition-colors" onClick={() => handleDeleteUser(u.id)} aria-label={`Delete ${u.username}`}>
+                          <span className="material-icons text-sm" aria-hidden>delete</span>
+                          <span>Delete</span>
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -258,6 +261,7 @@ export default function UsersPage() {
               onClose={closeEditUser}
               title="Edit User"
               size="xl"
+              closeOnOverlayClick={false}
               footer={
                 <div className="flex gap-3 justify-end">
                   <Button variant="ghost" onClick={closeEditUser}>
@@ -274,34 +278,52 @@ export default function UsersPage() {
                   Update user profile details. Permissions are managed separately in the Permissions editor.
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Input
-                    label="Username"
-                    value={editUserData.username}
-                    disabled
-                  />
-                  <Input
-                    label="Email"
-                    type="email"
-                    value={editUserData.email}
-                    onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
-                    required
-                  />
-                  <Input
-                    label="Full Name"
-                    value={editUserData.full_name}
-                    onChange={(e) => setEditUserData({ ...editUserData, full_name: e.target.value })}
-                  />
-                  <div>
-                    <label htmlFor="role" className="block text-sm font-medium text-sre-text mb-2">Role</label>
-                    <select
-                      value={editUserData.role}
-                      onChange={(e) => setEditUserData({ ...editUserData, role: e.target.value })}
-                      className="w-full px-3 pr-10 py-2 bg-sre-bg border border-sre-border rounded text-sre-text"
-                    >
-                      <option value="viewer">Viewer</option>
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <Input
+                        label="Username"
+                        value={editUserData.username}
+                        disabled
+                      />
+                    </div>
+                    <HelpTooltip text="The unique username for this user. This field cannot be edited." />
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <Input
+                        label="Email"
+                        type="email"
+                        value={editUserData.email}
+                        onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <HelpTooltip text="The primary email address for this user account, used for notifications and login." />
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <Input
+                        label="Full Name"
+                        value={editUserData.full_name}
+                        onChange={(e) => setEditUserData({ ...editUserData, full_name: e.target.value })}
+                      />
+                    </div>
+                    <HelpTooltip text="The display name for this user, shown throughout the interface." />
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <label htmlFor="role" className="block text-sm font-medium text-sre-text mb-2">Role</label>
+                      <select
+                        value={editUserData.role}
+                        onChange={(e) => setEditUserData({ ...editUserData, role: e.target.value })}
+                        className="w-full px-3 pr-10 py-2 bg-sre-bg border border-sre-border rounded text-sre-text"
+                      >
+                        {USER_ROLES.map(r => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <HelpTooltip text="The role determines the user's permissions. Admin has full access, User has limited access." />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -310,6 +332,7 @@ export default function UsersPage() {
                     onChange={() => setEditUserData({ ...editUserData, is_active: !editUserData.is_active })}
                     label="Active"
                   />
+                  <HelpTooltip text="Inactive users cannot log in but their account data is preserved." />
                 </div>
               </div>
             </Modal>

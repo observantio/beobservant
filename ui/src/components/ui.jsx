@@ -170,7 +170,7 @@ export function Badge({ children, variant = 'default', className, ...props }) {
     return (
         <span
             className={clsx(
-                'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border w-max text-center',
+                'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border w-max text-center',
                 variants[variant],
                 className
             )}
@@ -217,13 +217,6 @@ export function Input({ label, error, helperText, className, ...props }) {
       )}
     </div>
   )
-}
-
-Checkbox.propTypes = {
-  label: PropTypes.string,
-  error: PropTypes.string,
-  helperText: PropTypes.string,
-  className: PropTypes.string,
 }
 
 Input.propTypes = {
@@ -290,8 +283,9 @@ export function MetricCard({ label, value, trend, status, icon, className }) {
   return (
     <div
       className={clsx(
-        'bg-sre-surface/30 backdrop-blur-sm border border-sre-border rounded-lg p-4',
-        'hover:bg-sre-surface/50 transition-all duration-200',
+        'bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 border-sre-border/50',
+        'hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm',
+        'rounded-lg p-4 relative overflow-visible',
         className
       )}
     >
@@ -801,5 +795,12 @@ export function Checkbox({ label, error, helperText, className, ...props }) {
       )}
     </div>
   )
+}
+
+Checkbox.propTypes = {
+  label: PropTypes.string,
+  error: PropTypes.string,
+  helperText: PropTypes.string,
+  className: PropTypes.string,
 }
 

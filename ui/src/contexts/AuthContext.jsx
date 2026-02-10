@@ -4,6 +4,23 @@ import * as api from '../api'
 
 const AuthContext = createContext(null)
 
+/**
+ * Derive the org_id that should be used for X-Scope-OrgID headers.
+ *
+ * Priority:
+ *   1. The *active* (is_enabled) API key's `key` value — this is the
+ *      product/tenant the user has explicitly selected to view.
+ *   2. The *default* API key's `key` value — fallback when nothing is enabled.
+ *   3. `user.org_id` — ultimate fallback (synced with the default key on the
+ *      server; used for Grafana datasource creation and is NOT mutated when
+ *      the user merely switches the active key).
+ */
+function resolveActiveOrgId(userData) {
+  const keys = userData?.api_keys || []
+  const activeKey = keys.find((k) => k.is_enabled) || keys.find((k) => k.is_default)
+  return activeKey?.key || userData?.org_id || ''
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('auth_token'))
@@ -22,8 +39,7 @@ export function AuthProvider({ children }) {
     try {
       const userData = await api.getCurrentUser()
       setUser(userData)
-      const enabledKey = (userData.api_keys || []).find((k) => k.is_enabled)?.key
-      api.setUserOrgIds(enabledKey || userData.org_id || '')
+      api.setUserOrgIds(resolveActiveOrgId(userData))
     } catch (error) {
       console.error('Failed to load user:', error)
       logout()
@@ -59,8 +75,7 @@ export function AuthProvider({ children }) {
       try {
         const userData = await api.getCurrentUser()
         setUser(userData)
-        const enabledKey = (userData.api_keys || []).find((k) => k.is_enabled)?.key
-        api.setUserOrgIds(enabledKey || userData.org_id || '')
+        api.setUserOrgIds(resolveActiveOrgId(userData))
       } catch (error) {
         console.error('Failed to refresh user:', error)
       }
@@ -69,8 +84,7 @@ export function AuthProvider({ children }) {
 
   const updateUser = useCallback((userData) => {
     setUser(userData)
-    const enabledKey = (userData.api_keys || []).find((k) => k.is_enabled)?.key
-    api.setUserOrgIds(enabledKey || userData.org_id || '')
+    api.setUserOrgIds(resolveActiveOrgId(userData))
   }, [])
 
   const hasPermission = useCallback((permission) => user?.permissions?.includes(permission) || false, [user?.permissions])

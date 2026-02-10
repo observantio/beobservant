@@ -26,20 +26,82 @@ services:
       retries: 5
     restart: unless-stopped
 
-  otel-agent:
-    image: otel/opentelemetry-collector-contrib:0.145.0
-    command: ["--config=/etc/otel/agent.yaml"]
-    volumes:
-      - ./configs/otel-agent.yaml:/etc/otel/agent.yaml:ro
+  beobservant:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
     environment:
-      OTEL_AGENT_API_KEY: "${OTEL_AGENT_API_KEY:-Av45ZchZsQdKjN8XyG}"
+      BACKUP_ENABLED: "${BACKUP_ENABLED:-false}"
+      S3_BUCKET: "${S3_BUCKET:-beobservant-backup}"
+      S3_PREFIX: "${S3_PREFIX:-metrics}"
+      BACKUP_INTERVAL: "${BACKUP_INTERVAL:-3600}"
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      DATA_ENCRYPTION_KEY: "${DATA_ENCRYPTION_KEY:-}"
+      DATABASE_URL: "postgresql://beobservant:${POSTGRES_PASSWORD:-1234567890}@postgres:5432/beobservant"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change-this-secret-key-in-production}"
+      DEFAULT_ADMIN_USERNAME: "${DEFAULT_ADMIN_USERNAME:-admin}"
+      DEFAULT_ADMIN_PASSWORD: "${DEFAULT_ADMIN_PASSWORD:-admin123}"
+      DEFAULT_ADMIN_EMAIL: "${DEFAULT_ADMIN_EMAIL:-admin@example.com}"
+      DEFAULT_ORG_ID: "${DEFAULT_ORG_ID:-Av45ZchZsQdKjN8XyG}"
+      DEFAULT_OTLP_TOKEN: "${DEFAULT_OTLP_TOKEN:-DAMJ8xlh9UrUgK23yYWfzvLDJYeTRfase}"
+    ports:
+      - "4319:4319"
     depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    networks: [obs]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4319/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  otlp-gateway:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./configs/otlp-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      beobservant:
+        condition: service_healthy
       loki:
         condition: service_started
       tempo:
         condition: service_started
       mimir:
         condition: service_started
+    networks: [obs]
+    ports:
+      - "4320:4320"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:4320/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  otel-agent:
+    image: otel/opentelemetry-collector-contrib:0.145.0
+    command: ["--config=/etc/otel/agent.yaml"]
+    volumes:
+      - ./configs/otel-agent.yaml:/etc/otel/agent.yaml:ro
+    environment:
+      OTEL_OTLP_TOKEN: "${DEFAULT_OTLP_TOKEN:-DAMJ8xlh9UrUgK23yYWfzvLDJYeTRfase}"
+    depends_on:
+      otlp-gateway:
+        condition: service_healthy
     networks: [obs]
     ports:
       - "4317:4317"
@@ -97,8 +159,6 @@ services:
     volumes:
       - ./configs/loki.yaml:/etc/loki/loki.yaml:ro
     networks: [obs]
-    ports:
-      - "3100:3100"
     restart: unless-stopped
 
   tempo:
@@ -107,50 +167,7 @@ services:
     volumes:
       - ./configs/tempo.yaml:/etc/tempo/tempo.yaml:ro
     networks: [obs]
-    ports:
-      - "3200:3200"
     restart: unless-stopped
-
-  beobservant:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    environment:
-      BACKUP_ENABLED: "${BACKUP_ENABLED:-false}"
-      S3_BUCKET: "${S3_BUCKET:-beobservant-backup}"
-      S3_PREFIX: "${S3_PREFIX:-metrics}"
-      BACKUP_INTERVAL: "${BACKUP_INTERVAL:-3600}"
-      AWS_REGION: "${AWS_REGION:-us-east-1}"
-      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
-      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
-      DATA_ENCRYPTION_KEY: "${DATA_ENCRYPTION_KEY:-}"
-      DATABASE_URL: "postgresql://beobservant:${POSTGRES_PASSWORD:-1234567890}@postgres:5432/beobservant"
-      JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change-this-secret-key-in-production}"
-      DEFAULT_ADMIN_USERNAME: "${DEFAULT_ADMIN_USERNAME:-admin}"
-      DEFAULT_ADMIN_PASSWORD: "${DEFAULT_ADMIN_PASSWORD:-admin123}"
-      DEFAULT_ADMIN_EMAIL: "${DEFAULT_ADMIN_EMAIL:-admin@example.com}"
-      DEFAULT_ORG_ID: "${DEFAULT_ORG_ID:-Av45ZchZsQdKjN8XyG}"
-    ports:
-      - "4319:4319"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
-    networks: [obs]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4319/health')"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
   mimir:
     image: grafana/mimir:2.12.0
@@ -161,8 +178,6 @@ services:
     depends_on:
       - alertmanager
     networks: [obs]
-    ports:
-      - "9009:9009"
     restart: unless-stopped
 
   alertmanager:
@@ -184,7 +199,8 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:-admin}"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_INSTALL_PLUGINS: ""
-      MIMIR_TENANT_ID: "${MIMIR_TENANT_ID:-default}"
+      # Use the same default org ID as the backend so X-Scope-OrgID is consistent
+      MIMIR_TENANT_ID: "${DEFAULT_ORG_ID:-default}"
     volumes:
       - ./configs/grafana/grafana-datasource.yaml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - grafana:/var/lib/grafana

@@ -1,0 +1,59 @@
+# Mimir configuration using S3 object storage for blocks (bucket store)
+# Replace the ${...} placeholders with your environment variables or values.
+# For MinIO/S3-compatible endpoints, set `s3forcepathstyle: true` and provide endpoint URL.
+
+server:
+  http_listen_port: 9009
+  grpc_listen_port: 9095
+  log_level: info
+
+multitenancy_enabled: true
+
+common:
+  storage:
+    backend: s3
+    s3:
+      bucketnames: ${MIMIR_S3_BUCKET:-mimir-blocks}
+      endpoint: ${MIMIR_S3_ENDPOINT:-s3.amazonaws.com}
+      region: ${MIMIR_S3_REGION:-us-east-1}
+      access_key_id: ${MIMIR_S3_ACCESS_KEY:-}
+      secret_access_key: ${MIMIR_S3_SECRET_KEY:-}
+      s3forcepathstyle: ${MIMIR_S3_FORCEPATHSTYLE:-true}
+      part_size: 134217728
+
+blocks_storage:
+  storage_prefix: blocks
+  tsdb:
+    dir: /data/tsdb
+  bucket_store:
+    sync_dir: /data/tsdb-sync
+
+memberlist:
+  join_members:
+    - mimir
+
+ruler:
+  rule_path: /data/ruler
+  alertmanager_url: http://alertmanager:9093
+
+distributor:
+  ring:
+    kvstore:
+      store: memberlist
+
+ingester:
+  ring:
+    kvstore:
+      store: memberlist
+    replication_factor: 1
+
+compactor:
+  data_dir: /data/compactor
+  sharding_ring:
+    kvstore:
+      store: memberlist
+
+limits:
+  max_global_series_per_user: 0
+  ingestion_rate: 200000
+  out_of_order_time_window: 5m

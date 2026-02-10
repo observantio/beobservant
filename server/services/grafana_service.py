@@ -34,7 +34,6 @@ class GrafanaService:
         credentials = f"{username}:{password}"
         encoded = base64.b64encode(credentials.encode()).decode()
         self.auth_header = f"Basic {encoded}"
-        # Shared client with connection pooling – avoids TCP handshake per request
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(self.timeout),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
@@ -289,7 +288,7 @@ class GrafanaService:
             Created Datasource object or None if error
         """
         try:
-            data = datasource.model_dump(by_alias=True, exclude_none=True)
+            data = datasource.model_dump(by_alias=True, exclude_none=True, exclude={"org_id"})
             
             response = await self._client.post(
                 f"{self.grafana_url}/api/datasources",
@@ -304,6 +303,17 @@ class GrafanaService:
                 return Datasource(**result["datasource"])
             return None
             
+        except httpx.HTTPStatusError as e:
+            body = ""
+            try:
+                body = e.response.text
+            except Exception:
+                pass
+            logger.error(
+                "Error creating datasource (HTTP %s): %s – response body: %s",
+                e.response.status_code, e, body,
+            )
+            return None
         except httpx.HTTPError as e:
             logger.error("Error creating datasource: %s", e)
             return None
@@ -329,7 +339,7 @@ class GrafanaService:
             return None
         
         try:
-            data = datasource_update.model_dump(by_alias=True, exclude_none=True)
+            data = datasource_update.model_dump(by_alias=True, exclude_none=True, exclude={"org_id"})
             
             response = await self._client.put(
                 f"{self.grafana_url}/api/datasources/uid/{uid}",
@@ -343,6 +353,17 @@ class GrafanaService:
                 return Datasource(**result["datasource"])
             return await self.get_datasource(uid)
             
+        except httpx.HTTPStatusError as e:
+            body = ""
+            try:
+                body = e.response.text
+            except Exception:
+                pass
+            logger.error(
+                "Error updating datasource %s (HTTP %s): %s – response body: %s",
+                uid, e.response.status_code, e, body,
+            )
+            return None
         except httpx.HTTPError as e:
             logger.error("Error updating datasource %s: %s", uid, e)
             return None

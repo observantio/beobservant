@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Query, Body, Request, status, Depe
 from typing import Optional, List, Dict
 import json
 import logging
+import httpx
 
 from models.alertmanager_models import (
     Alert, AlertGroup, Silence, SilenceCreate, SilenceCreateRequest, Visibility,
@@ -35,6 +36,12 @@ webhook_router = APIRouter(tags=["alertmanager-webhooks"])
 alertmanager_service = AlertManagerService()
 notification_service = NotificationService()
 storage_service = DatabaseStorageService()
+_mimir_client = httpx.AsyncClient(
+    timeout=httpx.Timeout(config.DEFAULT_TIMEOUT),
+    limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+)
+
+MIMIR_RULES_NAMESPACE = "beobservant"
 
 
 def _require_inbound_webhook_token(request: Request) -> None:
@@ -104,6 +111,86 @@ def _decode_silence_comment(comment: Optional[str]) -> Dict[str, object]:
         "visibility": visibility,
         "shared_group_ids": shared_group_ids
     }
+
+
+def _resolve_rule_org_id(rule_org_id: Optional[str], current_user: TokenData) -> str:
+    user_org_id = getattr(current_user, "org_id", None)
+    return rule_org_id or user_org_id or config.DEFAULT_ORG_ID
+
+
+def _yaml_quote(value: object) -> str:
+    text = str(value)
+    escaped = text.replace("\\", "\\\\").replace("\"", "\\\"")
+    return f"\"{escaped}\""
+
+
+def _build_ruler_yaml(rules: List[AlertRule]) -> str:
+    groups: Dict[str, List[AlertRule]] = {}
+    for rule in rules:
+        if not rule.enabled:
+            continue
+        group_name = rule.group or config.DEFAULT_RULE_GROUP
+        groups.setdefault(group_name, []).append(rule)
+
+    if not groups:
+        return ""
+
+    lines = ["groups:"]
+    for group_name in sorted(groups.keys()):
+        lines.append(f"- name: {_yaml_quote(group_name)}")
+        lines.append("  rules:")
+        for rule in sorted(groups[group_name], key=lambda r: r.name.lower()):
+            lines.append(f"  - alert: {_yaml_quote(rule.name)}")
+            lines.append(f"    expr: {_yaml_quote(rule.expr)}")
+            lines.append(f"    for: {_yaml_quote(rule.duration)}")
+
+            labels = dict(rule.labels or {})
+            labels["severity"] = rule.severity
+            if labels:
+                lines.append("    labels:")
+                for key in sorted(labels.keys()):
+                    lines.append(f"      {key}: {_yaml_quote(labels[key])}")
+
+            annotations = rule.annotations or {}
+            if annotations:
+                lines.append("    annotations:")
+                for key in sorted(annotations.keys()):
+                    lines.append(f"      {key}: {_yaml_quote(annotations[key])}")
+
+    return "\n".join(lines) + "\n"
+
+
+async def _sync_mimir_rules_for_org(tenant_id: str, org_id: str) -> None:
+    rules = storage_service.get_alert_rules_for_org(tenant_id, org_id)
+    payload = _build_ruler_yaml(rules)
+    headers = {"X-Scope-OrgID": org_id}
+    base_url = config.MIMIR_URL.rstrip("/")
+
+    try:
+        if payload:
+            headers["Content-Type"] = "application/yaml"
+            resp = await _mimir_client.post(
+                f"{base_url}/api/v1/rules/{MIMIR_RULES_NAMESPACE}",
+                content=payload,
+                headers=headers,
+            )
+        else:
+            resp = await _mimir_client.delete(
+                f"{base_url}/api/v1/rules/{MIMIR_RULES_NAMESPACE}",
+                headers=headers,
+            )
+        if resp.status_code not in {200, 201, 202, 204, 404}:
+            raise httpx.HTTPStatusError(
+                f"Unexpected Mimir response: {resp.status_code}",
+                request=resp.request,
+                response=resp,
+            )
+    except httpx.HTTPError as exc:
+        logger.error("Failed to sync rules to Mimir for org_id=%s: %s", org_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to sync alert rules to Mimir",
+        ) from exc
 
 
 def _apply_silence_metadata(silence: Silence) -> Silence:
@@ -475,6 +562,60 @@ async def get_alert_rules(current_user: TokenData = Depends(require_permission(P
     return rules
 
 
+@router.get("/metrics/names")
+async def list_metric_names(
+    org_id: Optional[str] = Query(
+        None,
+        alias="orgId",
+        description=(
+            "API key value / org_id to scope metrics to. "
+            "If omitted, falls back to the current user's org_id."
+        ),
+    ),
+    current_user: TokenData = Depends(require_permission(Permission.WRITE_ALERTS)),
+):
+    """List metric names from Mimir for assisted rule creation.
+
+    Uses the configured Mimir Prometheus-compatible API and scopes the
+    query via ``X-Scope-OrgID`` so that each product / API key only sees
+    its own metrics.
+    """
+    tenant_org_id = org_id or getattr(current_user, "org_id", None)
+    if not tenant_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No org_id available to query metrics. Set a product / API key first.",
+        )
+
+    try:
+        resp = await _mimir_client.get(
+            f"{config.MIMIR_URL.rstrip('/')}/prometheus/api/v1/label/__name__/values",
+            headers={"X-Scope-OrgID": tenant_org_id},
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.error("Error querying Mimir metric names for org_id=%s: %s", tenant_org_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch metrics from Mimir",
+        ) from exc
+
+    payload = resp.json()
+    status_val = payload.get("status")
+    if status_val != "success":
+        logger.error("Unexpected Mimir response status for org_id=%s: %s", tenant_org_id, status_val)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Mimir returned an error while listing metrics",
+        )
+
+    metrics = payload.get("data") or []
+    if not isinstance(metrics, list):
+        metrics = []
+
+    return {"orgId": tenant_org_id, "metrics": metrics}
+
+
 @router.get("/rules/{rule_id}", response_model=AlertRule)
 async def get_alert_rule(rule_id: str, current_user: TokenData = Depends(require_permission(Permission.READ_ALERTS))):
     """Get a specific alert rule by ID.
@@ -503,7 +644,11 @@ async def create_alert_rule(
     tenant_id = current_user.tenant_id
     user_id = current_user.user_id
     group_ids = getattr(current_user, 'group_ids', []) or []
+    resolved_org_id = _resolve_rule_org_id(rule.org_id, current_user)
+    if rule.org_id != resolved_org_id:
+        rule = rule.model_copy(update={"org_id": resolved_org_id})
     created_rule = storage_service.create_alert_rule(rule, tenant_id, user_id, group_ids)
+    await _sync_mimir_rules_for_org(tenant_id, created_rule.org_id or resolved_org_id)
     return created_rule
 
 
@@ -521,9 +666,22 @@ async def update_alert_rule(
     tenant_id = current_user.tenant_id
     user_id = current_user.user_id
     group_ids = getattr(current_user, 'group_ids', []) or []
+    existing_rule = storage_service.get_alert_rule(rule_id, tenant_id, user_id, group_ids)
+    if not existing_rule:
+        raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found or access denied")
+
+    resolved_org_id = _resolve_rule_org_id(rule.org_id, current_user)
+    if rule.org_id != resolved_org_id:
+        rule = rule.model_copy(update={"org_id": resolved_org_id})
+
     updated_rule = storage_service.update_alert_rule(rule_id, rule, tenant_id, user_id, group_ids)
     if not updated_rule:
         raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found or access denied")
+
+    await _sync_mimir_rules_for_org(tenant_id, updated_rule.org_id or resolved_org_id)
+    if existing_rule.org_id and existing_rule.org_id != updated_rule.org_id:
+        await _sync_mimir_rules_for_org(tenant_id, existing_rule.org_id)
+
     return updated_rule
 
 
@@ -590,9 +748,16 @@ async def delete_alert_rule(rule_id: str, current_user: TokenData = Depends(requ
     tenant_id = current_user.tenant_id
     user_id = current_user.user_id
     group_ids = getattr(current_user, 'group_ids', []) or []
+    existing_rule = storage_service.get_alert_rule(rule_id, tenant_id, user_id, group_ids)
+    if not existing_rule:
+        raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found or access denied")
+
     success = storage_service.delete_alert_rule(rule_id, tenant_id, user_id, group_ids)
     if not success:
         raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found or access denied")
+
+    resolved_org_id = _resolve_rule_org_id(existing_rule.org_id, current_user)
+    await _sync_mimir_rules_for_org(tenant_id, resolved_org_id)
     return {"status": "success", "message": f"Alert rule {rule_id} deleted"}
 
 

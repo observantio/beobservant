@@ -57,12 +57,11 @@ async function requestWithHeaders(path, opts = {}, headers = {}) {
     let body
     try {
       body = text?.startsWith('{') ? JSON.parse(text) : { message: text }
-      globalThis.window.dispatchEvent(new CustomEvent('api-error', { detail: { status: res.status, body } }))
-    } catch (e) {
+    } catch {
       body = { message: text || res.statusText }
-      globalThis.window.dispatchEvent(new CustomEvent('api-error', { detail: { status: res.status, body } }))
-      console.error('Failed to parse error response', e)
     }
+
+    globalThis.window.dispatchEvent(new CustomEvent('api-error', { detail: { status: res.status, body } }))
 
     if (res.status === 401 && path !== '/api/auth/login') {
       authToken = null
@@ -70,17 +69,9 @@ async function requestWithHeaders(path, opts = {}, headers = {}) {
       globalThis.window.location.href = '/login'
     }
 
-    const err = new Error(text || res.statusText)
+    const err = new Error(body?.message || body?.detail || text || res.statusText)
     err.status = res.status
-    try {
-      if (body !== undefined) {
-        err.body = body
-      } else if (text?.startsWith('{')) {
-        err.body = JSON.parse(text)
-      }
-    } catch (e) {
-      console.error('Failed to parse error response', e)
-    }
+    err.body = body
     throw err
   }
 
@@ -364,6 +355,15 @@ export async function testNotificationChannel(channelId) {
   return request(`/api/alertmanager/channels/${encodeURIComponent(channelId)}/test`, {
     method: 'POST'
   })
+}
+
+// Mimir metrics for alert rule assistance
+export async function listMetricNames(orgId) {
+  const params = new URLSearchParams()
+  if (orgId) params.append('orgId', orgId)
+  const qs = params.toString()
+  const path = qs ? `/api/alertmanager/metrics/names?${qs}` : '/api/alertmanager/metrics/names'
+  return request(path)
 }
 
 // Loki

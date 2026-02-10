@@ -78,3 +78,34 @@ def init_db():
     logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=_engine)
     logger.info("Database tables created successfully")
+
+
+def run_column_migration(table_name: str, column_name: str, column_type: str):
+    """Add a column to an existing table if it does not already exist.
+
+    This is a lightweight migration helper for adding new nullable columns
+    without requiring a full Alembic migration.  It is safe to call
+    repeatedly (idempotent).
+    """
+    if _engine is None:
+        raise RuntimeError("Database not initialized. Call init_database() first.")
+
+    from sqlalchemy import text, inspect
+
+    inspector = inspect(_engine)
+    columns = [c["name"] for c in inspector.get_columns(table_name)]
+    if column_name in columns:
+        logger.debug("Column %s.%s already exists – skipping migration", table_name, column_name)
+        return
+
+    ddl = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+    with _engine.begin() as conn:
+        conn.execute(text(ddl))
+    logger.info("Added column %s.%s (%s)", table_name, column_name, column_type)
+
+    if column_name == "otlp_token":
+        idx_name = f"idx_{table_name}_{column_name}"
+        idx_ddl = f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {table_name} ({column_name})"
+        with _engine.begin() as conn:
+            conn.execute(text(idx_ddl))
+        logger.info("Created unique index %s", idx_name)

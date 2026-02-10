@@ -6,6 +6,7 @@ from . import grafana_router
 from . import auth_router
 from . import agents_router
 from . import system_router
+from . import gateway_router
 
 __all__ = [
     "tempo_router",
@@ -15,4 +16,5 @@ __all__ = [
     "auth_router",
     "agents_router",
     "system_router",
+    "gateway_router",
 ]

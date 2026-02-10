@@ -1,17 +1,34 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { fetchTempoServices, searchTraces, getTrace } from '../api'
 import { Card, Button, Select, Input, Alert, Badge, Spinner } from '../components/ui'
 import ServiceGraph from '../components/tempo/ServiceGraph'
 import TraceTimeline from '../components/tempo/TraceTimeline'
 import { formatDuration } from '../utils/formatters'
-import { getServiceName } from '../utils/helpers'
-import { TIME_RANGES, DEFAULT_DURATION_RANGE } from '../utils/constants'
+import { getServiceName, hasSpanError } from '../utils/helpers'
+import { TIME_RANGES, DEFAULT_DURATION_RANGE, TRACE_STATUS_OPTIONS } from '../utils/constants'
+import HelpTooltip from '../components/HelpTooltip'
+
+/**
+ * Extract unique service names from an array of traces
+ */
+function discoverServices(traces) {
+  const discovered = new Set()
+  traces.forEach(t => {
+    (t.spans || []).forEach(s => {
+      const name = getServiceName(s)
+      if (name && name !== 'unknown') discovered.add(name)
+    })
+  })
+  return Array.from(discovered).sort((a, b) => a.localeCompare(b))
+}
 
 export default function TempoPage() {
   const [services, setServices] = useState([])
   const [service, setService] = useState('')
   const [operation, setOperation] = useState('')
+  const [traceIdSearch, setTraceIdSearch] = useState('')
   const [durationRange, setDurationRange] = useState([DEFAULT_DURATION_RANGE.min, DEFAULT_DURATION_RANGE.max])
   const [statusFilter, setStatusFilter] = useState('all')
   const [timeRange, setTimeRange] = useState(60)
@@ -21,48 +38,68 @@ export default function TempoPage() {
   const [error, setError] = useState(null)
   const [viewMode, setViewMode] = useState('list')
 
-  const hasSpanError = (span) => {
-    return span.status?.code === 'ERROR' || span.tags?.some(tag => tag.key === 'error' && tag.value === true)
-  }
-
   const { isAuthenticated, loading: authLoading } = useAuth()
+  const toast = useToast()
 
-  // Load services only after authentication is ready to ensure auth token is set
+  const loadServices = useCallback(async () => {
+    try {
+      const data = await fetchTempoServices()
+      setServices(data || [])
+    } catch {
+      setServices([])
+    }
+  }, [])
+
+  // Load services only after authentication is ready
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
       loadServices()
     }
-  }, [isAuthenticated, authLoading])
+  }, [isAuthenticated, authLoading, loadServices])
 
   // If backend doesn't return services, derive them from loaded traces
   useEffect(() => {
-    if (!services?.length && traces?.data?.length) {
-      const discovered = new Set()
-      traces.data.forEach(t => {
-        (t.spans || []).forEach(s => {
-          const name = getServiceName(s)
-          if (name) discovered.add(name)
-        })
-      })
-      if (discovered.size) setServices(Array.from(discovered).sort((a, b) => a.localeCompare(b)))
+    if (!services.length && traces?.data?.length) {
+      const discovered = discoverServices(traces.data)
+      if (discovered.length) setServices(discovered)
     }
-  }, [traces])
+  }, [traces, services.length])
 
-  async function loadServices() {
+  const handleTraceClick = useCallback(async (traceId) => {
     try {
-      const data = await fetchTempoServices()
-      setServices(data || [])
+      const trace = await getTrace(traceId)
+      if (trace?.spans) {
+        setSelectedTrace({
+          ...trace,
+          spans: trace.spans.map(s => ({
+            ...s,
+            endTime: s.startTime + (s.duration || 0)
+          }))
+        })
+      } else {
+        setError('Trace data is incomplete — no spans returned')
+      }
     } catch (e) {
-      setServices([])
-      console.error('Failed to load services:', e)
+      setError(`Failed to load trace: ${e.message}`)
     }
-  }
+  }, [])
 
   async function onSearch(e) {
     if (e) e.preventDefault()
     setError(null)
-    setLoading(true)
 
+    // Direct trace ID lookup
+    if (traceIdSearch.trim()) {
+      setLoading(true)
+      try {
+        await handleTraceClick(traceIdSearch.trim())
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    setLoading(true)
     try {
       const end = Date.now() * 1000
       const start = end - (timeRange * 60 * 1000000)
@@ -78,15 +115,10 @@ export default function TempoPage() {
       })
 
       setTraces(res)
-      if (!services?.length && res?.data?.length) {
-        const discovered = new Set()
-        res.data.forEach(t => {
-          (t.spans || []).forEach(s => {
-            const name = getServiceName(s)
-            if (name) discovered.add(name)
-          })
-        })
-        if (discovered.size) setServices(Array.from(discovered).sort((a, b) => a.localeCompare(b)))
+
+      if (!services.length && res?.data?.length) {
+        const discovered = discoverServices(res.data)
+        if (discovered.length) setServices(discovered)
       }
     } catch (e) {
       setError(e.message)
@@ -95,36 +127,11 @@ export default function TempoPage() {
     }
   }
 
-  async function handleTraceClick(traceId) {
-    try {
-      const trace = await getTrace(traceId)
-      if (trace?.spans) {
-        const enrichedTrace = {
-          ...trace,
-          spans: trace.spans.map(s => ({
-            ...s,
-            endTime: s.startTime + (s.duration || 0)
-          }))
-        }
-        setSelectedTrace(enrichedTrace)
-      } else {
-        setError('Trace data is incomplete')
-      }
-    } catch (e) {
-      setError(`Failed to load trace: ${e.message}`)
-    }
-  }
-
   const filteredTraces = useMemo(() => {
     if (!traces?.data) return []
-
     return traces.data.filter(trace => {
-      if (statusFilter === 'error') {
-        return trace.spans?.some(hasSpanError)
-      }
-      if (statusFilter === 'ok') {
-        return !trace.spans?.some(hasSpanError)
-      }
+      if (statusFilter === 'error') return trace.spans?.some(hasSpanError)
+      if (statusFilter === 'ok') return !trace.spans?.some(hasSpanError)
       return true
     })
   }, [traces, statusFilter])
@@ -133,306 +140,353 @@ export default function TempoPage() {
     if (!filteredTraces.length) return null
 
     const durations = filteredTraces.map(t => {
-      if (!t.spans || t.spans.length === 0) return 0
-      const rootSpan = t.spans.find(s => !s.parentSpanId) || t.spans[0]
+      if (!t.spans?.length) return 0
+      const rootSpan = t.spans.find(s => !s.parentSpanId && !s.parentSpanID) || t.spans[0]
       return rootSpan?.duration || 0
     })
 
-    const errorCount = filteredTraces.filter(t =>
-      t.spans?.some(hasSpanError)
-    ).length
-
+    const errorCount = filteredTraces.filter(t => t.spans?.some(hasSpanError)).length
     const validDurations = durations.filter(d => d > 0)
-    const avgDuration = validDurations.length > 0 ? validDurations.reduce((a, b) => a + b, 0) / validDurations.length : 0
-    const maxDuration = validDurations.length > 0 ? Math.max(...validDurations) : 0
-    const minDuration = validDurations.length > 0 ? Math.min(...validDurations) : 0
+    const avgDuration = validDurations.length ? validDurations.reduce((a, b) => a + b, 0) / validDurations.length : 0
+    const maxDuration = validDurations.length ? Math.max(...validDurations) : 0
+    const minDuration = validDurations.length ? Math.min(...validDurations) : 0
+    const errorRate = filteredTraces.length ? (errorCount / filteredTraces.length) * 100 : 0
 
     return {
       total: filteredTraces.length,
       avgDuration,
       maxDuration,
       minDuration,
-      errorRate: (errorCount / filteredTraces.length * 100).toFixed(1),
+      errorRate,
       errorCount
     }
   }, [filteredTraces])
 
+  function clearFilters() {
+    setService('')
+    setOperation('')
+    setTraceIdSearch('')
+    setDurationRange([DEFAULT_DURATION_RANGE.min, DEFAULT_DURATION_RANGE.max])
+    setStatusFilter('all')
+  }
+
   return (
     <div className="animate-fade-in">
+      {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-sre-text mb-2 flex items-center gap-2">
-            <span className="material-icons text-sre-primary text-3xl">timeline</span>
-            <span>Distributed Tracing</span>
+              <span className="material-icons text-sre-primary text-3xl">timeline</span>
+               Tracing
           </h1>
           <p className="text-sre-text-muted">Search and analyze distributed traces across your services</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setViewMode('list')}
-            className={`px-3 py-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-sre-primary text-white' : 'bg-sre-surface text-sre-text hover:bg-sre-surface-light'}`}
-          >
-            <span className="material-icons text-sm">list</span>
-          </button>
-          <button
-            onClick={() => setViewMode('graph')}
-            className={`px-3 py-2 rounded-lg transition-colors ${viewMode === 'graph' ? 'bg-sre-primary text-white' : 'bg-sre-surface text-sre-text hover:bg-sre-surface-light'}`}
-          >
-            <span className="material-icons text-sm">hub</span>
-          </button>
+        <div className="flex items-center gap-2">
+          {[
+            { key: 'list', icon: 'list', label: 'List View' },
+            { key: 'graph', icon: 'hub', label: 'Dependency Map' },
+          ].map(v => (
+            <button
+              key={v.key}
+              onClick={() => setViewMode(v.key)}
+              title={v.label}
+              className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 text-sm ${
+                viewMode === v.key
+                  ? 'bg-sre-primary text-white shadow-sm'
+                  : 'text-sre-text-muted hover:text-sre-text hover:bg-sre-surface'
+              }`}
+            >
+              <span className="material-icons text-sm">{v.icon}</span>
+              <span className="hidden sm:inline">{v.label}</span>
+            </button>
+          ))}
+          <HelpTooltip text="Switch between list view (detailed trace information) and dependency map (service relationships)." />
         </div>
       </div>
 
       {error && (
-        <Alert variant="error" className="mb-6">
+        <Alert variant="error" className="mb-6" onClose={() => setError(null)}>
           <strong>Error:</strong> {error}
         </Alert>
       )}
 
+      {/* Stats Bar */}
       {traceStats && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <Card className="p-4">
-            <div className="text-sre-text-muted text-xs mb-1">Total Traces</div>
-            <div className="text-2xl font-bold text-sre-text">{traceStats.total}</div>
-          </Card>
-          <Card className="p-4">
-            <div className="text-sre-text-muted text-xs mb-1">Avg Duration</div>
-            <div className="text-2xl font-bold text-sre-text">{formatDuration(traceStats.avgDuration)}</div>
-          </Card>
-          <Card className="p-4">
-            <div className="text-sre-text-muted text-xs mb-1">Max Duration</div>
-            <div className="text-2xl font-bold text-sre-text">{formatDuration(traceStats.maxDuration)}</div>
-          </Card>
-          <Card className="p-4">
-            <div className="text-sre-text-muted text-xs mb-1">Error Rate</div>
-            <div className={`text-2xl font-bold ${traceStats.errorRate > 5 ? 'text-red-500' : 'text-green-500'}`}>
-              {traceStats.errorRate}%
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="text-sre-text-muted text-xs mb-1">Errors</div>
-            <div className="text-2xl font-bold text-red-500">{traceStats.errorCount}</div>
-          </Card>
+          {[
+            { label: 'Total Traces', value: traceStats.total, color: 'text-sre-text' },
+            { label: 'Avg Duration', value: formatDuration(traceStats.avgDuration), color: 'text-sre-text' },
+            { label: 'Max Duration', value: formatDuration(traceStats.maxDuration), color: 'text-sre-text' },
+            { label: 'Error Rate', value: `${traceStats.errorRate.toFixed(1)}%`, color: traceStats.errorRate > 5 ? 'text-red-500' : 'text-green-500' },
+            { label: 'Errors', value: traceStats.errorCount, color: traceStats.errorCount > 0 ? 'text-red-500' : 'text-green-500' },
+          ].map(stat => (
+            <Card key={stat.label} className="p-4 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 border-sre-border/50 hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm">
+              <div className="text-sre-text-muted text-xs mb-1">{stat.label}</div>
+              <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+            </Card>
+          ))}
         </div>
       )}
 
-      <Card title="Search Traces" subtitle="Query traces by service, operation, and duration" className="mb-6">
+      {/* Search Form */}
+      <Card title="Search Traces" subtitle="Query traces by service, operation, duration, or trace ID" className="mb-6">
         <form onSubmit={onSearch} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Select
-              label="Service"
-              value={service}
-              onChange={(e) => setService(e.target.value)}
-            >
-              <option value="">-- All Services --</option>
-              {services?.length > 0 ? (
-                services.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))
-              ) : (
-                <option disabled>No services available</option>
-              )}
-            </Select>
+          {/* Trace ID quick search */}
+          <div className="flex gap-2 items-end pb-3 border-b border-sre-border">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <Input
+                  size="sm"
+                  label="Trace ID (direct lookup)"
+                  value={traceIdSearch}
+                  onChange={(e) => setTraceIdSearch(e.target.value)}
+                  placeholder="Paste a trace ID to jump directly to it"
+                  className="flex-1 px-2 py-0.5 text-sm"
+                />
+                <HelpTooltip text="Enter a specific trace ID to view that trace directly, bypassing the search filters." />
+              </div>
+            </div>
+            <Button size="sm" type="submit" loading={loading && !!traceIdSearch.trim()} disabled={!traceIdSearch.trim() && loading}>
+              <span className="material-icons text-xs mr-1">search</span> Lookup
+            </Button>
+          </div>
 
-            <Input
-              label="Operation"
-              value={operation}
-              onChange={(e) => setOperation(e.target.value)}
-              placeholder="e.g., HTTP GET /api"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Select
+                  size="sm"
+                  label="Service"
+                  value={service}
+                  onChange={(e) => setService(e.target.value)}
+                  className="flex-1 px-2 py-0.5 text-sm"
+                >
+                  <option value="">All Services</option>
+                  {services.length > 0 ? (
+                    services.map((s) => <option key={s} value={s}>{s}</option>)
+                  ) : (
+                    <option disabled>No services discovered yet</option>
+                  )}
+                </Select>
+                <HelpTooltip text="Filter traces by the service that initiated them. Services are automatically discovered from your traces." />
+              </div>
+            </div>
 
-            <Select
-              label="Time Range"
-              value={timeRange}
-              onChange={(e) => setTimeRange(Number(e.target.value))}
-            >
-              {TIME_RANGES.map(tr => (
-                <option key={tr.value} value={tr.value}>{tr.label}</option>
-              ))}
-            </Select>
+            <div>
+              <div className="flex items-center gap-2">
+                <Input
+                  size="sm"
+                  label="Operation"
+                  value={operation}
+                  onChange={(e) => setOperation(e.target.value)}
+                  placeholder="e.g., HTTP GET /api"
+                  className="flex-1 px-2 py-0.5 text-sm"
+                />
+                <HelpTooltip text="Filter traces by operation name, such as HTTP methods or function names." />
+              </div>
+            </div>
 
-            <Select
-              label="Status"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="all">All</option>
-              <option value="ok">Success Only</option>
-              <option value="error">Errors Only</option>
-            </Select>
+            <div>
+              <div className="flex items-center gap-2">
+                <Select
+                  size="sm"
+                  label="Time Range"
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(Number(e.target.value))}
+                  className="flex-1 px-2 py-0.5 text-sm"
+                >
+                  {TIME_RANGES.map(tr => (
+                    <option key={tr.value} value={tr.value}>{tr.label}</option>
+                  ))}
+                </Select>
+                <HelpTooltip text="Select how far back to search for traces. Larger ranges may take longer to query." />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <Select
+                  size="sm"
+                  label="Status"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="flex-1 px-2 py-0.5 text-sm"
+                >
+                  {TRACE_STATUS_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </Select>
+                <HelpTooltip text="Filter traces by their status: all, successful, or those containing errors." />
+              </div>
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">
-              <span className="material-icons text-sm mr-1 align-middle">schedule</span>
-              Duration Range: {formatDuration(durationRange[0])} - {formatDuration(durationRange[1])}
-            </label>
-            <div className="space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <label className="block text-xs font-medium text-sre-text">
+                <span className="material-icons text-xs mr-1 align-middle">schedule</span>
+                Duration Range: {formatDuration(durationRange[0])} – {formatDuration(durationRange[1])}
+              </label>
+              <HelpTooltip text="Filter traces by their total duration using the sliders below." />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="min-duration" className="text-xs text-sre-text-muted">Minimum Duration</label>
+                <label className="text-xs text-sre-text-muted">Minimum</label>
                 <input
-                  type="range"
-                  min="0"
-                  max="10000000000"
-                  step="50000000"
+                  type="range" min="0" max="10000000000" step="50000000"
                   value={durationRange[0]}
                   onChange={(e) => {
                     const newMin = Math.max(0, Number(e.target.value))
-                    const nextMax = Math.max(durationRange[1], newMin + 10000000)
-                    setDurationRange([newMin, nextMax])
+                    setDurationRange([newMin, Math.max(durationRange[1], newMin + 10000000)])
                   }}
-                  className="w-full h-2 bg-sre-surface rounded-lg appearance-none cursor-pointer accent-sre-primary"
+                  className="w-full h-1.5 bg-sre-surface rounded-lg appearance-none cursor-pointer accent-sre-primary"
                 />
               </div>
               <div>
-                <label htmlFor="max-duration" className="text-xs text-sre-text-muted">Maximum Duration</label>
+                <label className="text-xs text-sre-text-muted">Maximum</label>
                 <input
-                  type="range"
-                  min="0"
-                  max="10000000000"
-                  step="50000000"
+                  type="range" min="0" max="10000000000" step="50000000"
                   value={durationRange[1]}
                   onChange={(e) => {
                     const newMax = Math.max(0, Number(e.target.value))
-                    const nextMin = Math.min(durationRange[0], newMax - 10000000)
-                    setDurationRange([Math.max(0, nextMin), newMax])
+                    setDurationRange([Math.max(0, Math.min(durationRange[0], newMax - 10000000)), newMax])
                   }}
-                  className="w-full h-2 bg-sre-surface rounded-lg appearance-none cursor-pointer accent-sre-primary"
+                  className="w-full h-1.5 bg-sre-surface rounded-lg appearance-none cursor-pointer accent-sre-primary"
                 />
               </div>
             </div>
-            <div className="flex justify-between text-xs text-sre-text-muted mt-1">
+            <div className="flex justify-between text-xs text-sre-text-muted mt-0.5">
               <span>0ms</span>
+              <button
+                type="button"
+                onClick={() => setDurationRange([DEFAULT_DURATION_RANGE.min, DEFAULT_DURATION_RANGE.max])}
+                className="text-sre-primary hover:underline text-xs"
+              >
+                Reset range
+              </button>
               <span>10s</span>
             </div>
-            <button
-              type="button"
-              onClick={() => setDurationRange([DEFAULT_DURATION_RANGE.min, DEFAULT_DURATION_RANGE.max])}
-              className="text-xs text-sre-primary hover:underline mt-1"
-            >
-              Reset range
-            </button>
           </div>
 
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => {
-              setService('')
-              setOperation('')
-              setDurationRange([DEFAULT_DURATION_RANGE.min, DEFAULT_DURATION_RANGE.max])
-              setStatusFilter('all')
-            }}>
-              Clear Filters
-            </Button>
-            <Button type="submit" loading={loading}>
-              <span className="material-icons text-sm mr-2">search</span> Search Traces
+          <div className="flex justify-end gap-2 mt-2">
+            <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="ghost" onClick={clearFilters}>
+                Clear Filters
+              </Button>
+              <HelpTooltip text="Reset all search filters and duration range to their default values." />
+            </div>
+            <Button type="submit" size="sm" loading={loading && !traceIdSearch.trim()}>
+              <span className="material-icons text-xs mr-1">search</span> Search Traces
             </Button>
           </div>
         </form>
       </Card>
 
-      {viewMode === 'graph' && filteredTraces?.length > 0 && (
+      {/* Service Dependency Graph */}
+      {viewMode === 'graph' && filteredTraces.length > 0 && (
         <div className="mb-6">
           <ServiceGraph traces={filteredTraces} />
         </div>
       )}
 
-      <Card
-        title="Trace Results"
-        subtitle={filteredTraces.length ? `Found ${filteredTraces.length} traces` : 'Run a search to see results'}
-      >
-        {(() => {
-          if (loading) {
-            return (
-              <div className="py-12">
-                <Spinner size="lg" />
-              </div>
-            );
-          } else if (filteredTraces.length) {
-            return (
-              <div className="space-y-2">
-                {filteredTraces.map((t) => {
-                  const rootSpan = t.spans?.find(s => !s.parentSpanId && !s.parentSpanID) || t.spans?.[0]
-                  const duration = rootSpan?.duration || 0
-                  const hasError = t.spans?.some(hasSpanError)
-                  const allServices = t.spans?.map(s => getServiceName(s)).filter(Boolean) || []
-                  const serviceCount = new Set(allServices).size
-                  const rootServiceName = rootSpan ? getServiceName(rootSpan) : 'unknown'
+      {/* Trace Results */}
+      {viewMode === 'list' && (
+        <Card
+          title="Trace Results"
+          subtitle={filteredTraces.length ? `Found ${filteredTraces.length} trace${filteredTraces.length === 1 ? '' : 's'}` : 'Run a search to see results'}
+        >
+          {loading ? (
+            <div className="py-12 flex flex-col items-center">
+              <Spinner size="lg" />
+              <p className="text-sre-text-muted mt-4">Searching traces...</p>
+            </div>
+          ) : filteredTraces.length > 0 ? (
+            <div className="space-y-2">
+              {filteredTraces.map((t) => {
+                const rootSpan = t.spans?.find(s => !s.parentSpanId && !s.parentSpanID) || t.spans?.[0]
+                const duration = rootSpan?.duration || 0
+                const traceHasError = t.spans?.some(hasSpanError)
+                const allServices = t.spans?.map(s => getServiceName(s)).filter(Boolean) || []
+                const serviceCount = new Set(allServices).size
+                const rootServiceName = rootSpan ? getServiceName(rootSpan) : 'unknown'
+                const traceId = t.traceID || t.traceId
 
-                  const traceId = t.traceID || t.traceId
-
-                  return (
-                    <button
-                      key={traceId}
-                      onClick={() => handleTraceClick(traceId)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleTraceClick(traceId);
-                        }
-                      }}
-                      className="p-4 bg-sre-surface/50 border border-sre-border rounded-lg hover:border-sre-primary/50 transition-all cursor-pointer group w-full text-left"
-                      type="button"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="material-icons text-sre-primary group-hover:scale-110 transition-transform">
-                              {hasError ? 'error' : 'check_circle'}
-                            </span>
-                            <span className="font-mono text-sm text-sre-text font-semibold">
-                              {traceId?.substring(0, 16)}...
-                            </span>
-                            <Badge variant={hasError ? 'error' : 'success'}>
-                              {hasError ? 'ERROR' : 'OK'}
-                            </Badge>
-                            <Badge variant="info">{t.spans?.length || 0} spans</Badge>
-                            <Badge variant="default">{serviceCount} services</Badge>
+                return (
+                  <button
+                    key={traceId}
+                    onClick={() => handleTraceClick(traceId)}
+                    className="p-4 bg-sre-surface/50 border border-sre-border rounded-lg hover:border-sre-primary/50 transition-all cursor-pointer group w-full text-left"
+                    type="button"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className={`material-icons ${traceHasError ? 'text-red-500' : 'text-green-500'} group-hover:scale-110 transition-transform`}>
+                            {traceHasError ? 'error' : 'check_circle'}
+                          </span>
+                          <span className="font-mono text-sm text-sre-text font-semibold">
+                            {traceId?.substring(0, 16)}...
+                          </span>
+                          <Badge variant={traceHasError ? 'error' : 'success'}>
+                            {traceHasError ? 'ERROR' : 'OK'}
+                          </Badge>
+                          <Badge variant="info">{t.spans?.length || 0} spans</Badge>
+                          <Badge variant="default">{serviceCount} service{serviceCount !== 1 ? 's' : ''}</Badge>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <span className="text-sre-text-muted">Service: </span>
+                            <span className="text-sre-text font-semibold">{rootServiceName}</span>
                           </div>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          {rootSpan?.operationName && (
                             <div>
-                              <span className="text-sre-text-muted">Service: </span>
-                              <span className="text-sre-text font-semibold">{rootServiceName}</span>
+                              <span className="text-sre-text-muted">Operation: </span>
+                              <span className="text-sre-text font-semibold">{rootSpan.operationName}</span>
                             </div>
-                            {rootSpan?.operationName && (
-                              <div>
-                                <span className="text-sre-text-muted">Operation: </span>
-                                <span className="text-sre-text font-semibold">{rootSpan.operationName}</span>
-                              </div>
-                            )}
-                            <div>
-                              <span className="text-sre-text-muted">Duration: </span>
-                              <span className="text-sre-text font-semibold font-mono">{formatDuration(duration)}</span>
-                            </div>
-                            <div>
-                              <span className="text-sre-text-muted">Started: </span>
-                              <span className="text-sre-text font-semibold">
-                                {new Date(rootSpan?.startTime / 1000).toLocaleTimeString()}
-                              </span>
-                            </div>
+                          )}
+                          <div>
+                            <span className="text-sre-text-muted">Duration: </span>
+                            <span className="text-sre-text font-semibold font-mono">{formatDuration(duration)}</span>
+                          </div>
+                          <div>
+                            <span className="text-sre-text-muted">Started: </span>
+                            <span className="text-sre-text font-semibold">
+                              {new Date(rootSpan?.startTime / 1000).toLocaleTimeString()}
+                            </span>
                           </div>
                         </div>
-                        <span className="material-icons text-sre-text-muted group-hover:text-sre-primary transition-colors">
-                          chevron_right
-                        </span>
                       </div>
-                    </button>
-                  )
-                })}
-              </div>
-            );
-          } else {
-            return (
-              <div className="text-center py-12">
-                <span className="material-icons text-6xl text-sre-text-subtle mb-4">timeline</span>
-                <p className="text-sre-text-muted mb-4">No traces found. Try adjusting your search criteria or time range.</p>
-              </div>
-            );
-          }
-        })()}
-      </Card>
+                      <span className="material-icons text-sre-text-muted group-hover:text-sre-primary transition-colors">
+                        chevron_right
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <span className="material-icons text-6xl text-sre-text-subtle mb-4">timeline</span>
+              <p className="text-lg text-sre-text-muted mb-2">No traces found</p>
+              <p className="text-sm text-sre-text-subtle">Try adjusting your search criteria, expanding the time range, or pasting a trace ID above.</p>
+            </div>
+          )}
+        </Card>
+      )}
 
+      {/* Trace Detail Modal */}
       {selectedTrace && (
-        <TraceTimeline trace={selectedTrace} onClose={() => setSelectedTrace(null)} />
+        <TraceTimeline
+          trace={selectedTrace}
+          onClose={() => setSelectedTrace(null)}
+          onCopyTraceId={() => {
+            const id = selectedTrace.traceId || selectedTrace.traceID || selectedTrace.id || ''
+            navigator.clipboard.writeText(id).then(
+              () => toast.success('Trace ID copied'),
+              () => toast.error('Failed to copy')
+            )
+          }}
+        />
       )}
     </div>
   )

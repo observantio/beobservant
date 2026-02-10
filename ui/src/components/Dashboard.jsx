@@ -167,24 +167,22 @@ export default function Dashboard({ info }) {
       try {
         const res = await fetchHealth()
         setHealth(res)
-      } catch (e) {
-        console.error('Failed to fetch health:', e)
+      } catch {
         setHealth(null)
       } finally {
-        if (typeof setLoading === 'function') setLoading(false)
+        setLoading(false)
       }
     })()
 
     ;(async () => {
       try {
-        if (typeof setLoadingAlerts === 'function') setLoadingAlerts(true)
+        setLoadingAlerts(true)
         const data = await getAlerts()
         setAlertCount(Array.isArray(data) ? data.length : 0)
-      } catch (e) {
-        console.error('Failed to fetch alerts:', e)
+      } catch {
         setAlertCount(0)
       } finally {
-        if (typeof setLoadingAlerts === 'function') setLoadingAlerts(false)
+        setLoadingAlerts(false)
       }
     })()
 
@@ -195,12 +193,11 @@ export default function Dashboard({ info }) {
         const metrics = await fetchTraceMetrics({ start: Math.floor(startUs), end: Math.floor(endUs) })
         setTraceCount(typeof metrics?.total_traces === 'number' ? metrics.total_traces : 0)
         setTraceErrorCount(typeof metrics?.error_count === 'number' ? metrics.error_count : null)
-      } catch (e) {
-        console.error('Failed to fetch traces:', e)
+      } catch {
         setTraceCount(0)
         setTraceErrorCount(null)
       } finally {
-        if (typeof setLoadingTraces === 'function') setLoadingTraces(false)
+        setLoadingTraces(false)
       }
     })()
 
@@ -212,16 +209,14 @@ export default function Dashboard({ info }) {
         let total = 0
         try {
           total = computeLogTotal(vol)
-        } catch (ex) {
-          console.error('Error processing log volume data:', ex)
+        } catch {
           total = null
         }
         setLogVolume(total)
-      } catch (e) {
-        console.error('Failed to fetch log volume:', e)
+      } catch {
         setLogVolume(null)
       } finally {
-        if (typeof setLoadingLogs === 'function') setLoadingLogs(false)
+        setLoadingLogs(false)
       }
     })()
 
@@ -230,8 +225,7 @@ export default function Dashboard({ info }) {
         setLoadingAgents(true)
         const res = await getActiveAgents()
         setAgentActivity(Array.isArray(res) ? res : [])
-      } catch (e) {
-        console.error('Failed to fetch agent activity:', e)
+      } catch {
         setAgentActivity([])
       } finally {
         setLoadingAgents(false)
@@ -247,8 +241,7 @@ export default function Dashboard({ info }) {
         setLoadingDashboards(true)
         const data = await searchDashboards()
         setDashboardCount(Array.isArray(data) ? data.length : 0)
-      } catch (e) {
-        console.error('Failed to fetch dashboards:', e)
+      } catch {
         setDashboardCount(0)
       } finally {
         setLoadingDashboards(false)
@@ -264,8 +257,7 @@ export default function Dashboard({ info }) {
         setLoadingSilences(true)
         const data = await getSilences()
         setSilenceCount(Array.isArray(data) ? data.length : 0)
-      } catch (e) {
-        console.error('Failed to fetch silences:', e)
+      } catch {
         setSilenceCount(0)
       } finally {
         setLoadingSilences(false)
@@ -281,8 +273,7 @@ export default function Dashboard({ info }) {
         setLoadingDatasources(true)
         const data = await getDatasources()
         setDatasourceCount(Array.isArray(data) ? data.length : 0)
-      } catch (e) {
-        console.error('Failed to fetch datasources:', e)
+      } catch {
         setDatasourceCount(0)
       } finally {
         setLoadingDatasources(false)
@@ -294,13 +285,13 @@ export default function Dashboard({ info }) {
         setLoadingSystemMetrics(true)
         const data = await fetchSystemMetrics()
         setSystemMetrics(data)
-      } catch (e) {
-        console.error('Failed to fetch system metrics:', e)
+      } catch {
         setSystemMetrics(null)
       } finally {
         setLoadingSystemMetrics(false)
       }
     })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const services = [
@@ -690,7 +681,7 @@ const layoutComponents = [
         localStorage.setItem('dashboard-layout-order', JSON.stringify(sanitizedLayoutOrder))
       }
     } catch (e) {
-      console.warn('Failed to persist layout order:', e)
+      // Silently handle localStorage failure
     }
   }, [layoutComponents.length])
 
@@ -736,16 +727,14 @@ const layoutComponents = [
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, displayIndex)}
               onDragEnd={handleDragEnd}
-              className={`cursor-move transition-all duration-200 hover:shadow-lg relative ${
+              className={`cursor-move transition-transform duration-200 ease-out will-change-transform hover:shadow-lg relative ${
                 draggedIndex === displayIndex ? 'opacity-50 scale-95 shadow-xl' : ''
               }`}
               title="Drag to rearrange"
               type="button"
             >
               <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors z-10">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                </svg>
+                <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
               </div>
               <MetricCard
                 label={metric.label}
@@ -766,7 +755,7 @@ const layoutComponents = [
           return (
             <div
               key={component.id}
-              className={`transition-all duration-200 ${
+              className={`transition-transform duration-200 ease-out will-change-transform ${
                 draggedIndex === displayIndex ? 'opacity-50 scale-95 shadow-xl' : ''
               }`}
             >
@@ -781,9 +770,7 @@ const layoutComponents = [
                 onDragEnd={handleDragEnd}
               >
                 <div className="absolute top-4 right-4 text-sre-text-muted hover:text-sre-text transition-colors z-10">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                  </svg>
+                  <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
                 </div>
                 {component.content}
               </Card>

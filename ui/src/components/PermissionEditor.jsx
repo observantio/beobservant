@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import PropTypes from 'prop-types'
 import { Button, Card, Badge, Spinner, Modal } from './ui'
 import { useToast } from '../contexts/ToastContext'
+import HelpTooltip from './HelpTooltip'
 import * as api from '../api'
 
 export default function PermissionEditor({ user, groups, onClose, onSave }) {
@@ -22,6 +23,61 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
     if (role === 'user') return 'info'
     return 'default'
   }, [role])
+
+  const getCategoryDescription = (category) => {
+    const descriptions = {
+      agents: 'Control access to OTEL agents and system metrics monitoring',
+      alerts: 'Manage alert rules, active alerts, and notification channels',
+      channels: 'Configure notification channels for alert delivery',
+      dashboards: 'Access and manage Grafana dashboards',
+      groups: 'Control user group creation, modification, and membership',
+      logs: 'Query and view application logs from Loki',
+      tenants: 'Manage multi-tenant settings and configurations',
+      traces: 'Query and view distributed traces from Tempo',
+      users: 'Control user account creation, modification, and access'
+    }
+    return descriptions[category] || `Manage ${category} permissions and access`
+  }
+
+  const getPermissionDescription = (permissionName) => {
+    const descriptions = {
+      'Read Agents': 'View OTEL agents and system metrics',
+      'View OTEL agents and system metrics': 'View OTEL agents and system metrics',
+      'Delete Alerts': 'Delete alert rules and active alerts',
+      'Delete alert rules': 'Delete alert rules and active alerts',
+      'Read Alerts': 'View alert rules and active alerts',
+      'View alert rules and active alerts': 'View alert rules and active alerts',
+      'Write Alerts': 'Create and update alert rules',
+      'Create and update alert rules': 'Create and update alert rules',
+      'Delete Channels': 'Delete notification channels',
+      'Delete notification channels': 'Delete notification channels',
+      'Read Channels': 'View notification channels',
+      'View notification channels': 'View notification channels',
+      'Write Channels': 'Create and update notification channels',
+      'Create and update notification channels': 'Create and update notification channels',
+      'Delete Dashboards': 'Delete Grafana dashboards',
+      'Delete dashboards': 'Delete Grafana dashboards',
+      'Read Dashboards': 'View Grafana dashboards',
+      'View Grafana dashboards': 'View Grafana dashboards',
+      'Write Dashboards': 'Create and update Grafana dashboards',
+      'Create and update dashboards': 'Create and update Grafana dashboards',
+      'Manage Groups': 'Create, update, and delete user groups',
+      'Create, update, and delete groups': 'Create, update, and delete user groups',
+      'Read Groups': 'View group information and membership',
+      'View group information': 'View group information and membership',
+      'Read Logs': 'Query and view application logs',
+      'Query and view logs': 'Query and view application logs',
+      'Manage Tenants': 'Manage tenant settings and configurations',
+      'Manage tenant settings': 'Manage tenant settings and configurations',
+      'Read Traces': 'Query and view distributed traces',
+      'Query and view traces': 'Query and view distributed traces',
+      'Manage Users': 'Create, update, and delete user accounts',
+      'Create, update, and delete users': 'Create, update, and delete user accounts',
+      'Read Users': 'View user information and accounts',
+      'View user information': 'View user information and accounts'
+    }
+    return descriptions[permissionName] || permissionName
+  }
 
   const allPermissionNames = useMemo(
     () => permissionsList.map((p) => p.name || p.id).filter(Boolean),
@@ -54,7 +110,6 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
         setRoleDefaults(defaults || {})
       } catch (error) {
         toast.error('Failed to load permissions')
-        console.error('Failed to load permissions:', error)
       } finally {
         setLoadingPermissions(false)
       }
@@ -151,7 +206,6 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
       onClose();
     } catch (error) {
       toast.error('Error saving: ' + error.message);
-      console.error('Save error:', error);
     } finally {
       setSaving(false)
     }
@@ -184,25 +238,31 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
 
         <div className="space-y-6 overflow-y-auto pr-1">
           {/* Role Selection */}
-          <div>
-            <label htmlFor='role' className="block text-sm font-semibold text-sre-text mb-2">Role</label>
-            <select
-              id='role'
-              value={role}
-              onChange={(e) => handleRoleChange(e.target.value)}
-              className="w-full px-3 pr-10 py-2 bg-sre-bg-alt border border-sre-border rounded text-sre-text"
-            >
-              <option value="viewer">Viewer - Read-only access</option>
-              <option value="user">User - Read and write access</option>
-              <option value="admin">Admin - Full access</option>
-            </select>
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <label htmlFor='role' className="block text-sm font-semibold text-sre-text mb-2">Role</label>
+              <select
+                id='role'
+                value={role}
+                onChange={(e) => handleRoleChange(e.target.value)}
+                className="w-full px-3 pr-10 py-2 bg-sre-bg-alt border border-sre-border rounded text-sre-text"
+              >
+                <option value="viewer">Viewer - Read-only access</option>
+                <option value="user">User - Read and write access</option>
+                <option value="admin">Admin - Full access</option>
+              </select>
+            </div>
+            <HelpTooltip text="Roles provide baseline permissions. Admin has full access to all features, User can read and modify most resources, Viewer has read-only access." />
           </div>
 
           {/* Group Membership */}
           <div>
-            <label htmlFor='group' className="block text-sm font-semibold text-sre-text mb-2">
-              Group Membership
-            </label>
+            <div className="flex items-center gap-2 mb-2">
+              <label htmlFor='group' className="block text-sm font-semibold text-sre-text">
+                Group Membership
+              </label>
+              <HelpTooltip text="Groups provide additional permissions beyond the user's role. Users inherit all permissions from their assigned groups." />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {groups.map((group) => (
                 <div key={group.id} className="">
@@ -268,9 +328,12 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
 
           {/* Permissions by Category */}
           <div>
-            <label htmlFor="direct-permissions" className="block text-sm mt-4 font-semibold text-sre-text mb-3">
-              Direct Permissions (additive to role and group access)
-            </label>
+            <div className="flex items-center gap-2 mt-4 mb-3">
+              <label htmlFor="direct-permissions" className="block text-sm font-semibold text-sre-text">
+                Direct Permissions (additive to role and group access)
+              </label>
+              <HelpTooltip text="Direct permissions are granted individually to this user, in addition to permissions from their role and groups. These override any restrictions." />
+            </div>
             <div id="direct-permissions" className="space-y-4">
               {loadingPermissions && (
                 <div className="flex items-center gap-2 text-sre-text-muted">
@@ -284,9 +347,12 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
                 return (
                   <Card key={category} className="!p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-sre-text capitalize">
-                        {category}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-sre-text capitalize">
+                          {category}
+                        </h3>
+                        <HelpTooltip text={getCategoryDescription(category)} />
+                      </div>
                       <div className="flex gap-2">
                         <Button
                           size="sm"
@@ -334,6 +400,7 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
                                 {isFromRoleOrGroup && (
                                   <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">from role/group</span>
                                 )}
+                                <HelpTooltip text={getPermissionDescription(displayName)} />
                               </div>
                               <div className="text-xs text-sre-text-muted">
                                 {description}

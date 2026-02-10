@@ -106,7 +106,6 @@ class User(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     last_login = Column(DateTime)
 
-    # Relationships
     tenant = relationship('Tenant', back_populates='users')
     groups = relationship('Group', secondary=user_groups, back_populates='members')
     permissions = relationship('Permission', secondary=user_permissions, back_populates='users')
@@ -132,7 +131,7 @@ class Group(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
-    # Relationships
+
     tenant = relationship('Tenant', back_populates='groups')
     members = relationship('User', secondary=user_groups, back_populates='groups')
     permissions = relationship('Permission', secondary=group_permissions, back_populates='groups')
@@ -154,6 +153,7 @@ class UserApiKey(Base):
     user_id = Column(String, ForeignKey(USERS_ID, ondelete='CASCADE'), nullable=False, index=True)
     name = Column(String(100), nullable=False)
     key = Column(String(200), nullable=False, index=True)
+    otlp_token = Column(String(200), nullable=True, unique=True, index=True)
     is_default = Column(Boolean, default=False, nullable=False)
     is_enabled = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -165,6 +165,7 @@ class UserApiKey(Base):
         Index('idx_user_api_keys_user', 'user_id'),
         Index('idx_user_api_keys_tenant', 'tenant_id'),
         Index('idx_user_api_keys_enabled', 'is_enabled'),
+        Index('idx_user_api_keys_otlp_token', 'otlp_token'),
     )
 
 
@@ -173,14 +174,12 @@ class Permission(Base):
     __tablename__ = 'permissions'
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    name = Column(String(100), unique=True, nullable=False, index=True)  # e.g., read:alerts, write:channels
+    name = Column(String(100), unique=True, nullable=False, index=True)  
     display_name = Column(String(200), nullable=False)
     description = Column(Text)
-    resource_type = Column(String(50), nullable=False, index=True)  # alerts, channels, logs, traces, dashboards, users, groups
-    action = Column(String(20), nullable=False, index=True)  # read, write, delete, manage
+    resource_type = Column(String(50), nullable=False, index=True)  
+    action = Column(String(20), nullable=False, index=True)  
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-
-    # Relationships
     groups = relationship('Group', secondary=group_permissions, back_populates='permissions')
     users = relationship('User', secondary=user_permissions, back_populates='permissions')
 
@@ -196,6 +195,7 @@ class AlertRule(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     tenant_id = Column(String, ForeignKey(TENANTS_ID, ondelete='CASCADE'), nullable=False, index=True)
     created_by = Column(String, ForeignKey(USERS_ID, ondelete=ONDELETE_SET_NULL))
+    org_id = Column(String, nullable=True, index=True)  # API key value — scopes the rule to a product/tenant
     name = Column(String(200), nullable=False, index=True)
     group = Column(String(100), nullable=False, default=config.DEFAULT_RULE_GROUP)
     expr = Column(Text, nullable=False)
@@ -209,7 +209,6 @@ class AlertRule(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
-    # Relationships
     tenant = relationship('Tenant', back_populates='alert_rules')
     creator = relationship('User', foreign_keys=[created_by], back_populates='created_rules')
     shared_groups = relationship('Group', secondary=rule_groups, back_populates='shared_rules')
@@ -229,14 +228,13 @@ class NotificationChannel(Base):
     tenant_id = Column(String, ForeignKey(TENANTS_ID, ondelete='CASCADE'), nullable=False, index=True)
     created_by = Column(String, ForeignKey('users.id', ondelete=ONDELETE_SET_NULL))
     name = Column(String(200), nullable=False, index=True)
-    type = Column(String(50), nullable=False, index=True)  # email, slack, webhook, etc
+    type = Column(String(50), nullable=False, index=True)  
     config = Column(JSON, nullable=False, default=dict)
     enabled = Column(Boolean, default=True, nullable=False)
-    visibility = Column(String(20), nullable=False, default='private', index=True)  # private, group, tenant
+    visibility = Column(String(20), nullable=False, default='private', index=True)  
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
-    # Relationships
     tenant = relationship('Tenant', back_populates='notification_channels')
     creator = relationship('User', foreign_keys=[created_by], back_populates='created_channels')
     shared_groups = relationship('Group', secondary=channel_groups, back_populates='shared_channels')
@@ -270,7 +268,6 @@ class AuditLog(Base):
     )
 
 
-# Many-to-many relationships for Grafana resources
 dashboard_groups = Table(
     'dashboard_groups',
     Base.metadata,
@@ -325,11 +322,11 @@ class GrafanaDatasource(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     tenant_id = Column(String, ForeignKey(TENANTS_ID, ondelete='CASCADE'), nullable=False, index=True)
     created_by = Column(String, ForeignKey(USERS_ID, ondelete=ONDELETE_SET_NULL))
-    grafana_uid = Column(String(100), nullable=False, index=True)  # UID in Grafana
-    grafana_id = Column(Integer)  # Numeric ID in Grafana
+    grafana_uid = Column(String(100), nullable=False, index=True)  
+    grafana_id = Column(Integer)  
     name = Column(String(200), nullable=False)
-    type = Column(String(100), nullable=False)  # prometheus, loki, tempo, etc.
-    visibility = Column(String(20), nullable=False, default='private', index=True)  # private, group, tenant
+    type = Column(String(100), nullable=False)  
+    visibility = Column(String(20), nullable=False, default='private', index=True)  
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

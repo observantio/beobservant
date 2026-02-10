@@ -6,7 +6,7 @@ export default function LogLabels({ labels, labelValuesCache }) {
 
   return (
     <Card title="Available Labels" subtitle={`${list.length} labels`}>
-      <div className="space-y-2 max-h-48 overflow-y-auto">
+      <div className="space-y-2 max-h-[30rem] overflow-y-auto pr-2 scrollbar-thin">
         {list.map(label => (
           <div key={label} className="flex items-center justify-between text-sm">
             <span className="font-mono text-sre-text">{label}</span>

@@ -66,6 +66,8 @@ class Config:
     
     # Multi-tenancy
     DEFAULT_ORG_ID: str = os.getenv("DEFAULT_ORG_ID", "default")
+    OTLP_GATEWAY_URL: str = os.getenv("OTLP_GATEWAY_URL", "http://otlp-gateway:4320")
+    DEFAULT_OTLP_TOKEN: Optional[str] = os.getenv("DEFAULT_OTLP_TOKEN")
 
     # Alerting and notifications defaults
     DEFAULT_RULE_GROUP: str = os.getenv("DEFAULT_RULE_GROUP", "default")

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import PropTypes from 'prop-types'
 import { Modal, Button, Input, Spinner } from './ui'
 import { useToast } from '../contexts/ToastContext'
+import HelpTooltip from './HelpTooltip'
 import * as api from '../api'
 
 export default function ChangePasswordModal({ isOpen, onClose, userId, isForced = false }) {
@@ -143,9 +144,12 @@ export default function ChangePasswordModal({ isOpen, onClose, userId, isForced 
       ) : (
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="currentPassword" className="block text-sm font-medium text-sre-text mb-1">
-            Current Password
-          </label>
+          <div className="flex items-center gap-2 mb-1">
+            <label htmlFor="currentPassword" className="block text-sm font-medium text-sre-text">
+              Current Password
+            </label>
+            <HelpTooltip text="Enter your current password to verify your identity before changing it." />
+          </div>
           <Input
             id="currentPassword"
             type="password"
@@ -158,9 +162,12 @@ export default function ChangePasswordModal({ isOpen, onClose, userId, isForced 
         </div>
 
         <div>
-          <label htmlFor="newPassword" className="block text-sm font-medium text-sre-text mb-1">
-            New Password
-          </label>
+          <div className="flex items-center gap-2 mb-1">
+            <label htmlFor="newPassword" className="block text-sm font-medium text-sre-text">
+              New Password
+            </label>
+            <HelpTooltip text="Choose a strong password with at least 8 characters, including uppercase, lowercase, numbers, and special characters." />
+          </div>
           <Input
             id="newPassword"
             type="password"
@@ -173,9 +180,12 @@ export default function ChangePasswordModal({ isOpen, onClose, userId, isForced 
         </div>
 
         <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-sre-text mb-1">
-            Confirm New Password
-          </label>
+          <div className="flex items-center gap-2 mb-1">
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-sre-text">
+              Confirm New Password
+            </label>
+            <HelpTooltip text="Re-enter your new password to ensure it matches exactly." />
+          </div>
           <Input
             id="confirmPassword"
             type="password"

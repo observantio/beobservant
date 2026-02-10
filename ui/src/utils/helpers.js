@@ -100,6 +100,40 @@ export function percentile(arr, p) {
 }
 
 /**
+ * Check if a trace span has an error status
+ * @param {object} span - Span object
+ * @returns {boolean} True if the span has an error
+ */
+export function hasSpanError(span) {
+  return Boolean(
+    span?.status?.code === 'ERROR' ||
+    (Array.isArray(span?.tags)
+      ? span.tags.some(t => t.key === 'error' && t.value === true)
+      : span?.tags?.error === true)
+  )
+}
+
+/**
+ * Deterministic color for a service name (hash-based)
+ * @param {string} name - Service name
+ * @param {boolean} hasError - Whether the span errored
+ * @returns {string} Tailwind background class
+ */
+export function getSpanColorClass(name, hasError = false) {
+  if (hasError) return 'bg-red-500'
+  const SERVICE_COLORS = [
+    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500',
+    'bg-cyan-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500',
+    'bg-orange-500', 'bg-lime-500',
+  ]
+  let hash = 0
+  for (let i = 0; i < (name || '').length; i++) {
+    hash = Math.trunc((hash << 5) - hash + name.codePointAt(i))
+  }
+  return SERVICE_COLORS[Math.abs(hash) % SERVICE_COLORS.length]
+}
+
+/**
  * Copy text to clipboard
  * @param {string} text - Text to copy
  * @returns {Promise<void>}
@@ -108,8 +142,7 @@ export async function copyToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text)
     return true
-  } catch (err) {
-    console.error('Failed to copy:', err)
+  } catch {
     return false
   }
 }

@@ -705,7 +705,6 @@ class GrafanaProxyService:
             return None
         
         
-        # Ensure tenant header is set for scoped datasources when org_id is provided
         if db_datasource.type in {"prometheus", "loki", "tempo"}:
             org_id = getattr(datasource_update, "org_id", None)
             if org_id is not None:

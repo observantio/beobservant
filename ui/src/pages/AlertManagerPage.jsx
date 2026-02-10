@@ -8,9 +8,12 @@ import {
 } from '../api'
 import { Card, Button, Select, Alert, Badge, Spinner, Modal } from '../components/ui'
 import ConfirmModal from '../components/ConfirmModal'
+import HelpTooltip from '../components/HelpTooltip'
 import RuleEditor from '../components/alertmanager/RuleEditor'
 import ChannelEditor from '../components/alertmanager/ChannelEditor'
 import SilenceForm from '../components/alertmanager/SilenceForm'
+import { ALERT_SEVERITY_OPTIONS } from '../utils/constants'
+import { useAuth } from '../contexts/AuthContext'
 
 function normalizeChannelPayload(channelData) {
   const normalized = { ...channelData, config: channelData.config || {} }
@@ -35,7 +38,11 @@ function normalizeChannelPayload(channelData) {
   return normalized
 }
 
+const EMPTY_CONFIRM = { isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' }
+
 export default function AlertManagerPage() {
+  const { user } = useAuth()
+  const apiKeys = user?.api_keys || []
   const [activeTab, setActiveTab] = useState('alerts')
   const [alerts, setAlerts] = useState([])
   const [silences, setSilences] = useState([])
@@ -49,14 +56,7 @@ export default function AlertManagerPage() {
   const [editingRule, setEditingRule] = useState(null)
   const [editingChannel, setEditingChannel] = useState(null)
   const [filterSeverity, setFilterSeverity] = useState('all')
-  const [confirmDialog, setConfirmDialog] = useState({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: null,
-    confirmText: 'Delete',
-    variant: 'danger'
-  })
+  const [confirmDialog, setConfirmDialog] = useState(EMPTY_CONFIRM)
 
   const [testDialog, setTestDialog] = useState({ isOpen: false, title: '', message: '' })
 
@@ -79,7 +79,7 @@ export default function AlertManagerPage() {
     try {
       localStorage.setItem('alertmanager-metric-order', JSON.stringify(metricOrder))
     } catch (e) {
-      console.warn('Failed to persist metric order', e)
+      // Silently handle localStorage failure
     }
   }, [metricOrder])
 
@@ -123,10 +123,10 @@ export default function AlertManagerPage() {
         await createAlertRule(ruleData)
       }
       await loadData()
-      setShowRuleEditor(false)
-      setEditingRule(null)
+      return true
     } catch (e) {
       handleApiError(e)
+      return false
     }
   }
 
@@ -141,10 +141,10 @@ export default function AlertManagerPage() {
         try {
           await deleteAlertRule(ruleId)
           await loadData()
-          setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
+          setConfirmDialog(EMPTY_CONFIRM)
         } catch (e) {
           handleApiError(e)
-          setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
+          setConfirmDialog(EMPTY_CONFIRM)
         }
       }
     })
@@ -177,10 +177,10 @@ export default function AlertManagerPage() {
         try {
           await deleteNotificationChannel(channelId)
           await loadData()
-          setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
+          setConfirmDialog(EMPTY_CONFIRM)
         } catch (e) {
           handleApiError(e)
-          setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
+          setConfirmDialog(EMPTY_CONFIRM)
         }
       }
     })
@@ -225,10 +225,10 @@ export default function AlertManagerPage() {
         try {
           await deleteSilence(silenceId)
           await loadData()
-          setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
+          setConfirmDialog(EMPTY_CONFIRM)
         } catch (e) {
           handleApiError(e)
-          setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })
+          setConfirmDialog(EMPTY_CONFIRM)
         }
       }
     })
@@ -238,6 +238,15 @@ export default function AlertManagerPage() {
     if (filterSeverity === 'all') return alerts
     return alerts.filter(a => a.labels?.severity === filterSeverity)
   }, [alerts, filterSeverity])
+
+  // Map org_id (API key value) → key name for display in rules list
+  const orgIdToName = useMemo(() => {
+    const map = {}
+    for (const k of apiKeys) {
+      if (k.key) map[k.key] = k.name
+    }
+    return map
+  }, [apiKeys])
 
   const stats = useMemo(() => ({
     totalAlerts: alerts.length,
@@ -266,55 +275,15 @@ export default function AlertManagerPage() {
         </Alert>
       )}
 
-      {/* Draggable Metric Cards (React state-backed swap behavior) */}
+      {/* Draggable Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {metricOrder.map((key) => {
-          let content = null
-          if (key === 'activeAlerts') {
-            content = (
-              <Card className="p-4 relative overflow-visible">
-                <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors">
-                  <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
-                </div>
-                <div className="text-sre-text-muted text-xs mb-1">Active Alerts</div>
-                <div className="text-2xl font-bold text-sre-text">{stats.totalAlerts}</div>
-                <div className="text-xs text-sre-text-muted mt-1"><span className="text-red-500">{stats.critical} critical</span> · <span className="text-yellow-500">{stats.warning} warning</span></div>
-              </Card>
-            )
-          } else if (key === 'alertRules') {
-            content = (
-              <Card className="p-4 relative overflow-visible">
-                <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors">
-                  <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
-                </div>
-                <div className="text-sre-text-muted text-xs mb-1">Alert Rules</div>
-                <div className="text-2xl font-bold text-sre-text">{stats.enabledRules}/{stats.totalRules}</div>
-                <div className="text-xs text-sre-text-muted mt-1">enabled</div>
-              </Card>
-            )
-          } else if (key === 'channels') {
-            content = (
-              <Card className="p-4 relative overflow-visible">
-                <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors">
-                  <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
-                </div>
-                <div className="text-sre-text-muted text-xs mb-1">Notification Channels</div>
-                <div className="text-2xl font-bold text-sre-text">{stats.enabledChannels}/{stats.totalChannels}</div>
-                <div className="text-xs text-sre-text-muted mt-1">active</div>
-              </Card>
-            )
-          } else {
-            content = (
-              <Card className="p-4 relative overflow-visible">
-                <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors">
-                  <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
-                </div>
-                <div className="text-sre-text-muted text-xs mb-1">Active Silences</div>
-                <div className="text-2xl font-bold text-sre-text">{stats.activeSilences}</div>
-                <div className="text-xs text-sre-text-muted mt-1">muting alerts</div>
-              </Card>
-            )
-          }
+          const metricData = {
+            activeAlerts: { label: 'Active Alerts', value: stats.totalAlerts, detail: <><span className="text-red-500">{stats.critical} critical</span> · <span className="text-yellow-500">{stats.warning} warning</span></> },
+            alertRules: { label: 'Alert Rules', value: `${stats.enabledRules}/${stats.totalRules}`, detail: 'enabled' },
+            channels: { label: 'Notification Channels', value: `${stats.enabledChannels}/${stats.totalChannels}`, detail: 'active' },
+            silences: { label: 'Active Silences', value: stats.activeSilences, detail: 'muting alerts' },
+          }[key]
 
           return (
             <div
@@ -323,7 +292,7 @@ export default function AlertManagerPage() {
               onDragStart={(e) => {
                 e.dataTransfer.effectAllowed = 'move'
                 e.dataTransfer.setData('text/plain', key)
-                e.currentTarget.classList.add('opacity-50','scale-95')
+                e.currentTarget.classList.add('opacity-50', 'scale-95')
               }}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
               onDrop={(e) => {
@@ -338,15 +307,20 @@ export default function AlertManagerPage() {
                   next[fromIdx] = key
                   next[toIdx] = sourceKey
                   setMetricOrder(next)
-                } catch (err) {
-                  /* ignore */
-                }
+                } catch { /* ignore */ }
               }}
-              onDragEnd={(e) => { e.currentTarget.classList.remove('opacity-50','scale-95') }}
+              onDragEnd={(e) => { e.currentTarget.classList.remove('opacity-50', 'scale-95') }}
               title="Drag to rearrange"
               className="cursor-move transition-transform duration-200 ease-out will-change-transform"
             >
-              {content}
+              <Card className="p-4 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 border-sre-border/50 hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm">
+                <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors">
+                  <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
+                </div>
+                <div className="text-sre-text-muted text-xs mb-1">{metricData.label}</div>
+                <div className="text-2xl font-bold text-sre-text">{metricData.value}</div>
+                <div className="text-xs text-sre-text-muted mt-1">{metricData.detail}</div>
+              </Card>
             </div>
           )
         })}
@@ -386,12 +360,14 @@ export default function AlertManagerPage() {
               title="Active Alerts" 
               subtitle={`You've got ${filteredAlerts.length} alert${filteredAlerts.length === 1 ? '' : 's'} firing`}
               action={
-                <Select value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
-                  <option value="all">All Severities</option>
-                  <option value="critical">Critical</option>
-                  <option value="warning">Warning</option>
-                  <option value="info">Info</option>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
+                    {ALERT_SEVERITY_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </Select>
+                  <HelpTooltip text="Filter alerts by severity level. Choose 'All' to see all alerts, or select specific severity to focus on critical or warning alerts." />
+                </div>
               }
             >
               {filteredAlerts.length ? (
@@ -480,7 +456,7 @@ export default function AlertManagerPage() {
                         >
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
+                              <div className="flex items-center gap-2 mb-2 flex-wrap">
                                 <span className="font-semibold text-sre-text">{rule.name}</span>
                                 <Badge variant={severityVariant}>
                                   {rule.severity}
@@ -491,6 +467,13 @@ export default function AlertManagerPage() {
                                   <Badge variant="default">Disabled</Badge>
                                 )}
                                 <Badge variant="default">{rule.group}</Badge>
+                                {rule.orgId ? (
+                                  <Badge variant="info">
+                                    {orgIdToName[rule.orgId] || `${rule.orgId.slice(0, 8)}...`}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="default">All products</Badge>
+                                )}
                               </div>
                               <p className="text-sm font-mono text-sre-text-muted mb-2">{rule.expr}</p>
                               <p className="text-xs text-sre-text-muted">
@@ -701,7 +684,15 @@ export default function AlertManagerPage() {
         <RuleEditor
           rule={editingRule}
           channels={channels}
-          onSave={(data) => { handleSaveRule(data); setShowRuleEditor(false); setEditingRule(null); }}
+          apiKeys={apiKeys}
+          onSave={async (data) => {
+            const ok = await handleSaveRule(data)
+            if (ok) {
+              setShowRuleEditor(false)
+              setEditingRule(null)
+            }
+            return ok
+          }}
           onCancel={() => { setShowRuleEditor(false); setEditingRule(null); }}
         />
       </Modal>
@@ -750,7 +741,7 @@ export default function AlertManagerPage() {
         title={confirmDialog.title}
         message={confirmDialog.message}
         onConfirm={confirmDialog.onConfirm}
-        onCancel={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' })}
+        onCancel={() => setConfirmDialog(EMPTY_CONFIRM)}
         confirmText={confirmDialog.confirmText}
         variant={confirmDialog.variant}
       />

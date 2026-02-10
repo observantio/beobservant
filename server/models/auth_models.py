@@ -152,7 +152,7 @@ class ApiKeyBase(BaseModel):
 
 
 class ApiKeyCreate(ApiKeyBase):
-    key: Optional[str] = Field(None, min_length=3, max_length=200, description="Optional custom API key value")
+    key: Optional[str] = Field(None, min_length=3, max_length=200, description="Optional custom API key value (org_id / X-Scope-OrgID)")
 
 
 class ApiKeyUpdate(BaseModel):
@@ -164,6 +164,7 @@ class ApiKeyUpdate(BaseModel):
 class ApiKey(ApiKeyBase):
     id: str
     key: str
+    otlp_token: Optional[str] = Field(None, description="Secure OTLP ingest token for gateway authentication")
     is_default: bool = False
     is_enabled: bool = True
     created_at: datetime
@@ -197,11 +198,11 @@ class TokenData(BaseModel):
     user_id: str
     username: str
     tenant_id: str
-    org_id: str  # Organization ID for multi-tenant observability
+    org_id: str
     role: Role
     is_superuser: bool = False
-    permissions: List[str]  # Changed to List[str] for flexibility
-    group_ids: List[str] = Field(default_factory=list)  # User's group IDs
+    permissions: List[str] 
+    group_ids: List[str] = Field(default_factory=list) 
 
 
 class LoginRequest(BaseModel):

@@ -8,7 +8,71 @@ import { Card, Button, Input, Textarea, Modal, ConfirmDialog, Badge, Alert, Chec
 import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToast } from '../contexts/ToastContext';
+import HelpTooltip from '../components/HelpTooltip';
 import * as api from '../api';
+
+/**
+ * Reusable member list for group modals (Create, Edit, Permissions)
+ */
+function MemberList({ users, selectedMembers, toggleMember }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  if (!users.length) {
+    return <div className="text-sm text-sre-text-muted">No users available.</div>
+  }
+
+  // Filter users based on search query
+  const filteredUsers = users.filter(user => {
+    const query = searchQuery.toLowerCase();
+    return (
+      (user.full_name || user.username).toLowerCase().includes(query) ||
+      user.email.toLowerCase().includes(query)
+    );
+  });
+
+  // Limit to 5 users
+  const displayedUsers = filteredUsers.slice(0, 5);
+  const hasMore = filteredUsers.length > 5;
+
+  return (
+    <div className="space-y-3">
+      <Input
+        placeholder="Search users by name or email..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        className="text-sm"
+      />
+      
+      <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
+        {displayedUsers.length === 0 ? (
+          <div className="text-sm text-sre-text-muted">
+            {searchQuery ? 'No users match your search.' : 'No users available.'}
+          </div>
+        ) : (
+          <>
+            {displayedUsers.map((user) => (
+              <label key={user.id} className="flex items-center gap-3 p-2 border border-sre-border rounded hover:bg-sre-surface/50 cursor-pointer">
+                <Checkbox
+                  checked={selectedMembers.includes(user.id)}
+                  onChange={() => toggleMember(user.id)}
+                />
+                <div className="text-sm text-sre-text">
+                  {user.full_name || user.username}
+                  <span className="text-xs text-sre-text-muted ml-2">{user.email}</span>
+                </div>
+              </label>
+            ))}
+            {hasMore && (
+              <div className="text-xs text-sre-text-muted text-center py-2">
+                Showing first 5 of {filteredUsers.length} users. Use search to find specific users.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function GroupsPage() {
   const { canManageGroups } = usePermissions();
@@ -51,7 +115,6 @@ export default function GroupsPage() {
       setUsers(usersData || []);
     } catch (err) {
       toast.error('Failed to load groups: ' + err.message);
-      console.error('Error loading data:', err);
     } finally {
       setLoading(false);
     }
@@ -82,7 +145,6 @@ export default function GroupsPage() {
       await fetchData();
     } catch (err) {
       toast.error('Failed to create group: ' + err.message);
-      console.error('Create group error:', err);
     } finally {
       setSaving(false);
     }
@@ -95,7 +157,6 @@ export default function GroupsPage() {
       fetchData();
     } catch (err) {
       toast.error('Failed to delete group: ' + err.message);
-      console.error('Delete group error:', err);
     }
   };
 
@@ -132,7 +193,6 @@ export default function GroupsPage() {
       await fetchData();
     } catch (err) {
       toast.error('Failed to update permissions: ' + err.message);
-      console.error('Save permissions error:', err);
     } finally {
       setSaving(false);
     }
@@ -169,7 +229,6 @@ export default function GroupsPage() {
       await fetchData();
     } catch (err) {
       toast.error('Failed to update group: ' + err.message);
-      console.error('Update group error:', err);
     } finally {
       setSaving(false);
     }
@@ -204,6 +263,21 @@ export default function GroupsPage() {
 
   const getPermLabel = (perm) => perm.display_name || perm.name || perm.id || 'Permission';
   const getPermDescription = (perm) => perm.description || perm.name || '';
+
+  const getCategoryDescription = (category) => {
+    const descriptions = {
+      agents: 'Control access to OTEL agents and system metrics monitoring',
+      alerts: 'Manage alert rules, active alerts, and notification channels',
+      channels: 'Configure notification channels for alert delivery',
+      dashboards: 'Access and manage Grafana dashboards',
+      groups: 'Control user group creation, modification, and membership',
+      logs: 'Query and view application logs from Loki',
+      tenants: 'Manage multi-tenant settings and configurations',
+      traces: 'Query and view distributed traces from Tempo',
+      users: 'Control user account creation, modification, and access'
+    }
+    return descriptions[category] || `Manage ${category} permissions and access`
+  }
 
   const groupPermissionsByResource = () => {
     const grouped = {};
@@ -266,12 +340,15 @@ export default function GroupsPage() {
 
       {/* Search Bar */}
       <Card>
-        <Input
-          placeholder="Search groups by name or description..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full"
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Search groups by name or description..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1"
+          />
+          <HelpTooltip text="Search groups by their name or description. The search is case-insensitive and matches partial strings." />
+        </div>
       </Card>
 
       {/* Groups Grid */}
@@ -282,7 +359,7 @@ export default function GroupsPage() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredGroups.map(group => (
-            <Card key={group.id} className="p-0 rounded-lg border border-sre-border shadow-sm bg-sre-surface hover:shadow-md transition-all overflow-hidden">
+            <Card key={group.id} className="p-0 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 border-sre-border/50 hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm rounded-lg">
               <div className="p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0 pr-3">
@@ -296,23 +373,21 @@ export default function GroupsPage() {
                   </Badge>
                 </div>
 
-                <div className="flex gap-2 mt-4 items-center">
-                  <Button size="sm" variant="ghost" className="py-0.5 px-2 text-xs flex items-center gap-2" onClick={() => openPermissionsModal(group)} aria-label={`Permissions for ${group.name}`}>
+                <div className="flex flex-wrap gap-2 mt-4 items-center">
+                  <Button size="sm" variant="ghost" className="flex items-center gap-1.5 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors" onClick={() => openPermissionsModal(group)} aria-label={`Permissions for ${group.name}`}>
                     <span className="material-icons text-sm" aria-hidden>security</span>
-                    <span className="leading-none">Permissions</span>
+                    <span>Permissions</span>
                   </Button>
 
-                  <Button size="sm" variant="ghost" className="py-0.5 px-2 text-xs flex items-center gap-2" onClick={() => openEditModal(group)} aria-label={`Edit ${group.name}`}>
+                  <Button size="sm" variant="ghost" className="flex items-center gap-1.5 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors" onClick={() => openEditModal(group)} aria-label={`Edit ${group.name}`}>
                     <span className="material-icons text-sm" aria-hidden>edit</span>
-                    <span className="leading-none">Edit</span>
+                    <span>Edit</span>
                   </Button>
 
-                  <div className="ml-auto">
-                    <Button size="sm" variant="danger" className="py-0.5 px-2 text-xs flex items-center gap-2" onClick={() => setDeleteConfirm(group)} aria-label={`Delete ${group.name}`}>
-                      <span className="material-icons text-sm" aria-hidden>delete</span>
-                      <span className="leading-none">Delete</span>
-                    </Button>
-                  </div>
+                  <Button size="sm" variant="ghost" className="flex items-center gap-1.5 hover:bg-red-500/10 hover:text-red-500 transition-colors" onClick={() => setDeleteConfirm(group)} aria-label={`Delete ${group.name}`}>
+                    <span className="material-icons text-sm" aria-hidden>delete</span>
+                    <span>Delete</span>
+                  </Button>
                 </div>
               </div>
             </Card>
@@ -358,27 +433,43 @@ export default function GroupsPage() {
       >
         <div className="space-y-6">
           <div className="space-y-4 pb-4 border-b border-sre-border">
-            <h3 className="font-semibold text-sre-text">Group Details</h3>
-            <Input
-              label="Group Name *"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g., SRE Team, DevOps, Security"
-              required
-              autoFocus
-            />
-            <Textarea
-              label="Description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Describe the group's purpose and responsibilities"
-              rows={2}
-            />
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-sre-text">Group Details</h3>
+              <HelpTooltip text="Basic information about the group including name and purpose." />
+            </div>
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <Input
+                  label="Group Name *"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g., SRE Team, DevOps, Security"
+                  required
+                  autoFocus
+                />
+              </div>
+              <HelpTooltip text="A unique name for the group. This will be displayed throughout the system." />
+            </div>
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <Textarea
+                  label="Description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Describe the group's purpose and responsibilities"
+                  rows={2}
+                />
+              </div>
+              <HelpTooltip text="An optional description to explain the group's role and responsibilities." />
+            </div>
           </div>
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sre-text">Permissions (Optional)</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-sre-text">Permissions (Optional)</h3>
+                <HelpTooltip text="Configure which permissions members of this group will inherit. Permissions are organized by resource type." />
+              </div>
               <div className="flex gap-3 text-xs">
                 <button
                   type="button"
@@ -410,7 +501,10 @@ export default function GroupsPage() {
               {Object.entries(groupPermissionsByResource()).map(([resource, perms]) => (
                 <div key={resource} className="border border-sre-border rounded-lg p-3 bg-sre-surface/20">
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold capitalize text-sm text-sre-text">{resource}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold capitalize text-sm text-sre-text">{resource}</h4>
+                      <HelpTooltip text={getCategoryDescription(resource)} />
+                    </div>
                     <div className="flex gap-2 text-xs">
                       <button
                         type="button"
@@ -430,14 +524,16 @@ export default function GroupsPage() {
                   </div>
                   <div className="space-y-1.5">
                     {perms.map(perm => (
-                      <label key={perm.id} className="flex justify-between gap-5 p-2 hover:bg-sre-surface/50 rounded cursor-pointer group">
+                      <label key={perm.id} className="flex items-start gap-2 p-2 hover:bg-sre-surface/50 rounded cursor-pointer">
                         <Checkbox
                           checked={groupPermissions.includes(perm.name)}
                           onChange={() => togglePermission(perm.name)}
                         />
-                        <div className="flex-1">
-                          <div className="text-xs font-medium text-sre-text break-words">{getPermLabel(perm)}</div>
-                          <div className="text-xs text-sre-text-muted break-words">{getPermDescription(perm)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium text-sm text-sre-text break-words">{getPermLabel(perm)}</div>
+                            <HelpTooltip text={getPermDescription(perm)} />
+                          </div>
                         </div>
                       </label>
                     ))}
@@ -449,23 +545,7 @@ export default function GroupsPage() {
 
           <div className="space-y-4">
             <h3 className="font-semibold text-sre-text">Group Members (Optional)</h3>
-            <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
-              {sortedUsers.length === 0 && (
-                <div className="text-sm text-sre-text-muted">No users available.</div>
-              )}
-              {sortedUsers.map((user) => (
-                <label key={user.id} className="flex items-center gap-3 p-2 border border-sre-border rounded hover:bg-sre-surface/50">
-                  <Checkbox
-                    checked={selectedMembers.includes(user.id)}
-                    onChange={() => toggleMember(user.id)}
-                  />
-                  <div className="text-sm text-sre-text">
-                    {user.full_name || user.username}
-                    <span className="text-xs text-sre-text-muted ml-2">{user.email}</span>
-                  </div>
-                </label>
-              ))}
-            </div>
+            <MemberList users={sortedUsers} selectedMembers={selectedMembers} toggleMember={toggleMember} />
           </div>
         </div>
       </Modal>
@@ -493,40 +573,34 @@ export default function GroupsPage() {
             Update group name and description. Permissions can be edited in the Permissions dialog.
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <Input
-              label="Group Name *"
-              value={editGroupData.name}
-              onChange={(e) => setEditGroupData({ ...editGroupData, name: e.target.value })}
-              placeholder="e.g., SRE Team, DevOps, Security"
-              required
-            />
-            <Textarea
-              label="Description"
-              value={editGroupData.description}
-              onChange={(e) => setEditGroupData({ ...editGroupData, description: e.target.value })}
-              placeholder="Describe the group's purpose and responsibilities"
-              rows={3}
-            />
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <Input
+                  label="Group Name *"
+                  value={editGroupData.name}
+                  onChange={(e) => setEditGroupData({ ...editGroupData, name: e.target.value })}
+                  placeholder="e.g., SRE Team, DevOps, Security"
+                  required
+                />
+              </div>
+              <HelpTooltip text="A unique name for the group. This will be displayed throughout the system." />
+            </div>
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <Textarea
+                  label="Description"
+                  value={editGroupData.description}
+                  onChange={(e) => setEditGroupData({ ...editGroupData, description: e.target.value })}
+                  placeholder="Describe the group's purpose and responsibilities"
+                  rows={3}
+                />
+              </div>
+              <HelpTooltip text="An optional description to explain the group's role and responsibilities." />
+            </div>
           </div>
           <div className="space-y-3">
             <h3 className="font-semibold text-sre-text">Group Members</h3>
-            <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
-              {sortedUsers.length === 0 && (
-                <div className="text-sm text-sre-text-muted">No users available.</div>
-              )}
-              {sortedUsers.map((user) => (
-                <label key={user.id} className="flex items-center gap-3 p-2 border border-sre-border rounded hover:bg-sre-surface/50">
-                  <Checkbox
-                    checked={selectedMembers.includes(user.id)}
-                    onChange={() => toggleMember(user.id)}
-                  />
-                  <div className="text-sm text-sre-text">
-                    {user.full_name || user.username}
-                    <span className="text-xs text-sre-text-muted ml-2">{user.email}</span>
-                  </div>
-                </label>
-              ))}
-            </div>
+            <MemberList users={sortedUsers} selectedMembers={selectedMembers} toggleMember={toggleMember} />
           </div>
         </div>
       </Modal>
@@ -569,30 +643,20 @@ export default function GroupsPage() {
           </Alert>
 
           <div className="space-y-3">
-            <h3 className="font-semibold text-sre-text">Group Members</h3>
-            <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
-              {sortedUsers.length === 0 && (
-                <div className="text-sm text-sre-text-muted">No users available.</div>
-              )}
-              {sortedUsers.map((user) => (
-                <label key={user.id} className="flex items-center gap-3 p-2 border border-sre-border rounded hover:bg-sre-surface/50">
-                  <Checkbox
-                    checked={selectedMembers.includes(user.id)}
-                    onChange={() => toggleMember(user.id)}
-                  />
-                  <div className="text-sm text-sre-text">
-                    {user.full_name || user.username}
-                    <span className="text-xs text-sre-text-muted ml-2">{user.email}</span>
-                  </div>
-                </label>
-              ))}
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-sre-text">Group Members</h3>
+              <HelpTooltip text="Users who are members of this group and will inherit the selected permissions." />
             </div>
+            <MemberList users={sortedUsers} selectedMembers={selectedMembers} toggleMember={toggleMember} />
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="text-sm text-sre-text-muted">
+            <div className="flex items-center gap-2">
+              <div className="text-sm text-sre-text-muted">
                 {groupPermissions.length} permission{groupPermissions.length === 1 ? '' : 's'} selected
               </div>
+              <HelpTooltip text="Total number of permissions currently assigned to this group." />
+            </div>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -611,38 +675,48 @@ export default function GroupsPage() {
             </div>
           </div>
 
+          <div className="flex items-center gap-2 mb-4">
+            <h3 className="font-semibold text-sre-text">Permissions</h3>
+            <HelpTooltip text="Configure which permissions members of this group will inherit. Permissions are organized by resource type." />
+          </div>
+
           <div className="max-h-96 overflow-y-auto space-y-4">
             {Object.entries(groupPermissionsByResource()).map(([resource, perms]) => (
-              <div key={resource} className="border border-sre-border rounded-lg p-4 bg-sre-surface/30">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold capitalize text-lg text-sre-text">{resource}</h3>
+              <div key={resource} className="border border-sre-border rounded-lg p-3 bg-sre-surface/30">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold capitalize text-base text-sre-text">{resource}</h3>
+                    <HelpTooltip text={getCategoryDescription(resource)} />
+                  </div>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => addPerms(perms)}
-                      className="text-sm text-sre-primary hover:text-sre-primary-light"
+                      className="text-xs px-2 py-1 text-sre-primary hover:bg-sre-primary/10 rounded"
                     >
                       Select All
                     </button>
                     <button
                       type="button"
                       onClick={() => removePerms(perms)}
-                      className="text-sm text-sre-text-muted hover:text-sre-text"
+                      className="text-xs px-2 py-1 text-sre-text-muted hover:bg-sre-surface rounded"
                     >
                       Clear
                     </button>
                   </div>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {perms.map(perm => (
-                    <label key={perm.id} className="flex items-start gap-3 p-3 hover:bg-sre-surface/50 rounded cursor-pointer">
+                    <label key={perm.id} className="flex items-start gap-2 p-2 hover:bg-sre-surface/50 rounded cursor-pointer">
                       <Checkbox
                         checked={groupPermissions.includes(perm.name)}
                         onChange={() => togglePermission(perm.name)}
                       />
-                      <div className="flex-1">
-                        <div className="font-medium text-sre-text break-words">{getPermLabel(perm)}</div>
-                        <div className="text-sm text-sre-text-muted break-words">{getPermDescription(perm)}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium text-sm text-sre-text break-words">{getPermLabel(perm)}</div>
+                          <HelpTooltip text={getPermDescription(perm)} />
+                        </div>
                       </div>
                     </label>
                   ))}

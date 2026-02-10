@@ -1,6 +1,7 @@
 import  { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { Button, Input, Select } from '../ui'
+import HelpTooltip from '../HelpTooltip'
 import { useAuth } from '../../contexts/AuthContext'
 import { getGroups } from '../../api'
 
@@ -31,8 +32,8 @@ export default function SilenceForm({ onSave, onCancel }) {
     try {
       const groupsData = await getGroups()
       setGroups(groupsData)
-    } catch (error) {
-      console.error('Error loading groups:', error)
+    } catch {
+      // Silently handle
     }
   }
 
@@ -75,18 +76,20 @@ export default function SilenceForm({ onSave, onCancel }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <label  htmlFor="matchers" className="text-sm font-semibold text-sre-text">Matchers</label>
+        <label  htmlFor="matchers" className="text-sm font-semibold text-sre-text flex items-center gap-2">
+          Matchers <HelpTooltip text="Define label matchers to specify which alerts should be silenced. Matchers work like filters." />
+        </label>
         {matchers.map((matcher, index) => (
           <div key={matcher.id} className="flex gap-2 items-end">
             <Input
-              label={index === 0 ? "Label" : ""}
+              label={index === 0 ? <>Label <HelpTooltip text="The alert label name to match against (e.g., alertname, severity)." /></> : ""}
               value={matcher.name}
               onChange={(e) => updateMatcher(matcher.id, 'name', e.target.value)}
               placeholder="label name"
               required
             />
             <Input
-              label={index === 0 ? "Value" : ""}
+              label={index === 0 ? <>Value <HelpTooltip text="The value that the label should match. Use regex for pattern matching." /></> : ""}
               value={matcher.value}
               onChange={(e) => updateMatcher(matcher.id, 'value', e.target.value)}
               placeholder="label value"
@@ -106,21 +109,29 @@ export default function SilenceForm({ onSave, onCancel }) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input
-          label="Duration (hours)"
-          type="number"
-          value={duration}
-          onChange={(e) => setDuration(e.target.value)}
-          min="1"
-          required
-        />
-        <Input
-          label="Comment"
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Reason for silence"
-          required
-        />
+        <div>
+          <label className="block text-sm font-medium text-sre-text mb-2">
+            Duration (hours) <HelpTooltip text="How long the silence should last in hours. Alerts matching the criteria will be suppressed for this duration." />
+          </label>
+          <Input
+            type="number"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            min="1"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-sre-text mb-2">
+            Comment <HelpTooltip text="A description explaining why this silence was created." />
+          </label>
+          <Input
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Reason for silence"
+            required
+          />
+        </div>
       </div>
 
       <div>
@@ -135,9 +146,9 @@ export default function SilenceForm({ onSave, onCancel }) {
 
       <div className="border-t border-sre-border pt-4 space-y-3">
         <div>
-          <label htmlFor="silence-visibility" className="block text-sm font-semibold text-sre-text mb-2">
-            <span className="material-icons text-sm align-middle mr-1">visibility</span>
-            Visibility
+          <label htmlFor="silence-visibility" className="block text-sm font-semibold text-sre-text mb-2 flex items-center gap-2">
+            <span className="material-icons text-sm align-middle">visibility</span>
+            Visibility <HelpTooltip text="Control who can view this silence. Private silences are only visible to you." />
           </label>
           <Select
             id="silence-visibility"
@@ -164,7 +175,7 @@ export default function SilenceForm({ onSave, onCancel }) {
         {visibility === 'group' && groups?.length > 0 && (
           <div>
             <label htmlFor="silence-groups" className="block text-sm font-medium text-sre-text mb-2">
-              Share with Groups
+              Share with Groups <HelpTooltip text="Select which user groups can view this silence." />
             </label>
             <div id="silence-groups" className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 border border-sre-border rounded bg-sre-surface">
               {groups.map((group) => (

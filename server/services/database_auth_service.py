@@ -1,5 +1,6 @@
 """Database-backed authentication service with enterprise IAM."""
 import logging
+import secrets
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
@@ -156,22 +157,64 @@ class DatabaseAuthService:
         
         db.flush()
 
+    @staticmethod
+    def _generate_otlp_token() -> str:
+        """Generate a secure random OTLP ingest token."""
+        return f"bo_{secrets.token_urlsafe(32)}"
+
+    def _resolve_default_otlp_token(self) -> str:
+        """Return the OTLP token to use for the default API key."""
+        if config.DEFAULT_OTLP_TOKEN:
+            return config.DEFAULT_OTLP_TOKEN
+        return self._generate_otlp_token()
+
     def _ensure_default_api_key(self, db: Session, user: User):
-        """Ensure a default API key exists for the user."""
+        """Ensure a default API key exists for the user.
+
+        Only the *system-created* "Default" key (name == "Default") has its
+        ``key`` and ``otlp_token`` synchronised with the environment
+        variables on every startup.  User-created keys that were later
+        promoted to default are left untouched so their unique OTLP tokens
+        and org-id values are preserved.
+        """
         if not user:
             return
+
+        is_system_user = (
+            getattr(user, "username", None)
+            and getattr(user, "username", "").strip().lower()
+            == (config.DEFAULT_ADMIN_USERNAME or "").strip().lower()
+        )
+
         existing_default = db.query(UserApiKey).filter_by(user_id=user.id, is_default=True).first()
         if existing_default:
-            if existing_default.key != (user.org_id or config.DEFAULT_ORG_ID):
-                existing_default.key = user.org_id or config.DEFAULT_ORG_ID
+            is_system_key = existing_default.name == "Default" and is_system_user
+            if is_system_key:
+                desired_token = self._resolve_default_otlp_token()
+                if existing_default.key != (user.org_id or config.DEFAULT_ORG_ID):
+                    existing_default.key = user.org_id or config.DEFAULT_ORG_ID
+                    existing_default.updated_at = datetime.now(timezone.utc)
+                if not existing_default.otlp_token or (
+                    config.DEFAULT_OTLP_TOKEN and existing_default.otlp_token != config.DEFAULT_OTLP_TOKEN
+                ):
+                    existing_default.otlp_token = desired_token
+                    existing_default.updated_at = datetime.now(timezone.utc)
+            elif not existing_default.otlp_token:
+                existing_default.otlp_token = self._generate_otlp_token()
                 existing_default.updated_at = datetime.now(timezone.utc)
             return
+
+        if is_system_user:
+            desired_token = self._resolve_default_otlp_token()
+        else:
+            desired_token = self._generate_otlp_token()
 
         default_key = UserApiKey(
             tenant_id=user.tenant_id,
             user_id=user.id,
             name="Default",
             key=user.org_id or config.DEFAULT_ORG_ID,
+            otlp_token=desired_token,
             is_default=True,
             is_enabled=True
         )
@@ -327,6 +370,7 @@ class DatabaseAuthService:
             id=key.id,
             name=key.name,
             key=key.key,
+            otlp_token=getattr(key, 'otlp_token', None),
             is_default=key.is_default,
             is_enabled=key.is_enabled,
             created_at=key.created_at,
@@ -389,8 +433,6 @@ class DatabaseAuthService:
             
             
             if user:
-                # Detach from session – data is already loaded via joinedload
-                # and expire_on_commit=False keeps it accessible.
                 db.expunge(user)
             
             return user
@@ -547,6 +589,7 @@ class DatabaseAuthService:
                 user_id=user_id,
                 name=key_create.name,
                 key=key_value,
+                otlp_token=self._generate_otlp_token(),
                 is_default=False,
                 is_enabled=True
             )
@@ -644,7 +687,6 @@ class DatabaseAuthService:
                 })
             
             db.commit()
-            # Re-query with eager loading so permissions are available after session close
             group = db.query(Group).options(
                 joinedload(Group.permissions)
             ).filter_by(id=group.id).first()
@@ -787,6 +829,55 @@ class DatabaseAuthService:
             db.commit()
             return True
     
+    def validate_otlp_token(self, token: str) -> Optional[str]:
+        """Validate an OTLP ingest token and return the mapped org_id (key).
+
+        Used by the OTLP gateway to authenticate incoming telemetry and
+        resolve the X-Scope-OrgID to set on the upstream request.
+
+        A token is valid when:
+        - it matches an existing ``UserApiKey.otlp_token``
+        - the owning user account is active
+
+        Note: ``is_enabled`` is intentionally **not** checked here.  That
+        flag controls which key is the user's *active session key* in the
+        UI and should not invalidate OTLP ingest tokens.  To revoke a
+        token, delete the API key instead.
+
+        Returns the API key value (org_id) if valid, None otherwise.
+        """
+        if not token:
+            return None
+        with get_db_session() as db:
+            api_key = (
+                db.query(UserApiKey)
+                .join(User, User.id == UserApiKey.user_id)
+                .filter(
+                    UserApiKey.otlp_token == token,
+                    User.is_active.is_(True),
+                )
+                .first()
+            )
+            if not api_key:
+                return None
+            return api_key.key
+
+    def backfill_otlp_tokens(self):
+        """Generate otlp_token for any existing API keys that lack one.
+
+        Called once at startup after the column migration.
+        """
+        with get_db_session() as db:
+            keys_without_token = db.query(UserApiKey).filter(
+                UserApiKey.otlp_token.is_(None)
+            ).all()
+            for key in keys_without_token:
+                key.otlp_token = self._generate_otlp_token()
+                key.updated_at = datetime.now(timezone.utc)
+            if keys_without_token:
+                db.commit()
+                logger.info("Backfilled otlp_token for %d API keys", len(keys_without_token))
+
     def _log_audit(self, db: Session, tenant_id: str, user_id: str, action: str, 
                    resource_type: str, resource_id: str, details: Dict[str, Any]):
         """Log an audit entry."""

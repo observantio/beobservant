@@ -3,46 +3,86 @@
  * @module components/tempo/ServiceGraph
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import PropTypes from 'prop-types'
 import ReactFlow, { Background, Controls, MiniMap, Handle, Position, MarkerType } from 'reactflow'
 import 'reactflow/dist/style.css'
 import dagre from '@dagrejs/dagre'
-import { getServiceName, getSpanAttribute, percentile } from '../../utils/helpers'
+import { getServiceName, getSpanAttribute, percentile, hasSpanError as spanHasErrorUtil } from '../../utils/helpers'
 import { formatDuration } from '../../utils/formatters'
 
 const PAIN_P95_THRESHOLD_US = 1_000_000
 const WARN_P95_THRESHOLD_US = 300_000
 
-/**=
+/**
  * ServiceNode component for rendering service nodes in the graph
  * @param {object} props - Component props
  * @param {object} props.data - Node data
-*/
+ */
 
 const ServiceNode = ({ data }) => {
   const { name, stats, colorClass } = data
+  const isPain = stats.pain
+  const errorRate = stats.errorRateNum
+
   return (
-    <div className={`rounded-xl border border-sre-border bg-sre-surface px-4 py-3 shadow-lg min-w-[220px] ${colorClass}`}>
-      <Handle type="target" position={Position.Left} className="!bg-sre-primary/70 !w-2 !h-2" />
-      <Handle type="source" position={Position.Right} className="!bg-sre-primary/70 !w-2 !h-2" />
-      <div className="flex items-center gap-2 mb-2">
-        <span className="material-icons text-sre-primary">hub</span>
-        <div className="font-semibold text-sre-text truncate">{name}</div>
+    <div className={`rounded-xl border-2 bg-gradient-to-br from-sre-surface to-sre-surface/80 px-4 py-3 shadow-lg min-w-[240px] transition-all duration-300 hover:shadow-xl hover:scale-105 ${colorClass} ${isPain ? 'border-red-500/50' : 'border-sre-border'}`}>
+      <Handle type="target" position={Position.Left} className="!bg-sre-primary/70 !w-3 !h-3 !border-2 !border-sre-bg hover:!bg-sre-primary hover:!scale-110 transition-all" />
+      <Handle type="source" position={Position.Right} className="!bg-sre-primary/70 !w-3 !h-3 !border-2 !border-sre-bg hover:!bg-sre-primary hover:!scale-110 transition-all" />
+
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`w-3 h-3 rounded-full ${isPain ? 'bg-red-500' : errorRate > 1 ? 'bg-yellow-500' : 'bg-green-500'} animate-pulse`}></div>
+        <div className="font-bold text-sre-text truncate flex-1">{name}</div>
+        {isPain && <span className="material-icons text-red-500 text-sm animate-bounce">warning</span>}
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs text-sre-text-muted">
-        <div>Traces: <span className="text-sre-text">{stats.traces}</span></div>
-        <div>Spans: <span className="text-sre-text">{stats.spans}</span></div>
-        <div>P50: <span className="text-sre-text">{stats.p50}</span></div>
-        <div>P95: <span className="text-sre-text">{stats.p95}</span></div>
-        <div>Error: <span className={stats.errorRateNum > 5 ? 'text-red-400' : 'text-green-400'}>{stats.errorRate}</span></div>
-        <div>In/Out: <span className="text-sre-text">{stats.inbound}/{stats.outbound}</span></div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="flex justify-between">
+          <span className="text-sre-text-muted">Traces:</span>
+          <span className="text-sre-text font-medium">{stats.traces}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-sre-text-muted">Spans:</span>
+          <span className="text-sre-text font-medium">{stats.spans}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-sre-text-muted">P50:</span>
+          <span className="text-sre-text font-medium">{stats.p50}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-sre-text-muted">P95:</span>
+          <span className={`font-medium ${stats.p95.includes('ms') && parseFloat(stats.p95) > 1000 ? 'text-red-400' : 'text-sre-text'}`}>{stats.p95}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-sre-text-muted">Error:</span>
+          <span className={`font-medium ${errorRate > 5 ? 'text-red-400' : errorRate > 1 ? 'text-yellow-400' : 'text-green-400'}`}>{stats.errorRate}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-sre-text-muted">I/O:</span>
+          <span className="text-sre-text font-medium">{stats.inbound}/{stats.outbound}</span>
+        </div>
       </div>
-      {stats.pain && (
-        <div className="mt-2 text-[10px] px-2 py-1 rounded bg-red-500/10 text-red-400 border border-red-500/30">
+
+      {/* Pain Point Indicator */}
+      {isPain && (
+        <div className="mt-3 text-[10px] px-2 py-1.5 rounded-lg bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-300 border border-red-500/30 animate-pulse">
+          <span className="material-icons text-xs mr-1 align-middle">local_fire_department</span>
           Pain point: high latency or error rate
         </div>
       )}
+
+      {/* Health Indicator */}
+      <div className="mt-2 flex items-center gap-1">
+        <div className={`h-1.5 flex-1 rounded-full ${isPain ? 'bg-red-500/20' : errorRate > 1 ? 'bg-yellow-500/20' : 'bg-green-500/20'}`}>
+          <div
+            className={`h-full rounded-full transition-all duration-1000 ${isPain ? 'bg-red-500' : errorRate > 1 ? 'bg-yellow-500' : 'bg-green-500'}`}
+            style={{ width: `${Math.max(10, 100 - errorRate * 2)}%` }}
+          ></div>
+        </div>
+        <span className="text-[10px] text-sre-text-muted">Health</span>
+      </div>
     </div>
   )
 }
@@ -61,7 +101,7 @@ ServiceNode.propTypes = {
  * @returns {boolean}
  */
 function spanHasError(span) {
-  return Boolean(span.tags?.find(t => t.key === 'error' && t.value === true) || span.status?.code === 'ERROR')
+  return spanHasErrorUtil(span)
 }
 
 /**
@@ -89,6 +129,10 @@ function findRootSpan(spans) {
  * @param {Array} props.traces - Array of trace objects
  */
 export default function ServiceGraph({ traces }) {
+  const [activeNodeId, setActiveNodeId] = useState(null)
+  const [activeEdgeId, setActiveEdgeId] = useState(null)
+  const [hoverNodeId, setHoverNodeId] = useState(null)
+
   const graphData = useMemo(() => {
     const services = new Map()
     const edges = new Map()
@@ -204,12 +248,21 @@ export default function ServiceGraph({ traces }) {
       } else {
         colorClass = 'ring-2 ring-green-500/40'
       }
+      const isActive = activeNodeId === name || hoverNodeId === name
+      const isConnected = activeNodeId
+        ? graphData.edges.has(`${name}->${activeNodeId}`) || graphData.edges.has(`${activeNodeId}->${name}`)
+        : true
       nodesArray.push({
         id: name,
         type: 'service',
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
         position: { x: 0, y: 0 },
+        className: isActive ? 'service-node-active' : '',
+        style: {
+          opacity: activeNodeId && !isConnected && !isActive ? 0.35 : 1,
+          transition: 'opacity 200ms ease'
+        },
         data: {
           name,
           colorClass,
@@ -228,7 +281,47 @@ export default function ServiceGraph({ traces }) {
       })
     })
     return nodesArray
-  }, [graphData.services])
+  }, [graphData.services, graphData.edges, activeNodeId, hoverNodeId])
+
+  const insights = useMemo(() => {
+    const serviceStats = Array.from(graphData.services.entries()).map(([name, stats]) => {
+      const p95 = percentile(stats.durations, 0.95)
+      const errorRateNum = stats.spans ? (stats.errors / stats.spans) * 100 : 0
+      return {
+        name,
+        p95,
+        errorRateNum,
+        spans: stats.spans,
+        traces: stats.traces.size,
+        inbound: stats.inbound,
+        outbound: stats.outbound
+      }
+    })
+
+    const edgeStats = Array.from(graphData.edges.entries()).map(([key, val]) => {
+      const [source, target] = key.split('->')
+      const p95 = percentile(val.durations, 0.95)
+      const errorRateNum = val.count ? (val.errors / val.count) * 100 : 0
+      return {
+        id: key,
+        source,
+        target,
+        p95,
+        errorRateNum,
+        count: val.count
+      }
+    })
+
+    const painServices = serviceStats
+      .filter(s => s.p95 > PAIN_P95_THRESHOLD_US || s.errorRateNum > 5)
+      .sort((a, b) => (b.p95 + b.errorRateNum) - (a.p95 + a.errorRateNum))
+      .slice(0, 3)
+
+    const topCalls = [...edgeStats].sort((a, b) => b.count - a.count).slice(0, 3)
+    const topErrors = [...edgeStats].sort((a, b) => b.errorRateNum - a.errorRateNum).slice(0, 3)
+
+    return { serviceStats, edgeStats, painServices, topCalls, topErrors }
+  }, [graphData.edges, graphData.services])
 
   const edges = useMemo(() => {
     return Array.from(graphData.edges.entries()).map(([key, val]) => {
@@ -236,6 +329,9 @@ export default function ServiceGraph({ traces }) {
       const p95 = percentile(val.durations, 0.95)
       const errorRateNum = val.count ? (val.errors / val.count) * 100 : 0
       const isPain = p95 > PAIN_P95_THRESHOLD_US || errorRateNum > 5
+      const isActive = activeEdgeId === key
+      const isConnectedToActive = activeNodeId ? source === activeNodeId || target === activeNodeId : true
+      const fade = activeNodeId && !isConnectedToActive && !isActive
       let color
       if (isPain) {
         color = '#ef4444'
@@ -245,20 +341,48 @@ export default function ServiceGraph({ traces }) {
         color = '#10b981'
       }
       const label = `${val.count} calls · p95 ${formatDuration(p95)} · err ${errorRateNum.toFixed(1)}%`
+
       return {
         id: key,
         source,
         target,
         label,
-        animated: isPain,
+        animated: true, // Always animate for flow direction
         type: 'smoothstep',
-        style: { stroke: color, strokeWidth: isPain ? 2.5 : 1.5 },
-        labelStyle: { fill: '#cbd5e1', fontSize: 10 },
-        labelBgStyle: { fill: '#0f172a', fillOpacity: 0.7 },
-        markerEnd: { type: MarkerType.ArrowClosed, color }
+        className: isActive ? 'edge-active' : '',
+        style: {
+          stroke: color,
+          strokeWidth: isActive ? 4 : isPain ? 3 : 2,
+          strokeDasharray: isActive ? '6 6' : isPain ? '4 4' : '0',
+          opacity: fade ? 0.2 : 1,
+          filter: isActive
+            ? 'drop-shadow(0 0 6px rgba(59, 130, 246, 0.6))'
+            : isPain
+              ? 'drop-shadow(0 0 4px rgba(239, 68, 68, 0.5))'
+              : 'none'
+        },
+        labelStyle: {
+          fontSize: 11,
+          fontWeight: '500',
+          fill: fade ? 'var(--sre-text-muted)' : 'var(--sre-text)',
+          filter: 'drop-shadow(0 0 2px var(--sre-bg))'
+        },
+        labelBgStyle: {
+          fill: 'var(--sre-surface)',
+          fillOpacity: fade ? 0.4 : 0.9,
+          stroke: 'var(--sre-border)',
+          strokeWidth: 1,
+          rx: 4
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color,
+          width: isActive ? 22 : isPain ? 20 : 16,
+          height: isActive ? 22 : isPain ? 20 : 16
+        }
       }
     })
-  }, [graphData.edges])
+  }, [graphData.edges, activeEdgeId, activeNodeId])
 
   const layouted = useMemo(() => {
     const nodeWidth = 260
@@ -300,27 +424,176 @@ export default function ServiceGraph({ traces }) {
 
   if (layouted.nodes.length === 0) return null
 
+  const activeNode = insights.serviceStats.find(s => s.name === activeNodeId)
+  const activeEdge = insights.edgeStats.find(e => e.id === activeEdgeId)
+  const activeDirection = activeEdge ? `${activeEdge.source} → ${activeEdge.target}` : null
+
   return (
-    <div className="bg-sre-surface/30 border border-sre-border rounded-lg p-6">
-      <h3 className="text-lg font-semibold text-sre-text mb-4 flex items-center gap-2">
-        <span className="material-icons text-sre-primary">hub</span> Service Dependency Map (pain points highlighted)
-      </h3>
-      <div className="h-[520px] rounded-lg overflow-hidden border border-sre-border bg-sre-bg">
+    <div className="bg-gradient-to-br from-sre-surface/30 to-sre-surface/10 border-2 border-sre-border/50 rounded-xl p-6 shadow-lg">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xl font-bold text-sre-text flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sre-primary to-sre-primary-light flex items-center justify-center">
+            <span className="material-icons text-white text-sm">hub</span>
+          </div>
+          Service Dependency Map
+          <span className="text-sm font-normal text-sre-text-muted">(pain points highlighted)</span>
+        </h3>
+        <div className="flex items-center gap-2">
+          <div className="text-xs text-sre-text-muted bg-sre-surface px-2 py-1 rounded-lg border">
+            {layouted.nodes.length} services • {layouted.edges.length} connections
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 mb-4">
+        <div className="p-4 bg-sre-surface/60 rounded-xl border border-sre-border/60">
+          <div className="text-xs text-sre-text-muted mb-2">Insights</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div className="p-3 rounded-lg border border-sre-border/50 bg-sre-surface/60">
+              <div className="text-sre-text-muted mb-1">Top Pain Services</div>
+              {insights.painServices.length ? insights.painServices.map(s => (
+                <div key={s.name} className="flex items-center justify-between text-sre-text">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveNodeId(s.name); setActiveEdgeId(null) }}
+                    className="truncate hover:text-sre-primary"
+                  >
+                    {s.name}
+                  </button>
+                  <span className="text-red-400">{formatDuration(s.p95)}</span>
+                </div>
+              )) : (
+                <div className="text-sre-text-muted">No pain points</div>
+              )}
+            </div>
+            <div className="p-3 rounded-lg border border-sre-border/50 bg-sre-surface/60">
+              <div className="text-sre-text-muted mb-1">Busiest Flows</div>
+              {insights.topCalls.length ? insights.topCalls.map(e => (
+                <div key={e.id} className="flex items-center justify-between text-sre-text">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveEdgeId(e.id); setActiveNodeId(null) }}
+                    className="truncate hover:text-sre-primary"
+                  >
+                    {e.source} → {e.target}
+                  </button>
+                  <span className="text-sre-text-muted">{e.count}</span>
+                </div>
+              )) : (
+                <div className="text-sre-text-muted">No flows</div>
+              )}
+            </div>
+            <div className="p-3 rounded-lg border border-sre-border/50 bg-sre-surface/60">
+              <div className="text-sre-text-muted mb-1">Highest Error Rate</div>
+              {insights.topErrors.length ? insights.topErrors.map(e => (
+                <div key={e.id} className="flex items-center justify-between text-sre-text">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveEdgeId(e.id); setActiveNodeId(null) }}
+                    className="truncate hover:text-sre-primary"
+                  >
+                    {e.source} → {e.target}
+                  </button>
+                  <span className="text-yellow-400">{e.errorRateNum.toFixed(1)}%</span>
+                </div>
+              )) : (
+                <div className="text-sre-text-muted">No errors</div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="p-4 bg-sre-surface/60 rounded-xl border border-sre-border/60">
+          <div className="text-xs text-sre-text-muted mb-2">Selection</div>
+          {activeNode && (
+            <div className="text-sm text-sre-text space-y-1">
+              <div className="font-semibold">{activeNode.name}</div>
+              <div className="text-xs text-sre-text-muted">Traces: {activeNode.traces} · Spans: {activeNode.spans}</div>
+              <div className="text-xs text-sre-text-muted">P95: {formatDuration(activeNode.p95)} · Error: {activeNode.errorRateNum.toFixed(1)}%</div>
+              <div className="text-xs text-sre-text-muted">Inbound: {activeNode.inbound} · Outbound: {activeNode.outbound}</div>
+            </div>
+          )}
+          {activeEdge && (
+            <div className="text-sm text-sre-text space-y-1">
+              <div className="font-semibold">{activeEdge.source} → {activeEdge.target}</div>
+              <div className="text-xs text-sre-text-muted">Direction: {activeDirection}</div>
+              <div className="text-xs text-sre-text-muted">Calls: {activeEdge.count}</div>
+              <div className="text-xs text-sre-text-muted">P95: {formatDuration(activeEdge.p95)} · Error: {activeEdge.errorRateNum.toFixed(1)}%</div>
+            </div>
+          )}
+          {!activeNode && !activeEdge && (
+            <div className="text-xs text-sre-text-muted">Click a node or edge to focus and see details.</div>
+          )}
+        </div>
+      </div>
+
+      <div className="h-[600px] rounded-xl overflow-hidden border-2 border-sre-border bg-gradient-to-br from-sre-bg to-sre-surface/20 shadow-inner">
         <ReactFlow
           nodes={layouted.nodes}
           edges={layouted.edges}
           nodeTypes={{ service: ServiceNode }}
           fitView
-          minZoom={0.2}
-          maxZoom={1.5}
+          minZoom={0.1}
+          maxZoom={2}
+          defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+          className="react-flow-interactive"
+          onPaneClick={() => { setActiveNodeId(null); setActiveEdgeId(null) }}
+          onNodeClick={(_, node) => {
+            setActiveNodeId(node.id)
+            setActiveEdgeId(null)
+          }}
+          onEdgeClick={(_, edge) => {
+            setActiveEdgeId(edge.id)
+            setActiveNodeId(null)
+          }}
+          onNodeMouseEnter={(_, node) => setHoverNodeId(node.id)}
+          onNodeMouseLeave={() => setHoverNodeId(null)}
         >
-          <MiniMap zoomable pannable />
-          <Controls />
-          <Background gap={16} />
+          <MiniMap
+            zoomable
+            pannable
+            nodeColor="#1f2937"
+            maskColor="rgba(0, 0, 0, 0.2)"
+            style={{ background: 'var(--sre-surface)' }}
+          />
+          <Controls
+            showZoom
+            showFitView
+            showInteractive
+            className="react-flow-controls-custom"
+          />
+          <Background
+            gap={20}
+            color="var(--sre-border)"
+            variant="dots"
+          />
         </ReactFlow>
       </div>
-      <div className="mt-3 text-xs text-sre-text-muted">
-        Colors: green = healthy, amber = elevated errors, red = pain point (high p95 or error rate). Edge labels show call count, p95 latency, and error rate.
+
+      {/* Legend */}
+      <div className="mt-4 p-4 bg-sre-surface/50 rounded-lg border border-sre-border/50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-6 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
+              <span className="text-sre-text-muted">Healthy</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-yellow-500 animate-pulse"></div>
+              <span className="text-sre-text-muted">Warning</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-red-500 animate-bounce"></div>
+              <span className="text-sre-text-muted">Pain Point</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-0.5 bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 rounded"></div>
+              <span className="text-sre-text-muted">Flow Direction</span>
+            </div>
+          </div>
+          <div className="text-xs text-sre-text-muted">
+            Edge labels: call count • p95 latency • error rate • animated direction
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -108,6 +108,7 @@ class DatabaseStorageService:
     def _rule_to_pydantic(self, r: AlertRuleDB) -> AlertRulePydantic:
         return AlertRulePydantic(
             id=r.id,
+            org_id=r.org_id,
             name=r.name,
             expr=r.expr,
             duration=r.duration,
@@ -149,6 +150,16 @@ class DatabaseStorageService:
                                _get_shared_group_ids(r), group_ids)
             ]
 
+    def get_alert_rules_for_org(self, tenant_id: str, org_id: str) -> List[AlertRulePydantic]:
+        with get_db_session() as db:
+            rules = (
+                db.query(AlertRuleDB)
+                .options(joinedload(AlertRuleDB.shared_groups))
+                .filter(AlertRuleDB.tenant_id == tenant_id, AlertRuleDB.org_id == org_id)
+                .all()
+            )
+            return [self._rule_to_pydantic(r) for r in rules]
+
     def get_alert_rule(
         self, rule_id: str, tenant_id: str, user_id: str,
         group_ids: Optional[List[str]] = None,
@@ -177,6 +188,7 @@ class DatabaseStorageService:
                 id=str(uuid.uuid4()),
                 tenant_id=tenant_id,
                 created_by=user_id,
+                org_id=rule_create.org_id or None,
                 name=rule_create.name,
                 group=rule_create.group,
                 expr=rule_create.expr,
@@ -192,7 +204,7 @@ class DatabaseStorageService:
                 rule.shared_groups = _resolve_groups(db, rule_create.shared_group_ids)
             db.add(rule)
             db.flush()
-            logger.info("Created alert rule %s (%s) visibility=%s", rule.name, rule.id, rule.visibility)
+            logger.info("Created alert rule %s (%s) org_id=%s visibility=%s", rule.name, rule.id, rule.org_id, rule.visibility)
             return self._rule_to_pydantic(rule)
 
     def update_alert_rule(
@@ -213,6 +225,7 @@ class DatabaseStorageService:
                                _get_shared_group_ids(r), group_ids):
                 return None
 
+            r.org_id = rule_update.org_id or None
             r.name = rule_update.name
             r.group = rule_update.group
             r.expr = rule_update.expr
@@ -227,7 +240,7 @@ class DatabaseStorageService:
                 r.shared_groups = _resolve_groups(db, rule_update.shared_group_ids)
 
             db.flush()
-            logger.info("Updated alert rule %s (%s)", r.name, rule_id)
+            logger.info("Updated alert rule %s (%s) org_id=%s", r.name, rule_id, r.org_id)
             return self._rule_to_pydantic(r)
 
     def delete_alert_rule(

@@ -22,18 +22,12 @@ processors:
   memory_limiter:
     check_interval: 1s
     limit_mib: 512
-  
-  resource:
-    attributes:
-      - key: tenant_id
-        value: ${OTEL_AGENT_API_KEY}
-        action: upsert
 
 exporters:
   otlphttp/loki:
-    endpoint: "http://loki:3100/otlp"
+    endpoint: "http://otlp-gateway:4320/loki/otlp"
     headers:
-      X-Scope-OrgID: ${OTEL_AGENT_API_KEY}
+      x-otlp-token: ${OTEL_OTLP_TOKEN}
     tls:
       insecure: true
     retry_on_failure:
@@ -46,10 +40,10 @@ exporters:
       num_consumers: 10
       queue_size: 1000
 
-  otlp/tempo:
-    endpoint: "tempo:4317"
+  otlphttp/tempo:
+    endpoint: "http://otlp-gateway:4320/tempo"
     headers:
-      X-Scope-OrgID: ${OTEL_AGENT_API_KEY}
+      x-otlp-token: ${OTEL_OTLP_TOKEN}
     tls:
       insecure: true
     retry_on_failure:
@@ -63,9 +57,9 @@ exporters:
       queue_size: 1000
 
   prometheusremotewrite/mimir:
-    endpoint: "http://mimir:9009/api/v1/push"
+    endpoint: "http://otlp-gateway:4320/mimir/api/v1/push"
     headers:
-      X-Scope-OrgID: ${OTEL_AGENT_API_KEY}
+      x-otlp-token: ${OTEL_OTLP_TOKEN}
     retry_on_failure:
       enabled: true
       initial_interval: 5s
@@ -79,17 +73,17 @@ service:
   pipelines:
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, resource]
+      processors: [memory_limiter]
       exporters: [otlphttp/loki, debug]
 
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resource]
-      exporters: [otlp/tempo, debug]
+      processors: [memory_limiter]
+      exporters: [otlphttp/tempo, debug]
 
     metrics:
       receivers: [hostmetrics, otlp]
-      processors: [memory_limiter, resource]
+      processors: [memory_limiter]
       exporters: [prometheusremotewrite/mimir, debug]
 
   telemetry:

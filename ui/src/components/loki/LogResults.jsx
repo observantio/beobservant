@@ -1,6 +1,8 @@
 import { Badge, Spinner } from '../../components/ui'
 import PropTypes from 'prop-types'
-import { formatNsToIso, formatRelativeTime, formatLogLine, getLogLevelColor, getLogLevelBadge } from '../../utils/logFormatters'
+import { formatNsToIso, formatRelativeTime, parseLogLine } from '../../utils/formatters'
+import { getLogLevel } from '../../utils/helpers'
+import { LOG_LEVELS } from '../../utils/constants'
 
 function normalizeStreamLabelValue(label, value) {
   if (typeof value !== 'string') return value
@@ -69,7 +71,7 @@ export default function LogResults({ queryResult, loading, filterDisplayedLogs, 
   }
 
   return (
-    <div className="space-y-4 overflow-auto scrollbar-thin h-[70rem]">
+    <div className="space-y-4 overflow-auto scrollbar-thin h-[70rem] pr-4">
       {filteredStreams.map(({ stream, values: filteredValues }, streamIdx) => {
         const streamKey = stream.stream
           ? Object.entries(stream.stream).sort((a, b) => String(a[0]).localeCompare(String(b[0]))).map(([k, v]) => `${k}=${v}`).join('|')
@@ -94,10 +96,10 @@ export default function LogResults({ queryResult, loading, filterDisplayedLogs, 
 
             <div className="divide-y divide-sre-border">
               {filteredValues.slice().reverse().slice(0, viewMode === 'compact' ? 200 : 100).map((v) => {
-                const formatted = formatLogLine(v[1])
+                const formatted = parseLogLine(v[1])
                 const logKey = `${streamIdx}-${v[0]}-${String(v[1]).substring(0, 50).replaceAll(/[^a-zA-Z0-9]/g, '')}`
                 const isExpanded = !!expandedLogs[logKey]
-                const badge = getLogLevelBadge(v[1])
+                const badge = getLogLevel(v[1])
 
                 let displayText
                 if (isExpanded) {
@@ -112,8 +114,8 @@ export default function LogResults({ queryResult, loading, filterDisplayedLogs, 
                   return (
                     <div key={logKey} className="px-4 py-2 hover:bg-sre-surface/50 transition-colors text-xs font-mono">
                       <span className="text-sre-text-muted mr-3">{formatNsToIso(v[0]).substring(11,19)}</span>
-                      <span className={`${badge.class} px-2 py-0.5 rounded text-[10px] font-bold mr-2`}>{badge.text}</span>
-                      <span className={getLogLevelColor(v[1])}>{String(v[1]).substring(0, 150)}{String(v[1]).length > 150 ? '...' : ''}</span>
+                      <span className={`${badge.bgClass} px-2 py-0.5 rounded text-[10px] font-bold mr-2`}>{badge.text}</span>
+                      <span className={getLogLevel(v[1]).color}>{String(v[1]).substring(0, 150)}{String(v[1]).length > 150 ? '...' : ''}</span>
                     </div>
                   )
                 }
@@ -130,7 +132,7 @@ export default function LogResults({ queryResult, loading, filterDisplayedLogs, 
                   <div key={logKey} className="px-4 py-3 hover:bg-sre-surface/50 transition-colors">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-3">
-                        <span className={`${badge.class} px-2 py-1 rounded text-[10px] font-bold border`}>{badge.text}</span>
+                        <span className={`${badge.bgClass} px-2 py-1 rounded text-[10px] font-bold border`}>{badge.text}</span>
                         <div className="text-xs text-sre-text-muted">
                           <div className="font-semibold">{formatNsToIso(v[0])}</div>
                           <div className="text-[10px]">{formatRelativeTime(v[0])}</div>
@@ -153,7 +155,7 @@ export default function LogResults({ queryResult, loading, filterDisplayedLogs, 
                         {Object.entries(formatted.data).slice(0, isExpanded ? undefined : 5).map(([key, val]) => (
                           <div key={key} className="flex gap-3 text-sm">
                             <span className="text-sre-primary font-semibold min-w-[120px] font-mono">{key}:</span>
-                            <span className={`${getLogLevelColor(String(val))} flex-1 font-mono break-all`}>{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
+                            <span className={`${getLogLevel(String(val)).color} flex-1 font-mono break-all`}>{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
                           </div>
                         ))}
                         {!isExpanded && Object.keys(formatted.data).length > 5 && (
@@ -161,7 +163,7 @@ export default function LogResults({ queryResult, loading, filterDisplayedLogs, 
                         )}
                       </div>
                     ) : (
-                      <div className={`mt-2 text-sm font-mono ${getLogLevelColor(formatted.data)} break-all`}>
+                      <div className={`mt-2 text-sm font-mono ${getLogLevel(formatted.data).color} break-all`}>
                         {displayText}
                         {!isExpanded && formatted.data.length > 300 && (
                           <button onClick={() => toggleLogExpand(logKey)} className="text-xs text-sre-primary hover:underline ml-2">Show more</button>

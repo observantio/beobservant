@@ -50,7 +50,3 @@ export default function ThemeToggle({ className = '' }) {
 ThemeToggle.propTypes = {
   className: PropTypes.string,
 }
-
-ThemeToggle.propTypes = {
-  className: PropTypes.string,
-}

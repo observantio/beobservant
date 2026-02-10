@@ -14,19 +14,20 @@ export default function FoldersTab({ folders, onCreateFolder, onDeleteFolder }) 
 
   return (
     <>
-      <div className="mb-6 flex gap-3">
-        <form onSubmit={(e) => { e.preventDefault() }} className="flex gap-3 flex-1">
+      <div className="mb-6 flex gap-2">
+        <form onSubmit={(e) => { e.preventDefault() }} className="flex gap-2 flex-1">
           <Input
+            size="sm"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search folders by name..."
-            className="flex-1"
+            className="flex-1 px-2 py-0.5 text-sm"
           />
-          <Button type="button" onClick={() => setQuery('')}>Clear</Button>
+          <Button type="button" onClick={() => setQuery('')} size="sm">Clear</Button>
         </form>
         {folders.length ? (
-          <Button onClick={onCreateFolder} variant="primary">
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <Button onClick={onCreateFolder} variant="primary" size="sm">
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             New Folder

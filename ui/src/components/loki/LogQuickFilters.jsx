@@ -6,7 +6,7 @@ export default function LogQuickFilters({ labelValuesCache, topTerms, onSelectLa
 
   return (
     <Card title="Quick Filters" subtitle="Filter by labels">
-      <div className="space-y-3">
+      <div className="space-y-3 max-h-[30rem] overflow-y-auto pr-2 scrollbar-thin">
         {Object.entries(labelValuesCache || {}).map(([label, values]) => (
           Array.isArray(values) && values?.length > 0 && (
             <div key={label}>

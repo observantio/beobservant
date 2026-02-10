@@ -4,51 +4,25 @@ import {
   getDatasources, createDatasource, updateDatasource, deleteDatasource,
   getFolders, createFolder, deleteFolder, getGroups
 } from '../api'
-import {  Button, Input, Alert, Modal, ConfirmDialog, Select, Checkbox } from '../components/ui'
+import {  Button, Input, Modal, ConfirmDialog, Select, Checkbox } from '../components/ui'
+import { useToast } from '../contexts/ToastContext'
+import HelpTooltip from '../components/HelpTooltip'
 import GrafanaTabs from '../components/grafana/GrafanaTabs'
 import GrafanaContent from '../components/grafana/GrafanaContent'
 import { useAuth } from '../contexts/AuthContext'
-import { MIMIR_PROMETHEUS_URL } from '../utils/constants'
+import { GRAFANA_URL, MIMIR_PROMETHEUS_URL, DATASOURCE_TYPES as DS_TYPES, VISIBILITY_OPTIONS, GRAFANA_REFRESH_INTERVALS } from '../utils/constants'
 
-const GRAFANA_URL = import.meta.env.VITE_GRAFANA_URL || 'https://localhost/grafana'
-
-const DATASOURCE_TYPES = [
-  { value: 'prometheus', label: 'Mimir (Prometheus-compatible)', icon: (
-    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <rect x="3" y="11" width="4" height="10" rx="1" />
-      <rect x="9" y="7" width="4" height="14" rx="1" />
-      <rect x="15" y="3" width="4" height="18" rx="1" />
-    </svg>
-  )},
-  { value: 'loki', label: 'Loki', icon: (
-    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path d="M3 7h18M3 12h18M3 17h18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )},
-  { value: 'tempo', label: 'Tempo', icon: (
-    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <circle cx="11" cy="11" r="6" strokeWidth="2" />
-      <path d="M21 21l-4.3-4.3" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  )},
-  { value: 'graphite', label: 'Graphite', icon: (
-    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path d="M3 3v18h18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M7 13l4-4 4 6 4-10" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )},
-  { value: 'influxdb', label: 'InfluxDB', icon: (
-    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path d="M12 2v20" strokeWidth="2" strokeLinecap="round" />
-      <path d="M5 7c2 4 4 6 7 6s5-2 7-6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )},
-  { value: 'elasticsearch', label: 'Elasticsearch', icon: (
-    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path d="M12 2l7 4v8l-7 4-7-4V6l7-4z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )},
-]
+const DATASOURCE_TYPES = DS_TYPES.map(dt => {
+  const icons = {
+    prometheus: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="11" width="4" height="10" rx="1" /><rect x="9" y="7" width="4" height="14" rx="1" /><rect x="15" y="3" width="4" height="18" rx="1" /></svg>,
+    loki: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18M3 12h18M3 17h18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+    tempo: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="6" strokeWidth="2" /><path d="M21 21l-4.3-4.3" strokeWidth="2" strokeLinecap="round" /></svg>,
+    graphite: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M7 13l4-4 4 6 4-10" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+    influxdb: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20" strokeWidth="2" strokeLinecap="round" /><path d="M5 7c2 4 4 6 7 6s5-2 7-6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+    elasticsearch: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l7 4v8l-7 4-7-4V6l7-4z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+  }
+  return { ...dt, icon: icons[dt.value] || null }
+})
 
 function openInGrafana(path) {
   window.open(`${GRAFANA_URL}${path}`, '_blank', 'noopener,noreferrer')
@@ -65,8 +39,8 @@ export default function GrafanaPage() { // NOSONAR
   const [groups, setGroups] = useState([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(null)
+
+  const toast = useToast()
 
   // Centralized API error handling for this page.
   // Permission errors (403) are already shown globally via toast; avoid duplicating them here.
@@ -79,7 +53,7 @@ export default function GrafanaPage() { // NOSONAR
     // Suppress Grafana 'not found / access denied / update failed' messages as toasts already show them
     if (lower.includes('not found') && (lower.includes('access denied') || lower.includes('update failed'))) return
 
-    setError(msg)
+    toast.error(msg)
   }
 
   // Dashboard editor state
@@ -134,14 +108,13 @@ export default function GrafanaPage() { // NOSONAR
     try {
       const groupsData = await getGroups().catch(() => [])
       setGroups(groupsData)
-    } catch (e) {
-      console.error('Failed to load groups:', e)
+    } catch {
+      // Silently handle
     }
   }
 
   async function loadData() {
     setLoading(true)
-    setError(null)
     try {
       if (activeTab === 'dashboards') {
         const [dashboardsData, foldersData, datasourcesData] = await Promise.all([
@@ -168,7 +141,6 @@ export default function GrafanaPage() { // NOSONAR
 
   async function onSearch(e) {
     e.preventDefault()
-    setError(null)
     setLoading(true)
     try {
       const res = await searchDashboards(query)
@@ -208,8 +180,6 @@ export default function GrafanaPage() { // NOSONAR
   }
 
   async function saveDashboard() {
-    setError(null)
-    setSuccess(null)
     try {
       const tags = dashboardForm.tags
         .split(',')
@@ -259,10 +229,10 @@ export default function GrafanaPage() { // NOSONAR
       if (editingDashboard) {
         payload.dashboard.uid = editingDashboard.uid
         await updateDashboard(editingDashboard.uid, payload, params.toString())
-        setSuccess('Dashboard updated successfully')
+        toast.success('Dashboard updated successfully')
       } else {
         await createDashboard(payload, params.toString())
-        setSuccess('Dashboard created successfully')
+        toast.success('Dashboard created successfully')
       }
 
       setShowDashboardEditor(false)
@@ -279,11 +249,9 @@ export default function GrafanaPage() { // NOSONAR
       message: `Are you sure you want to delete "${dashboard.title}"? This action cannot be undone.`,
       variant: 'danger',
       onConfirm: async () => {
-        setError(null)
-        setSuccess(null)
         try {
           await deleteDashboard(dashboard.uid)
-          setSuccess('Dashboard deleted successfully')
+          toast.success('Dashboard deleted successfully')
           loadData()
         } catch (e) {
           handleApiError(e)
@@ -323,13 +291,10 @@ export default function GrafanaPage() { // NOSONAR
   }
 
   async function saveDatasource() {
-    setError(null)
-    setSuccess(null)
-    
     // Validate org_id for multi-tenant datasources
     const isMultiTenantType = ['prometheus', 'loki', 'tempo'].includes(datasourceForm.type)
     if (!editingDatasource && isMultiTenantType && !datasourceForm.apiKeyId) {
-      setError('API key is required for Prometheus, Loki, and Tempo datasources')
+      toast.error('API key is required for Prometheus, Loki, and Tempo datasources')
       return
     }
     
@@ -359,10 +324,10 @@ export default function GrafanaPage() { // NOSONAR
 
       if (editingDatasource) {
         await updateDatasource(editingDatasource.uid, payload, params.toString())
-        setSuccess('Datasource updated successfully')
+        toast.success('Datasource updated successfully')
       } else {
         await createDatasource(payload, params.toString())
-        setSuccess('Datasource created successfully')
+        toast.success('Datasource created successfully')
       }
 
       setShowDatasourceEditor(false)
@@ -379,11 +344,9 @@ export default function GrafanaPage() { // NOSONAR
       message: `Are you sure you want to delete "${datasource.name}"? This will affect all dashboards using this datasource.`,
       variant: 'danger',
       onConfirm: async () => {
-        setError(null)
-        setSuccess(null)
         try {
           await deleteDatasource(datasource.uid)
-          setSuccess('Datasource deleted successfully')
+          toast.success('Datasource deleted successfully')
           loadData()
         } catch (e) {
           handleApiError(e)
@@ -394,12 +357,10 @@ export default function GrafanaPage() { // NOSONAR
 
   async function handleCreateFolder() {
     if (!folderName.trim()) return
-    
-    setError(null)
-    setSuccess(null)
+
     try {
       await createFolder(folderName.trim())
-      setSuccess('Folder created successfully')
+      toast.success('Folder created successfully')
       setShowFolderCreator(false)
       setFolderName('')
       loadData()
@@ -415,11 +376,9 @@ export default function GrafanaPage() { // NOSONAR
       message: `Are you sure you want to delete "${folder.title}"? All dashboards in this folder will be moved to General.`,
       variant: 'danger',
       onConfirm: async () => {
-        setError(null)
-        setSuccess(null)
         try {
           await deleteFolder(folder.uid)
-          setSuccess('Folder deleted successfully')
+          toast.success('Folder deleted successfully')
           loadData()
         } catch (e) {
           handleApiError(e)
@@ -438,33 +397,22 @@ export default function GrafanaPage() { // NOSONAR
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-sre-text mb-2"><span className="material-icons text-blue-600 text-3xl align-middle">analytics</span> Grafana Manager</h1>
+            <h1 className="text-3xl font-bold text-sre-text mb-2"><span className="material-icons text-blue-600 text-3xl align-middle">analytics</span> Dashboard</h1>
             <p className="text-sre-text-muted">Manage dashboards, datasources, and folders with powerful SRE tooling</p>
           </div>
         </div>
         <Button
           onClick={() => openInGrafana('/')}
           variant="outline"
+          size="sm"
           className="flex items-center gap-2"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
           </svg>
           Open Grafana
         </Button>
       </div>
-
-      {error && (
-        <Alert variant="error" className="mb-6" onClose={() => setError(null)}>
-          <strong>Error:</strong> {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert variant="success" className="mb-6" onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
 
       <GrafanaTabs activeTab={activeTab} onChange={setActiveTab} />
 
@@ -512,84 +460,102 @@ export default function GrafanaPage() { // NOSONAR
         }
       >
         <div className="space-y-4">
-          <Input
-            label="Dashboard Title *"
-            value={dashboardForm.title}
-            onChange={(e) => setDashboardForm({ ...dashboardForm, title: e.target.value })}
-            placeholder="My Awesome Dashboard"
-            required
-          />
+          <div>
+            <label className="block text-sm font-medium text-sre-text mb-2">
+              Dashboard Title <span className="text-red-500">*</span> <HelpTooltip text="Enter a descriptive title for your dashboard that clearly identifies its purpose." />
+            </label>
+            <Input
+              value={dashboardForm.title}
+              onChange={(e) => setDashboardForm({ ...dashboardForm, title: e.target.value })}
+              placeholder="My Awesome Dashboard"
+              required
+            />
+          </div>
 
-          <Input
-            label="Tags (comma-separated)"
-            value={dashboardForm.tags}
-            onChange={(e) => setDashboardForm({ ...dashboardForm, tags: e.target.value })}
-            placeholder="production, metrics, monitoring"
-            helperText="Use tags to categorize and filter dashboards"
-          />
+          <div>
+            <label className="block text-sm font-medium text-sre-text mb-2">
+              Tags (comma-separated) <HelpTooltip text="Add tags to categorize and make your dashboard easier to find. Use commas to separate multiple tags." />
+            </label>
+            <Input
+              value={dashboardForm.tags}
+              onChange={(e) => setDashboardForm({ ...dashboardForm, tags: e.target.value })}
+              placeholder="production, metrics, monitoring"
+            />
+            <p className="text-xs text-sre-text-muted mt-1">Use tags to categorize and filter dashboards</p>
+          </div>
 
-          <Select
-            label="Folder"
-            value={dashboardForm.folderId}
-            onChange={(e) => setDashboardForm({ ...dashboardForm, folderId: e.target.value })}
-          >
-            <option value="0">General</option>
-            {folders.map((folder) => (
-              <option key={folder.id} value={folder.id}>
-                {folder.title}
-              </option>
-            ))}
-          </Select>
+          <div>
+            <label className="block text-sm font-medium text-sre-text mb-2">
+              Folder <HelpTooltip text="Choose which folder to organize this dashboard in. Use 'General' for dashboards that don't need specific organization." />
+            </label>
+            <Select
+              value={dashboardForm.folderId}
+              onChange={(e) => setDashboardForm({ ...dashboardForm, folderId: e.target.value })}
+            >
+              <option value="0">General</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.title}
+                </option>
+              ))}
+            </Select>
+          </div>
 
-          <Select
-            label="Default Datasource"
-            value={dashboardForm.datasourceUid}
-            onChange={(e) => setDashboardForm({ ...dashboardForm, datasourceUid: e.target.value })}
-            helperText="Optional: Sets the default datasource variable for this dashboard"
-          >
-            <option value="">-- None --</option>
-            {datasources.map((ds) => (
-              <option key={ds.uid} value={ds.uid}>
-                {ds.name} ({ds.type})
-              </option>
-            ))}
-          </Select>
+          <div>
+            <label className="block text-sm font-medium text-sre-text mb-2">
+              Default Datasource <HelpTooltip text="Optional: Set a default datasource that will be pre-selected in dashboard variables for easier panel creation." />
+            </label>
+            <Select
+              value={dashboardForm.datasourceUid}
+              onChange={(e) => setDashboardForm({ ...dashboardForm, datasourceUid: e.target.value })}
+            >
+              <option value="">-- None --</option>
+              {datasources.map((ds) => (
+                <option key={ds.uid} value={ds.uid}>
+                  {ds.name} ({ds.type})
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-sre-text-muted mt-1">Optional: Sets the default datasource variable for this dashboard</p>
+          </div>
 
-          <Select
-            label="Auto-refresh Interval"
-            value={dashboardForm.refresh}
-            onChange={(e) => setDashboardForm({ ...dashboardForm, refresh: e.target.value })}
-            helperText="How often the dashboard should automatically refresh"
-          >
-            <option value="">No auto-refresh</option>
-            <option value="5s">5 seconds</option>
-            <option value="10s">10 seconds</option>
-            <option value="30s">30 seconds</option>
-            <option value="1m">1 minute</option>
-            <option value="5m">5 minutes</option>
-            <option value="15m">15 minutes</option>
-            <option value="30m">30 minutes</option>
-            <option value="1h">1 hour</option>
-          </Select>
+          <div>
+            <label className="block text-sm font-medium text-sre-text mb-2">
+              Auto-refresh Interval <HelpTooltip text="How often the dashboard should automatically refresh its data. Choose 'Off' to disable auto-refresh." />
+            </label>
+            <Select
+              value={dashboardForm.refresh}
+              onChange={(e) => setDashboardForm({ ...dashboardForm, refresh: e.target.value })}
+            >
+              {GRAFANA_REFRESH_INTERVALS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </Select>
+            <p className="text-xs text-sre-text-muted mt-1">How often the dashboard should automatically refresh</p>
+          </div>
 
           <div className="border-t border-sre-border pt-4">
-            <Select
-              label="Visibility"
-              value={dashboardForm.visibility}
-              onChange={(e) => {
-                setDashboardForm({ ...dashboardForm, visibility: e.target.value, sharedGroupIds: [] })
-              }}
-              helperText="Control who can access this dashboard"
-            >
-              <option value="private">Private (Only me)</option>
-              <option value="group">Shared with Groups</option>
-              <option value="tenant">Tenant-wide (Everyone in organization)</option>
-            </Select>
+            <div>
+              <label className="block text-sm font-medium text-sre-text mb-2">
+                Visibility <HelpTooltip text="Control who can view and edit this dashboard. Private dashboards are only visible to you." />
+              </label>
+              <Select
+                value={dashboardForm.visibility}
+                onChange={(e) => {
+                  setDashboardForm({ ...dashboardForm, visibility: e.target.value, sharedGroupIds: [] })
+                }}
+              >
+                {VISIBILITY_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </Select>
+              <p className="text-xs text-sre-text-muted mt-1">Control who can access this dashboard</p>
+            </div>
 
             {dashboardForm.visibility === 'group' && (
               <div className="mt-4">
                 <label htmlFor="shared-groups" className="block text-sm font-medium text-sre-text mb-2">
-                  Shared Groups
+                  Shared Groups <HelpTooltip text="Select which user groups can view and edit this dashboard." />
                 </label>
                 <div id="shared-groups" className="space-y-2 max-h-40 overflow-y-auto border border-sre-border rounded p-3">
                   {groups.map(group => (
@@ -647,55 +613,73 @@ export default function GrafanaPage() { // NOSONAR
         }
       >
         <div className="space-y-4">
-          <Input
-            label="Datasource Name *"
-            value={datasourceForm.name}
-            onChange={(e) => setDatasourceForm({ ...datasourceForm, name: e.target.value })}
-            placeholder="My Mimir"
-            required
-          />
+          <div>
+            <label className="block text-sm font-medium text-sre-text mb-2">
+              Datasource Name <span className="text-red-500">*</span> <HelpTooltip text="Enter a descriptive name for your datasource that clearly identifies its purpose and type." />
+            </label>
+            <Input
+              value={datasourceForm.name}
+              onChange={(e) => setDatasourceForm({ ...datasourceForm, name: e.target.value })}
+              placeholder="My Mimir"
+              required
+            />
+          </div>
 
-          <Select
-            label="Type *"
-            value={datasourceForm.type}
-            onChange={(e) => setDatasourceForm({ ...datasourceForm, type: e.target.value })}
-            disabled={!!editingDatasource}
-            helperText={editingDatasource ? "Type cannot be changed after creation" : "Select the datasource type"}
-          >
-            {DATASOURCE_TYPES.map((type) => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
-            ))}
-          </Select>
+          <div>
+            <label className="block text-sm font-medium text-sre-text mb-2">
+              Type <span className="text-red-500">*</span> <HelpTooltip text="Select the type of datasource. This determines how Grafana will query and display data." />
+            </label>
+            <Select
+              value={datasourceForm.type}
+              onChange={(e) => setDatasourceForm({ ...datasourceForm, type: e.target.value })}
+              disabled={!!editingDatasource}
+            >
+              {DATASOURCE_TYPES.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </Select>
+            {editingDatasource && <p className="text-xs text-sre-text-muted mt-1">Type cannot be changed after creation</p>}
+            {!editingDatasource && <p className="text-xs text-sre-text-muted mt-1">Select the datasource type</p>}
+          </div>
 
-          <Input
-            label="URL *"
-            value={datasourceForm.url}
-            onChange={(e) => setDatasourceForm({ ...datasourceForm, url: e.target.value })}
-            placeholder={MIMIR_PROMETHEUS_URL}
-            helperText="The URL where the datasource is accessible"
-            required
-          />
+          <div>
+            <label className="block text-sm font-medium text-sre-text mb-2">
+              URL <span className="text-red-500">*</span> <HelpTooltip text="The endpoint URL where the datasource service is running and accessible." />
+            </label>
+            <Input
+              value={datasourceForm.url}
+              onChange={(e) => setDatasourceForm({ ...datasourceForm, url: e.target.value })}
+              placeholder={MIMIR_PROMETHEUS_URL}
+              required
+            />
+            <p className="text-xs text-sre-text-muted mt-1">The URL where the datasource is accessible</p>
+          </div>
 
-          <Select
-            label="Access Mode"
-            value={datasourceForm.access}
-            onChange={(e) => setDatasourceForm({ ...datasourceForm, access: e.target.value })}
-            helperText="Proxy: Access via Grafana server. Direct: Access from browser"
-          >
-            <option value="proxy">Server (Proxy)</option>
-            <option value="direct">Browser (Direct)</option>
-          </Select>
+          <div>
+            <label className="block text-sm font-medium text-sre-text mb-2">
+              Access Mode <HelpTooltip text="Server (Proxy): Grafana server makes requests. Browser (Direct): Browser makes direct requests to the datasource." />
+            </label>
+            <Select
+              value={datasourceForm.access}
+              onChange={(e) => setDatasourceForm({ ...datasourceForm, access: e.target.value })}
+            >
+              <option value="proxy">Server (Proxy)</option>
+              <option value="direct">Browser (Direct)</option>
+            </Select>
+            <p className="text-xs text-sre-text-muted mt-1">Proxy: Access via Grafana server. Direct: Access from browser</p>
+          </div>
 
           {!editingDatasource && ['prometheus', 'loki', 'tempo'].includes(datasourceForm.type) && (
-            <div className="">
+            <div>
+              <label className="block text-sm font-medium text-sre-text mb-2">
+                API Key <span className="text-red-500">*</span> <HelpTooltip text="Select the API key for multi-tenant data isolation. This ensures the datasource only queries data for the selected product." />
+              </label>
               <Select
-                label="API Key *"
                 value={datasourceForm.apiKeyId}
                 onChange={(e) => setDatasourceForm({ ...datasourceForm, apiKeyId: e.target.value })}
                 required
-                helperText="Select which API key to use for multi-tenant data isolation."
               >
                 {defaultKey && (
                   <option key={defaultKey.id} value={defaultKey.id}>
@@ -708,6 +692,7 @@ export default function GrafanaPage() { // NOSONAR
                   </option>
                 ))}
               </Select>
+              <p className="text-xs text-sre-text-muted mt-1">Select which API key to use for multi-tenant data isolation.</p>
               {(() => {
                 let datasourceName;
                 if (datasourceForm.type === 'prometheus') {
@@ -727,30 +712,41 @@ export default function GrafanaPage() { // NOSONAR
             </div>
           )}
 
-          <Checkbox
-            label="Set as default datasource"
-            checked={datasourceForm.isDefault}
-            onChange={(e) => setDatasourceForm({ ...datasourceForm, isDefault: e.target.checked })}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="is-default"
+              checked={datasourceForm.isDefault}
+              onChange={(e) => setDatasourceForm({ ...datasourceForm, isDefault: e.target.checked })}
+              className="w-4 h-4"
+            />
+            <label htmlFor="is-default" className="text-sm text-sre-text">
+              Set as default datasource <HelpTooltip text="When checked, this datasource will be the default choice in new panels and dashboards." />
+            </label>
+          </div>
 
           <div className="border-t border-sre-border pt-4">
-            <Select
-              label="Visibility"
-              value={datasourceForm.visibility}
-              onChange={(e) => {
-                setDatasourceForm({ ...datasourceForm, visibility: e.target.value, sharedGroupIds: [] })
-              }}
-              helperText="Control who can access this datasource"
-            >
-              <option value="private">Private (Only me)</option>
-              <option value="group">Shared with Groups</option>
-              <option value="tenant">Tenant-wide (Everyone in organization)</option>
-            </Select>
+            <div>
+              <label className="block text-sm font-medium text-sre-text mb-2">
+                Visibility <HelpTooltip text="Control who can view and use this datasource. Private datasources are only accessible to you." />
+              </label>
+              <Select
+                value={datasourceForm.visibility}
+                onChange={(e) => {
+                  setDatasourceForm({ ...datasourceForm, visibility: e.target.value, sharedGroupIds: [] })
+                }}
+              >
+                {VISIBILITY_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </Select>
+              <p className="text-xs text-sre-text-muted mt-1">Control who can access this datasource</p>
+            </div>
 
             {datasourceForm.visibility === 'group' && (
               <div className="mt-4">
                 <label htmlFor="shared-groups" className="block text-sm font-medium text-sre-text mb-2">
-                  Shared Groups
+                  Shared Groups <HelpTooltip text="Select which user groups can view and use this datasource." />
                 </label>
                 <div id="shared-groups" className="space-y-2 max-h-40 overflow-y-auto border border-sre-border rounded p-3">
                   {groups.map(group => (
@@ -813,20 +809,24 @@ export default function GrafanaPage() { // NOSONAR
           </div>
         }
       >
-        <Input
-          label="Folder Name *"
-          value={folderName}
-          onChange={(e) => setFolderName(e.target.value)}
-          placeholder="Production Dashboards"
-          helperText="Choose a descriptive name for your folder"
-          required
-          autoFocus
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && folderName.trim()) {
-              handleCreateFolder()
-            }
-          }}
-        />
+        <div>
+          <label className="block text-sm font-medium text-sre-text mb-2">
+            Folder Name <span className="text-red-500">*</span> <HelpTooltip text="Enter a descriptive name for your folder to organize related dashboards." />
+          </label>
+          <Input
+            value={folderName}
+            onChange={(e) => setFolderName(e.target.value)}
+            placeholder="Production Dashboards"
+            required
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && folderName.trim()) {
+                handleCreateFolder()
+              }
+            }}
+          />
+          <p className="text-xs text-sre-text-muted mt-1">Choose a descriptive name for your folder</p>
+        </div>
       </Modal>
 
       {/* Confirmation Dialog */}

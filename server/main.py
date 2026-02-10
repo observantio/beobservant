@@ -14,8 +14,8 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
 from config import config, constants
-from routers import tempo_router, loki_router, alertmanager_router, grafana_router, auth_router, agents_router, system_router
-from database import init_database, init_db
+from routers import tempo_router, loki_router, alertmanager_router, grafana_router, auth_router, agents_router, system_router, gateway_router
+from database import init_database, init_db, run_column_migration
 from middleware.limits import RequestSizeLimitMiddleware, ConcurrencyLimitMiddleware
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -26,14 +26,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger("beobservant")
 
-# Database is required – all persistent data lives in PostgreSQL.
 logger.info("Connecting to database: %s", config.DATABASE_URL.split("@")[-1])
 init_database(config.DATABASE_URL, config.LOG_LEVEL == "debug")
 init_db()
 logger.info("✓ Database initialized")
 
+run_column_migration("user_api_keys", "otlp_token", "VARCHAR(200)")
+run_column_migration("alert_rules", "org_id", "VARCHAR")
+logger.info("✓ Database migrations checked")
+
 from routers.auth_router import auth_service
 auth_service._lazy_init()
+
+auth_service.backfill_otlp_tokens()
 logger.info("✓ Auth service initialized")
 
 app = FastAPI(
@@ -44,7 +49,6 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Backpressure + payload protection (runs before CORS/routes)
 app.add_middleware(RequestSizeLimitMiddleware, max_bytes=config.MAX_REQUEST_BYTES)
 app.add_middleware(
     ConcurrencyLimitMiddleware,
@@ -90,7 +94,6 @@ async def general_exception_handler(
 async def _shutdown_http_clients() -> None:
     """Close shared httpx.AsyncClient instances for a clean shutdown."""
     clients = []
-    # Router-level service singletons
     for svc in (
         getattr(tempo_router, "tempo_service", None),
         getattr(loki_router, "loki_service", None),
@@ -108,12 +111,12 @@ async def _shutdown_http_clients() -> None:
     if extra is not None:
         clients.append(extra)
 
-    # Close unique clients only
     unique = {id(c): c for c in clients}.values()
     if unique:
         await asyncio.gather(*(c.aclose() for c in unique), return_exceptions=True)
 
 app.include_router(auth_router.router)
+app.include_router(gateway_router.router)
 app.include_router(agents_router.router)
 app.include_router(system_router.router)
 app.include_router(tempo_router.router)

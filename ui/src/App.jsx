@@ -86,7 +86,7 @@ function AppContent() {
           isForced={true}
         />
       )}
-      <main className={isAuthenticated ? "container flex-1" : "flex-1"}>
+      <main className={isAuthenticated ? "container flex-1 mt-4" : "flex-1"}>
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />

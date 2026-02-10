@@ -5,24 +5,25 @@ import { Card, Button, Input, Badge } from '../ui'
 export default function DashboardsTab({ dashboards, query, setQuery, onSearch, openDashboardEditor, onOpenGrafana, onDeleteDashboard }) {
   return (
     <>
-      <div className="mb-6 flex gap-3">
-        <form onSubmit={onSearch} className="flex gap-3 flex-1">
+      <div className="mb-6 flex gap-2">
+        <form onSubmit={onSearch} className="flex gap-2 flex-1">
           <Input
+            size="sm"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search dashboards by name or tag..."
-            className="flex-1"
+            className="flex-1 px-2 py-0.5 text-sm"
           />
-          <Button type="submit">
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <Button type="submit" size="sm">
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             Search
           </Button>
         </form>
         {dashboards.length ? (
-          <Button onClick={() => openDashboardEditor()} variant="primary">
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <Button onClick={() => openDashboardEditor()} variant="primary" size="sm">
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             New Dashboard
@@ -67,12 +68,6 @@ export default function DashboardsTab({ dashboards, query, setQuery, onSearch, o
                       )}
                     </div>
 
-                    {d.uid && (
-                      <p className="text-xs text-sre-text-muted font-mono mt-1">UID: {d.uid}</p>
-                    )}
-                    {d.url && (
-                      <p className="text-xs text-sre-text-subtle mt-1">{d.url}</p>
-                    )}
                   </div>
 
                   <div className="flex gap-2 ml-4">

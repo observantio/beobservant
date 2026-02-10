@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal, Input, Button, Checkbox } from '../ui'
 import { useToast } from '../../contexts/ToastContext'
+import HelpTooltip from '../HelpTooltip'
 import * as api from '../../api'
 
 export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [] }) {
@@ -15,6 +16,16 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
   })
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
+  const [groupSearchQuery, setGroupSearchQuery] = useState('')
+
+  // Filter and limit groups
+  const filteredGroups = groups.filter(group => {
+    const query = groupSearchQuery.toLowerCase()
+    return group.name.toLowerCase().includes(query) || 
+           (group.description && group.description.toLowerCase().includes(query))
+  })
+  const displayedGroups = filteredGroups.slice(0, 5)
+  const hasMoreGroups = filteredGroups.length > 5
 
   const generatePassword = () => {
     const length = 16;
@@ -38,7 +49,6 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
       toast.success('Password copied to clipboard');
     } catch (err) {
       toast.error('Failed to copy password: ' + (err?.message || 'Unknown error'));
-      console.error('Failed to copy password:', err);
     }
   };
 
@@ -104,8 +114,7 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
           }
         }
         return JSON.stringify(err)
-      } catch (e) {
-        console.error('Error formatting API error', e)
+      } catch {
         return 'Unknown error'
       }
     }
@@ -115,6 +124,7 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
       await api.createUser(payload)
       toast.success('User created successfully')
       setFormData({ username: '', email: '', password: '', full_name: '', role: 'user', group_ids: [] })
+      setGroupSearchQuery('')
       onCreated && onCreated()
       onClose && onClose()
     } catch (error) {
@@ -141,115 +151,156 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Username"
-            placeholder="Username"
-            value={formData.username}
-            onChange={(e) => {
-              const val = e.target.value
-              const lower = val.toLowerCase()
-              setFormData({ ...formData, username: lower })
-              // live validation
-              if (errors.username) {
-                const usernameRegex = /^[a-z0-9._-]{3,50}$/
-                if (lower && usernameRegex.test(lower)) {
-                  const { username, ...rest } = errors
-                  setErrors(rest)
-                }
-              }
-            }}
-            required
-            error={errors.username}
-          />
-          <Input
-            label="Email"
-            placeholder="me@company.com"
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            required
-            error={errors.email}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <div className="flex-1">
               <Input
-                label="Password"
-                placeholder="••••••••••••••"
-                type="password"
-                value={formData.password}
+                label="Username"
+                placeholder="Username"
+                value={formData.username}
                 onChange={(e) => {
                   const val = e.target.value
-                  setFormData({ ...formData, password: val })
-                  if (errors.password && val.length >= 8) {
-                    const { password, ...rest } = errors
-                    setErrors(rest)
+                  const lower = val.toLowerCase()
+                  setFormData({ ...formData, username: lower })
+                  // live validation
+                  if (errors.username) {
+                    const usernameRegex = /^[a-z0-9._-]{3,50}$/
+                    if (lower && usernameRegex.test(lower)) {
+                      const { username, ...rest } = errors
+                      setErrors(rest)
+                    }
                   }
                 }}
                 required
-                error={errors.password}
-                helperText={!errors.password && (formData.password || '').length < 8 ? 'Minimum 8 characters' : undefined}
-                className="w-full"
+                error={errors.username}
               />
             </div>
-            <div className="flex-shrink-0 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleGeneratePassword}
-                aria-label="Generate password"
-                className="inline-flex items-center justify-center p-2 rounded-md bg-sre-surface hover:bg-sre-surface-light border border-sre-border"
-                title="Generate password"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582M20 20v-5h-.581M5.5 9A7.5 7.5 0 0119 12.5M18.5 15A7.5 7.5 0 015 11.5" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={handleCopyPassword}
-                aria-label="Copy password"
-                disabled={!formData.password}
-                className="inline-flex items-center justify-center p-2 rounded-md bg-sre-surface hover:bg-sre-surface-light border border-sre-border disabled:opacity-50"
-                title="Copy password"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2M16 20h2a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2h6z" />
-                </svg>
-              </button>
+            <HelpTooltip text="Unique username for login. Must be 3-50 characters, lowercase letters, numbers, dots, underscores, or hyphens only." />
+          </div>
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <Input
+                label="Email"
+                placeholder="me@company.com"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                required
+                error={errors.email}
+              />
             </div>
+            <HelpTooltip text="Primary email address for account notifications and password recovery." />
           </div>
         </div>
 
-        <Input
-          label="Full Name"
-          placeholder="Full Name (optional)"
-          value={formData.full_name}
-          onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-        />
+        <div className="space-y-2">
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <Input
+                    label="Password"
+                    placeholder="••••••••••••••"
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setFormData({ ...formData, password: val })
+                      if (errors.password && val.length >= 8) {
+                        const { password, ...rest } = errors
+                        setErrors(rest)
+                      }
+                    }}
+                    required
+                    error={errors.password}
+                    helperText={!errors.password && (formData.password || '').length < 8 ? `${8 - (formData.password || '').length} characters to go` : undefined}
+                    className="w-full"
+                  />
+                </div>
+                <div className="flex-shrink-0 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleGeneratePassword}
+                    aria-label="Generate password"
+                    className="inline-flex items-center justify-center p-2 rounded-md bg-sre-surface hover:bg-sre-surface-light border border-sre-border"
+                    title="Generate password"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582M20 20v-5h-.581M5.5 9A7.5 7.5 0 0119 12.5M18.5 15A7.5 7.5 0 015 11.5" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyPassword}
+                    aria-label="Copy password"
+                    disabled={!formData.password}
+                    className="inline-flex items-center justify-center p-2 rounded-md bg-sre-surface hover:bg-sre-surface-light border border-sre-border disabled:opacity-50"
+                    title="Copy password"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2M16 20h2a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2h6z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <HelpTooltip text="Secure password for account access. Must be at least 8 characters. Use the generate button for a strong random password." />
+          </div>
+        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-sre-text mb-2">Role</label>
-          <select
-            value={formData.role}
-            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-            className="w-full px-4 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text"
-          >
-            <option value="viewer">Viewer</option>
-            <option value="user">User</option>
-            <option value="admin">Admin</option>
-          </select>
+        <div className="flex items-start gap-2">
+          <div className="flex-1">
+            <Input
+              label="Full Name"
+              placeholder="Full Name (optional)"
+              value={formData.full_name}
+              onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+            />
+          </div>
+          <HelpTooltip text="Display name shown throughout the interface. Optional field for better user identification." />
+        </div>
+
+        <div className="flex items-start gap-2">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-sre-text mb-2">Role</label>
+            <select
+              value={formData.role}
+              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+              className="w-full px-4 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text"
+            >
+              <option value="viewer">Viewer</option>
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <HelpTooltip text="User role determines baseline permissions. Admin has full access, User can read and modify most resources, Viewer has read-only access." />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-sre-text mb-2">Groups (optional)</label>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="block text-sm font-medium text-sre-text">Groups (optional)</label>
+            <HelpTooltip text="Assign user to groups for additional permissions beyond their role. Users inherit all permissions from assigned groups." />
+          </div>
+          
+          {groups.length > 0 && (
+            <div className="mb-3">
+              <Input
+                placeholder="Search groups..."
+                value={groupSearchQuery}
+                onChange={(e) => setGroupSearchQuery(e.target.value)}
+                className="text-sm"
+              />
+            </div>
+          )}
+          
           <div className="max-h-48 overflow-y-auto border border-sre-border rounded p-3 bg-sre-surface">
             {groups.length === 0 && (
               <p className="text-sm text-sre-text-muted">No groups available</p>
             )}
+            {filteredGroups.length === 0 && groups.length > 0 && (
+              <p className="text-sm text-sre-text-muted">No groups match your search</p>
+            )}
             <div className="grid gap-3">
-              {groups.map((group) => (
+              {displayedGroups.map((group) => (
                 <div key={group.id} className="flex items-start gap-3 p-3 bg-sre-bg-alt border border-sre-border rounded-lg">
                   <div className="flex-shrink-0 pt-1">
                     <Checkbox
@@ -276,6 +327,11 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
                 </div>
               ))}
             </div>
+            {hasMoreGroups && (
+              <div className="text-xs text-sre-text-muted text-center py-2 mt-2 border-t border-sre-border">
+                Showing first 5 of {filteredGroups.length} groups. Use search to find specific groups.
+              </div>
+            )}
           </div>
         </div>
       </form>

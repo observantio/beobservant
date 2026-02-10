@@ -146,4 +146,71 @@ select.text-xs {
   background-size: 0.85rem;
 }
 
+/* ReactFlow Custom Styles */
+.react-flow__node-service {
+  border-radius: 12px !important;
+}
+
+.react-flow__controls {
+  background: var(--sre-surface) !important;
+  border: 1px solid var(--sre-border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.react-flow__controls-button {
+  background: var(--sre-bg) !important;
+  border: 1px solid var(--sre-border) !important;
+  color: var(--sre-text) !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--sre-primary) !important;
+  color: white !important;
+  transform: scale(1.05) !important;
+}
+
+.react-flow__minimap {
+  background: var(--sre-surface) !important;
+  border: 1px solid var(--sre-border) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+.react-flow__minimap-mask {
+  fill: rgba(0, 0, 0, 0.1) !important;
+}
+
+.react-flow__minimap-node {
+  fill: var(--sre-surface) !important;
+  stroke: var(--sre-border) !important;
+  stroke-width: 1px !important;
+}
+
+.react-flow__edge-path {
+  stroke-dasharray: 5, 5 !important;
+  animation: flow 2s linear infinite !important;
+}
+
+@keyframes flow {
+  0% { stroke-dashoffset: 10; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 5, 5 !important;
+  animation: flow 1.5s linear infinite !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 6px rgba(14, 165, 233, 0.5)) !important;
+}
+
+.react-flow__node.selected {
+  box-shadow: 0 0 0 2px var(--sre-primary) !important;
+}
+
 
