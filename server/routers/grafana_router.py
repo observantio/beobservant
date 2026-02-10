@@ -13,6 +13,8 @@ from database import get_db
 from sqlalchemy.orm import Session
 
 from routers.auth_router import require_permission
+from middleware.rate_limit import enforce_rate_limit
+from config import config
 
 router = APIRouter(
     prefix="/api/grafana",
@@ -36,6 +38,7 @@ async def search_dashboards(
     current_user: TokenData = Depends(require_permission(Permission.READ_DASHBOARDS)),
     db: Session = Depends(get_db)
 ) -> List[DashboardSearchResult]:
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     results = await grafana_proxy_service.search_dashboards(
         db=db,
         user_id=current_user.user_id,
@@ -58,6 +61,7 @@ async def get_dashboard(
     
     Returns the complete dashboard JSON including all panels and configuration.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     dashboard = await grafana_proxy_service.get_dashboard(
         db=db,
         uid=uid,
@@ -85,6 +89,7 @@ async def create_dashboard(
     - group: Visible to specified groups
     - tenant: Visible to all users in tenant
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     if visibility not in ["private", "group", "tenant"]:
         raise HTTPException(status_code=400, detail="Invalid visibility value")
     
@@ -116,6 +121,7 @@ async def update_dashboard(
     Updates the dashboard with the specified UID. Only the owner can update.
     Optionally update visibility settings.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     if visibility and visibility not in ["private", "group", "tenant"]:
         raise HTTPException(status_code=400, detail="Invalid visibility value")
     
@@ -147,6 +153,7 @@ async def delete_dashboard(
     
     Permanently deletes the dashboard. Only the owner can delete.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     success = await grafana_proxy_service.delete_dashboard(
         db=db,
         uid=uid,
@@ -173,6 +180,7 @@ async def get_datasources(
     
     Returns a list of datasources accessible to the current user.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     datasources = await grafana_proxy_service.get_datasources(
         db=db,
         user_id=current_user.user_id,
@@ -192,6 +200,7 @@ async def get_datasource_by_uid(
     
     Returns detailed information about a specific datasource.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     datasource = await grafana_proxy_service.get_datasource(
         db=db,
         uid=uid,
@@ -215,6 +224,7 @@ async def get_datasource_by_name(
     Note: This endpoint queries Grafana directly without multi-tenant filtering.
     For secure access, use the UID-based endpoint.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     datasource = await grafana_service.get_datasource_by_name(name)
     if not datasource:
         raise HTTPException(status_code=404, detail=f"Datasource {name} not found")
@@ -246,6 +256,7 @@ async def create_datasource(
     
     Creates a new datasource in Grafana with specified visibility.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     if visibility not in ["private", "group", "tenant"]:
         raise HTTPException(status_code=400, detail="Invalid visibility value")
     
@@ -276,6 +287,7 @@ async def update_datasource(
     
     Updates the datasource configuration. Only the owner can update.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     if visibility and visibility not in ["private", "group", "tenant"]:
         raise HTTPException(status_code=400, detail="Invalid visibility value")
     
@@ -307,6 +319,7 @@ async def delete_datasource(
     
     Permanently deletes the datasource. Only the owner can delete.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     success = await grafana_proxy_service.delete_datasource(
         db=db,
         uid=uid,
@@ -331,6 +344,7 @@ async def get_folders(current_user: TokenData = Depends(require_permission(Permi
     Returns a list of all dashboard folders in Grafana.
     Note: Folders are not currently multi-tenant filtered.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     folders = await grafana_service.get_folders()
     return folders
 
@@ -344,6 +358,7 @@ async def create_folder(
     
     Creates a new folder for organizing dashboards.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     result = await grafana_service.create_folder(title)
     if not result:
         raise HTTPException(status_code=500, detail="Failed to create folder")
@@ -356,6 +371,7 @@ async def delete_folder(uid: str, current_user: TokenData = Depends(require_perm
     
     Permanently deletes the folder with the specified UID.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:grafana", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     success = await grafana_service.delete_folder(uid)
     if not success:
         raise HTTPException(

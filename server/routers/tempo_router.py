@@ -8,6 +8,7 @@ from config import config
 from models.auth_models import Permission, TokenData
 
 from routers.auth_router import require_permission
+from middleware.rate_limit import enforce_rate_limit
 
 router = APIRouter(
     prefix="/api/tempo",
@@ -40,6 +41,7 @@ async def search_traces(
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT, description="Maximum traces to return"),
     current_user: TokenData = Depends(require_permission(Permission.READ_TRACES))
 ) -> TraceResponse:
+    enforce_rate_limit(key=f"user:{current_user.user_id}:tempo", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     query = TraceQuery(
         service=service,
         operation=operation,
@@ -66,6 +68,7 @@ async def get_trace(
     request: Request,
     current_user: TokenData = Depends(require_permission(Permission.READ_TRACES))
 ) -> Trace:
+    enforce_rate_limit(key=f"user:{current_user.user_id}:tempo", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user)
     trace = await tempo_service.get_trace(trace_id, tenant_id=tenant_id)
     if not trace:
@@ -83,6 +86,7 @@ async def get_trace(
     description="Return list of services that have traces"
 )
 async def get_services(request: Request, current_user: TokenData = Depends(require_permission(Permission.READ_TRACES))) -> List[str]:
+    enforce_rate_limit(key=f"user:{current_user.user_id}:tempo", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user)
     services = await tempo_service.get_services(tenant_id=tenant_id)
     return services
@@ -98,6 +102,7 @@ async def get_operations(
     request: Request,
     current_user: TokenData = Depends(require_permission(Permission.READ_TRACES))
 ) -> List[str]:
+    enforce_rate_limit(key=f"user:{current_user.user_id}:tempo", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user)
     operations = await tempo_service.get_operations(service, tenant_id=tenant_id)
     return operations
@@ -119,6 +124,7 @@ async def get_trace_metrics(
     
     Returns aggregated metrics like trace count, span count, durations, and error rates.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:tempo", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user) if request else getattr(current_user, 'org_id', config.DEFAULT_ORG_ID)
     metrics = await tempo_service.get_trace_metrics(service, start, end, tenant_id=tenant_id)
     return metrics

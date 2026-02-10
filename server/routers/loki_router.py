@@ -9,6 +9,7 @@ from services.loki_service import LokiService
 from config import config
 from models.auth_models import Permission, TokenData
 from routers.auth_router import require_permission
+from middleware.rate_limit import enforce_rate_limit
 
 START_TIME_DESC = "Start time in nanoseconds"
 END_TIME_DESC = "End time in nanoseconds"
@@ -43,6 +44,7 @@ async def query_logs(
     step: Optional[int] = Query(None, description="Query resolution step in seconds"),
     current_user: TokenData = Depends(require_permission(Permission.READ_LOGS))
 ) -> LogResponse:
+    enforce_rate_limit(key=f"user:{current_user.user_id}:loki", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     log_query = LogQuery(
         query=query,
         limit=limit,
@@ -68,6 +70,7 @@ async def query_logs_instant(
     
     Returns logs matching the query at the specified timestamp (or now if not provided).
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:loki", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user)
     result = await loki_service.query_logs_instant(query, time, tenant_id=tenant_id)
     return result
@@ -84,6 +87,7 @@ async def get_labels(
     
     Returns a list of label names that can be used in queries.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:loki", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user)
     result = await loki_service.get_labels(start, end, tenant_id=tenant_id)
     return result
@@ -102,6 +106,7 @@ async def get_label_values(
     
     Returns all unique values for the given label within the time range.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:loki", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user)
     effective_query = query
     result = await loki_service.get_label_values(label, start, end, effective_query, tenant_id=tenant_id)
@@ -118,6 +123,7 @@ async def search_logs(
     
     Searches for logs containing the specified pattern, optionally filtered by labels.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:loki", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user)
     result = await loki_service.search_logs_by_pattern(
         pattern=payload.pattern,
@@ -141,6 +147,7 @@ async def filter_logs(
     Apply label-based filtering with optional additional text filters.
     Example labels: {"app": "nginx", "level": "error"}
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:loki", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user)
     result = await loki_service.filter_logs(
         labels=payload.labels or {},
@@ -167,6 +174,7 @@ async def aggregate_logs(
     Supports aggregation functions like rate(), count_over_time(), bytes_over_time(), etc.
     Example: rate({app="nginx"}[5m])
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:loki", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user)
     result = await loki_service.aggregate_logs(query, start, end, step, tenant_id=tenant_id)
     return result
@@ -185,6 +193,7 @@ async def get_log_volume(
     
     Returns the number of log entries over time for the given query.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:loki", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     tenant_id = _resolve_tenant_id(request, current_user)
     result = await loki_service.get_log_volume(query, start, end, step, tenant_id=tenant_id)
     return result

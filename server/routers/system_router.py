@@ -5,6 +5,8 @@ import logging
 from services.system_service import SystemService
 from models.auth_models import Permission, TokenData
 from routers.auth_router import require_permission
+from middleware.rate_limit import enforce_rate_limit
+from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,7 @@ async def get_system_metrics(
     Get system metrics including CPU, memory, disk, network utilization and stress status.
     Requires READ_AGENTS permission.
     """
+    enforce_rate_limit(key=f"user:{current_user.user_id}:system", limit=config.RATE_LIMIT_USER_PER_MINUTE, window_seconds=60)
     try:
         return system_service.get_all_metrics()
     except Exception as e:
