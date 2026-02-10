@@ -1,16 +1,17 @@
 import { useState } from 'react'
-import { Modal, Input, Button } from '../ui'
+import { Modal, Input, Button, Checkbox } from '../ui'
 import { useToast } from '../../contexts/ToastContext'
 import * as api from '../../api'
 
-export default function CreateUserModal({ isOpen, onClose, onCreated }) {
+export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [] }) {
   const toast = useToast()
   const [formData, setFormData] = useState({
     username: '',
     email: '',
     password: '',
     full_name: '',
-    role: 'user'
+    role: 'user',
+    group_ids: []
   })
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
@@ -47,16 +48,23 @@ export default function CreateUserModal({ isOpen, onClose, onCreated }) {
     // Client-side validation
     const email = (formData.email || '').trim()
     const password = formData.password || ''
-    const username = (formData.username || '').trim()
+    const usernameRaw = (formData.username || '').trim()
+    const username = usernameRaw.toLowerCase()
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const usernameRegex = /^[a-z0-9._-]{3,50}$/
     const newErrors = {}
     if (!username) newErrors.username = 'Please enter a username'
+    else if (!usernameRegex.test(username)) newErrors.username = 'Username must be 3-50 chars and use a-z, 0-9, ., _ or - (no spaces)'
     if (!emailRegex.test(email)) newErrors.email = 'Please enter a valid email address'
     if (password.length < 8) newErrors.password = 'Password must be at least 8 characters'
     if (Object.keys(newErrors).length) {
       setErrors(newErrors)
       return
     }
+
+    // Ensure username sent to API is normalized
+    const payload = { ...formData, username: username }
+
 
     setLoading(true)
 
@@ -104,9 +112,9 @@ export default function CreateUserModal({ isOpen, onClose, onCreated }) {
 
     try {
       setErrors({})
-      await api.createUser(formData)
+      await api.createUser(payload)
       toast.success('User created successfully')
-      setFormData({ username: '', email: '', password: '', full_name: '', role: 'user' })
+      setFormData({ username: '', email: '', password: '', full_name: '', role: 'user', group_ids: [] })
       onCreated && onCreated()
       onClose && onClose()
     } catch (error) {
@@ -121,6 +129,7 @@ export default function CreateUserModal({ isOpen, onClose, onCreated }) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
+      closeOnOverlayClick={false}
       title="Create User"
       size="lg"
       footer={
@@ -134,15 +143,27 @@ export default function CreateUserModal({ isOpen, onClose, onCreated }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="Username"
-            placeholder="stefa"
+            placeholder="Username"
             value={formData.username}
-            onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+            onChange={(e) => {
+              const val = e.target.value
+              const lower = val.toLowerCase()
+              setFormData({ ...formData, username: lower })
+              // live validation
+              if (errors.username) {
+                const usernameRegex = /^[a-z0-9._-]{3,50}$/
+                if (lower && usernameRegex.test(lower)) {
+                  const { username, ...rest } = errors
+                  setErrors(rest)
+                }
+              }
+            }}
             required
             error={errors.username}
           />
           <Input
             label="Email"
-            placeholder="you@example.com"
+            placeholder="me@company.com"
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -159,10 +180,17 @@ export default function CreateUserModal({ isOpen, onClose, onCreated }) {
                 placeholder="••••••••••••••"
                 type="password"
                 value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setFormData({ ...formData, password: val })
+                  if (errors.password && val.length >= 8) {
+                    const { password, ...rest } = errors
+                    setErrors(rest)
+                  }
+                }}
                 required
                 error={errors.password}
-                helperText="Minimum 8 characters"
+                helperText={!errors.password && (formData.password || '').length < 8 ? 'Minimum 8 characters' : undefined}
                 className="w-full"
               />
             </div>
@@ -212,6 +240,43 @@ export default function CreateUserModal({ isOpen, onClose, onCreated }) {
             <option value="user">User</option>
             <option value="admin">Admin</option>
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-sre-text mb-2">Groups (optional)</label>
+          <div className="max-h-48 overflow-y-auto border border-sre-border rounded p-3 bg-sre-surface">
+            {groups.length === 0 && (
+              <p className="text-sm text-sre-text-muted">No groups available</p>
+            )}
+            <div className="grid gap-3">
+              {groups.map((group) => (
+                <div key={group.id} className="flex items-start gap-3 p-3 bg-sre-bg-alt border border-sre-border rounded-lg">
+                  <div className="flex-shrink-0 pt-1">
+                    <Checkbox
+                      checked={formData.group_ids.includes(group.id)}
+                      onChange={() => {
+                        const next = new Set(formData.group_ids)
+                        if (next.has(group.id)) {
+                          next.delete(group.id)
+                        } else {
+                          next.add(group.id)
+                        }
+                        setFormData({ ...formData, group_ids: Array.from(next) })
+                      }}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium text-sre-text text-sm">{group.name}</div>
+                    </div>
+                    {group.description && (
+                      <div className="text-xs text-sre-text-muted mt-1 truncate" title={group.description}>{group.description}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </form>
     </Modal>

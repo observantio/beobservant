@@ -517,7 +517,7 @@ export default function LokiPage() {
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-sre-text mb-2"><span className="material-icons text-blue-600 text-3xl align-middle">search</span>{' '}Logs</h1>
+            <h1 className="text-3xl font-bold text-sre-text mb-2"><span className="material-icons text-sre-primary text-3xl align-middle">view_stream</span>{' '}Logs</h1>
             <p className="text-sre-text-muted">Query and analyze logs using LogQL</p>
           </div>
         </div>

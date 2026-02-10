@@ -1,15 +1,16 @@
 """AlertManager API router."""
 from fastapi import APIRouter, HTTPException, Query, Body, Request, status, Depends
 from typing import Optional, List, Dict
+import json
 import logging
 
 from models.alertmanager_models import (
-    Alert, AlertGroup, Silence, SilenceCreate,
+    Alert, AlertGroup, Silence, SilenceCreate, SilenceCreateRequest, Visibility,
     AlertManagerStatus, AlertRule, AlertRuleCreate,
     NotificationChannel, NotificationChannelCreate
 )
 from services.alertmanager_service import AlertManagerService
-from services.storage_service import StorageService
+from services.storage_db_service import DatabaseStorageService
 from services.notification_service import NotificationService
 from config import constants
 from models.alertmanager_models import AlertStatus, AlertState
@@ -34,6 +35,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 INVALID_FILTER_LABELS_JSON = "Invalid filter_labels JSON"
+SILENCE_META_PREFIX = "[beobservant-meta]"
 
 router = APIRouter(
     prefix="/api/alertmanager",
@@ -43,8 +45,85 @@ router = APIRouter(
 webhook_router = APIRouter(tags=["alertmanager-webhooks"])
 
 alertmanager_service = AlertManagerService()
-storage_service = StorageService()
 notification_service = NotificationService()
+storage_service = DatabaseStorageService()
+
+
+def _normalize_visibility(value: Optional[str]) -> str:
+    if isinstance(value, Visibility):
+        value = value.value
+    if not value:
+        return Visibility.PRIVATE.value
+    normalized = value.lower()
+    if normalized == "public":
+        normalized = Visibility.TENANT.value
+    if normalized not in {Visibility.PRIVATE.value, Visibility.GROUP.value, Visibility.TENANT.value}:
+        raise HTTPException(status_code=400, detail="Invalid visibility value")
+    return normalized
+
+
+def _encode_silence_comment(comment: str, visibility: str, shared_group_ids: List[str]) -> str:
+    meta = {
+        "visibility": visibility,
+        "shared_group_ids": shared_group_ids or []
+    }
+    payload = json.dumps(meta, separators=(",", ":"))
+    return f"{SILENCE_META_PREFIX}{payload}\n{comment}"
+
+
+def _decode_silence_comment(comment: Optional[str]) -> Dict[str, object]:
+    if not comment or not comment.startswith(SILENCE_META_PREFIX):
+        return {
+            "comment": comment or "",
+            "visibility": Visibility.TENANT.value,
+            "shared_group_ids": []
+        }
+
+    raw = comment[len(SILENCE_META_PREFIX):]
+    if "\n" in raw:
+        meta_str, comment_text = raw.split("\n", 1)
+    else:
+        meta_str, comment_text = raw, ""
+
+    try:
+        meta = json.loads(meta_str)
+    except json.JSONDecodeError:
+        return {
+            "comment": comment,
+            "visibility": Visibility.TENANT.value,
+            "shared_group_ids": []
+        }
+
+    visibility = _normalize_visibility(meta.get("visibility") or Visibility.TENANT.value)
+    shared_group_ids = meta.get("shared_group_ids") or []
+    if not isinstance(shared_group_ids, list):
+        shared_group_ids = []
+
+    return {
+        "comment": comment_text,
+        "visibility": visibility,
+        "shared_group_ids": shared_group_ids
+    }
+
+
+def _apply_silence_metadata(silence: Silence) -> Silence:
+    data = _decode_silence_comment(silence.comment)
+    silence.comment = data["comment"]
+    silence.visibility = data["visibility"]
+    silence.shared_group_ids = data["shared_group_ids"]
+    return silence
+
+
+def _silence_accessible(silence: Silence, current_user: TokenData) -> bool:
+    visibility = silence.visibility or Visibility.TENANT.value
+    if silence.created_by == current_user.username:
+        return True
+    if visibility == Visibility.TENANT.value:
+        return True
+    if visibility == Visibility.GROUP.value:
+        user_group_ids = getattr(current_user, "group_ids", []) or []
+        return any(gid in silence.shared_group_ids for gid in user_group_ids)
+    return False
 
 
 @webhook_router.post(
@@ -137,7 +216,6 @@ async def get_alerts(
     
     Returns all alerts from AlertManager, optionally filtered by state and labels.
     """
-    import json
     labels = None
     if filter_labels:
         try:
@@ -163,7 +241,6 @@ async def get_alert_groups(
     
     Returns alerts grouped by their grouping labels.
     """
-    import json
     labels = None
     if filter_labels:
         try:
@@ -199,7 +276,6 @@ async def delete_alerts(
     
     Creates a short silence to suppress matching alerts (AlertManager doesn't support direct deletion).
     """
-    import json
     try:
         labels = json.loads(filter_labels)
     except json.JSONDecodeError:
@@ -223,7 +299,6 @@ async def get_silences(
     
     Returns all active and expired silences, optionally filtered by labels.
     """
-    import json
     labels = None
     if filter_labels:
         try:
@@ -232,7 +307,12 @@ async def get_silences(
             raise HTTPException(status_code=400, detail=INVALID_FILTER_LABELS_JSON)
     
     silences = await alertmanager_service.get_silences(filter_labels=labels)
-    return silences
+    visible_silences = []
+    for silence in silences:
+        silence = _apply_silence_metadata(silence)
+        if _silence_accessible(silence, current_user):
+            visible_silences.append(silence)
+    return visible_silences
 
 
 @router.get("/silences/{silence_id}", response_model=Silence)
@@ -247,19 +327,35 @@ async def get_silence(
     silence = await alertmanager_service.get_silence(silence_id)
     if not silence:
         raise HTTPException(status_code=404, detail=f"Silence {silence_id} not found")
+    silence = _apply_silence_metadata(silence)
+    if not _silence_accessible(silence, current_user):
+        raise HTTPException(status_code=404, detail=f"Silence {silence_id} not found")
     return silence
 
 
 @router.post("/silences", response_model=Dict[str, str])
 async def create_silence(
-    silence: SilenceCreate = Body(..., description="Silence configuration"),
+    silence: SilenceCreateRequest = Body(..., description="Silence configuration"),
     current_user: TokenData = Depends(require_permission(Permission.WRITE_ALERTS))
 ):
     """Create a new silence.
     
     Creates a silence that will suppress alerts matching the specified matchers.
     """
-    silence_id = await alertmanager_service.create_silence(silence)
+    visibility = _normalize_visibility(silence.visibility)
+    shared_group_ids = silence.shared_group_ids if visibility == Visibility.GROUP.value else []
+    comment = _encode_silence_comment(silence.comment, visibility, shared_group_ids)
+    created_by = current_user.username or current_user.user_id
+
+    payload = SilenceCreate(
+        matchers=silence.matchers,
+        starts_at=silence.starts_at,
+        ends_at=silence.ends_at,
+        created_by=created_by,
+        comment=comment
+    )
+
+    silence_id = await alertmanager_service.create_silence(payload)
     if not silence_id:
         raise HTTPException(status_code=500, detail="Failed to create silence")
     return {"silenceID": silence_id, "status": "success"}
@@ -268,14 +364,34 @@ async def create_silence(
 @router.put("/silences/{silence_id}", response_model=Dict[str, str])
 async def update_silence(
     silence_id: str,
-    silence: SilenceCreate = Body(..., description="Updated silence configuration"),
+    silence: SilenceCreateRequest = Body(..., description="Updated silence configuration"),
     current_user: TokenData = Depends(require_permission(Permission.WRITE_ALERTS))
 ):
     """Update an existing silence.
     
     Deletes the old silence and creates a new one with the updated configuration.
     """
-    new_id = await alertmanager_service.update_silence(silence_id, silence)
+    existing = await alertmanager_service.get_silence(silence_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Silence {silence_id} not found")
+    existing = _apply_silence_metadata(existing)
+    if not _silence_accessible(existing, current_user):
+        raise HTTPException(status_code=404, detail=f"Silence {silence_id} not found")
+
+    visibility = _normalize_visibility(silence.visibility)
+    shared_group_ids = silence.shared_group_ids if visibility == Visibility.GROUP.value else []
+    comment = _encode_silence_comment(silence.comment, visibility, shared_group_ids)
+    created_by = current_user.username or current_user.user_id
+
+    payload = SilenceCreate(
+        matchers=silence.matchers,
+        starts_at=silence.starts_at,
+        ends_at=silence.ends_at,
+        created_by=created_by,
+        comment=comment
+    )
+
+    new_id = await alertmanager_service.update_silence(silence_id, payload)
     if not new_id:
         raise HTTPException(status_code=500, detail="Failed to update silence")
     return {"silenceID": new_id, "status": "success", "message": "Silence updated"}
@@ -290,6 +406,13 @@ async def delete_silence(
     
     Immediately expires the specified silence.
     """
+    existing = await alertmanager_service.get_silence(silence_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Silence {silence_id} not found or already deleted")
+    existing = _apply_silence_metadata(existing)
+    if not _silence_accessible(existing, current_user):
+        raise HTTPException(status_code=404, detail=f"Silence {silence_id} not found or already deleted")
+
     success = await alertmanager_service.delete_silence(silence_id)
     if not success:
         raise HTTPException(status_code=404, detail=f"Silence {silence_id} not found or already deleted")

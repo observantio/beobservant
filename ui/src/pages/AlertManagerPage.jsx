@@ -6,7 +6,7 @@ import {
   getNotificationChannels, createNotificationChannel, updateNotificationChannel,
   deleteNotificationChannel, testNotificationChannel, testAlertRule
 } from '../api'
-import { Card, Button, Select, Alert, Badge, Spinner } from '../components/ui'
+import { Card, Button, Select, Alert, Badge, Spinner, Modal } from '../components/ui'
 import ConfirmModal from '../components/ConfirmModal'
 import RuleEditor from '../components/alertmanager/RuleEditor'
 import ChannelEditor from '../components/alertmanager/ChannelEditor'
@@ -59,6 +59,29 @@ export default function AlertManagerPage() {
   })
 
   const [testDialog, setTestDialog] = useState({ isOpen: false, title: '', message: '' })
+
+  const defaultMetricKeys = ['activeAlerts','alertRules','channels','silences']
+  const [metricOrder, setMetricOrder] = useState(() => {
+    try {
+      const raw = localStorage.getItem('alertmanager-metric-order')
+      if (!raw) return defaultMetricKeys
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return defaultMetricKeys
+      const setp = new Set(parsed)
+      if (!defaultMetricKeys.every(k => setp.has(k))) return defaultMetricKeys
+      return parsed
+    } catch (e) {
+      return defaultMetricKeys
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('alertmanager-metric-order', JSON.stringify(metricOrder))
+    } catch (e) {
+      console.warn('Failed to persist metric order', e)
+    }
+  }, [metricOrder])
 
   function handleApiError(e) {
     if (!e) return
@@ -243,29 +266,90 @@ export default function AlertManagerPage() {
         </Alert>
       )}
 
+      {/* Draggable Metric Cards (React state-backed swap behavior) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Card className="p-4 pl-0">
-          <div className="text-sre-text-muted text-xs mb-1">Active Alerts</div>
-          <div className="text-2xl font-bold text-sre-text">{stats.totalAlerts}</div>
-          <div className="text-xs text-sre-text-muted mt-1">
-            <span className="text-red-500">{stats.critical} critical</span> · <span className="text-yellow-500">{stats.warning} warning</span>
-          </div>
-        </Card>
-        <Card className="p-4 pl-0">
-          <div className="text-sre-text-muted text-xs mb-1">Alert Rules</div>
-          <div className="text-2xl font-bold text-sre-text">{stats.enabledRules}/{stats.totalRules}</div>
-          <div className="text-xs text-sre-text-muted mt-1">enabled</div>
-        </Card>
-        <Card className="p-4 pl-0">
-          <div className="text-sre-text-muted text-xs mb-1">Notification Channels</div>
-          <div className="text-2xl font-bold text-sre-text">{stats.enabledChannels}/{stats.totalChannels}</div>
-          <div className="text-xs text-sre-text-muted mt-1">active</div>
-        </Card>
-        <Card className="p-4 pl-0">
-          <div className="text-sre-text-muted text-xs mb-1">Active Silences</div>
-          <div className="text-2xl font-bold text-sre-text">{stats.activeSilences}</div>
-          <div className="text-xs text-sre-text-muted mt-1">muting alerts</div>
-        </Card>
+        {metricOrder.map((key) => {
+          let content = null
+          if (key === 'activeAlerts') {
+            content = (
+              <Card className="p-4 relative overflow-visible">
+                <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors">
+                  <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
+                </div>
+                <div className="text-sre-text-muted text-xs mb-1">Active Alerts</div>
+                <div className="text-2xl font-bold text-sre-text">{stats.totalAlerts}</div>
+                <div className="text-xs text-sre-text-muted mt-1"><span className="text-red-500">{stats.critical} critical</span> · <span className="text-yellow-500">{stats.warning} warning</span></div>
+              </Card>
+            )
+          } else if (key === 'alertRules') {
+            content = (
+              <Card className="p-4 relative overflow-visible">
+                <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors">
+                  <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
+                </div>
+                <div className="text-sre-text-muted text-xs mb-1">Alert Rules</div>
+                <div className="text-2xl font-bold text-sre-text">{stats.enabledRules}/{stats.totalRules}</div>
+                <div className="text-xs text-sre-text-muted mt-1">enabled</div>
+              </Card>
+            )
+          } else if (key === 'channels') {
+            content = (
+              <Card className="p-4 relative overflow-visible">
+                <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors">
+                  <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
+                </div>
+                <div className="text-sre-text-muted text-xs mb-1">Notification Channels</div>
+                <div className="text-2xl font-bold text-sre-text">{stats.enabledChannels}/{stats.totalChannels}</div>
+                <div className="text-xs text-sre-text-muted mt-1">active</div>
+              </Card>
+            )
+          } else {
+            content = (
+              <Card className="p-4 relative overflow-visible">
+                <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors">
+                  <span className="material-icons text-sm drag-handle" aria-hidden>drag_indicator</span>
+                </div>
+                <div className="text-sre-text-muted text-xs mb-1">Active Silences</div>
+                <div className="text-2xl font-bold text-sre-text">{stats.activeSilences}</div>
+                <div className="text-xs text-sre-text-muted mt-1">muting alerts</div>
+              </Card>
+            )
+          }
+
+          return (
+            <div
+              key={key}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/plain', key)
+                e.currentTarget.classList.add('opacity-50','scale-95')
+              }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+              onDrop={(e) => {
+                e.preventDefault()
+                try {
+                  const sourceKey = e.dataTransfer.getData('text/plain')
+                  if (!sourceKey || sourceKey === key) return
+                  const next = [...metricOrder]
+                  const fromIdx = next.indexOf(sourceKey)
+                  const toIdx = next.indexOf(key)
+                  if (fromIdx === -1 || toIdx === -1) return
+                  next[fromIdx] = key
+                  next[toIdx] = sourceKey
+                  setMetricOrder(next)
+                } catch (err) {
+                  /* ignore */
+                }
+              }}
+              onDragEnd={(e) => { e.currentTarget.classList.remove('opacity-50','scale-95') }}
+              title="Drag to rearrange"
+              className="cursor-move transition-transform duration-200 ease-out will-change-transform"
+            >
+              {content}
+            </div>
+          )
+        })}
       </div>
 
       <div className="mb-6 flex gap-2 border-b border-sre-border justify-start items-center">
@@ -279,7 +363,7 @@ export default function AlertManagerPage() {
             type="button"
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 flex items-center gap-2 border-b-2 transition-colors ${
+            className={`pl-0 pr-4 py-2 flex items-center gap-2 border-b-2 transition-colors ${
               activeTab === tab.key
                 ? 'border-sre-primary text-sre-primary'
                 : 'border-transparent text-sre-text-muted hover:text-sre-text'
@@ -369,24 +453,11 @@ export default function AlertManagerPage() {
 
           {activeTab === 'rules' && (
             <>
-              {showRuleEditor ? (
-                <Card title={editingRule ? "Edit Alert Rule" : "Create Alert Rule"}>
-                  <RuleEditor
-                    rule={editingRule}
-                    channels={channels}
-                    onSave={handleSaveRule}
-                    onCancel={() => {
-                      setShowRuleEditor(false)
-                      setEditingRule(null)
-                    }}
-                  />
-                </Card>
-              ) : (
-                <Card
+                    <Card
                   title="Alert Rules"
                   subtitle={`${rules.length} rule${rules.length === 1 ? '' : 's'} configured`}
                   action={rules.length ? (
-                    <Button onClick={() => setShowRuleEditor(true)}>
+                    <Button onClick={() => { setEditingRule(null); setShowRuleEditor(true); }}>
                       <span className="material-icons text-sm mr-2">add</span>{' '}Create Rule
                     </Button>
                   ) : null}
@@ -452,35 +523,22 @@ export default function AlertManagerPage() {
                     <div className="text-center py-12">
                       <span className="material-icons text-6xl text-sre-text-subtle mb-4">rule</span>
                       <p className="text-sre-text-muted mb-4">No alert rules configured</p>
-                      <Button onClick={() => setShowRuleEditor(true)}>
+                      <Button onClick={() => { setEditingRule(null); setShowRuleEditor(true); }}>
                         <span className="material-icons text-sm mr-2">add</span>{' '}Create Your First Rule
                       </Button>
                     </div>
                   )}
                 </Card>
-              )}
             </>
           )}
 
           {activeTab === 'channels' && (
             <>
-              {showChannelEditor ? (
-                <Card title={editingChannel ? "Edit Notification Channel" : "Create Notification Channel"}>
-                  <ChannelEditor
-                    channel={editingChannel}
-                    onSave={handleSaveChannel}
-                    onCancel={() => {
-                      setShowChannelEditor(false)
-                      setEditingChannel(null)
-                    }}
-                  />
-                </Card>
-              ) : (
-                <Card
+                    <Card
                   title="Notification Channels"
                   subtitle={`${channels.length} channel${channels.length === 1 ? '' : 's'} configured`}
                   action={channels.length ? (
-                    <Button onClick={() => setShowChannelEditor(true)}>
+                    <Button onClick={() => { setEditingChannel(null); setShowChannelEditor(true); }}>
                       <span className="material-icons text-sm mr-2">add</span>{' '}Create Channel
                     </Button>
                   ) : null}
@@ -547,27 +605,18 @@ export default function AlertManagerPage() {
                     <div className="text-center py-12">
                       <span className="material-icons text-6xl text-sre-text-subtle mb-4">send</span>
                       <p className="text-sre-text-muted mb-4">No notification channels configured</p>
-                      <Button onClick={() => setShowChannelEditor(true)}>
+                      <Button onClick={() => { setEditingChannel(null); setShowChannelEditor(true); }}>
                         <span className="material-icons text-sm mr-2">add</span>{' '}Create Your First Channel
                       </Button>
                     </div>
                   )}
                 </Card>
-              )}
             </>
           )}
 
           {activeTab === 'silences' && (
             <>
-              {showSilenceForm ? (
-                <Card title="Create Silence">
-                  <SilenceForm
-                    onSave={handleCreateSilence}
-                    onCancel={() => setShowSilenceForm(false)}
-                  />
-                </Card>
-              ) : (
-                <Card
+                    <Card
                   title="Active Silences"
                   subtitle={`${silences.length} silence${silences.length === 1 ? '' : 's'} active`}
                   action={silences.length ? (
@@ -578,43 +627,52 @@ export default function AlertManagerPage() {
                 >
                   {silences.length ? (
                     <div className="space-y-3">
-                      {silences.map((s) => (
-                        <div
-                          key={s.id}
-                          className="p-4 bg-sre-surface/50 border border-sre-border rounded-lg hover:border-sre-primary/30 transition-all"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="material-icons text-sre-warning">volume_off</span>
-                                <Badge variant="warning">Silenced</Badge>
-                                <span className="text-sm text-sre-text-muted">{s.comment}</span>
-                              </div>
-                              <div className="text-xs text-sre-text-muted mb-2">
-                                <span className="font-mono">ID: {s.id}</span>
-                              </div>
-                              {s.matchers?.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {s.matchers.map((m) => (
-                                    <span
-                                      key={`${m.name}-${m.isEqual ? 'eq' : 'neq'}-${m.value}`}
-                                      className="text-xs px-2 py-0.5 bg-sre-surface border border-sre-border rounded text-sre-text"
-                                    >
-                                      {m.name}{m.isEqual ? '=' : '!='}{m.value}
-                                    </span>
-                                  ))}
+                      {silences.map((s) => {
+                        const visibilityLabel = s.visibility === 'tenant'
+                          ? 'Public'
+                          : s.visibility === 'group'
+                            ? 'Group'
+                            : 'Private'
+
+                        return (
+                          <div
+                            key={s.id}
+                            className="p-4 bg-sre-surface/50 border border-sre-border rounded-lg hover:border-sre-primary/30 transition-all"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="material-icons text-sre-warning">volume_off</span>
+                                  <Badge variant="warning">Silenced</Badge>
+                                  <Badge variant="default">{visibilityLabel}</Badge>
+                                  <span className="text-sm text-sre-text-muted">{s.comment}</span>
                                 </div>
-                              )}
-                              <div className="text-xs text-sre-text-muted mt-2">
-                                {new Date(s.starts_at || s.startsAt).toLocaleString()} → {new Date(s.ends_at || s.endsAt).toLocaleString()}
+                                <div className="text-xs text-sre-text-muted mb-2">
+                                  <span className="font-mono">ID: {s.id}</span>
+                                </div>
+                                {s.matchers?.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {s.matchers.map((m) => (
+                                      <span
+                                        key={`${m.name}-${m.isEqual ? 'eq' : 'neq'}-${m.value}`}
+                                        className="text-xs px-2 py-0.5 bg-sre-surface border border-sre-border rounded text-sre-text"
+                                      >
+                                        {m.name}{m.isEqual ? '=' : '!='}{m.value}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="text-xs text-sre-text-muted mt-2">
+                                  {new Date(s.starts_at || s.startsAt).toLocaleString()} → {new Date(s.ends_at || s.endsAt).toLocaleString()}
+                                </div>
                               </div>
+                              <Button variant="ghost" onClick={() => handleDeleteSilence(s.id)}>
+                                <span className="material-icons text-sm">delete</span>
+                              </Button>
                             </div>
-                            <Button variant="ghost" onClick={() => handleDeleteSilence(s.id)}>
-                              <span className="material-icons text-sm">delete</span>
-                            </Button>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-12">
@@ -627,11 +685,55 @@ export default function AlertManagerPage() {
                     </div>
                   )}
                 </Card>
-              )}
             </>
           )}
         </>
       )}
+
+      {/* Rule Editor Modal */}
+      <Modal
+        isOpen={showRuleEditor}
+        onClose={() => { setShowRuleEditor(false); setEditingRule(null); }}
+        title={editingRule ? 'Edit Alert Rule' : 'Create Alert Rule'}
+        size="lg"
+        closeOnOverlayClick={false}
+      >
+        <RuleEditor
+          rule={editingRule}
+          channels={channels}
+          onSave={(data) => { handleSaveRule(data); setShowRuleEditor(false); setEditingRule(null); }}
+          onCancel={() => { setShowRuleEditor(false); setEditingRule(null); }}
+        />
+      </Modal>
+
+      {/* Channel Editor Modal */}
+      <Modal
+        isOpen={showChannelEditor}
+        onClose={() => { setShowChannelEditor(false); setEditingChannel(null); }}
+        title={editingChannel ? 'Edit Notification Channel' : 'Create Notification Channel'}
+        size="lg"
+        closeOnOverlayClick={false}
+      >
+        <ChannelEditor
+          channel={editingChannel}
+          onSave={(data) => { handleSaveChannel(data); setShowChannelEditor(false); setEditingChannel(null); }}
+          onCancel={() => { setShowChannelEditor(false); setEditingChannel(null); }}
+        />
+      </Modal>
+
+      {/* Silence Form Modal */}
+      <Modal
+        isOpen={showSilenceForm}
+        onClose={() => setShowSilenceForm(false)}
+        title="Create Silence"
+        size="md"
+        closeOnOverlayClick={false}
+      >
+        <SilenceForm
+          onSave={(data) => { handleCreateSilence(data); setShowSilenceForm(false); }}
+          onCancel={() => setShowSilenceForm(false)}
+        />
+      </Modal>
 
       <ConfirmModal
         isOpen={testDialog.isOpen}

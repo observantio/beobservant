@@ -7,15 +7,11 @@ from config import config
 from models.auth_models import (
     LoginRequest, RegisterRequest, Token, UserResponse,
     UserCreate, UserUpdate, UserPasswordUpdate,
-    Group, GroupCreate, GroupUpdate, TokenData, Permission, ROLE_PERMISSIONS,
+    Group, GroupCreate, GroupUpdate, GroupMembersUpdate, TokenData, Permission, ROLE_PERMISSIONS,
     ApiKey, ApiKeyCreate, ApiKeyUpdate
 )
-try:
-    from services.database_auth_service import DatabaseAuthService
-    auth_service = DatabaseAuthService()
-except Exception:
-    from services.auth_service import AuthService
-    auth_service = AuthService()
+from services.database_auth_service import DatabaseAuthService
+auth_service = DatabaseAuthService()
 
 logger = logging.getLogger(__name__)
 
@@ -463,6 +459,19 @@ async def update_group_permissions(
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=GROUP_NOT_FOUND)
     return {"success": True, "permissions": permission_names}
+
+
+@router.put("/groups/{group_id}/members")
+async def update_group_members(
+    group_id: str,
+    members: GroupMembersUpdate,
+    current_user: TokenData = Depends(require_permission(Permission.MANAGE_GROUPS))
+):
+    """Update group membership."""
+    success = auth_service.update_group_members(group_id, members.user_ids, current_user.tenant_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=GROUP_NOT_FOUND)
+    return {"success": True, "user_ids": members.user_ids}
 
 
 @router.get("/permissions")

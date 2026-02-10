@@ -74,11 +74,6 @@ export default function Header() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12zm11 3a3 3 0 100-6 3 3 0 000 6z" />
                   </svg>
                 </div>
-                <div>
-                  <div className="text-xl font-bold font-mono text-sre-text tracking-tight">
-                    Be Observant
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -120,7 +115,7 @@ export default function Header() {
                   }`
                 }
               >
-                <span className="material-icons text-sm leading-none" aria-hidden>search</span>{' '}Loki
+                <span className="material-icons text-sm leading-none text-sre-primary" aria-hidden>view_stream</span>{' '}Loki
               </NavLink>
               )}
               {hasPermission('read:alerts') && (
@@ -249,7 +244,7 @@ export default function Header() {
               }`
             }
           >
-            <span className="material-icons text-sm leading-none" aria-hidden>search</span>{' '}Loki
+            <span className="material-icons text-sm leading-none text-sre-primary" aria-hidden>view_stream</span>{' '}Loki
           </NavLink>
           )}
           {hasPermission('read:alerts') && (

@@ -73,15 +73,16 @@ class DatabaseAuthService:
                 self._ensure_permissions(db)
                 
                 
+                admin_username = (config.DEFAULT_ADMIN_USERNAME or '').strip().lower()
                 admin_user = db.query(User).filter_by(
                     tenant_id=default_tenant.id,
-                    username=config.DEFAULT_ADMIN_USERNAME
+                    username=admin_username
                 ).first()
                 
                 if not admin_user:
                     admin_user = User(
                         tenant_id=default_tenant.id,
-                        username=config.DEFAULT_ADMIN_USERNAME,
+                        username=admin_username,
                         email=config.DEFAULT_ADMIN_EMAIL,
                         full_name="System Administrator",
                         org_id=config.DEFAULT_ORG_ID,
@@ -357,8 +358,10 @@ class DatabaseAuthService:
     def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """Authenticate user with username and password."""
         self._lazy_init()
+        username = (username or '').strip().lower()
+        from sqlalchemy import func
         with get_db_session() as db:
-            user = db.query(User).filter_by(username=username).first()
+            user = db.query(User).filter(func.lower(User.username) == username).first()
             
             if not user:
                 return None
@@ -428,8 +431,10 @@ class DatabaseAuthService:
     
     def get_user_by_username(self, username: str) -> Optional[UserSchema]:
         """Get user by username."""
+        username = (username or '').strip().lower()
+        from sqlalchemy import func
         with get_db_session() as db:
-            user = db.query(User).options(joinedload(User.api_keys)).filter_by(username=username).first()
+            user = db.query(User).options(joinedload(User.api_keys)).filter(func.lower(User.username) == username).first()
             if not user:
                 return None
             return self._to_user_schema(user)
@@ -437,8 +442,9 @@ class DatabaseAuthService:
     def create_user(self, user_create: UserCreate, tenant_id: str, creator_id: str = None) -> UserSchema:
         """Create a new user."""
         with get_db_session() as db:
-            
-            if db.query(User).filter_by(username=user_create.username).first():
+            normalized_username = (user_create.username or '').strip().lower()
+            from sqlalchemy import func
+            if db.query(User).filter(func.lower(User.username) == normalized_username).first():
                 raise ValueError("Username already exists")
             
             if db.query(User).filter_by(email=user_create.email).first():
@@ -446,7 +452,7 @@ class DatabaseAuthService:
             
             user = User(
                 tenant_id=tenant_id,
-                username=user_create.username,
+                username=normalized_username,
                 email=user_create.email,
                 full_name=user_create.full_name,
                 org_id=getattr(user_create, 'org_id', None) or config.DEFAULT_ORG_ID,
@@ -741,6 +747,26 @@ class DatabaseAuthService:
             permissions = db.query(Permission).filter(Permission.name.in_(permission_names)).all()
             group.permissions = permissions
             
+            db.commit()
+            return True
+
+    def update_group_members(self, group_id: str, user_ids: List[str], tenant_id: str) -> bool:
+        """Update group's member users."""
+        with get_db_session() as db:
+            group = db.query(Group).filter_by(id=group_id, tenant_id=tenant_id).first()
+            if not group:
+                return False
+
+            members = []
+            if user_ids:
+                members = db.query(User).filter(
+                    and_(
+                        User.id.in_(user_ids),
+                        User.tenant_id == tenant_id
+                    )
+                ).all()
+
+            group.members = members
             db.commit()
             return True
     

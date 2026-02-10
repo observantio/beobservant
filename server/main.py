@@ -25,18 +25,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger("beobservant")
 
+# Database is required – all persistent data lives in PostgreSQL.
+logger.info("Connecting to database: %s", config.DATABASE_URL.split("@")[-1])
+init_database(config.DATABASE_URL, config.LOG_LEVEL == "debug")
+init_db()
+logger.info("✓ Database initialized")
+
+from routers.auth_router import auth_service
+auth_service._lazy_init()
+logger.info("✓ Auth service initialized")
+
+# One-time migration: import any legacy JSON files into the database.
 try:
-    logger.info(f"Connecting to database: {config.DATABASE_URL.split('@')[-1]}")
-    init_database(config.DATABASE_URL, config.LOG_LEVEL == "debug")
-    init_db()
-    logger.info("✓ Database initialized successfully")
-    
-    from routers.auth_router import auth_service
-    auth_service._lazy_init()
-    logger.info("✓ Auth service initialized")
-except Exception as e:
-    logger.error(f"Failed to initialize database: {e}", exc_info=True)
-    logger.warning("Continuing without database - using fallback JSON storage")
+    from services.storage_migration import migrate_file_storage_to_db
+    migrate_file_storage_to_db()
+except Exception as mig_err:
+    logger.warning("Legacy storage migration skipped: %s", mig_err)
 
 app = FastAPI(
     title=constants.APP_NAME,

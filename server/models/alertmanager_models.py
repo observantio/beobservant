@@ -80,9 +80,12 @@ class Silence(BaseModel):
     created_by: str = Field(..., alias="createdBy", description="User who created the silence")
     comment: str = Field(..., description="Comment explaining the silence")
     status: Optional[Dict[str, str]] = Field(None, description="Current status of the silence")
+    visibility: Optional[Visibility] = Field(None, description="Visibility scope")
+    shared_group_ids: List[str] = Field(default_factory=list, alias="sharedGroupIds", description="Group IDs this silence is shared with")
     
     class Config:
         populate_by_name = True
+        use_enum_values = True
 
 class SilenceCreate(BaseModel):
     """Create a new silence."""
@@ -94,6 +97,19 @@ class SilenceCreate(BaseModel):
     
     class Config:
         populate_by_name = True
+
+class SilenceCreateRequest(BaseModel):
+    """Client-facing silence creation payload (created_by is derived from auth)."""
+    matchers: List[Matcher] = Field(..., description="Matchers that define which alerts to silence")
+    starts_at: str = Field(..., alias="startsAt", description="Time when the silence starts")
+    ends_at: str = Field(..., alias="endsAt", description="Time when the silence ends")
+    comment: str = Field(..., description="Comment explaining the silence")
+    visibility: Visibility = Field(Visibility.PRIVATE, description="Visibility scope")
+    shared_group_ids: List[str] = Field(default_factory=list, alias="sharedGroupIds", description="Group IDs to share with")
+
+    class Config:
+        populate_by_name = True
+        use_enum_values = True
 
 class NotificationChannel(BaseModel):
     """Notification channel configuration."""

@@ -6,7 +6,6 @@ volumes:
   mimir:
   grafana:
   alertmanager:
-  beobservant_data:
   postgres_data:
 
 services:
@@ -124,7 +123,6 @@ services:
       AWS_REGION: "${AWS_REGION:-us-east-1}"
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
-      STORAGE_DIR: "/data/beobservant"
       DATA_ENCRYPTION_KEY: "${DATA_ENCRYPTION_KEY:-}"
       DATABASE_URL: "postgresql://beobservant:${POSTGRES_PASSWORD:-1234567890}@postgres:5432/beobservant"
       JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change-this-secret-key-in-production}"
@@ -134,8 +132,6 @@ services:
       DEFAULT_ORG_ID: "${DEFAULT_ORG_ID:-Av45ZchZsQdKjN8XyG}"
     ports:
       - "4319:4319"
-    volumes:
-      - beobservant_data:/data/beobservant
     depends_on:
       postgres:
         condition: service_healthy

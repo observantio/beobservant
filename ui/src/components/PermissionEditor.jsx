@@ -64,34 +64,18 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
   }, [toast])
 
   useEffect(() => {
-    // Direct permissions are what we edit
+    // Initialize editable state from the user payload
     const hasDirectPermissions = Object.hasOwn(user, 'direct_permissions')
     const directPermsSource = hasDirectPermissions ? (user.direct_permissions || []) : []
     const directPerms = directPermsSource.map(p => (typeof p === 'string' ? p : p.name))
     setSelectedPermissions(new Set(directPerms))
+    setSelectedGroups(new Set(user.group_ids || []))
+    setRole(user.role)
+  }, [user])
 
+  useEffect(() => {
     // Compute all permissions (role + group + direct) for display
-    const rolePerms = getRoleDefaults(user.role)
-    const groupPerms = new Set()
-    ;(user.group_ids || []).forEach(gid => {
-      const group = groups.find(g => g.id === gid)
-      if (group?.permissions) {
-        group.permissions.forEach(p => {
-          const pname = typeof p === 'string' ? p : (p.name || p.id)
-          groupPerms.add(pname)
-        })
-      }
-    })
-    
-    const allPerms = new Set([...rolePerms, ...groupPerms, ...directPerms])
-    setComputedPermissions(allPerms)
-  }, [user, groups, roleDefaults, permissionsList])
-
-  const handleRoleChange = (newRole) => {
-    setRole(newRole)
-    // Don't automatically clear direct permissions when role changes
-    // Just update computed permissions for display
-    const rolePerms = getRoleDefaults(newRole)
+    const rolePerms = getRoleDefaults(role)
     const groupPerms = new Set()
     ;(selectedGroups || []).forEach(gid => {
       const group = groups.find(g => g.id === gid)
@@ -104,6 +88,10 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
     })
     const allPerms = new Set([...rolePerms, ...groupPerms, ...selectedPermissions])
     setComputedPermissions(allPerms)
+  }, [role, selectedGroups, selectedPermissions, groups, roleDefaults, permissionsList])
+
+  const handleRoleChange = (newRole) => {
+    setRole(newRole)
   }
 
   const togglePermission = (permId) => {
@@ -114,21 +102,6 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
       newPerms.add(permId)
     }
     setSelectedPermissions(newPerms)
-
-    // Recompute computedPermissions so UI (checkbox checked state) updates immediately
-    const rolePerms = getRoleDefaults(role)
-    const groupPerms = new Set()
-    ;(selectedGroups || []).forEach(gid => {
-      const group = groups.find(g => g.id === gid)
-      if (group?.permissions) {
-        group.permissions.forEach(p => {
-          const pname = typeof p === 'string' ? p : (p.name || p.id)
-          groupPerms.add(pname)
-        })
-      }
-    })
-    const allPerms = new Set([...rolePerms, ...groupPerms, ...newPerms])
-    setComputedPermissions(allPerms)
   }
 
   const toggleGroup = (groupId) => {
@@ -139,21 +112,6 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
       newGroups.add(groupId)
     }
     setSelectedGroups(newGroups)
-    
-    // Recompute permissions when groups change
-    const rolePerms = getRoleDefaults(role)
-    const groupPerms = new Set()
-    newGroups.forEach(gid => {
-      const group = groups.find(g => g.id === gid)
-      if (group?.permissions) {
-        group.permissions.forEach(p => {
-          const pname = typeof p === 'string' ? p : (p.name || p.id)
-          groupPerms.add(pname)
-        })
-      }
-    })
-    const allPerms = new Set([...rolePerms, ...groupPerms, ...selectedPermissions])
-    setComputedPermissions(allPerms)
   }
 
   const toggleExpanded = (groupId) => {
@@ -203,6 +161,7 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
     <Modal
       isOpen
       onClose={onClose}
+      closeOnOverlayClick={false}
       title={`Edit User: ${user.username}`}
       size="xl"
       footer={
@@ -244,17 +203,19 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
             <label htmlFor='group' className="block text-sm font-semibold text-sre-text mb-2">
               Group Membership
             </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {groups.map((group) => (
-                <div key={group.id} className="space-y-2">
-                  <div className="flex items-center gap-2 p-3 bg-sre-bg-alt border border-sre-border rounded">
-                    <input
-                      id={`group-${group.id}`}
-                      type="checkbox"
-                      checked={selectedGroups.has(group.id)}
-                      onChange={() => toggleGroup(group.id)}
-                      className="w-4 h-4"
-                    />
+                <div key={group.id} className="">
+                  <div className="flex items-start gap-3 p-3 bg-sre-bg-alt border border-sre-border rounded-lg">
+                    <div className="flex-shrink-0 pt-1">
+                      <input
+                        id={`group-${group.id}`}
+                        type="checkbox"
+                        checked={selectedGroups.has(group.id)}
+                        onChange={() => toggleGroup(group.id)}
+                        className="w-5 h-5"
+                      />
+                    </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <div className="font-medium text-sre-text">{group.name}</div>
@@ -270,13 +231,13 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
                         </button>
                       </div>
                       {group.description && (
-                        <div className="text-xs text-sre-text-muted">{group.description}</div>
+                        <div className="text-xs text-sre-text-muted mt-1 truncate" title={group.description}>{group.description}</div>
                       )}
                     </div>
                   </div>
 
                   {expandedGroups.has(group.id) && (
-                    <Card className="!p-3 ml-6">
+                    <Card className="!p-3 ml-6 mt-2 rounded-lg border border-sre-border">
                       <div className="text-sm font-semibold text-sre-text mb-2">Group Permissions</div>
                       <div className="space-y-2">
                         {(group.permissions || []).length === 0 && (

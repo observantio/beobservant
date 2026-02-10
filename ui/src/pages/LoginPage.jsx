@@ -17,7 +17,7 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await login(username, password)
+      await login(username.trim(), password)
       navigate('/')
     } catch (err) {
       console.error('Login failed:', err)
@@ -31,9 +31,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4">
       <Card className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="mx-auto mb-4 w-16 h-16 rounded-lg flex items-center justify-center">
-            <span className="material-icons text-7xl text-white eye-blink" aria-hidden>visibility</span>
-          </div>
+            <span className="material-icons text-7xl text-sre-black eye-blink " aria-hidden>visibility</span>
           <h1 className="text-3xl font-bold text-sre-text mb-2">
             Be Observant
           </h1>
@@ -57,7 +55,7 @@ export default function LoginPage() {
               id="username"
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => setUsername(e.target.value.toLowerCase())}
               placeholder="Enter your username"
               required
               autoFocus

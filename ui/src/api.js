@@ -222,6 +222,14 @@ export async function deleteGroup(groupId) {
   })
 }
 
+export async function updateGroupMembers(groupId, userIds) {
+  return request(`/api/auth/groups/${groupId}/members`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_ids: userIds })
+  })
+}
+
 // Permission Management
 export async function getPermissions() {
   return request('/api/auth/permissions')

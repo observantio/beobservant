@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Card, Button, Input, Textarea, Modal, ConfirmDialog, Badge, Alert, Checkbox } from '../components/ui';
+import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToast } from '../contexts/ToastContext';
 import * as api from '../api';
@@ -12,7 +13,9 @@ import * as api from '../api';
 export default function GroupsPage() {
   const { canManageGroups } = usePermissions();
   const toast = useToast();
+  const navigate = useNavigate();
   const [groups, setGroups] = useState([]);
+  const [users, setUsers] = useState([]);
   const [permissions, setPermissions] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -29,6 +32,7 @@ export default function GroupsPage() {
   const [formData, setFormData] = useState({ name: '', description: '' });
   const [editGroupData, setEditGroupData] = useState({ id: '', name: '', description: '' });
   const [groupPermissions, setGroupPermissions] = useState([]);
+  const [selectedMembers, setSelectedMembers] = useState([]);
 
   useEffect(() => {
     fetchData();
@@ -43,6 +47,8 @@ export default function GroupsPage() {
       ]);
       setGroups(groupsData);
       setPermissions(permsData);
+      const usersData = await api.getUsers().catch(() => []);
+      setUsers(usersData || []);
     } catch (err) {
       toast.error('Failed to load groups: ' + err.message);
       console.error('Error loading data:', err);
@@ -66,11 +72,13 @@ export default function GroupsPage() {
       if (groupPermissions?.length > 0) {
         await api.updateGroupPermissions(newGroup.id, groupPermissions);
       }
+      await api.updateGroupMembers(newGroup.id, selectedMembers);
       
       toast.success('Group created successfully');
       setShowCreateModal(false);
       setFormData({ name: '', description: '' });
       setGroupPermissions([]);
+      setSelectedMembers([]);
       await fetchData();
     } catch (err) {
       toast.error('Failed to create group: ' + err.message);
@@ -96,6 +104,8 @@ export default function GroupsPage() {
     // Set current group permissions
     const currentPerms = group.permissions?.map(p => p.name || p) || [];
     setGroupPermissions(currentPerms);
+    const memberIds = (users || []).filter(u => (u.group_ids || []).includes(group.id)).map(u => u.id);
+    setSelectedMembers(memberIds);
     setShowPermissionsModal(true);
   };
 
@@ -105,6 +115,8 @@ export default function GroupsPage() {
       name: group.name || '',
       description: group.description || ''
     });
+    const memberIds = (users || []).filter(u => (u.group_ids || []).includes(group.id)).map(u => u.id);
+    setSelectedMembers(memberIds);
     setShowEditModal(true);
   };
 
@@ -112,9 +124,11 @@ export default function GroupsPage() {
     setSaving(true);
     try {
       await api.updateGroupPermissions(selectedGroup.id, groupPermissions);
+      await api.updateGroupMembers(selectedGroup.id, selectedMembers);
       toast.success('Permissions updated successfully');
       setShowPermissionsModal(false);
       setSelectedGroup(null);
+      setSelectedMembers([]);
       await fetchData();
     } catch (err) {
       toast.error('Failed to update permissions: ' + err.message);
@@ -128,11 +142,13 @@ export default function GroupsPage() {
     setShowCreateModal(false);
     setFormData({ name: '', description: '' });
     setGroupPermissions([]);
+    setSelectedMembers([]);
   };
 
   const closeEditModal = () => {
     setShowEditModal(false);
     setEditGroupData({ id: '', name: '', description: '' });
+    setSelectedMembers([]);
   };
 
   const updateGroup = async () => {
@@ -147,6 +163,7 @@ export default function GroupsPage() {
         name: editGroupData.name,
         description: editGroupData.description
       });
+      await api.updateGroupMembers(editGroupData.id, selectedMembers);
       toast.success('Group updated successfully');
       closeEditModal();
       await fetchData();
@@ -176,6 +193,15 @@ export default function GroupsPage() {
     setGroupPermissions(prev => prev.filter(p => !permNames.has(p)));
   };
 
+  const toggleMember = (userId) => {
+    setSelectedMembers(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return Array.from(next);
+    });
+  };
+
   const getPermLabel = (perm) => perm.display_name || perm.name || perm.id || 'Permission';
   const getPermDescription = (perm) => perm.description || perm.name || '';
 
@@ -197,6 +223,12 @@ export default function GroupsPage() {
     g.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const sortedUsers = (users || []).slice().sort((a, b) => {
+    const nameA = (a.full_name || a.username || '').toLowerCase();
+    const nameB = (b.full_name || b.username || '').toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+
   if (!canManageGroups) {
     return (
       <div className="p-6">
@@ -209,19 +241,27 @@ export default function GroupsPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-sre-text">Groups Management</h1>
           <p className="text-sre-text-muted mt-2">Manage groups and assign permissions that members will inherit</p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Create Group
-        </Button>
+        {/* Only show the header Create button when there are existing groups or when a search is active.
+            When there are no groups and no search query, the centered Empty State CTA will be shown instead. */}
+        {!(groups.length === 0 && !searchQuery) && (
+          <div className="flex items-center gap-3">
+            <Button onClick={() => setShowCreateModal(true)} size="sm">
+              <span className="material-icons mr-2">add</span>
+              Create Group
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => navigate('/users')}>
+              <span className="material-icons mr-2">people</span>
+              Users
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Search Bar */}
@@ -240,52 +280,40 @@ export default function GroupsPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sre-primary"></div>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredGroups.map(group => (
-            <Card key={group.id} className="hover:border-sre-primary/50 transition-all">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-sre-text">{group.name}</h3>
-                  <p className="text-sm text-sre-text-muted mt-1">
-                    {group.description || 'No description'}
-                  </p>
+            <Card key={group.id} className="p-0 rounded-lg border border-sre-border shadow-sm bg-sre-surface hover:shadow-md transition-all overflow-hidden">
+              <div className="p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0 pr-3">
+                    <h3 className="text-lg font-semibold text-sre-text truncate" title={group.name}>{group.name}</h3>
+                    <p className="text-sm text-sre-text-muted mt-1 truncate" title={group.description || 'No description'}>
+                      {group.description || 'No description'}
+                    </p>
+                  </div>
+                  <Badge variant="info" className="ml-3 flex-shrink-0 whitespace-nowrap text-xs px-2 py-0.5">
+                    {(() => { const n = (group.permissions || []).length || 0; return `${n} perm${n === 1 ? '' : 's'}` })()}
+                  </Badge>
                 </div>
-                <Badge variant="info">
-                  {group.permissions?.length || 0} perms
-                </Badge>
-              </div>
 
-              <div className="flex gap-2 mt-4">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={() => openPermissionsModal(group)}
-                >
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  Permissions
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => openEditModal(group)}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5h2m2 0h3a2 2 0 012 2v3m0 4v3a2 2 0 01-2 2h-3m-4 0H7a2 2 0 01-2-2v-3m0-4V7a2 2 0 012-2h3" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.5 5.5l-9 9-3 1 1-3 9-9" />
-                  </svg>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="danger"
-                  onClick={() => setDeleteConfirm(group)}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </Button>
+                <div className="flex gap-2 mt-4 items-center">
+                  <Button size="sm" variant="ghost" className="py-0.5 px-2 text-xs flex items-center gap-2" onClick={() => openPermissionsModal(group)} aria-label={`Permissions for ${group.name}`}>
+                    <span className="material-icons text-sm" aria-hidden>security</span>
+                    <span className="leading-none">Permissions</span>
+                  </Button>
+
+                  <Button size="sm" variant="ghost" className="py-0.5 px-2 text-xs flex items-center gap-2" onClick={() => openEditModal(group)} aria-label={`Edit ${group.name}`}>
+                    <span className="material-icons text-sm" aria-hidden>edit</span>
+                    <span className="leading-none">Edit</span>
+                  </Button>
+
+                  <div className="ml-auto">
+                    <Button size="sm" variant="danger" className="py-0.5 px-2 text-xs flex items-center gap-2" onClick={() => setDeleteConfirm(group)} aria-label={`Delete ${group.name}`}>
+                      <span className="material-icons text-sm" aria-hidden>delete</span>
+                      <span className="leading-none">Delete</span>
+                    </Button>
+                  </div>
+                </div>
               </div>
             </Card>
           ))}
@@ -311,6 +339,7 @@ export default function GroupsPage() {
       <Modal
         isOpen={showCreateModal}
         onClose={closeCreateModal}
+        closeOnOverlayClick={false}
         title="Create New Group"
         size="lg"
         footer={
@@ -417,6 +446,27 @@ export default function GroupsPage() {
               ))}
             </div>
           </div>
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-sre-text">Group Members (Optional)</h3>
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
+              {sortedUsers.length === 0 && (
+                <div className="text-sm text-sre-text-muted">No users available.</div>
+              )}
+              {sortedUsers.map((user) => (
+                <label key={user.id} className="flex items-center gap-3 p-2 border border-sre-border rounded hover:bg-sre-surface/50">
+                  <Checkbox
+                    checked={selectedMembers.includes(user.id)}
+                    onChange={() => toggleMember(user.id)}
+                  />
+                  <div className="text-sm text-sre-text">
+                    {user.full_name || user.username}
+                    <span className="text-xs text-sre-text-muted ml-2">{user.email}</span>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       </Modal>
 
@@ -424,6 +474,7 @@ export default function GroupsPage() {
       <Modal
         isOpen={showEditModal}
         onClose={closeEditModal}
+        closeOnOverlayClick={false}
         title="Edit Group"
         size="xl"
         footer={
@@ -457,6 +508,26 @@ export default function GroupsPage() {
               rows={3}
             />
           </div>
+          <div className="space-y-3">
+            <h3 className="font-semibold text-sre-text">Group Members</h3>
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
+              {sortedUsers.length === 0 && (
+                <div className="text-sm text-sre-text-muted">No users available.</div>
+              )}
+              {sortedUsers.map((user) => (
+                <label key={user.id} className="flex items-center gap-3 p-2 border border-sre-border rounded hover:bg-sre-surface/50">
+                  <Checkbox
+                    checked={selectedMembers.includes(user.id)}
+                    onChange={() => toggleMember(user.id)}
+                  />
+                  <div className="text-sm text-sre-text">
+                    {user.full_name || user.username}
+                    <span className="text-xs text-sre-text-muted ml-2">{user.email}</span>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       </Modal>
 
@@ -466,7 +537,9 @@ export default function GroupsPage() {
         onClose={() => {
           setShowPermissionsModal(false);
           setSelectedGroup(null);
+          setSelectedMembers([]);
         }}
+        closeOnOverlayClick={false}
         title={`Permissions: ${selectedGroup?.name}`}
         size="lg"
         footer={
@@ -476,6 +549,7 @@ export default function GroupsPage() {
               onClick={() => {
                 setShowPermissionsModal(false);
                 setSelectedGroup(null);
+                setSelectedMembers([]);
               }}
               disabled={saving}
             >
@@ -493,6 +567,27 @@ export default function GroupsPage() {
               All members of this group will inherit these permissions. User-specific permissions override group permissions.
             </div>
           </Alert>
+
+          <div className="space-y-3">
+            <h3 className="font-semibold text-sre-text">Group Members</h3>
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
+              {sortedUsers.length === 0 && (
+                <div className="text-sm text-sre-text-muted">No users available.</div>
+              )}
+              {sortedUsers.map((user) => (
+                <label key={user.id} className="flex items-center gap-3 p-2 border border-sre-border rounded hover:bg-sre-surface/50">
+                  <Checkbox
+                    checked={selectedMembers.includes(user.id)}
+                    onChange={() => toggleMember(user.id)}
+                  />
+                  <div className="text-sm text-sre-text">
+                    {user.full_name || user.username}
+                    <span className="text-xs text-sre-text-muted ml-2">{user.email}</span>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
 
           <div className="flex items-center justify-between">
             <div className="text-sm text-sre-text-muted">

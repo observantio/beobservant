@@ -237,7 +237,7 @@ export default function ChannelEditor({ channel, onSave, onCancel }) {
             <option value="group">Group - Share with specific groups</option>
             <option value="tenant">Tenant - Visible to all users in tenant</option>
           </Select>
-          <p className="text-xs text-sre-text-muted mt-1">
+          <p className="text-xs text-sre-text-muted mt-3">
             {formData.visibility === 'private' && 'Only you can view and edit this channel'}
             {formData.visibility === 'group' && 'Users in selected groups can view this channel'}
             {formData.visibility === 'tenant' && 'All users in your organization can view this channel'}

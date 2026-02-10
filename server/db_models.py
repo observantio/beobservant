@@ -207,6 +207,7 @@ class AlertRule(Base):
     annotations = Column(JSON, default=dict)
     enabled = Column(Boolean, default=True, nullable=False)
     notification_channels = Column(JSON, default=list)  # List of channel IDs
+    visibility = Column(String(20), nullable=False, default='private', index=True)  # private, group, tenant
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -218,6 +219,7 @@ class AlertRule(Base):
     __table_args__ = (
         Index('idx_alert_rules_tenant_enabled', 'tenant_id', 'enabled'),
         Index('idx_alert_rules_severity', 'severity'),
+        Index('idx_alert_rules_visibility', 'visibility'),
     )
 
 
@@ -232,6 +234,7 @@ class NotificationChannel(Base):
     type = Column(String(50), nullable=False, index=True)  # email, slack, webhook, etc
     config = Column(JSON, nullable=False, default=dict)
     enabled = Column(Boolean, default=True, nullable=False)
+    visibility = Column(String(20), nullable=False, default='private', index=True)  # private, group, tenant
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -243,6 +246,7 @@ class NotificationChannel(Base):
     __table_args__ = (
         Index('idx_notification_channels_tenant_enabled', 'tenant_id', 'enabled'),
         Index('idx_notification_channels_type', 'type'),
+        Index('idx_notification_channels_visibility', 'visibility'),
     )
 
 

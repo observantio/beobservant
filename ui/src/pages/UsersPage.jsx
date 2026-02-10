@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Card, Button, Input, Badge, Spinner, Modal, Checkbox } from '../components/ui'
 import CreateUserModal from '../components/users/CreateUserModal'
 import { useAuth } from '../contexts/AuthContext'
+import { useNavigate } from 'react-router-dom'
 import { useToast } from '../contexts/ToastContext'
 import PermissionEditor from '../components/PermissionEditor'
 import ConfirmModal from '../components/ConfirmModal'
@@ -9,6 +10,7 @@ import * as api from '../api'
 
 export default function UsersPage() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [users, setUsers] = useState([])
   const [groups, setGroups] = useState([])
   const [loading, setLoading] = useState(true)
@@ -151,13 +153,26 @@ export default function UsersPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-sre-text mb-2">
-          User Management
-        </h1>
-        <p className="text-sre-text-muted">
-          Manage users, roles, and permissions
-        </p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-sre-text mb-2">
+            User Management
+          </h1>
+          <p className="text-sre-text-muted">
+            Manage users, roles, and permissions
+          </p>
+        </div>
+        {/* Show header Create button only when there are users or a search is active. When no users exist the centered empty state CTA is shown instead. */}
+        {!(users.length === 0 && !searchQuery) && (
+          <div className="flex items-center gap-3">
+            <Button onClick={() => setShowCreateModal(true)} size="sm" variant="primary">
+              Create User
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => navigate('/groups')}>
+              <span className="material-icons mr-2">groups</span>Groups
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Search Bar */}
@@ -172,71 +187,67 @@ export default function UsersPage() {
 
       <Card
         title="Users"
-        subtitle={`Returned ${filteredUsers.length} user${filteredUsers.length === 1 ? '' : 's'}${searchQuery ? ' (filtered)' : ''} from the database.`}
-        action={
-          <Button onClick={() => setShowCreateModal(true)} size="sm">
-            Create User
-          </Button>
-        }
+        subtitle={`${filteredUsers.length} user${filteredUsers.length === 1 ? '' : 's'}${searchQuery ? ' (filtered)' : ''}`}
       >
-        <CreateUserModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onCreated={loadData} />
+        <CreateUserModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} onCreated={loadData} groups={groups} />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {filteredUsers.length === 0 ? (
-                <div className="text-center py-8 text-sre-text-muted">
-                  {searchQuery ? 'No users found matching your search' : 'No users yet'}
+                <div className="text-center py-12">
+                  <h3 className="text-lg font-semibold text-sre-text mb-2">{searchQuery ? 'No users found' : 'No users yet'}</h3>
+                  <p className="text-sre-text-muted mb-4">{searchQuery ? 'Try a different search term' : 'Create your first user to get started'}</p>
+                  {!searchQuery && (
+                    <div>
+                      <Button onClick={() => setShowCreateModal(true)}>Create User</Button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 filteredUsers.map((u) => {
                 let roleVariant = 'default';
-                if (u.role === 'admin') {
-                  roleVariant = 'error';
-                } else if (u.role === 'user') {
-                  roleVariant = 'info';
-                }
+                if (u.role === 'admin') roleVariant = 'error';
+                else if (u.role === 'user') roleVariant = 'info';
+                const initials = (u.full_name || u.username || 'U').split(' ').map(s => s[0]).join('').substring(0,2).toUpperCase();
                 return (
-                <div key={u.id} className="p-4 bg-sre-surface/50 rounded-sm border border-sre-border  transition-all flex gap-4">
-                  <div className="w-12 h-12 flex-none  bg-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold text-sm">
-                    {u.username ? u.username.charAt(0).toUpperCase() : 'U'}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="truncate">
-                        <div className="font-semibold text-sre-text truncate">{u.username}</div>
-                        <div className="text-xs text-sre-text-muted truncate">{u.email}</div>
-                      </div>
-                      <div className="hidden sm:flex items-center gap-2">
-                        <Badge variant={roleVariant}>{u.role}</Badge>
-                        {!u.is_active && <Badge variant="warning">Inactive</Badge>}
-                        {u.group_ids?.length > 0 && (
-                          <Badge variant="success">{u.group_ids.length} group{u.group_ids.length > 1 ? 's' : ''}</Badge>
-                        )}
-                      </div>
+                <Card key={u.id} className="p-0 rounded-lg border border-sre-border shadow-sm bg-sre-surface hover:shadow-md transition-all overflow-hidden">
+                  <div className="flex items-start gap-4 p-4">
+                    <div className="w-12 h-12 flex-none rounded-md bg-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold text-sm border border-sre-border">
+                      {initials}
                     </div>
-
-                    <div className="mt-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2 sm:hidden">
-                        <Badge variant={roleVariant}>{u.role}</Badge>
-                        {!u.is_active && <Badge variant="warning">Inactive</Badge>}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="truncate">
+                          <div className="font-semibold text-sre-text truncate">{u.username}</div>
+                          {u.full_name && <div className="text-xs text-sre-text-muted">{u.full_name}</div>}
+                          <div className="text-xs text-sre-text-muted">{u.email}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={roleVariant} className="ml-2">{u.role}</Badge>
+                          {!u.is_active && <Badge variant="warning" className="ml-2">Inactive</Badge>}
+                          {u.group_ids?.length > 0 && <Badge variant="success" className="ml-2">{u.group_ids.length} group{u.group_ids.length > 1 ? 's' : ''}</Badge>}
+                        </div>
                       </div>
-
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => openEditUser(u)} >
-                          Edit
+                      <div className="mt-3 flex gap-2 items-center justify-start w-full">
+                        <Button variant="ghost" size="sm" className="py-0.5 px-2 text-xs flex items-center gap-2" onClick={() => openEditUser(u)} aria-label={`Edit ${u.username}`}>
+                          <span className="material-icons text-sm" aria-hidden>edit</span>
+                          <span className="leading-none">Edit</span>
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleEditPermissions(u)} className=" text-blue-500">
-                          Permissions
+                        <Button variant="ghost" size="sm" className="py-0.5 px-2 text-xs text-blue-500 flex items-center gap-2" onClick={() => handleEditPermissions(u)} aria-label={`Edit permissions for ${u.username}`}>
+                          <span className="material-icons text-sm" aria-hidden>manage_accounts</span>
+                          <span className="leading-none">Permissions</span>
                         </Button>
                         {u.id !== currentUser?.id && (
-                          <Button variant="ghost" size="sm" onClick={() => handleDeleteUser(u.id)} className="text-red-500">
-                            Delete
-                          </Button>
+                          <div className="ml-2">
+                            <Button variant="ghost" size="sm" className="py-0.5 px-2 text-xs text-red-500 flex items-center gap-2" onClick={() => handleDeleteUser(u.id)} aria-label={`Delete ${u.username}`}>
+                              <span className="material-icons text-sm" aria-hidden>delete</span>
+                              <span className="leading-none">Delete</span>
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </div>
                   </div>
-                </div>
+                </Card>
               )
               })
               )}

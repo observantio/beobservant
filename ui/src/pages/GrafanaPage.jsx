@@ -8,6 +8,7 @@ import {  Button, Input, Alert, Modal, ConfirmDialog, Select, Checkbox } from '.
 import GrafanaTabs from '../components/grafana/GrafanaTabs'
 import GrafanaContent from '../components/grafana/GrafanaContent'
 import { useAuth } from '../contexts/AuthContext'
+import { MIMIR_PROMETHEUS_URL } from '../utils/constants'
 
 const GRAFANA_URL = import.meta.env.VITE_GRAFANA_URL || 'https://localhost/grafana'
 
@@ -672,7 +673,7 @@ export default function GrafanaPage() { // NOSONAR
             label="URL *"
             value={datasourceForm.url}
             onChange={(e) => setDatasourceForm({ ...datasourceForm, url: e.target.value })}
-            placeholder="http://mimir:9009/prometheus"
+            placeholder={MIMIR_PROMETHEUS_URL}
             helperText="The URL where the datasource is accessible"
             required
           />

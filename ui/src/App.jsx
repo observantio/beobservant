@@ -76,7 +76,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sre-bg via-sre-bg-alt to-sre-bg">
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-sre-bg via-sre-bg-alt to-sre-bg">
       {isAuthenticated && <Header />}
       {user?.needs_password_change && (
         <ChangePasswordModal
@@ -86,7 +86,7 @@ function AppContent() {
           isForced={true}
         />
       )}
-      <main className={isAuthenticated ? "container" : ""}>
+      <main className={isAuthenticated ? "container flex-1" : "flex-1"}>
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -141,6 +141,10 @@ function AppContent() {
           </Routes>
         </Suspense>
       </main>
+
+      <footer className="container text-center text-xs text-sre-text-muted mt-8 mb-8">
+        © Be Observant — MIT License
+      </footer>
     </div>
   )
 }

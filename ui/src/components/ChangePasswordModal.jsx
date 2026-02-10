@@ -122,7 +122,7 @@ export default function ChangePasswordModal({ isOpen, onClose, userId, isForced 
               const slide = slides[slideIndex] || {}
               return (
                 <div>
-                  <div className="text-sm text-sre-text-muted mt-2">{slide.body}</div>
+                  <div className="text-sm text-sre-text-muted">{slide.body}</div>
                 </div>
               )
             })()}

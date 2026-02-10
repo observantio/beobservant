@@ -20,9 +20,11 @@ class Config:
     GRAFANA_USERNAME: str = os.getenv("GRAFANA_USERNAME", "admin")
     GRAFANA_PASSWORD: str = os.getenv("GRAFANA_PASSWORD", "admin")
     
-    # Storage security
-    STORAGE_DIR: str = os.getenv("STORAGE_DIR", "/data/beobservant")
+    # Encryption key for sensitive data at rest (channel config in DB)
     DATA_ENCRYPTION_KEY: Optional[str] = os.getenv("DATA_ENCRYPTION_KEY")
+
+    # Legacy storage directory – only used by one-time migration from JSON to DB
+    STORAGE_DIR: str = os.getenv("STORAGE_DIR", "/data/beobservant")
     
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://beobservant:changeme123@localhost:5432/beobservant")
@@ -44,10 +46,6 @@ class Config:
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     JWT_EXPIRATION_MINUTES: int = int(os.getenv("JWT_EXPIRATION_MINUTES", "1440"))
     
-    # User storage
-    USERS_FILE: str = "users.json"
-    GROUPS_FILE: str = "groups.json"
-
     # Default admin bootstrap (can be overridden via environment)
     DEFAULT_ADMIN_USERNAME: str = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
     DEFAULT_ADMIN_PASSWORD: str = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")

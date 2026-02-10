@@ -114,4 +114,36 @@
   .eye-blink { animation: none; }
 }
 
+/* Custom select styling: consistent dropdown arrow and reserved right padding */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 2.25rem; /* reserve space for custom arrow */
+  background-position: right 0.75rem center;
+  background-repeat: no-repeat;
+  background-size: 1rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='%2364748b' d='M5.25 7.5L10 12.75 14.75 7.5z'/></svg>");
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+/* Dark theme arrow color */
+:root[data-theme='dark'] select,
+body[data-theme='dark'] select,
+.dark select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='%238b93a8' d='M5.25 7.5L10 12.75 14.75 7.5z'/></svg>");
+}
+
+/* Hide native IE/Edge expand button */
+select::-ms-expand {
+  display: none;
+}
+
+/* Helpers for small selects */
+select.text-xs {
+  padding-right: 1.75rem;
+  background-position: right 0.5rem center;
+  background-size: 0.85rem;
+}
+
 

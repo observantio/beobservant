@@ -5,6 +5,12 @@
 // API Configuration
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4319'
 export const GRAFANA_URL = import.meta.env.VITE_GRAFANA_URL || 'https://localhost/grafana'
+// External service endpoints (configurable via Vite env)
+export const LOKI_OTLP_ENDPOINT = import.meta.env.VITE_LOKI_OTLP_ENDPOINT || 'http://loki:3100/otlp'
+export const LOKI_BASE = import.meta.env.VITE_LOKI_URL || 'http://loki:3100'
+export const MIMIR_REMOTE_WRITE = import.meta.env.VITE_MIMIR_REMOTE_WRITE || 'http://mimir:9009/api/v1/push'
+export const MIMIR_PROMETHEUS_URL = import.meta.env.VITE_MIMIR_PROMETHEUS_URL || 'http://mimir:9009/prometheus'
+export const TEMPO_OTLP_ENDPOINT = import.meta.env.VITE_TEMPO_OTLP_ENDPOINT || 'tempo:4317'
 
 // Time ranges (in minutes)
 export const TIME_RANGES = [

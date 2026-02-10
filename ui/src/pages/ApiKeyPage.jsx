@@ -1,9 +1,18 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Card, Input, Button, Alert, Select } from '../components/ui'
+import { Card, Input, Button, Alert, Select, Modal } from '../components/ui'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import * as api from '../api'
+import { LOKI_OTLP_ENDPOINT, MIMIR_REMOTE_WRITE, TEMPO_OTLP_ENDPOINT } from '../utils/constants'
 
-const buildOtelYaml = (apiKey) => `receivers:
+const buildOtelYaml = (apiKey, endpoints = {}) => {
+  const {
+    lokiEndpoint = LOKI_OTLP_ENDPOINT,
+    tempoEndpoint = TEMPO_OTLP_ENDPOINT,
+    mimirEndpoint = MIMIR_REMOTE_WRITE
+  } = endpoints || {}
+
+  return `receivers:
   hostmetrics:
     collection_interval: 1s
     scrapers:
@@ -29,7 +38,7 @@ processors:
 
 exporters:
   otlphttp/loki:
-    endpoint: "http://loki:3100/otlp"
+    endpoint: "${lokiEndpoint}"
     headers:
       X-Scope-OrgID: "${apiKey}"
     tls:
@@ -45,7 +54,7 @@ exporters:
       queue_size: 1000
 
   otlp/tempo:
-    endpoint: "tempo:4317"
+    endpoint: "${tempoEndpoint}"
     headers:
       X-Scope-OrgID: "${apiKey}"
     tls:
@@ -61,7 +70,7 @@ exporters:
       queue_size: 1000
 
   prometheusremotewrite/mimir:
-    endpoint: "http://mimir:9009/api/v1/push"
+    endpoint: "${mimirEndpoint}"
     headers:
       X-Scope-OrgID: "${apiKey}"
     retry_on_failure:
@@ -94,25 +103,27 @@ service:
     logs:
       level: info
 `
+}
 
 export default function ApiKeyPage() {
   const { user, updateUser } = useAuth()
+  const toast = useToast()
   const [orgId, setOrgId] = useState('')
   const [apiKeys, setApiKeys] = useState([])
-  const [yamlKeyId, setYamlKeyId] = useState('')
+
   const [newKeyName, setNewKeyName] = useState('')
   const [newKeyValue, setNewKeyValue] = useState('')
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState(null)
-  const [error, setError] = useState(null)
+
   const [showKeyId, setShowKeyId] = useState(null)
+  const [showDefaultModal, setShowDefaultModal] = useState(false)
+  const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     if (user) {
       setApiKeys(user.api_keys || [])
       const enabled = (user.api_keys || []).filter((k) => k.is_enabled)
       const initialKey = enabled[0] || (user.api_keys || [])[0]
-      setYamlKeyId(initialKey?.id || '')
       const defaultKey = (user.api_keys || []).find((k) => k.is_default)
       const orgKey = defaultKey
         || (user.api_keys || []).find((k) => k.key === user.org_id)
@@ -126,37 +137,34 @@ export default function ApiKeyPage() {
     setApiKeys(updatedUser.api_keys || [])
     const enabled = (updatedUser.api_keys || []).filter((k) => k.is_enabled)
     const initialKey = enabled[0] || (updatedUser.api_keys || [])[0]
-    setYamlKeyId(initialKey?.id || '')
   }
 
   const handleSaveOrgId = async (e) => {
-    e.preventDefault()
-    setError(null)
-    setMessage(null)
+    if (e && typeof e.preventDefault === 'function') e.preventDefault()
     setLoading(true)
     try {
       if (!orgId) {
-        setError('Please select an API key')
+        toast.error('Please select an API key')
         setLoading(false)
         return
       }
       // Set the selected API key as the default key
       await api.updateApiKey(orgId, { is_default: true })
       await refreshUser()
-      setMessage('Default API key updated successfully.')
+      toast.success('Default API key updated successfully.')
+      setShowDefaultModal(false)
     } catch (err) {
-      setError(err.body?.detail || err.message || 'Failed to update default API key')
+      const msg = err.body?.detail || err.message || 'Failed to update default API key'
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
   }
 
   const handleCreateKey = async (e) => {
-    e.preventDefault()
-    setError(null)
-    setMessage(null)
+    if (e && typeof e.preventDefault === 'function') e.preventDefault()
     if (!newKeyName.trim()) {
-      setError('Key name is required')
+      toast.error('Key name is required')
       return
     }
     setLoading(true)
@@ -165,70 +173,95 @@ export default function ApiKeyPage() {
       setNewKeyName('')
       setNewKeyValue('')
       await refreshUser()
-      setMessage('API key created successfully.')
+      toast.success('API key created successfully.')
+      setShowAddModal(false)
     } catch (err) {
-      setError(err.body?.detail || err.message || 'Failed to create API key')
+      const msg = err.body?.detail || err.message || 'Failed to create API key'
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
   }
 
   const handleActivateKey = async (key) => {
-    setError(null)
-    setMessage(null)
     try {
       await api.updateApiKey(key.id, { is_enabled: true })
       await refreshUser()
+      toast.success('API key activated')
     } catch (err) {
-      setError(err.body?.detail || err.message || 'Failed to update API key')
+      const msg = err.body?.detail || err.message || 'Failed to update API key'
+      toast.error(msg)
     }
   }
 
   const handleDeleteKey = async (key) => {
-    setError(null)
-    setMessage(null)
     try {
       await api.deleteApiKey(key.id)
       await refreshUser()
-      setMessage('API key deleted successfully.')
+      toast.success('API key deleted successfully.')
     } catch (err) {
-      setError(err.body?.detail || err.message || 'Failed to delete API key')
+      const msg = err.body?.detail || err.message || 'Failed to delete API key'
+      toast.error(msg)
     }
   }
 
   const handleCopy = async (value, successMessage) => {
     try {
       await navigator.clipboard.writeText(value)
-      setMessage(successMessage)
+      toast.success(successMessage)
     } catch (err) {
       console.error('Copy to clipboard failed:', err)
-      setError('Failed to copy to clipboard')
+      const msg = 'Failed to copy to clipboard'
+      toast.error(msg)
     }
   }
 
   const handleDownloadYaml = (content) => {
-    const blob = new Blob([content], { type: 'text/yaml' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'otel-agent.yaml'
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
+    try {
+      const blob = new Blob([content], { type: 'text/yaml' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'otel-agent.yaml'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      toast.success('YAML downloaded')
+    } catch (err) {
+      console.error('Download failed:', err)
+      const msg = 'Failed to download YAML'
+      toast.error(msg)
+    }
   }
 
-  const yamlKey = useMemo(() => apiKeys.find((k) => k.id === yamlKeyId) || apiKeys[0], [apiKeys, yamlKeyId])
   const selectedOrgKeyValue = useMemo(() => {
     const found = apiKeys.find((k) => k.id === orgId)
     return found?.key || user?.org_id || ''
   }, [apiKeys, orgId, user])
-  const yamlContent = useMemo(() => buildOtelYaml(yamlKey?.key || selectedOrgKeyValue || ''), [yamlKey, selectedOrgKeyValue])
+
+  // YAML modal state
+  const [showYamlModal, setShowYamlModal] = useState(false)
+  const [yamlModalKeyId, setYamlModalKeyId] = useState('')
+  const [lokiEndpoint, setLokiEndpoint] = useState(LOKI_OTLP_ENDPOINT)
+  const [tempoEndpoint, setTempoEndpoint] = useState(TEMPO_OTLP_ENDPOINT)
+  const [mimirEndpoint, setMimirEndpoint] = useState(MIMIR_REMOTE_WRITE)
+
+  const yamlModalKeyValue = useMemo(() => {
+    const found = apiKeys.find((k) => k.id === yamlModalKeyId)
+    return found?.key || user?.org_id || ''
+  }, [apiKeys, yamlModalKeyId, user])
+
+  const yamlModalContent = useMemo(() => buildOtelYaml(yamlModalKeyValue || selectedOrgKeyValue || '', {
+    lokiEndpoint,
+    tempoEndpoint,
+    mimirEndpoint
+  }), [yamlModalKeyValue, selectedOrgKeyValue, lokiEndpoint, tempoEndpoint, mimirEndpoint])
 
   const enabledCount = apiKeys.filter((k) => k.is_enabled).length
 
   return (
-    <div className="animate-fade-in max-w-6xl mx-auto">
+    <div className="animate-fade-in max-w-7xl mx-auto">
       <div className="mb-6">
         <h1 className="text-3xl font-semibold text-sre-text mb-2 flex items-center gap-3">
           <span className="material-icons text-sre-primary text-3xl">key</span>
@@ -237,64 +270,22 @@ export default function ApiKeyPage() {
         <p className="text-sre-text-muted max-w-2xl">Manage tenant keys for logs, traces and metrics. Use keys to isolate datasets per product or team.</p>
       </div>
 
-      {message && (
-        <Alert variant="success" className="mb-6">
-          {message}
-        </Alert>
-      )}
 
-      {error && (
-        <Alert variant="error" className="mb-6">
-          <strong>Error:</strong> {error}
-        </Alert>
-      )}
 
       <div className="space-y-8">
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card title="Default API Key" subtitle="Default tenant identifier used by public agents" className="p-4 border border-sre-border rounded-lg shadow-sm bg-sre-surface">
-            <form onSubmit={handleSaveOrgId} className="flex gap-3 items-start">
-              <Select
-                value={orgId}
-                onChange={(e) => setOrgId(e.target.value)}
-                aria-label="Default API key select"
-                className="min-w-[240px]"
-                required
-              >
-                {apiKeys.length === 0 ? (
-                  <option value="">No API keys available</option>
-                ) : (
-                  apiKeys.map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.name} {k.is_default ? '(Default)' : ''}
-                    </option>
-                  ))
-                )}
-              </Select>
-              <div className="flex flex-col gap-2">
-                <Button type="submit" loading={loading} disabled={apiKeys.length === 0} className="whitespace-nowrap">Save</Button>
+        <div>
+          <Card className="p-3 rounded-lg border border-sre-border shadow-sm bg-sre-surface">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-sre-text">Key Actions</h3>
+                <p className="text-xs text-sre-text-muted mt-1">Update the default API key, add a new key, or generate an OTEL agent config.</p>
               </div>
-            </form>
-          </Card>
-
-          <Card title="Add API Key" subtitle="Create a new tenant key or save an existing one" className="p-4 border border-sre-border rounded-lg shadow-sm bg-sre-surface">
-            <form onSubmit={handleCreateKey} className="grid gap-4">
-              <Input
-                label="Key Name"
-                value={newKeyName}
-                onChange={(e) => setNewKeyName(e.target.value)}
-                placeholder="e.g., XYZ Product"
-                required
-              />
-              <Input
-                label="Key Value (optional)"
-                value={newKeyValue}
-                onChange={(e) => setNewKeyValue(e.target.value)}
-                placeholder="Leave empty to auto-generate"
-              />
-              <div className="flex justify-end">
-                <Button type="submit" loading={loading}>Add Key</Button>
+              <div className="flex items-center gap-3">
+                <Button size="sm" variant="secondary" className="py-1 px-3" onClick={() => setShowDefaultModal(true)}>Update Default Key</Button>
+                <Button size="sm" className="py-1 px-3" onClick={() => setShowAddModal(true)}>Add New Key</Button>
+                <Button size="sm" variant="secondary" className="py-1 px-3" onClick={() => { const defaultKeyId = (apiKeys.find(k => k.is_default)?.id) || (apiKeys[0]?.id || ''); setYamlModalKeyId(defaultKeyId); setShowYamlModal(true); }}>Generate Agent YAML</Button>
               </div>
-            </form>
+            </div>
           </Card>
         </div>
 
@@ -373,47 +364,68 @@ export default function ApiKeyPage() {
           )}
         </Card>
 
-        <Card title="OTEL Agent YAML" className="p-4 mt-6 border border-sre-border rounded-lg shadow-sm bg-sre-surface" subtitle="Prefilled configuration for your agent">
-          <div className="space-y-3">
-            <Select
-              label="Select API Key for Agent"
-              value={yamlKeyId}
-              onChange={(e) => setYamlKeyId(e.target.value)}
-            >
-              {apiKeys.map((key) => (
-                <option key={key.id} value={key.id}>
-                  {key.name} {key.is_default ? '(Default)' : ''}
-                </option>
-              ))}
+
+
+        {/* Default key modal */}
+        <Modal isOpen={showDefaultModal} onClose={() => setShowDefaultModal(false)} title="Update Default API Key" size="md" closeOnOverlayClick={false}>
+          <form onSubmit={handleSaveOrgId} className="space-y-4">
+            <Select value={orgId} onChange={(e) => setOrgId(e.target.value)} className="w-full" required>
+              {apiKeys.length === 0 ? (
+                <option value="">No API keys available</option>
+              ) : (
+                apiKeys.map((k) => (
+                  <option key={k.id} value={k.id}>{k.name} {k.is_default ? '(Default)' : ''}</option>
+                ))
+              )}
             </Select>
+            <div className="flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setShowDefaultModal(false)}>Cancel</Button>
+              <Button type="submit" loading={loading}>Save</Button>
+            </div>
+          </form>
+        </Modal>
 
-            <div className="flex gap-3 items-center">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handleCopy(yamlContent, 'OTEL YAML copied to clipboard')}
-                aria-label="Copy YAML"
-                title="Copy YAML"
-              >
-                <span className="material-icons">content_copy</span>
-              </Button>
+        {/* Add key modal */}
+        <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Add API Key" size="md" closeOnOverlayClick={false}>
+          <form onSubmit={handleCreateKey} className="space-y-4">
+            <Input label="Key Name" value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} placeholder="e.g., XYZ Product" required />
+            <Input label="Key Value (optional)" value={newKeyValue} onChange={(e) => setNewKeyValue(e.target.value)} placeholder="Leave empty to auto-generate" />
+            <div className="flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setShowAddModal(false)}>Cancel</Button>
+              <Button type="submit" loading={loading}>Create</Button>
+            </div>
+          </form>
+        </Modal>
 
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handleDownloadYaml(yamlContent)}
-                aria-label="Download YAML"
-                title="Download YAML"
-              >
-                <span className="material-icons">download</span>
+        {/* YAML modal */}
+        <Modal isOpen={showYamlModal} onClose={() => setShowYamlModal(false)} title="Generate OTEL Agent YAML" size="lg" closeOnOverlayClick={false}>
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Select label="Select API Key" value={yamlModalKeyId} onChange={(e) => setYamlModalKeyId(e.target.value)}>
+                {apiKeys.map((k) => (
+                  <option key={k.id} value={k.id}>{k.name} {k.is_default ? '(Default)' : ''}</option>
+                ))}
+              </Select>
+              <Input label="Loki OTLP endpoint" value={lokiEndpoint} onChange={(e) => setLokiEndpoint(e.target.value)} placeholder={LOKI_OTLP_ENDPOINT} helperText={`Full URL to Loki OTLP endpoint (e.g., ${LOKI_OTLP_ENDPOINT})`} />
+              <Input label="Tempo endpoint" value={tempoEndpoint} onChange={(e) => setTempoEndpoint(e.target.value)} placeholder={TEMPO_OTLP_ENDPOINT} helperText={`Tempo gRPC/OTLP endpoint (e.g., ${TEMPO_OTLP_ENDPOINT})`} />
+              <Input label="Mimir write endpoint" value={mimirEndpoint} onChange={(e) => setMimirEndpoint(e.target.value)} placeholder={MIMIR_REMOTE_WRITE} helperText={`Prometheus remote_write endpoint for metrics (e.g., ${MIMIR_REMOTE_WRITE})`} />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button variant="secondary" onClick={() => handleCopy(yamlModalContent, 'OTEL YAML copied to clipboard')}>
+                <span className="material-icons mr-2">content_copy</span>Copy YAML
               </Button>
+              <Button variant="secondary" onClick={() => handleDownloadYaml(yamlModalContent)}>
+                <span className="material-icons mr-2">download</span>Download YAML
+              </Button>
+              <div className="text-sm text-sre-text-muted ml-auto">Preview below reflects overrides</div>
             </div>
 
             <div className="bg-sre-background p-3 rounded border border-sre-border text-xs overflow-auto max-h-72">
-              <pre className="whitespace-pre-wrap break-words text-sre-text"><code>{yamlContent}</code></pre>
+              <pre className="whitespace-pre-wrap break-words text-sre-text"><code>{yamlModalContent}</code></pre>
             </div>
           </div>
-        </Card>
+        </Modal>
       </div>
     </div>
   )

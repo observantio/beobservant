@@ -1,7 +1,8 @@
 from enum import Enum
 from typing import List, Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, validator
+import re
 
 from config import config
 
@@ -60,6 +61,10 @@ class GroupUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class GroupMembersUpdate(BaseModel):
+    user_ids: List[str] = Field(default_factory=list)
+
+
 class PermissionInfo(BaseModel):
     id: str
     name: str
@@ -91,6 +96,19 @@ class UserBase(BaseModel):
     role: Role = Role.USER
     group_ids: List[str] = Field(default_factory=list)
     is_active: bool = True
+
+    @validator('username', pre=True, always=True)
+    def normalize_username(cls, v):
+        if v is None:
+            raise ValueError('username is required')
+        if not isinstance(v, str):
+            raise ValueError('username must be a string')
+        uname = v.strip().lower()
+        if ' ' in uname:
+            raise ValueError('username must not contain spaces')
+        if not re.match(r'^[a-z0-9._-]{3,50}$', uname):
+            raise ValueError('username must be 3-50 chars and contain only lowercase letters, numbers, dot, underscore or hyphen')
+        return uname
 
 
 class UserCreate(UserBase):
@@ -172,12 +190,35 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+    @validator('username', pre=True, always=True)
+    def normalize_login_username(cls, v):
+        if v is None:
+            raise ValueError('username is required')
+        if not isinstance(v, str):
+            raise ValueError('username must be a string')
+        uname = v.strip().lower()
+        if ' ' in uname:
+            raise ValueError('username must not contain spaces')
+        return uname
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: Optional[str] = None
+
+    @validator('username', pre=True, always=True)
+    def normalize_register_username(cls, v):
+        if v is None:
+            raise ValueError('username is required')
+        if not isinstance(v, str):
+            raise ValueError('username must be a string')
+        uname = v.strip().lower()
+        if ' ' in uname:
+            raise ValueError('username must not contain spaces')
+        if not re.match(r'^[a-z0-9._-]{3,50}$', uname):
+            raise ValueError('username must be 3-50 chars and contain only lowercase letters, numbers, dot, underscore or hyphen')
+        return uname
 
 
 class UserResponse(BaseModel):
