@@ -10,6 +10,7 @@ export const LOKI_OTLP_ENDPOINT = import.meta.env.VITE_LOKI_OTLP_ENDPOINT || 'ht
 export const LOKI_BASE = import.meta.env.VITE_LOKI_URL || 'http://loki:3100'
 export const MIMIR_REMOTE_WRITE = import.meta.env.VITE_MIMIR_REMOTE_WRITE || 'http://mimir:9009/api/v1/push'
 export const MIMIR_PROMETHEUS_URL = import.meta.env.VITE_MIMIR_PROMETHEUS_URL || 'http://mimir:9009/prometheus'
+export const TEMPO_URL = import.meta.env.VITE_TEMPO_URL || 'http://tempo:3200'
 export const TEMPO_OTLP_ENDPOINT = import.meta.env.VITE_TEMPO_OTLP_ENDPOINT || 'tempo:4317'
 // OTLP Gateway host used by UI when generating agent configs
 export const OTLP_GATEWAY_HOST = import.meta.env.VITE_OTLP_GATEWAY_HOST || 'http://localhost:4320'

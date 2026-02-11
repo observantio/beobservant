@@ -160,6 +160,37 @@ class DatabaseStorageService:
             )
             return [self._rule_to_pydantic(r) for r in rules]
 
+    def get_alert_rules_with_owner(self, tenant_id: str, user_id: str, group_ids: Optional[List[str]] = None) -> List[tuple]:
+        """Return list of (AlertRulePydantic, created_by) tuples for tenant rules.
+
+        Useful when callers need owner metadata to decide whether to expose
+        tenant-scoped sensitive fields like `org_id`.
+        """
+        group_ids = group_ids or []
+        with get_db_session() as db:
+            rules = (
+                db.query(AlertRuleDB)
+                .options(joinedload(AlertRuleDB.shared_groups))
+                .filter(AlertRuleDB.tenant_id == tenant_id)
+                .all()
+            )
+            result = []
+            for r in rules:
+                if _has_access(r.visibility or "private", r.created_by, user_id, _get_shared_group_ids(r), group_ids):
+                    result.append((self._rule_to_pydantic(r), r.created_by))
+            return result
+
+    def get_alert_rule_raw(self, rule_id: str, tenant_id: str):
+        """Return the raw DB object for a specific rule or None if not found."""
+        with get_db_session() as db:
+            r = (
+                db.query(AlertRuleDB)
+                .options(joinedload(AlertRuleDB.shared_groups))
+                .filter(AlertRuleDB.id == rule_id, AlertRuleDB.tenant_id == tenant_id)
+                .first()
+            )
+            return r
+
     def get_alert_rule(
         self, rule_id: str, tenant_id: str, user_id: str,
         group_ids: Optional[List[str]] = None,
@@ -388,3 +419,26 @@ class DatabaseStorageService:
             "success": True,
             "message": f"Test notification would be sent to {channel.type} channel: {channel.name}",
         }
+
+    def get_notification_channels_for_rule_name(self, rule_name: str) -> List[NotificationChannelPydantic]:
+        """Return notification channels for alert rules matching *rule_name*.
+
+        If a rule specifies explicit channel IDs, only those channels for the
+        rule's tenant are returned. If a rule has no channels configured, all
+        tenant channels are returned. This may return channels across multiple
+        tenants if multiple rules share the same name.
+        """
+        with get_db_session() as db:
+            results: List[NotificationChannelPydantic] = []
+            rules = db.query(AlertRuleDB).filter(AlertRuleDB.name == rule_name, AlertRuleDB.enabled == True).all()
+            for r in rules:
+                if r.notification_channels:
+                    chs = db.query(NotificationChannelDB).filter(
+                        NotificationChannelDB.tenant_id == r.tenant_id,
+                        NotificationChannelDB.id.in_(r.notification_channels)
+                    ).all()
+                else:
+                    chs = db.query(NotificationChannelDB).filter(NotificationChannelDB.tenant_id == r.tenant_id).all()
+                for ch in chs:
+                    results.append(self._channel_to_pydantic(ch))
+            return results

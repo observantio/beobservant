@@ -10,16 +10,15 @@ import HelpTooltip from '../components/HelpTooltip'
 import GrafanaTabs from '../components/grafana/GrafanaTabs'
 import GrafanaContent from '../components/grafana/GrafanaContent'
 import { useAuth } from '../contexts/AuthContext'
-import { GRAFANA_URL, MIMIR_PROMETHEUS_URL, DATASOURCE_TYPES as DS_TYPES, VISIBILITY_OPTIONS, GRAFANA_REFRESH_INTERVALS } from '../utils/constants'
+import { GRAFANA_URL, MIMIR_PROMETHEUS_URL, LOKI_BASE, TEMPO_URL, DATASOURCE_TYPES as DS_TYPES, VISIBILITY_OPTIONS, GRAFANA_REFRESH_INTERVALS } from '../utils/constants'
 
-const DATASOURCE_TYPES = DS_TYPES.map(dt => {
+const DATASOURCE_TYPES = DS_TYPES
+  .filter(dt => ['prometheus', 'loki', 'tempo'].includes(dt.value))
+  .map(dt => {
   const icons = {
     prometheus: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="11" width="4" height="10" rx="1" /><rect x="9" y="7" width="4" height="14" rx="1" /><rect x="15" y="3" width="4" height="18" rx="1" /></svg>,
     loki: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18M3 12h18M3 17h18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
     tempo: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="6" strokeWidth="2" /><path d="M21 21l-4.3-4.3" strokeWidth="2" strokeLinecap="round" /></svg>,
-    graphite: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M7 13l4-4 4 6 4-10" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
-    influxdb: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20" strokeWidth="2" strokeLinecap="round" /><path d="M5 7c2 4 4 6 7 6s5-2 7-6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
-    elasticsearch: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l7 4v8l-7 4-7-4V6l7-4z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>,
   }
   return { ...dt, icon: icons[dt.value] || null }
 })
@@ -290,6 +289,22 @@ export default function GrafanaPage() { // NOSONAR
     setShowDatasourceEditor(true)
   }
 
+  // Auto-fill URL based on datasource type
+  useEffect(() => {
+    if (editingDatasource) return // Don't auto-fill when editing existing datasource
+    
+    const urlMapping = {
+      prometheus: MIMIR_PROMETHEUS_URL,
+      loki: LOKI_BASE,
+      tempo: TEMPO_URL,
+    }
+    
+    const defaultUrl = urlMapping[datasourceForm.type]
+    if (defaultUrl) {
+      setDatasourceForm(prev => ({ ...prev, url: defaultUrl }))
+    }
+  }, [datasourceForm.type, editingDatasource])
+
   async function saveDatasource() {
     // Validate org_id for multi-tenant datasources
     const isMultiTenantType = ['prometheus', 'loki', 'tempo'].includes(datasourceForm.type)
@@ -394,26 +409,6 @@ export default function GrafanaPage() { // NOSONAR
 
   return (
     <div className="animate-fade-in">
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div>
-            <h1 className="text-3xl font-bold text-sre-text mb-2"><span className="material-icons text-blue-600 text-3xl align-middle">analytics</span> Dashboard</h1>
-            <p className="text-sre-text-muted">Manage dashboards, datasources, and folders with powerful SRE tooling</p>
-          </div>
-        </div>
-        <Button
-          onClick={() => openInGrafana('/')}
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-          Open Grafana
-        </Button>
-      </div>
-
       <GrafanaTabs activeTab={activeTab} onChange={setActiveTab} />
 
       <GrafanaContent
@@ -612,142 +607,182 @@ export default function GrafanaPage() { // NOSONAR
           </div>
         }
       >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">
-              Datasource Name <span className="text-red-500">*</span> <HelpTooltip text="Enter a descriptive name for your datasource that clearly identifies its purpose and type." />
-            </label>
-            <Input
-              value={datasourceForm.name}
-              onChange={(e) => setDatasourceForm({ ...datasourceForm, name: e.target.value })}
-              placeholder="My Mimir"
-              required
-            />
+        <div className="space-y-6">
+          {/* Basic Information */}
+          <div className="space-y-4">
+            <div className="pb-2 border-b border-sre-border">
+              <h3 className="text-sm font-semibold text-sre-text uppercase tracking-wide">Basic Information</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">
+                  Datasource Name <span className="text-red-500">*</span> <HelpTooltip text="Enter a descriptive name for your datasource that clearly identifies its purpose and type." />
+                </label>
+                <Input
+                  value={datasourceForm.name}
+                  onChange={(e) => setDatasourceForm({ ...datasourceForm, name: e.target.value })}
+                  placeholder={
+                    datasourceForm.type === 'prometheus' ? 'My Mimir' :
+                    datasourceForm.type === 'loki' ? 'My Loki' :
+                    'My Tempo'
+                  }
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">
+                  Type <span className="text-red-500">*</span> <HelpTooltip text="Select the type of datasource. This determines how Grafana will query and display data." />
+                </label>
+                <Select
+                  value={datasourceForm.type}
+                  onChange={(e) => setDatasourceForm({ ...datasourceForm, type: e.target.value })}
+                  disabled={!!editingDatasource}
+                >
+                  {DATASOURCE_TYPES.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </Select>
+                {editingDatasource && <p className="text-xs text-sre-text-muted mt-1">Type cannot be changed after creation</p>}
+                {!editingDatasource && <p className="text-xs text-sre-text-muted mt-1">Select the datasource type</p>}
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">
-              Type <span className="text-red-500">*</span> <HelpTooltip text="Select the type of datasource. This determines how Grafana will query and display data." />
-            </label>
-            <Select
-              value={datasourceForm.type}
-              onChange={(e) => setDatasourceForm({ ...datasourceForm, type: e.target.value })}
-              disabled={!!editingDatasource}
-            >
-              {DATASOURCE_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </Select>
-            {editingDatasource && <p className="text-xs text-sre-text-muted mt-1">Type cannot be changed after creation</p>}
-            {!editingDatasource && <p className="text-xs text-sre-text-muted mt-1">Select the datasource type</p>}
+          {/* Connection Settings */}
+          <div className="space-y-4">
+            <div className="pb-2 border-b border-sre-border">
+              <h3 className="text-sm font-semibold text-sre-text uppercase tracking-wide">Connection</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-sre-text mb-2">
+                  URL <span className="text-red-500">*</span> <HelpTooltip text="The endpoint URL where the datasource service is running and accessible." />
+                </label>
+                <Input
+                  value={datasourceForm.url}
+                  onChange={(e) => setDatasourceForm({ ...datasourceForm, url: e.target.value })}
+                  placeholder={
+                    datasourceForm.type === 'prometheus' ? MIMIR_PROMETHEUS_URL :
+                    datasourceForm.type === 'loki' ? LOKI_BASE :
+                    datasourceForm.type === 'tempo' ? TEMPO_URL :
+                    'https://example.com'
+                  }
+                  required
+                />
+                <p className="text-xs text-sre-text-muted mt-1">The URL where the datasource is accessible</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">
+                  Access Mode <HelpTooltip text="Server (Proxy): Grafana server makes requests. Browser (Direct): Browser makes direct requests to the datasource." />
+                </label>
+                <Select
+                  value={datasourceForm.access}
+                  onChange={(e) => setDatasourceForm({ ...datasourceForm, access: e.target.value })}
+                >
+                  <option value="proxy">Server (Proxy)</option>
+                  <option value="direct">Browser (Direct)</option>
+                </Select>
+                <p className="text-xs text-sre-text-muted mt-1">Proxy: Access via Grafana server. Direct: Access from browser</p>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">
-              URL <span className="text-red-500">*</span> <HelpTooltip text="The endpoint URL where the datasource service is running and accessible." />
-            </label>
-            <Input
-              value={datasourceForm.url}
-              onChange={(e) => setDatasourceForm({ ...datasourceForm, url: e.target.value })}
-              placeholder={MIMIR_PROMETHEUS_URL}
-              required
-            />
-            <p className="text-xs text-sre-text-muted mt-1">The URL where the datasource is accessible</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">
-              Access Mode <HelpTooltip text="Server (Proxy): Grafana server makes requests. Browser (Direct): Browser makes direct requests to the datasource." />
-            </label>
-            <Select
-              value={datasourceForm.access}
-              onChange={(e) => setDatasourceForm({ ...datasourceForm, access: e.target.value })}
-            >
-              <option value="proxy">Server (Proxy)</option>
-              <option value="direct">Browser (Direct)</option>
-            </Select>
-            <p className="text-xs text-sre-text-muted mt-1">Proxy: Access via Grafana server. Direct: Access from browser</p>
-          </div>
-
+          {/* Multi-tenant Configuration */}
           {!editingDatasource && ['prometheus', 'loki', 'tempo'].includes(datasourceForm.type) && (
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                API Key <span className="text-red-500">*</span> <HelpTooltip text="Select the API key for multi-tenant data isolation. This ensures the datasource only queries data for the selected product." />
-              </label>
-              <Select
-                value={datasourceForm.apiKeyId}
-                onChange={(e) => setDatasourceForm({ ...datasourceForm, apiKeyId: e.target.value })}
-                required
-              >
-                {defaultKey && (
-                  <option key={defaultKey.id} value={defaultKey.id}>
-                    Default — {defaultKey.name}
-                  </option>
-                )}
-                {(user?.api_keys || []).filter(k => !k.is_default).map((key) => (
-                  <option key={key.id} value={key.id}>
-                    {key.name}
-                  </option>
-                ))}
-              </Select>
-              <p className="text-xs text-sre-text-muted mt-1">Select which API key to use for multi-tenant data isolation.</p>
-              {(() => {
-                let datasourceName;
-                if (datasourceForm.type === 'prometheus') {
-                  datasourceName = 'Mimir';
-                } else if (datasourceForm.type === 'loki') {
-                  datasourceName = 'Loki';
-                } else {
-                  datasourceName = 'Tempo';
-                }
-                return (
-                  <div className="mt-2 text-xs text-sre-text-muted">
-                    <span className="material-icons text-sm align-middle mr-1">info</span>
-                    This datasource will only query data tagged with this API key in {datasourceName}.
-                  </div>
-                );
-              })()}
+            <div className="space-y-4">
+              <div className="pb-2 border-b border-sre-border">
+                <h3 className="text-sm font-semibold text-sre-text uppercase tracking-wide">Multi-tenant Configuration</h3>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">
+                  API Key <span className="text-red-500">*</span> <HelpTooltip text="Select the API key for multi-tenant data isolation. This ensures the datasource only queries data for the selected product." />
+                </label>
+                <Select
+                  value={datasourceForm.apiKeyId}
+                  onChange={(e) => setDatasourceForm({ ...datasourceForm, apiKeyId: e.target.value })}
+                  required
+                >
+                  {defaultKey && (
+                    <option key={defaultKey.id} value={defaultKey.id}>
+                      Default — {defaultKey.name}
+                    </option>
+                  )}
+                  {(user?.api_keys || []).filter(k => !k.is_default).map((key) => (
+                    <option key={key.id} value={key.id}>
+                      {key.name}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-xs text-sre-text-muted mt-1">Select which API key to use for multi-tenant data isolation.</p>
+                {(() => {
+                  let datasourceName;
+                  if (datasourceForm.type === 'prometheus') {
+                    datasourceName = 'Mimir';
+                  } else if (datasourceForm.type === 'loki') {
+                    datasourceName = 'Loki';
+                  } else {
+                    datasourceName = 'Tempo';
+                  }
+                  return (
+                    <div className="mt-2 text-xs text-sre-text-muted">
+                      <span className="material-icons text-sm align-middle mr-1">info</span>
+                      This datasource will only query data tagged with this API key in {datasourceName}.
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="is-default"
-              checked={datasourceForm.isDefault}
-              onChange={(e) => setDatasourceForm({ ...datasourceForm, isDefault: e.target.checked })}
-              className="w-4 h-4"
-            />
-            <label htmlFor="is-default" className="text-sm text-sre-text">
-              Set as default datasource <HelpTooltip text="When checked, this datasource will be the default choice in new panels and dashboards." />
-            </label>
-          </div>
-
-          <div className="border-t border-sre-border pt-4">
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                Visibility <HelpTooltip text="Control who can view and use this datasource. Private datasources are only accessible to you." />
-              </label>
-              <Select
-                value={datasourceForm.visibility}
-                onChange={(e) => {
-                  setDatasourceForm({ ...datasourceForm, visibility: e.target.value, sharedGroupIds: [] })
-                }}
-              >
-                {VISIBILITY_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </Select>
-              <p className="text-xs text-sre-text-muted mt-1">Control who can access this datasource</p>
+          {/* Settings */}
+          <div className="space-y-4">
+            <div className="pb-2 border-b border-sre-border">
+              <h3 className="text-sm font-semibold text-sre-text uppercase tracking-wide">Settings</h3>
             </div>
 
-            {datasourceForm.visibility === 'group' && (
-              <div className="mt-4">
-                <label htmlFor="shared-groups" className="block text-sm font-medium text-sre-text mb-2">
-                  Shared Groups <HelpTooltip text="Select which user groups can view and use this datasource." />
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="is-default"
+                  checked={datasourceForm.isDefault}
+                  onChange={(e) => setDatasourceForm({ ...datasourceForm, isDefault: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <label htmlFor="is-default" className="text-sm text-sre-text">
+                  Set as default datasource <HelpTooltip text="When checked, this datasource will be the default choice in new panels and dashboards." />
                 </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">
+                  Visibility <HelpTooltip text="Control who can view and use this datasource. Private datasources are only accessible to you." />
+                </label>
+                <Select
+                  value={datasourceForm.visibility}
+                  onChange={(e) => {
+                    setDatasourceForm({ ...datasourceForm, visibility: e.target.value, sharedGroupIds: [] })
+                  }}
+                >
+                  {VISIBILITY_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </Select>
+                <p className="text-xs text-sre-text-muted mt-1">Control who can access this datasource</p>
+              </div>
+
+              {datasourceForm.visibility === 'group' && (
+                <div>
+                  <label htmlFor="shared-groups" className="block text-sm font-medium text-sre-text mb-2">
+                    Shared Groups <HelpTooltip text="Select which user groups can view and use this datasource." />
+                  </label>
                 <div id="shared-groups" className="space-y-2 max-h-40 overflow-y-auto border border-sre-border rounded p-3">
                   {groups.map(group => (
                     <Checkbox
@@ -777,6 +812,7 @@ export default function GrafanaPage() { // NOSONAR
             )}
           </div>
         </div>
+      </div>
       </Modal>
 
       {/* Folder Creator Modal */}

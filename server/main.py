@@ -41,12 +41,42 @@ auth_service._lazy_init()
 auth_service.backfill_otlp_tokens()
 logger.info("✓ Auth service initialized")
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        yield
+    finally:
+        clients = []
+        for svc in (
+            getattr(tempo_router, "tempo_service", None),
+            getattr(loki_router, "loki_service", None),
+            getattr(alertmanager_router, "alertmanager_service", None),
+            getattr(alertmanager_router, "notification_service", None),
+            getattr(grafana_router, "grafana_service", None),
+            getattr(agents_router, "loki_service", None),
+            getattr(agents_router, "tempo_service", None),
+        ):
+            client = getattr(svc, "_client", None)
+            if client is not None:
+                clients.append(client)
+
+        extra = getattr(agents_router, "_mimir_client", None)
+        if extra is not None:
+            clients.append(extra)
+
+        unique = {id(c): c for c in clients}.values()
+        if unique:
+            await asyncio.gather(*(c.aclose() for c in unique), return_exceptions=True)
+
 app = FastAPI(
     title=constants.APP_NAME,
     description=constants.APP_DESCRIPTION,
     version=constants.APP_VERSION,
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(RequestSizeLimitMiddleware, max_bytes=config.MAX_REQUEST_BYTES)

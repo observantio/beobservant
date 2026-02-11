@@ -465,10 +465,12 @@ export default function TempoPage() {
               })}
             </div>
           ) : (
-            <div className="text-center py-12">
-              <span className="material-icons text-6xl text-sre-text-subtle mb-4">timeline</span>
-              <p className="text-lg text-sre-text-muted mb-2">No traces found</p>
-              <p className="text-sm text-sre-text-subtle">Try adjusting your search criteria, expanding the time range, or pasting a trace ID above.</p>
+            <div className="text-center py-16 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
+              <span className="material-icons text-5xl text-sre-text-muted mb-4 block">timeline</span>
+              <h3 className="text-xl font-semibold text-sre-text mb-2">No Traces Found</h3>
+              <p className="text-sre-text-muted mb-6 max-w-md mx-auto">
+                Try adjusting your search criteria, expanding the time range, or pasting a trace ID above.
+              </p>
             </div>
           )}
         </Card>

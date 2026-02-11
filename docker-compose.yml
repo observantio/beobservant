@@ -108,23 +108,6 @@ services:
       - "4318:4318"
     restart: unless-stopped
 
-  chaos-stress:
-    image: alpine:latest
-    command: >
-      sh -c "apk add --no-cache stress-ng &&
-             while true; do
-               WAIT=$$((60 + RANDOM % 120));
-               echo \"Waiting $${WAIT}s before next stress...\";
-               sleep $$WAIT;
-               echo 'Starting 45s stress on OTel agent container...';
-               stress-ng --cpu 2 --vm 1 --vm-bytes 384M --timeout 45s --metrics-brief || true;
-             done"
-    pid: "container:beobservant-otel-agent-1"
-    depends_on:
-      - otel-agent
-    networks: [obs]
-    restart: unless-stopped
-
   trace-generator:
     image: alpine:latest
     network_mode: host
@@ -189,8 +172,6 @@ services:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
       - "--storage.path=/alertmanager"
     networks: [obs]
-    ports:
-      - "9093:9093"
     restart: unless-stopped
 
   grafana:
@@ -199,8 +180,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:-admin}"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_INSTALL_PLUGINS: ""
-      # Use the same default org ID as the backend so X-Scope-OrgID is consistent
-      MIMIR_TENANT_ID: "${DEFAULT_ORG_ID:-default}"
+      MIMIR_TENANT_ID: "${DEFAULT_ORG_ID:-Av45ZchZsQdKjN8XyG}"
     volumes:
       - ./configs/grafana/grafana-datasource.yaml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - grafana:/var/lib/grafana

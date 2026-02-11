@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import PropTypes from 'prop-types'
 import { Button, Input, Select } from '../ui'
+import RuleEditorWizard from './RuleEditorWizard'
 import HelpTooltip from '../HelpTooltip'
 import { getGroups, listMetricNames, testAlertRule } from '../../api'
 
@@ -10,11 +11,11 @@ const RULE_TEMPLATES = [
   {
     id: 'cpu-system',
     name: 'High CPU (system)',
-    expr: 'avg without (cpu, state) (rate(system_cpu_time_seconds_total{state="system"}[1m])) * 100 > 80',
+    expr: '100 - (avg without (cpu, state) (rate(system_cpu_time_seconds_total{state="idle"}[1m])) * 100) > 80',
     duration: '2m',
     severity: 'warning',
-    summary: 'High system CPU',
-    description: 'System CPU time above 80% for 2 minutes.'
+    summary: 'High CPU utilization',
+    description: 'CPU busy (non-idle) above 80% for 2 minutes.'
   },
   {
     id: 'cpu-node',
@@ -61,13 +62,17 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
   const [metricFilter, setMetricFilter] = useState('')
   const [loadingMetrics, setLoadingMetrics] = useState(false)
   const [metricsError, setMetricsError] = useState(null)
-  const [labelPairs, setLabelPairs] = useState(() => Object.entries(rule?.labels || {}).map(([key, value]) => ({ key, value })))
+  const [labelPairs, setLabelPairs] = useState(() => Object.entries(rule?.labels || {}).map(([key, value]) => ({ id: Math.random().toString(36).substr(2, 9), key, value })))
   const [validationErrors, setValidationErrors] = useState({})
   const [validationWarnings, setValidationWarnings] = useState([])
   const [saveError, setSaveError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
+  const [currentStep, setCurrentStep] = useState(0)
+  const totalSteps = 4
+  const [issuesCollapsed, setIssuesCollapsed] = useState(true)
+  const [selectedTemplate, setSelectedTemplate] = useState(null)
 
   useEffect(() => {
     loadGroups()
@@ -82,6 +87,17 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
     })
     setFormData((prev) => ({ ...prev, labels: nextLabels }))
   }, [labelPairs])
+
+  // Detect which template matches current form data
+  useEffect(() => {
+    const matchingTemplate = RULE_TEMPLATES.find(template =>
+      template.expr === formData.expr &&
+      template.duration === formData.duration &&
+      template.summary === formData.annotations?.summary &&
+      template.description === formData.annotations?.description
+    )
+    setSelectedTemplate(matchingTemplate?.id || null)
+  }, [formData.expr, formData.duration, formData.annotations])
 
   const loadGroups = async () => {
     try {
@@ -219,16 +235,15 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
   const applyTemplate = (template) => {
     setFormData((prev) => ({
       ...prev,
-      name: template.name,
       expr: template.expr,
       duration: template.duration,
-      severity: template.severity,
       annotations: {
         ...prev.annotations,
         summary: template.summary,
         description: template.description
       }
     }))
+    setSelectedTemplate(template.id)
   }
 
   const handleTestRule = async () => {
@@ -245,549 +260,771 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
     }
   }
 
+  const canProceedToNextStep = () => {
+    const { errors } = validateForm(formData)
+    switch (currentStep) {
+      case 0: // Basic
+        return !errors.name && formData.name.trim()
+      case 1: // Condition
+        return !errors.expr && !errors.duration && formData.expr.trim()
+      case 2: // Details
+        return true // Optional fields
+      case 3: // Advanced
+        return true // Optional fields
+      default:
+        return false
+    }
+  }
+
+  const handleNext = () => {
+    if (canProceedToNextStep() && currentStep < totalSteps - 1) {
+      setCurrentStep(currentStep + 1)
+    }
+  }
+
+  const handlePrevious = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1)
+    }
+  }
+
+  const handleWizardSubmit = async () => {
+    const { errors } = validateForm(formData)
+    if (Object.keys(errors).length > 0) return
+
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const success = await onSave(formData)
+      if (success) {
+        onCancel() // Close the modal on success
+      }
+    } catch (e) {
+      setSaveError(e.message || 'Failed to save rule')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const hasErrors = Object.keys(validationErrors).length > 0
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Rule Configuration */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-sre-text border-b border-sre-border pb-2">Rule Configuration</h3>
+    <div className="max-w-6xl mx-auto overflow-hidden">
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
+        <RuleEditorWizard
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          onNext={handleNext}
+          onPrevious={handlePrevious}
+          onSubmit={handleWizardSubmit}
+          canProceed={canProceedToNextStep()}
+          isSubmitting={saving}
+          hasErrors={hasErrors}
+        />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                Rule Name <HelpTooltip text="Enter a descriptive name for your alert rule that clearly identifies what it monitors." />
-              </label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-                placeholder="e.g., HighCPUUsage"
-                className="w-full"
-              />
-              {validationErrors.name && (
-                <p className="text-xs text-red-400 mt-1 break-words">{validationErrors.name}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                Severity <HelpTooltip text="Choose the severity level for this alert. Critical alerts require immediate attention, warnings are less urgent." />
-              </label>
-              <Select
-                value={formData.severity}
-                onChange={(e) => setFormData({ ...formData, severity: e.target.value })}
-                className="w-full"
-              >
-                <option value="info">Info</option>
-                <option value="warning">Warning</option>
-                <option value="critical">Critical</option>
-              </Select>
-              {validationErrors.severity && (
-                <p className="text-xs text-red-400 mt-1 break-words">{validationErrors.severity}</p>
-              )}
-            </div>
-          </div>
-
-          {apiKeys.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                Product / API Key <HelpTooltip text="Select the API key to scope this rule to a specific product, or leave empty to monitor all products." />
-              </label>
-              <Select
-                value={formData.orgId || ''}
-                onChange={(e) => setFormData({ ...formData, orgId: e.target.value })}
-                className="w-full max-w-md"
-              >
-                <option value="">All products (no scope)</option>
-                {apiKeys.map((k) => (
-                  <option key={k.id} value={k.key}>
-                    {k.name}{k.is_default ? ' (Default)' : ''}{k.is_enabled ? ' — active' : ''}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-        </div>
-
-        {/* Quick Templates */}
-        <div className="bg-sre-surface/40 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="material-icons text-sre-primary">auto_awesome</span>
-            <h4 className="text-sm font-semibold text-sre-text">Quick Templates</h4>
-          </div>
-          <p className="text-xs text-sre-text-muted leading-relaxed">
-            Start from a known-good template, then tune the expression and thresholds for your environment.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {RULE_TEMPLATES.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                onClick={() => applyTemplate(template)}
-                className="text-left p-3 rounded-lg border border-sre-border bg-sre-surface hover:border-sre-primary/40 hover:bg-sre-primary/5 transition-colors group"
-              >
-                <div className="text-sm font-semibold text-sre-text group-hover:text-sre-primary transition-colors">{template.name}</div>
-                <div className="text-xs text-sre-text-muted mt-1 line-clamp-2">{template.summary}</div>
-                <div className="text-[11px] text-sre-text-muted mt-2 font-mono break-all line-clamp-3 leading-tight">{template.expr}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Metric Explorer */}
-        <div className="bg-sre-surface/40 space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="material-icons text-sre-primary">functions</span>
-                <h4 className="text-sm font-semibold text-sre-text">Metric Explorer (optional)</h4>
-              </div>
-              <p className="text-xs text-sre-text-muted leading-relaxed">
-                Load metric names from Mimir for the selected product and click to insert them into your PromQL expression.
-              </p>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={loadMetrics} disabled={loadingMetrics}>
-              {loadingMetrics ? (
-                <>
-                  <span className="material-icons text-sm mr-2 animate-spin">progress_activity</span>
-                  Loading…
-                </>
-              ) : (
-                <>
-                  <span className="material-icons text-sm mr-2">refresh</span>
-                  Load metrics
-                </>
-              )}
-            </Button>
-          </div>
-
-          {metricsError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400 break-words">
-              {metricsError}
-            </div>
-          )}
-
-          {metricNames.length > 0 && (
+        {/* Step Content */}
+        <div className="min-h-[500px] bg-gradient-to-br from-sre-bg to-sre-surface/30 rounded-xl p-6 border border-sre-border/50 shadow-inner overflow-hidden">
+          {currentStep === 0 && (
             <>
-              <div>
-                <label className="block text-sm font-medium text-sre-text mb-2">Filter metrics</label>
-                <Input
-                  value={metricFilter}
-                  onChange={(e) => setMetricFilter(e.target.value)}
-                  placeholder="e.g., http_requests_total"
-                  className="w-full"
-                />
-              </div>
-              <div className="max-h-40 overflow-y-auto border border-dashed border-sre-border rounded-lg p-3 bg-sre-bg-alt">
-                {filteredMetricNames.length ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {filteredMetricNames.map((name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => {
-                          const base = formData.expr || ''
-                          const template = base ? `${base}\n${name}` : name
-                          setFormData({ ...formData, expr: template })
-                        }}
-                        className="px-2 py-1 text-xs rounded-full border border-sre-border bg-sre-surface hover:bg-sre-primary/10 hover:border-sre-primary text-sre-text transition-colors break-all max-w-full"
-                        title={name}
-                      >
-                        {name}
-                      </button>
-                    ))}
+              {/* Basic Setup */}
+              <div className="space-y-8">
+<div className="text-left mb-6">
+                  <h2 className="text-xl font-bold text-sre-text mb-2">Basic Setup</h2>
+                  <p className="text-sm text-sre-text-muted">Configure the fundamental properties of your alert rule</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-sre-text">
+                      Rule Name <HelpTooltip text="Enter a descriptive name for your alert rule that clearly identifies what it monitors." />
+                    </label>
+                    <Input
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                      placeholder="CPU Alert"
+                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                    />
+                    {validationErrors.name && (
+                      <p className="text-sm text-red-500 font-medium flex items-center gap-1">
+                        <span className="material-icons text-sm">error</span>
+                        {validationErrors.name}
+                      </p>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-xs text-sre-text-muted">No metrics match this filter.</p>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-sre-text">
+                      Severity <HelpTooltip text="Choose the severity level for this alert. Critical alerts require immediate attention, warnings are less urgent." />
+                    </label>
+                    <Select
+                      value={formData.severity}
+                      onChange={(e) => setFormData({ ...formData, severity: e.target.value })}
+                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                    >
+                      <option value="info">Info</option>
+                      <option value="warning">Warning</option>
+                      <option value="critical">Critical</option>
+                    </Select>
+                    {validationErrors.severity && (
+                      <p className="text-sm text-red-500 font-medium flex items-center gap-1">
+                        <span className="material-icons text-sm">error</span>
+                        {validationErrors.severity}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {apiKeys.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-sre-text">
+                      Product / API Key <HelpTooltip text="Select the API key to scope this rule to a specific product, or leave empty to monitor all products." />
+                    </label>
+                    <Select
+                      value={formData.orgId || ''}
+                      onChange={(e) => setFormData({ ...formData, orgId: e.target.value })}
+                      className="w-full max-w-md text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                    >
+                      <option value="">All products (no scope)</option>
+                      {apiKeys.map((k) => (
+                        <option key={k.id} value={k.key}>
+                          {k.name}{k.is_default ? ' (Default)' : ''}{k.is_enabled ? ' — active' : ''}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+
+                {/* Quick Templates */}
+                <div className="bg-gradient-to-r from-sre-primary/5 to-sre-primary/10 rounded-xl p-6 border border-sre-primary/20">
+                  <div className="mb-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="material-icons text-2xl text-sre-primary">auto_awesome</span>
+                      <h4 className="text-base font-semibold text-sre-text">Quick Templates</h4>
+                    </div>
+                    <p className="text-sm text-sre-text-muted">Start from a known-good template, then tune the expression and thresholds for your environment.</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {RULE_TEMPLATES.map((template) => {
+                      const isSelected = selectedTemplate === template.id
+                      return (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => applyTemplate(template)}
+                          className={`text-left p-4 rounded-lg border-2 transition-all duration-200 group shadow-sm hover:shadow-md h-auto relative ${
+                            isSelected
+                              ? 'border-sre-primary bg-sre-primary/10 shadow-md'
+                              : 'border-sre-border bg-sre-surface hover:border-sre-primary hover:bg-sre-primary/5'
+                          }`}
+                        >
+                          {isSelected && (
+                            <div className="absolute top-2 right-2">
+                              <span className="material-icons text-lg text-sre-primary">auto_awesome</span>
+                            </div>
+                          )}
+                          <div className={`text-base font-semibold transition-colors mb-2 text-left ${
+                            isSelected
+                              ? 'text-sre-primary'
+                              : 'text-sre-text group-hover:text-sre-primary'
+                          }`}>
+                            {template.name}
+                          </div>
+                          <div className="text-sm text-sre-text-muted mb-3 line-clamp-2 text-left">
+                            {template.summary}
+                          </div>
+                          <div className="text-xs font-mono text-sre-text-muted bg-sre-bg-alt p-3 rounded border text-left whitespace-pre-wrap break-words leading-relaxed min-h-[80px] overflow-hidden">
+                            {template.expr}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {currentStep === 1 && (
+            <>
+              {/* Alert Condition */}
+              <div className="space-y-8">
+<div className="text-left mb-6">
+                  <h2 className="text-xl font-bold text-sre-text mb-2">Alert Condition</h2>
+                  <p className="text-sre-text-muted">Define when this alert should trigger</p>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <label className="block text-sm font-semibold text-sre-text">
+                      PromQL Expression <HelpTooltip text="Write a PromQL query that defines when this alert should fire. Use the metric explorer below to help build your query." />
+                    </label>
+                    <Input
+                      value={formData.expr}
+                      onChange={(e) => setFormData({ ...formData, expr: e.target.value })}
+                      required
+                      placeholder="e.g., rate(requests_total[5m]) > 100"
+                      className="w-full font-mono text-base py-3 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors min-h-[60px]"
+                    />
+                    {validationErrors.expr && (
+                      <p className="text-sm text-red-500 font-medium flex items-center gap-1">
+                        <span className="material-icons text-sm">error</span>
+                        {validationErrors.expr}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-sre-text">
+                        Duration <HelpTooltip text="How long the condition must be true before the alert fires. Use Prometheus duration format (e.g., 5m, 1h)." />
+                      </label>
+                      <Input
+                        value={formData.duration}
+                        onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                        placeholder="e.g., 5m, 1h"
+                        className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                      />
+                      {validationErrors.duration && (
+                        <p className="text-sm text-red-500 font-medium flex items-center gap-1">
+                          <span className="material-icons text-sm">error</span>
+                          {validationErrors.duration}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-sre-text">
+                        Group <HelpTooltip text="Group name for organizing related alerts. Alerts in the same group are treated as a single notification." />
+                      </label>
+                      <Input
+                        value={formData.group}
+                        onChange={(e) => setFormData({ ...formData, group: e.target.value })}
+                        placeholder="default"
+                        className="w-full text-lg py-3 px-4 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Metric Explorer */}
+                  <div className="bg-gradient-to-r from-sre-surface to-sre-surface/80 rounded-xl p-6 border border-sre-border">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="material-icons text-xl text-sre-primary">functions</span>
+                          <h4 className="text-base font-semibold text-sre-text">Metric Explorer</h4>
+                        </div>
+                        <p className="text-sm text-sre-text-muted leading-relaxed">
+                          Load metric names from Mimir for the selected product and click to insert them into your PromQL expression.
+                        </p>
+                      </div>
+                      <Button type="button" variant="outline" size="lg" onClick={loadMetrics} disabled={loadingMetrics}>
+                        {loadingMetrics ? (
+                          <>
+                            <span className="material-icons text-base mr-2 animate-spin">progress_activity</span>
+                            Loading…
+                          </>
+                        ) : (
+                          <>
+                            <span className="material-icons text-base mr-2">refresh</span>
+                            Load metrics
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    {metricsError && (
+                      <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-medium">
+                        <span className="material-icons text-base mr-1 align-middle">error</span>
+                        {metricsError}
+                      </div>
+                    )}
+
+                    {metricNames.length > 0 && (
+                      <>
+                        <div className="mb-4">
+                          <label className="block text-sm font-semibold text-sre-text mb-2">Filter metrics</label>
+                          <Input
+                            value={metricFilter}
+                            onChange={(e) => setMetricFilter(e.target.value)}
+                            placeholder="e.g., http_requests_total"
+                            className="w-full py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
+                          />
+                        </div>
+                        <div className="max-h-48 overflow-y-auto border border-sre-border rounded-lg p-4 bg-sre-bg-alt">
+                          {filteredMetricNames.length ? (
+                            <div className="flex flex-wrap gap-2">
+                              {filteredMetricNames.map((name) => (
+                                <button
+                                  key={name}
+                                  type="button"
+                                  onClick={() => {
+                                    const base = formData.expr || ''
+                                    const template = base ? `${base}\n${name}` : name
+                                    setFormData({ ...formData, expr: template })
+                                  }}
+                                  className="px-3 py-2 text-sm rounded-full border border-sre-border bg-white hover:bg-sre-primary/10 hover:border-sre-primary text-sre-text transition-all duration-200 break-words max-w-full shadow-sm hover:shadow-md text-left"
+                                  title={name}
+                                >
+                                  {name}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-sre-text-muted italic">No metrics match this filter.</p>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {currentStep === 2 && (
+            <>
+              {/* Alert Details */}
+              <div className="space-y-8">
+<div className="text-left mb-6">
+                  <h2 className="text-xl font-bold text-sre-text mb-2">Alert Details</h2>
+                  <p className="text-sre-text-muted">Add context and labels to make your alerts more informative</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className="block text-sm font-semibold text-sre-text">
+                      Summary <HelpTooltip text="A brief summary of the alert that will be shown in notifications and the UI." />
+                    </label>
+                    <Input
+                      value={formData.annotations.summary}
+                      onChange={(e) => setFormData({ ...formData, annotations: { ...formData.annotations, summary: e.target.value }})}
+                      placeholder="Brief alert summary"
+                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="block text-sm font-semibold text-sre-text">
+                      Description <HelpTooltip text="Detailed description of the alert condition and what it means when it fires." />
+                    </label>
+                    <Input
+                      value={formData.annotations.description}
+                      onChange={(e) => setFormData({ ...formData, annotations: { ...formData.annotations, description: e.target.value }})}
+                      placeholder="Detailed description"
+                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Alert Labels */}
+                <div className="bg-gradient-to-r from-sre-surface to-sre-surface/80 rounded-xl p-6 border border-sre-border">
+                  <div className="flex items-center justify-between gap-4 mb-4">
+                    <div>
+                      <h4 className="text-base font-semibold text-sre-text">Alert Labels</h4>
+                      <p className="text-sm text-sre-text-muted">Labels help route and group alerts. Severity is automatically added.</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLabelPairs([...labelPairs, { id: Math.random().toString(36).substr(2, 9), key: '', value: '' }])}
+                    >
+                      <span className="material-icons text-base mr-2">add</span>
+                      Add Label
+                    </Button>
+                  </div>
+
+                  {labelPairs.length === 0 ? (
+                    <p className="text-sm text-sre-text-muted italic">No labels added yet.</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {labelPairs.map((pair, idx) => (
+                        <div key={pair.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-center p-4 bg-sre-surface border border-sre-border rounded-lg shadow-sm">
+                          <Input
+                            value={pair.key}
+                            onChange={(e) => {
+                              const next = [...labelPairs]
+                              next[idx] = { ...next[idx], key: e.target.value }
+                              setLabelPairs(next)
+                            }}
+                            placeholder="label_key"
+                            className="w-full"
+                          />
+                          <Input
+                            value={pair.value}
+                            onChange={(e) => {
+                              const next = [...labelPairs]
+                              next[idx] = { ...next[idx], value: e.target.value }
+                              setLabelPairs(next)
+                            }}
+                            placeholder="value"
+                            className="w-full"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setLabelPairs(labelPairs.filter((p) => p.id !== pair.id))}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20 transition-colors"
+                          >
+                            <span className="material-icons text-base">close</span>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {validationErrors.labels && (
+                    <p className="text-sm text-red-500 font-medium flex items-center gap-1 mt-2">
+                      <span className="material-icons text-sm">error</span>
+                      {validationErrors.labels}
+                    </p>
+                  )}
+                </div>
+
+                {/* Rule Preview */}
+                <div className="bg-gradient-to-r from-sre-primary/5 to-sre-primary/10 rounded-xl p-6 border border-sre-primary/20">
+                  <h4 className="text-lg font-semibold text-sre-text mb-4 flex items-center gap-2">
+                    <span className="material-icons text-xl text-sre-primary">visibility</span>
+                    Rule Preview
+                  </h4>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">Expression</div>
+                      <div className="text-sm font-mono text-sre-text break-words bg-sre-surface p-4 rounded-lg border border-sre-border shadow-inner max-h-24 overflow-y-auto">
+                        {formData.expr || 'No expression set'}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">Duration</div>
+                        <div className="text-base text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border">{formData.duration || '1m'}</div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">Group</div>
+                        <div className="text-base text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border">{formData.group || 'default'}</div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">Target Org</div>
+                        <div className="text-base text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border break-words">{formData.orgId || 'default org'}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">Labels</div>
+                      <div className="flex flex-wrap gap-2 min-h-[3rem] p-3 bg-sre-surface rounded border border-sre-border">
+                        {Object.entries(effectiveLabels).length > 0 ? (
+                          Object.entries(effectiveLabels).map(([key, value]) => (
+                            <span key={key} className="text-sm px-3 py-1 bg-sre-primary/10 border border-sre-primary/20 rounded-full text-sre-text break-words text-left">
+                              {key}={value}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-sm text-sre-text-muted italic">No labels</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {currentStep === 3 && (
+            <>
+              {/* Advanced Settings */}
+              <div className="space-y-8">
+<div className="text-left mb-6">
+                  <h2 className="text-xl font-bold text-sre-text mb-2">Advanced Settings</h2>
+                  <p className="text-sre-text-muted">Configure notifications and rule visibility</p>
+                </div>
+
+                {/* Notification Channels */}
+                <div className="space-y-6">
+                  <div className="flex items-center gap-3">
+                    <span className="material-icons text-xl text-sre-primary">notifications</span>
+                    <div>
+                      <h4 className="text-base font-semibold text-sre-text">Notification Channels</h4>
+                      <p className="text-sm text-sre-text-muted">
+                        {channels?.length > 0
+                          ? `${channels.length} channel${channels.length !== 1 ? 's' : ''} configured`
+                          : 'No channels configured'
+                        }
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {channels?.length > 0 ? (
+                      <>
+                        {/* All Channels Option */}
+                        <div
+                          onClick={() => {
+                            let newChannels = []
+                            if (formData.notificationChannels && formData.notificationChannels.length > 0) {
+                              newChannels = []
+                            } else {
+                              newChannels = channels.map(c => c.id)
+                            }
+                            setFormData({ ...formData, notificationChannels: newChannels })
+                          }}
+                          className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                            !formData.notificationChannels || formData.notificationChannels.length === 0
+                              ? 'border-sre-primary bg-sre-primary/5 shadow-md'
+                              : 'border-sre-border bg-sre-surface hover:border-sre-primary/50 hover:bg-sre-primary/5'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                              !formData.notificationChannels || formData.notificationChannels.length === 0
+                                ? 'bg-sre-primary border-sre-primary'
+                                : 'border-sre-border'
+                            }`}>
+                              {(!formData.notificationChannels || formData.notificationChannels.length === 0) && (
+                                <span className="material-icons text-white text-sm">check</span>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-semibold text-sre-text">All Channels</div>
+                              <div className="text-sm text-sre-text-muted">Use all enabled notification channels (default)</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Individual Channels */}
+                        <div className="grid gap-3">
+                          {channels.map((channel) => {
+                            const isSelected = formData.notificationChannels?.includes(channel.id)
+                            return (
+                              <div
+                                key={channel.id}
+                                onClick={() => {
+                                  const channels = formData.notificationChannels || []
+                                  const newChannels = isSelected
+                                    ? channels.filter(id => id !== channel.id)
+                                    : [...channels, channel.id]
+                                  setFormData({ ...formData, notificationChannels: newChannels })
+                                }}
+                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                                  isSelected
+                                    ? 'border-sre-primary bg-sre-primary/5 shadow-md'
+                                    : 'border-sre-border bg-sre-surface hover:border-sre-primary/50 hover:bg-sre-primary/5'
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors mt-0.5 ${
+                                    isSelected
+                                      ? 'bg-sre-primary border-sre-primary'
+                                      : 'border-sre-border'
+                                  }`}>
+                                    {isSelected && (
+                                      <span className="material-icons text-white text-sm">check</span>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        channel.type === 'slack'
+                                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200'
+                                          : channel.type === 'email'
+                                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200'
+                                          : channel.type === 'webhook'
+                                          ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                                          : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                                      }`}>
+                                        {channel.type}
+                                      </span>
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        channel.enabled
+                                          ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                                          : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+                                      }`}>
+                                        {channel.enabled ? 'Enabled' : 'Disabled'}
+                                      </span>
+                                    </div>
+                                    <div className="font-semibold text-sre-text mb-1">{channel.name}</div>
+                                    {channel.config?.channel && (
+                                      <div className="text-sm text-sre-text-muted">
+                                        Channel: {channel.config.channel}
+                                      </div>
+                                    )}
+                                    {channel.config?.url && (
+                                      <div className="text-sm text-sre-text-muted truncate">
+                                        URL: {channel.config.url}
+                                      </div>
+                                    )}
+                                    {channel.config?.to && (
+                                      <div className="text-sm text-sre-text-muted truncate">
+                                        To: {channel.config.to}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-12 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
+                        <span className="material-icons text-4xl text-sre-text-muted mb-4 block">notifications_off</span>
+                        <h4 className="text-base font-semibold text-sre-text mb-2">No Channels Configured</h4>
+                        <p className="text-sre-text-muted mb-4">Configure notification channels first before assigning them to alerts.</p>
+                        <p className="text-sm text-sre-text-muted">You can assign channels later after creating the rule.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Enable Rule */}
+                <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-sre-surface to-sre-surface/80 rounded-xl border-2 border-sre-border">
+                  <input
+                    type="checkbox"
+                    id="enabled"
+                    checked={formData.enabled}
+                    onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
+                    className="w-5 h-5 text-sre-primary border-2 border-sre-border rounded focus:ring-sre-primary"
+                  />
+                  <label htmlFor="enabled" className="text-base text-sre-text cursor-pointer">
+                    <span className="font-semibold">Enable this rule</span> <HelpTooltip text="Only enabled rules will trigger alerts. Disabled rules are saved but won't fire." />
+                  </label>
+                </div>
+
+                {/* Visibility Settings */}
+                <div className="space-y-4">
+                  <label htmlFor="rule-visibility" className="block text-sm font-semibold text-sre-text">
+                    <span className="material-icons text-lg align-middle mr-2 text-sre-primary">visibility</span> Visibility <HelpTooltip text="Control who can view and edit this alert rule. Private rules are only visible to you." />
+                  </label>
+                  <Select
+                    id="rule-visibility"
+                    value={formData.visibility || 'private'}
+                    onChange={(e) => {
+                      const newVisibility = e.target.value
+                      setFormData({ ...formData, visibility: newVisibility })
+                      if (newVisibility !== 'group') {
+                        setSelectedGroups(new Set())
+                      }
+                    }}
+                    className="w-full max-w-md text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                  >
+                    <option value="private">Private - Only visible to me</option>
+                    <option value="group">Group - Share with specific groups</option>
+                    <option value="tenant">Tenant - Visible to all users in tenant</option>
+                  </Select>
+                  <p className="text-sm text-sre-text-muted leading-relaxed">
+                    {formData.visibility === 'private' && 'Only you can view and edit this rule'}
+                    {formData.visibility === 'group' && 'Users in selected groups can view this rule'}
+                    {formData.visibility === 'tenant' && 'All users in your organization can view this rule'}
+                  </p>
+                </div>
+
+                {/* Group Sharing */}
+                {formData.visibility === 'group' && groups?.length > 0 && (
+                  <div className="space-y-4">
+                    <label htmlFor="rule-groups" className="block text-sm font-semibold text-sre-text">
+                      Share with Groups <HelpTooltip text="Select which user groups can view and edit this alert rule." />
+                    </label>
+                    <div id="rule-groups" className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto p-4 border-2 border-sre-border rounded-xl bg-sre-bg-alt">
+                      {groups.map((group) => (
+                        <label
+                          key={group.id}
+                          className="flex items-center gap-4 p-4 bg-sre-surface border border-sre-border rounded-lg cursor-pointer hover:bg-sre-primary/5 hover:border-sre-primary transition-all duration-200 shadow-sm hover:shadow-md"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedGroups.has(group.id)}
+                            onChange={() => toggleGroup(group.id)}
+                            className="w-5 h-5 text-sre-primary border-2 border-sre-border rounded focus:ring-sre-primary"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-sre-text truncate">{group.name}</div>
+                            {group.description && (
+                              <div className="text-sm text-sre-text-muted truncate">{group.description}</div>
+                            )}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-sm text-sre-text-muted">
+                      {selectedGroups.size} group{selectedGroups.size === 1 ? '' : 's'} selected
+                    </p>
+                  </div>
                 )}
               </div>
             </>
           )}
         </div>
 
-        {/* PromQL Expression */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-sre-text border-b border-sre-border pb-2">Alert Condition</h3>
-
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">
-              PromQL Expression <HelpTooltip text="Write a PromQL query that defines when this alert should fire. Use the metric explorer below to help build your query." />
-            </label>
-            <Input
-              value={formData.expr}
-              onChange={(e) => setFormData({ ...formData, expr: e.target.value })}
-              required
-              placeholder="e.g., rate(requests_total[5m]) > 100"
-              className="w-full font-mono text-sm"
-            />
-            {validationErrors.expr && (
-              <p className="text-xs text-red-400 mt-1 break-words max-w-full">{validationErrors.expr}</p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                Duration <HelpTooltip text="How long the condition must be true before the alert fires. Use Prometheus duration format (e.g., 5m, 1h)." />
-              </label>
-              <Input
-                value={formData.duration}
-                onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                placeholder="e.g., 5m, 1h"
-                className="w-full"
-              />
-              {validationErrors.duration && (
-                <p className="text-xs text-red-400 mt-1 break-words">{validationErrors.duration}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                Group <HelpTooltip text="Group name for organizing related alerts. Alerts in the same group are treated as a single notification." />
-              </label>
-              <Input
-                value={formData.group}
-                onChange={(e) => setFormData({ ...formData, group: e.target.value })}
-                placeholder="default"
-                className="w-full"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Alert Details */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-sre-text border-b border-sre-border pb-2">Alert Details</h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                Summary <HelpTooltip text="A brief summary of the alert that will be shown in notifications and the UI." />
-              </label>
-              <Input
-                value={formData.annotations.summary}
-                onChange={(e) => setFormData({ ...formData, annotations: { ...formData.annotations, summary: e.target.value }})}
-                placeholder="Brief alert summary"
-                className="w-full"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                Description <HelpTooltip text="Detailed description of the alert condition and what it means when it fires." />
-              </label>
-              <Input
-                value={formData.annotations.description}
-                onChange={(e) => setFormData({ ...formData, annotations: { ...formData.annotations, description: e.target.value }})}
-                placeholder="Detailed description"
-                className="w-full"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Alert Labels */}
-        <div className="border border-sre-border rounded-lg p-4 bg-sre-surface/40 space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h4 className="text-sm font-semibold text-sre-text">Alert Labels</h4>
-              <p className="text-xs text-sre-text-muted mt-1">Labels help route and group alerts. Severity is automatically added.</p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setLabelPairs([...labelPairs, { key: '', value: '' }])}
+        {/* Checks and Issues - Collapsible */}
+        {(hasErrors || validationWarnings.length > 0 || saveError) && (
+          <div className="border-2 border-red-200 dark:border-red-800 rounded-xl p-4 bg-red-50 dark:bg-red-900/20 shadow-inner">
+            <button
+              onClick={() => setIssuesCollapsed(!issuesCollapsed)}
+              className="w-full flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-red-500 rounded-lg p-2 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
             >
-              <span className="material-icons text-sm mr-2">add</span>
-              Add Label
-            </Button>
-          </div>
-
-          {labelPairs.length === 0 ? (
-            <p className="text-xs text-sre-text-muted italic">No labels added yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {labelPairs.map((pair, idx) => (
-                <div key={`${pair.key}-${idx}`} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-center p-3 bg-sre-bg-alt rounded-lg">
-                  <Input
-                    value={pair.key}
-                    onChange={(e) => {
-                      const next = [...labelPairs]
-                      next[idx] = { ...next[idx], key: e.target.value }
-                      setLabelPairs(next)
-                    }}
-                    placeholder="label_key"
-                    className="w-full"
-                  />
-                  <Input
-                    value={pair.value}
-                    onChange={(e) => {
-                      const next = [...labelPairs]
-                      next[idx] = { ...next[idx], value: e.target.value }
-                      setLabelPairs(next)
-                    }}
-                    placeholder="value"
-                    className="w-full"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setLabelPairs(labelPairs.filter((_, i) => i !== idx))}
-                    className="justify-self-start text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                  >
-                    <span className="material-icons text-sm">close</span>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-          {validationErrors.labels && (
-            <p className="text-xs text-red-400 break-words">{validationErrors.labels}</p>
-          )}
-        </div>
-
-        {/* Rule Preview */}
-        <div className="bg-sre-surface/40 space-y-4">
-          <h4 className="text-sm font-semibold text-sre-text">Rule Preview</h4>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <div className="text-xs text-sre-text-muted font-medium uppercase tracking-wide">Expression</div>
-              <div className="text-xs font-mono text-sre-text break-words bg-sre-bg-alt p-3 rounded border max-h-24 overflow-y-auto">
-                {formData.expr || 'No expression set'}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-1">
-                <div className="text-xs text-sre-text-muted font-medium uppercase tracking-wide">Duration</div>
-                <div className="text-sm text-sre-text font-mono bg-sre-bg-alt px-2 py-1 rounded">{formData.duration || '1m'}</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-xs text-sre-text-muted font-medium uppercase tracking-wide">Group</div>
-                <div className="text-sm text-sre-text font-mono bg-sre-bg-alt px-2 py-1 rounded">{formData.group || 'default'}</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-xs text-sre-text-muted font-medium uppercase tracking-wide">Target Org</div>
-                <div className="text-sm text-sre-text font-mono bg-sre-bg-alt px-2 py-1 rounded break-words">{formData.orgId || 'default org'}</div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-xs text-sre-text-muted font-medium uppercase tracking-wide">Labels</div>
-              <div className="flex flex-wrap gap-2 min-h-[2rem] p-2 bg-sre-bg-alt rounded border">
-                {Object.entries(effectiveLabels).length > 0 ? (
-                  Object.entries(effectiveLabels).map(([key, value]) => (
-                    <span key={key} className="text-xs px-2 py-1 bg-sre-surface border border-sre-border rounded text-sre-text break-all">
-                      {key}={value}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-sre-text-muted italic">No labels</span>
+              <h4 className="text-base font-semibold text-red-800 dark:text-red-200 flex items-center gap-2">
+                <span className="material-icons text-xl">error</span>
+                Checks and Issues
+              </h4>
+              <div className="flex items-center gap-2">
+                {(hasErrors || saveError) && (
+                  <span className="px-2 py-1 bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200 text-xs font-medium rounded-full">
+                    {Object.keys(validationErrors).length + (saveError ? 1 : 0)} errors
+                  </span>
                 )}
+                {validationWarnings.length > 0 && (
+                  <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200 text-xs font-medium rounded-full">
+                    {validationWarnings.length} warnings
+                  </span>
+                )}
+                <span className="material-icons text-red-600 dark:text-red-400">
+                  {issuesCollapsed ? 'expand_more' : 'expand_less'}
+                </span>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Notification Channels */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-sre-text border-b border-sre-border pb-2">Notifications</h3>
-
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">
-              Notification Channels {formData.notificationChannels?.length > 0 ? `(${formData.notificationChannels.length} selected)` : '(All channels)'} <HelpTooltip text="Select specific notification channels for this alert, or leave empty to use all enabled channels." />
-            </label>
-            <div className="space-y-3 max-h-64 overflow-y-auto border border-sre-border rounded-lg p-4 bg-sre-surface">
-              {channels?.length > 0 ? (
-                <>
-                  <div className="flex items-center gap-3 pb-3 border-b border-sre-border">
-                    <input
-                      type="checkbox"
-                      id="channel-all"
-                      checked={!formData.notificationChannels || formData.notificationChannels.length === 0}
-                      onChange={(e) => {
-                        let newChannels = []
-                        if (!e.target.checked) {
-                          newChannels = channels ? channels.map(c => c.id) : []
-                        }
-                        setFormData({ ...formData, notificationChannels: newChannels })
-                      }}
-                      className="w-4 h-4"
-                    />
-                    <label htmlFor="channel-all" className="text-sm text-sre-text font-medium cursor-pointer">
-                      All Channels (default)
-                    </label>
+            </button>
+            {!issuesCollapsed && (
+              <div className="mt-4 space-y-3">
+                {saveError && (
+                  <div className="p-4 bg-red-100 dark:bg-red-900/50 border border-red-300 dark:border-red-700 rounded-lg text-sm text-red-800 dark:text-red-200 font-medium">
+                    {saveError}
                   </div>
-                  <div className="space-y-2">
-                    {channels.map((channel) => (
-                      <div key={channel.id} className="flex items-center gap-3 p-2 rounded hover:bg-sre-bg-alt transition-colors">
-                        <input
-                          type="checkbox"
-                          id={`channel-${channel.id}`}
-                          checked={formData.notificationChannels?.includes(channel.id)}
-                          onChange={(e) => {
-                            const channels = formData.notificationChannels || []
-                            const newChannels = e.target.checked
-                              ? [...channels, channel.id]
-                              : channels.filter(id => id !== channel.id)
-                            setFormData({ ...formData, notificationChannels: newChannels })
-                          }}
-                          className="w-4 h-4"
-                        />
-                        <label htmlFor={`channel-${channel.id}`} className="text-sm text-sre-text flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-                          <span className={`px-2 py-0.5 rounded text-xs flex-shrink-0 ${channel.enabled ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
-                            {channel.type}
-                          </span>
-                          <span className="truncate">{channel.name}</span>
-                          {!channel.enabled && <span className="text-xs text-gray-500 flex-shrink-0">(disabled)</span>}
-                        </label>
+                )}
+                {hasErrors && (
+                  <div className="space-y-3">
+                    {Object.values(validationErrors).map((msg, idx) => (
+                      <div key={`err-${idx}`} className="p-4 bg-red-100 dark:bg-red-900/50 border border-red-300 dark:border-red-700 rounded-lg text-sm text-red-800 dark:text-red-200 font-medium flex items-start gap-2">
+                        <span className="material-icons text-base mt-0.5 flex-shrink-0">error</span>
+                        <span>{msg}</span>
                       </div>
                     ))}
                   </div>
-                </>
-              ) : (
-                <p className="text-sm text-sre-text-muted italic">No channels configured. Create channels first to assign them to alerts.</p>
-              )}
-            </div>
-            <p className="text-xs text-sre-text-muted mt-2">
-              Select specific channels to notify, or leave empty to notify all channels
-            </p>
-          </div>
-        </div>
-
-        {/* Validation & Settings */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-sre-text border-b border-sre-border pb-2">Settings</h3>
-
-          {/* Enable Rule */}
-          <div className="flex items-center gap-3 p-3 bg-sre-surface/40 rounded-lg border border-sre-border">
-            <input
-              type="checkbox"
-              id="enabled"
-              checked={formData.enabled}
-              onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-              className="w-4 h-4"
-            />
-            <label htmlFor="enabled" className="text-sm text-sre-text cursor-pointer">
-              <span className="font-medium">Enable this rule</span> <HelpTooltip text="Only enabled rules will trigger alerts. Disabled rules are saved but won't fire." />
-            </label>
-          </div>
-
-          {/* Visibility Settings */}
-          <div className="space-y-3">
-            <label htmlFor="rule-visibility" className="block text-sm font-medium text-sre-text">
-              <span className="material-icons text-sm align-middle mr-1">visibility</span> Visibility <HelpTooltip text="Control who can view and edit this alert rule. Private rules are only visible to you." />
-            </label>
-            <Select
-              id="rule-visibility"
-              value={formData.visibility || 'private'}
-              onChange={(e) => {
-                const newVisibility = e.target.value
-                setFormData({ ...formData, visibility: newVisibility })
-                if (newVisibility !== 'group') {
-                  setSelectedGroups(new Set())
-                }
-              }}
-              className="w-full max-w-md"
-            >
-              <option value="private">Private - Only visible to me</option>
-              <option value="group">Group - Share with specific groups</option>
-              <option value="tenant">Tenant - Visible to all users in tenant</option>
-            </Select>
-            <p className="text-xs text-sre-text-muted leading-relaxed">
-              {formData.visibility === 'private' && 'Only you can view and edit this rule'}
-              {formData.visibility === 'group' && 'Users in selected groups can view this rule'}
-              {formData.visibility === 'tenant' && 'All users in your organization can view this rule'}
-            </p>
-          </div>
-
-          {/* Group Sharing */}
-          {formData.visibility === 'group' && groups?.length > 0 && (
-            <div>
-              <label htmlFor="rule-groups" className="block text-sm font-medium text-sre-text mb-3">
-                Share with Groups <HelpTooltip text="Select which user groups can view and edit this alert rule." />
-              </label>
-              <div id="rule-groups" className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 border border-sre-border rounded-lg bg-sre-surface">
-                {groups.map((group) => (
-                  <label
-                    key={group.id}
-                    className="flex items-center gap-3 p-2 bg-sre-bg-alt rounded cursor-pointer hover:bg-sre-accent/10 transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedGroups.has(group.id)}
-                      onChange={() => toggleGroup(group.id)}
-                      className="w-4 h-4"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sre-text truncate">{group.name}</div>
-                      {group.description && (
-                        <div className="text-xs text-sre-text-muted truncate">{group.description}</div>
-                      )}
-                    </div>
-                  </label>
-                ))}
-              </div>
-              <p className="text-xs text-sre-text-muted mt-2">
-                {selectedGroups.size} group{selectedGroups.size === 1 ? '' : 's'} selected
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Checks and Issues */}
-        {(hasErrors || validationWarnings.length > 0 || saveError) && (
-          <div className="border border-sre-border rounded-lg p-4 bg-sre-surface/40 space-y-3">
-            <h4 className="text-sm font-semibold text-sre-text">Checks and Issues</h4>
-            {saveError && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400 break-words">
-                {saveError}
-              </div>
-            )}
-            {hasErrors && (
-              <div className="space-y-2">
-                {Object.values(validationErrors).map((msg, idx) => (
-                  <div key={`err-${idx}`} className="p-3 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400 break-words">
-                    {msg}
+                )}
+                {validationWarnings.length > 0 && (
+                  <div className="space-y-3">
+                    {validationWarnings.map((msg, idx) => (
+                      <div key={`warn-${idx}`} className="p-4 bg-yellow-100 dark:bg-yellow-900/50 border border-yellow-300 dark:border-yellow-700 rounded-lg text-sm text-yellow-800 dark:text-yellow-200 font-medium flex items-start gap-2">
+                        <span className="material-icons text-base mt-0.5 flex-shrink-0">warning</span>
+                        <span>{msg}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-            {validationWarnings.length > 0 && (
-              <div className="space-y-2">
-                {validationWarnings.map((msg, idx) => (
-                  <div key={`warn-${idx}`} className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded text-xs text-yellow-400 break-words">
-                    {msg}
-                  </div>
-                ))}
+                )}
               </div>
             )}
           </div>
         )}
 
-        {/* Form Actions */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-6 border-t border-sre-border">
-          <div className="flex gap-3">
-            {rule?.id && (
-              <Button type="button" variant="outline" onClick={handleTestRule} disabled={testing}>
-                <span className="material-icons text-sm mr-2" aria-hidden="true">science</span>{' '}
-                {testing ? 'Testing...' : 'Test Notification'}
-              </Button>
-            )}
-            {testResult && (
-              <span className="text-xs text-sre-text-muted self-center break-words max-w-xs">{testResult}</span>
-            )}
-          </div>
-          <div className="flex gap-3">
-            <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-            <Button type="submit" disabled={saving || hasErrors}>
-              <span className="material-icons text-sm mr-2" aria-hidden="true">save</span>{' '}
-              {saving ? 'Saving...' : 'Save Rule'}
+        {/* Test Rule Button - Only show for existing rules */}
+        {rule?.id && (
+          <div className="flex justify-center pt-4">
+            <Button type="button" variant="outline" onClick={handleTestRule} disabled={testing}>
+              <span className="material-icons text-base mr-2" aria-hidden="true">science</span>{' '}
+              {testing ? 'Testing...' : 'Test Current Rule'}
             </Button>
+            {testResult && (
+              <span className="text-sm text-sre-text-muted self-center break-words max-w-xs ml-4">{testResult}</span>
+            )}
           </div>
-        </div>
+        )}
       </form>
     </div>
   )

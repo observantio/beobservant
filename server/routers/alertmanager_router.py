@@ -4,6 +4,7 @@ from typing import Optional, List, Dict
 import json
 import logging
 import httpx
+from urllib.parse import quote
 
 from models.alertmanager_models import (
     Alert, AlertGroup, Silence, SilenceCreate, SilenceCreateRequest, Visibility,
@@ -36,6 +37,56 @@ webhook_router = APIRouter(tags=["alertmanager-webhooks"])
 alertmanager_service = AlertManagerService()
 notification_service = NotificationService()
 storage_service = DatabaseStorageService()
+
+async def _notify_for_alerts(alerts_list):
+    """Notify configured channels for each incoming Alertmanager alert."""
+    for al in alerts_list:
+        alertname = al.get('labels', {}).get('alertname')
+        if not alertname:
+            logger.debug("Alert without alertname label, skipping")
+            continue
+
+        channels = storage_service.get_notification_channels_for_rule_name(alertname)
+        if not channels:
+            logger.info("No notification channels configured for rule %s", alertname)
+            continue
+
+        # Normalize status
+        raw_status = al.get('status') or {}
+        state_val = None
+        silenced = []
+        inhibited = []
+        if isinstance(raw_status, dict):
+            state_val = raw_status.get('state')
+            silenced = raw_status.get('silencedBy', []) or []
+            inhibited = raw_status.get('inhibitedBy', []) or []
+        elif isinstance(raw_status, str):
+            state_val = raw_status
+
+        state_enum = AlertState.ACTIVE if (state_val and str(state_val).lower() in {'active', 'firing'}) else AlertState.UNPROCESSED
+        status_obj = AlertStatus(state=state_enum, silencedBy=silenced, inhibitedBy=inhibited)
+
+        starts_at = al.get('startsAt') or al.get('starts_at') or datetime.now(timezone.utc).isoformat()
+
+        alert_model = Alert(
+            labels=al.get('labels', {}),
+            annotations=al.get('annotations', {}),
+            startsAt=starts_at,
+            endsAt=al.get('endsAt') or al.get('ends_at'),
+            generatorURL=al.get('generatorURL'),
+            status=status_obj,
+            fingerprint=al.get('fingerprint') or al.get('fingerPrint')
+        )
+
+        action = 'firing' if state_enum == AlertState.ACTIVE else 'resolved'
+
+        for chan in channels:
+            try:
+                ok = await notification_service.send_notification(chan, alert_model, action)
+                logger.info("Sent notification to channel %s ok=%s", chan.name, ok)
+            except Exception as e:
+                logger.exception("Failed to send notification for rule %s to channel %s: %s", alertname, getattr(chan, 'name', 'unknown'), e)
+
 _mimir_client = httpx.AsyncClient(
     timeout=httpx.Timeout(config.DEFAULT_TIMEOUT),
     limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
@@ -43,6 +94,7 @@ _mimir_client = httpx.AsyncClient(
 
 MIMIR_RULES_NAMESPACE = "beobservant"
 
+MIMIR_RULER_CONFIG_BASEPATH = "/prometheus/config/v1/rules"
 
 def _require_inbound_webhook_token(request: Request) -> None:
     """Optional shared-secret auth for inbound webhook endpoints."""
@@ -125,6 +177,8 @@ def _yaml_quote(value: object) -> str:
 
 
 def _build_ruler_yaml(rules: List[AlertRule]) -> str:
+    # NOTE: Kept for backward compatibility in case something else imports it,
+    # but Mimir's ruler config API expects a single rule group per POST.
     groups: Dict[str, List[AlertRule]] = {}
     for rule in rules:
         if not rule.enabled:
@@ -160,31 +214,116 @@ def _build_ruler_yaml(rules: List[AlertRule]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _group_enabled_rules(rules: List[AlertRule]) -> Dict[str, List[AlertRule]]:
+    grouped: Dict[str, List[AlertRule]] = {}
+    for rule in rules:
+        if not rule.enabled:
+            continue
+        group_name = rule.group or config.DEFAULT_RULE_GROUP
+        grouped.setdefault(group_name, []).append(rule)
+    return grouped
+
+
+def _build_ruler_group_yaml(group_name: str, rules: List[AlertRule]) -> str:
+    """Build a single ruler RuleGroup payload.
+
+    Grafana Mimir's config API expects a single group object, not a full
+    Prometheus rules file with a top-level 'groups:' key.
+    """
+    lines = [f"name: {_yaml_quote(group_name)}", "rules:"]
+    for rule in sorted(rules, key=lambda r: r.name.lower()):
+        lines.append(f"  - alert: {_yaml_quote(rule.name)}")
+        lines.append(f"    expr: {_yaml_quote(rule.expr)}")
+        lines.append(f"    for: {_yaml_quote(rule.duration)}")
+
+        labels = dict(rule.labels or {})
+        labels["severity"] = rule.severity
+        if labels:
+            lines.append("    labels:")
+            for key in sorted(labels.keys()):
+                lines.append(f"      {key}: {_yaml_quote(labels[key])}")
+
+        annotations = rule.annotations or {}
+        if annotations:
+            lines.append("    annotations:")
+            for key in sorted(annotations.keys()):
+                lines.append(f"      {key}: {_yaml_quote(annotations[key])}")
+
+    return "\n".join(lines) + "\n"
+
+
+def _extract_mimir_group_names(namespace_yaml: str) -> List[str]:
+    """Extract rule group names from Mimir's YAML response.
+
+    Mimir returns YAML (not JSON) for this endpoint. We only need the
+    group names, so a lightweight line-based parse avoids adding PyYAML.
+    """
+    if not namespace_yaml:
+        return []
+
+    names: List[str] = []
+    for line in namespace_yaml.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- name:"):
+            continue
+        value = stripped[len("- name:"):].strip()
+        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            value = value[1:-1]
+        if value:
+            names.append(value)
+    return names
+
+
 async def _sync_mimir_rules_for_org(tenant_id: str, org_id: str) -> None:
     rules = storage_service.get_alert_rules_for_org(tenant_id, org_id)
-    payload = _build_ruler_yaml(rules)
-    headers = {"X-Scope-OrgID": org_id}
+    desired_groups = _group_enabled_rules(rules)
+    headers = {"X-Scope-OrgID": org_id, "Content-Type": "application/yaml"}
     base_url = config.MIMIR_URL.rstrip("/")
 
+    list_url = f"{base_url}{MIMIR_RULER_CONFIG_BASEPATH}/{MIMIR_RULES_NAMESPACE}"
+    upsert_url = f"{base_url}{MIMIR_RULER_CONFIG_BASEPATH}/{MIMIR_RULES_NAMESPACE}"
+
     try:
-        if payload:
-            headers["Content-Type"] = "application/yaml"
-            resp = await _mimir_client.post(
-                f"{base_url}/api/v1/rules/{MIMIR_RULES_NAMESPACE}",
+        existing_group_names: List[str] = []
+        try:
+            resp = await _mimir_client.get(list_url, headers={"X-Scope-OrgID": org_id})
+            if resp.status_code == 200:
+                existing_group_names = _extract_mimir_group_names(resp.text)
+        except httpx.HTTPError:
+            # If listing fails, still attempt to upsert desired groups.
+            existing_group_names = []
+
+        # Delete groups that no longer exist locally.
+        for group_name in existing_group_names:
+            if group_name in desired_groups:
+                continue
+            delete_url = (
+                f"{base_url}{MIMIR_RULER_CONFIG_BASEPATH}/"
+                f"{MIMIR_RULES_NAMESPACE}/{quote(group_name, safe='')}"
+            )
+            del_resp = await _mimir_client.delete(delete_url, headers={"X-Scope-OrgID": org_id})
+            if del_resp.status_code not in {200, 202, 204, 404}:
+                raise httpx.HTTPStatusError(
+                    f"Unexpected Mimir delete response: {del_resp.status_code}",
+                    request=del_resp.request,
+                    response=del_resp,
+                )
+
+        # Upsert each group as a separate payload.
+        for group_name, group_rules in desired_groups.items():
+            payload = _build_ruler_group_yaml(group_name, group_rules)
+            post_resp = await _mimir_client.post(
+                upsert_url,
                 content=payload,
                 headers=headers,
             )
-        else:
-            resp = await _mimir_client.delete(
-                f"{base_url}/api/v1/rules/{MIMIR_RULES_NAMESPACE}",
-                headers=headers,
-            )
-        if resp.status_code not in {200, 201, 202, 204, 404}:
-            raise httpx.HTTPStatusError(
-                f"Unexpected Mimir response: {resp.status_code}",
-                request=resp.request,
-                response=resp,
-            )
+            if post_resp.status_code not in {200, 201, 202, 204}:
+                raise httpx.HTTPStatusError(
+                    f"Unexpected Mimir upsert response: {post_resp.status_code}",
+                    request=post_resp.request,
+                    response=post_resp,
+                )
+
     except httpx.HTTPError as exc:
         logger.error("Failed to sync rules to Mimir for org_id=%s: %s", org_id, exc)
         raise HTTPException(
@@ -231,12 +370,8 @@ async def alert_webhook(request: Request) -> dict:
         payload = await request.json()
         alerts = payload.get("alerts", [])
         logger.info("Received webhook payload with %d alerts", len(alerts))
-        
-        for alert in alerts:
-            alertname = alert.get('labels', {}).get('alertname', 'unknown')
-            alert_status = alert.get('status', 'unknown')
-            logger.info("Alert: %s - %s", alertname, alert_status)
-        
+        await _notify_for_alerts(alerts)
+
         return {
             "status": constants.STATUS_SUCCESS,
             "count": len(alerts)
@@ -267,11 +402,7 @@ async def alert_critical(request: Request) -> dict:
         payload = await request.json()
         alerts = payload.get("alerts", [])
         logger.warning("Received %d critical alerts", len(alerts))
-        
-        for alert in alerts:
-            alertname = alert.get('labels', {}).get('alertname', 'unknown')
-            logger.warning("Critical Alert: %s", alertname)
-        
+        await _notify_for_alerts(alerts)
         return {
             "status": constants.STATUS_SUCCESS,
             "severity": "critical",
@@ -303,9 +434,7 @@ async def alert_warning(request: Request) -> dict:
         payload = await request.json()
         alerts = payload.get("alerts", [])
         logger.info("Received warning alerts payload with %d alerts", len(alerts))
-        for alert in alerts:
-            logger.info("Warning Alert: %s", alert.get('labels', {}).get('alertname', 'unknown'))
-        
+        await _notify_for_alerts(alerts)
         return {"status": "received", "severity": "warning", "count": len(alerts)}
     except Exception as e:
         logger.error("Error processing warning alerts: %s", e)
@@ -558,8 +687,17 @@ async def get_alert_rules(current_user: TokenData = Depends(require_permission(P
     tenant_id = current_user.tenant_id
     user_id = current_user.user_id
     group_ids = getattr(current_user, 'group_ids', []) or []
-    rules = storage_service.get_alert_rules(tenant_id, user_id, group_ids)
-    return rules
+    rules_with_owner = storage_service.get_alert_rules_with_owner(tenant_id, user_id, group_ids)
+
+    result: List[AlertRule] = []
+    for rule, owner in rules_with_owner:
+        # Hide tenant-scoped org id (sensitive) unless the current user is the creator
+        # or a superuser.
+        if owner != current_user.user_id and not getattr(current_user, 'is_superuser', False):
+            rule.org_id = None
+        result.append(rule)
+
+    return result
 
 
 @router.get("/metrics/names")
@@ -628,6 +766,12 @@ async def get_alert_rule(rule_id: str, current_user: TokenData = Depends(require
     rule = storage_service.get_alert_rule(rule_id, tenant_id, user_id, group_ids)
     if not rule:
         raise HTTPException(status_code=404, detail=f"Alert rule {rule_id} not found")
+
+    # Fetch raw DB to determine creator so we can hide sensitive fields from others
+    raw = storage_service.get_alert_rule_raw(rule_id, tenant_id)
+    if raw and raw.created_by != current_user.user_id and not getattr(current_user, 'is_superuser', False):
+        rule.org_id = None
+
     return rule
 
 

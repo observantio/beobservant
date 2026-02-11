@@ -356,90 +356,143 @@ export default function AlertManagerPage() {
       ) : (
         <>
           {activeTab === 'alerts' && (
-            <Card 
-              title="Active Alerts" 
-              subtitle={`You've got ${filteredAlerts.length} alert${filteredAlerts.length === 1 ? '' : 's'} firing`}
-              action={
-                <div className="flex items-center gap-2">
-                  <Select value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
-                    {ALERT_SEVERITY_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </Select>
-                  <HelpTooltip text="Filter alerts by severity level. Choose 'All' to see all alerts, or select specific severity to focus on critical or warning alerts." />
-                </div>
-              }
-            >
-              {filteredAlerts.length ? (
-                <div className="space-y-3">
-                  {filteredAlerts.map((a, idx) => (
-                    <div
-                      key={a.fingerprint || a.id || a.starts_at || idx}
-                      className="p-4 bg-sre-surface/50 border border-sre-border rounded-lg hover:border-sre-primary/30 transition-all"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                          <span className="material-icons text-sre-error">
-                            {a.labels?.severity === 'critical' ? 'error' : 'warning'}
-                          </span>
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-sm font-semibold text-sre-text">
-                                {a.labels?.alertname || 'Unknown'}
-                              </span>
-                              <Badge variant={a.labels?.severity === 'critical' ? 'error' : 'warning'}>
-                                {a.labels?.severity || 'unknown'}
-                              </Badge>
-                              <Badge variant="default">{a.status?.state || 'active'}</Badge>
+            <>
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="material-icons text-2xl text-sre-primary">warning</span>
+                      <div>
+                        <h2 className="text-xl font-semibold text-sre-text">Active Alerts</h2>
+                        <p className="text-sm text-sre-text-muted">
+                          {filteredAlerts.length > 0
+                            ? `You've got ${filteredAlerts.length} alert${filteredAlerts.length !== 1 ? 's' : ''} firing`
+                            : 'No active alerts'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Select value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
+                        {ALERT_SEVERITY_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </Select>
+                      <HelpTooltip text="Filter alerts by severity level. Choose 'All' to see all alerts, or select specific severity to focus on critical or warning alerts." />
+                    </div>
+                  </div>
+
+                  {filteredAlerts.length > 0 ? (
+                    <div className="space-y-4">
+                      {filteredAlerts.map((a, idx) => (
+                        <div
+                          key={a.fingerprint || a.id || a.starts_at || idx}
+                          className="p-6 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-3 mb-3">
+                                <div className={`p-2 rounded-lg ${
+                                  a.labels?.severity === 'critical'
+                                    ? 'bg-red-100 dark:bg-red-900/30'
+                                    : 'bg-yellow-100 dark:bg-yellow-900/30'
+                                }`}>
+                                  <span className={`material-icons text-xl ${
+                                    a.labels?.severity === 'critical'
+                                      ? 'text-red-600 dark:text-red-400'
+                                      : 'text-yellow-600 dark:text-yellow-400'
+                                  }`}>
+                                    {a.labels?.severity === 'critical' ? 'error' : 'warning'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <h3 className="font-semibold text-sre-text text-lg">{a.labels?.alertname || 'Unknown'}</h3>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      a.labels?.severity === 'critical'
+                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+                                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                    }`}>
+                                      {a.labels?.severity || 'unknown'}
+                                    </span>
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      a.status?.state === 'active'
+                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                                    }`}>
+                                      {a.status?.state || 'active'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {a.annotations?.summary && (
+                                <p className="text-sm text-sre-text-muted mb-3">{a.annotations.summary}</p>
+                              )}
+
+                              {a.labels && Object.keys(a.labels).length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {Object.entries(a.labels)
+                                    .filter(([key]) => !['alertname', 'severity'].includes(key))
+                                    .map(([key, value]) => (
+                                      <span
+                                        key={key}
+                                        className="text-xs px-3 py-1 bg-sre-bg-alt border border-sre-border rounded-full text-sre-text-muted"
+                                      >
+                                        {key}={value}
+                                      </span>
+                                    ))}
+                                </div>
+                              )}
                             </div>
-                            {a.annotations?.summary && (
-                              <p className="text-sm text-sre-text-muted">{a.annotations.summary}</p>
-                            )}
+
+                            <div className="flex flex-col items-end gap-2 ml-4">
+                              <span className="text-xs text-sre-text-muted whitespace-nowrap">
+                                {new Date(a.starts_at || a.startsAt).toLocaleString()}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        <span className="text-xs text-sre-text-muted">
-                          {new Date(a.starts_at || a.startsAt).toLocaleString()}
-                        </span>
-                      </div>
-                      {a.labels && Object.keys(a.labels).length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1">
-                          {Object.entries(a.labels)
-                            .filter(([key]) => !['alertname', 'severity'].includes(key))
-                            .map(([key, value]) => (
-                              <span
-                                key={key}
-                                className="text-xs px-2 py-0.5 bg-sre-surface border border-sre-border rounded text-sre-text-muted"
-                              >
-                                {key}={value}
-                              </span>
-                            ))}
-                        </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="text-center py-16 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
+                      <span className="material-icons text-5xl text-sre-text-muted mb-4 block">check_circle</span>
+                      <h3 className="text-xl font-semibold text-sre-text mb-2">No Active Alerts</h3>
+                      <p className="text-sre-text-muted mb-6 max-w-md mx-auto">
+                        All systems are running smoothly. No alerts are currently firing.
+                      </p>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="text-center py-12">
-                  <span className="material-icons text-6xl text-sre-text-subtle mb-4">check_circle</span>
-                  <p className="text-sre-text-muted">No active alerts</p>
-                </div>
-              )}
-            </Card>
+            </>
           )}
 
           {activeTab === 'rules' && (
             <>
-                    <Card
-                  title="Alert Rules"
-                  subtitle={`${rules.length} rule${rules.length === 1 ? '' : 's'} configured`}
-                  action={rules.length ? (
-                    <Button onClick={() => { setEditingRule(null); setShowRuleEditor(true); }}>
-                      <span className="material-icons text-sm mr-2">add</span>{' '}Create Rule
-                    </Button>
-                  ) : null}
-                >
-                  {rules.length ? (
-                    <div className="space-y-3">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="material-icons text-2xl text-sre-primary">rule</span>
+                      <div>
+                        <h2 className="text-xl font-semibold text-sre-text">Alert Rules</h2>
+                        <p className="text-sm text-sre-text-muted">
+                          {rules.length > 0
+                            ? `${rules.length} rule${rules.length !== 1 ? 's' : ''} configured`
+                            : 'No rules configured'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    {rules.length > 0 && (
+                      <Button onClick={() => { setEditingRule(null); setShowRuleEditor(true); }}>
+                        <span className="material-icons text-sm mr-2">add</span>
+                        Create Rule
+                      </Button>
+                    )}
+                  </div>
+
+                  {rules.length > 0 ? (
+                    <div className="grid gap-4">
                       {rules.map((rule) => {
                         let severityVariant;
                         if (rule.severity === 'critical') {
@@ -450,84 +503,163 @@ export default function AlertManagerPage() {
                           severityVariant = 'info';
                         }
                         return (
-                        <div
-                          key={rule.id}
-                          className="p-4 bg-sre-surface/50 border border-sre-border rounded-lg hover:border-sre-primary/30 transition-all"
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                <span className="font-semibold text-sre-text">{rule.name}</span>
-                                <Badge variant={severityVariant}>
-                                  {rule.severity}
-                                </Badge>
-                                {rule.enabled ? (
-                                  <Badge variant="success">Enabled</Badge>
-                                ) : (
-                                  <Badge variant="default">Disabled</Badge>
-                                )}
-                                <Badge variant="default">{rule.group}</Badge>
-                                {rule.orgId ? (
-                                  <Badge variant="info">
-                                    {orgIdToName[rule.orgId] || `${rule.orgId.slice(0, 8)}...`}
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="default">All products</Badge>
-                                )}
+                          <div
+                            key={rule.id}
+                            className="p-6 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-3 mb-3">
+                                  <div className={`p-2 rounded-lg ${
+                                    rule.severity === 'critical'
+                                      ? 'bg-red-100 dark:bg-red-900/30'
+                                      : rule.severity === 'warning'
+                                      ? 'bg-yellow-100 dark:bg-yellow-900/30'
+                                      : 'bg-blue-100 dark:bg-blue-900/30'
+                                  }`}>
+                                    <span className={`material-icons text-xl ${
+                                      rule.severity === 'critical'
+                                        ? 'text-red-600 dark:text-red-400'
+                                        : rule.severity === 'warning'
+                                        ? 'text-yellow-600 dark:text-yellow-400'
+                                        : 'text-blue-600 dark:text-blue-400'
+                                    }`}>
+                                      {rule.severity === 'critical' ? 'error' : rule.severity === 'warning' ? 'warning' : 'info'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <h3 className="font-semibold text-sre-text text-lg">{rule.name}</h3>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        rule.severity === 'critical'
+                                          ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+                                          : rule.severity === 'warning'
+                                          ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200'
+                                      }`}>
+                                        {rule.severity}
+                                      </span>
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        rule.enabled
+                                          ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                                          : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+                                      }`}>
+                                        {rule.enabled ? 'Enabled' : 'Disabled'}
+                                      </span>
+                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                                        {rule.group}
+                                      </span>
+                                      {rule.orgId ? (
+                                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200">
+                                          {orgIdToName[rule.orgId] || `${rule.orgId.slice(0, 8)}...`}
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                                          All products
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2 text-sm text-sre-text-muted">
+                                  <div className="flex items-center gap-2">
+                                    <span className="material-icons text-sm">functions</span>
+                                    <span className="font-mono text-xs bg-sre-bg-alt px-2 py-1 rounded border">{rule.expr}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="material-icons text-sm">schedule</span>
+                                    <span>Duration: {rule.duration}</span>
+                                  </div>
+                                  {rule.annotations?.summary && (
+                                    <div className="flex items-start gap-2">
+                                      <span className="material-icons text-sm mt-0.5">description</span>
+                                      <span>{rule.annotations.summary}</span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <p className="text-sm font-mono text-sre-text-muted mb-2">{rule.expr}</p>
-                              <p className="text-xs text-sre-text-muted">
-                                Duration: {rule.duration} · {rule.annotations?.summary || 'No summary'}
-                              </p>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button variant="ghost" onClick={() => handleTestRule(rule.id)}>
-                                <span className="material-icons text-sm">science</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                onClick={() => {
-                                  setEditingRule(rule)
-                                  setShowRuleEditor(true)
-                                }}
-                              >
-                                <span className="material-icons text-sm">edit</span>
-                              </Button>
-                              <Button variant="ghost" onClick={() => handleDeleteRule(rule.id)}>
-                                <span className="material-icons text-sm">delete</span>
-                              </Button>
+
+                              <div className="flex gap-1 ml-4">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleTestRule(rule.id)}
+                                  className="p-2"
+                                  title="Test Rule"
+                                >
+                                  <span className="material-icons text-base">science</span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingRule(rule)
+                                    setShowRuleEditor(true)
+                                  }}
+                                  className="p-2"
+                                  title="Edit Rule"
+                                >
+                                  <span className="material-icons text-base">edit</span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteRule(rule.id)}
+                                  className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                                  title="Delete Rule"
+                                >
+                                  <span className="material-icons text-base">delete</span>
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                        </div>
                         )
                       })}
                     </div>
                   ) : (
-                    <div className="text-center py-12">
-                      <span className="material-icons text-6xl text-sre-text-subtle mb-4">rule</span>
-                      <p className="text-sre-text-muted mb-4">No alert rules configured</p>
+                    <div className="text-center py-16 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
+                      <span className="material-icons text-5xl text-sre-text-muted mb-4 block">rule</span>
+                      <h3 className="text-xl font-semibold text-sre-text mb-2">No Rules Configured</h3>
+                      <p className="text-sre-text-muted mb-6 max-w-md mx-auto">
+                        Create alert rules to monitor your systems and get notified when issues occur.
+                      </p>
                       <Button onClick={() => { setEditingRule(null); setShowRuleEditor(true); }}>
-                        <span className="material-icons text-sm mr-2">add</span>{' '}Create Your First Rule
+                        <span className="material-icons text-sm mr-2">add</span>
+                        Create Your First Rule
                       </Button>
                     </div>
                   )}
-                </Card>
+                </div>
             </>
           )}
 
           {activeTab === 'channels' && (
             <>
-                    <Card
-                  title="Notification Channels"
-                  subtitle={`${channels.length} channel${channels.length === 1 ? '' : 's'} configured`}
-                  action={channels.length ? (
-                    <Button onClick={() => { setEditingChannel(null); setShowChannelEditor(true); }}>
-                      <span className="material-icons text-sm mr-2">add</span>{' '}Create Channel
-                    </Button>
-                  ) : null}
-                >
-                  {channels.length ? (
-                    <div className="space-y-3">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="material-icons text-2xl text-sre-primary">notifications</span>
+                      <div>
+                        <h2 className="text-xl font-semibold text-sre-text">Notification Channels</h2>
+                        <p className="text-sm text-sre-text-muted">
+                          {channels.length > 0
+                            ? `${channels.length} channel${channels.length !== 1 ? 's' : ''} configured`
+                            : 'No channels configured'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    {channels.length > 0 && (
+                      <Button onClick={() => { setEditingChannel(null); setShowChannelEditor(true); }}>
+                        <span className="material-icons text-sm mr-2">add</span>
+                        Create Channel
+                      </Button>
+                    )}
+                  </div>
+
+                  {channels.length > 0 ? (
+                    <div className="space-y-4">
                       {channels.map((channel) => {
                         let iconName;
                         if (channel.type === 'email') {
@@ -540,76 +672,183 @@ export default function AlertManagerPage() {
                           iconName = 'webhook'
                         }
                         return (
-                        <div
-                          key={channel.id}
-                          className="p-4 bg-sre-surface/50 border border-sre-border rounded-lg hover:border-sre-primary/30 transition-all"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="material-icons text-sre-primary">{iconName}</span>
-                                <span className="font-semibold text-sre-text">{channel.name}</span>
-                                <Badge variant="info">{channel.type}</Badge>
-                                {channel.enabled ? (
-                                  <Badge variant="success">Enabled</Badge>
-                                ) : (
-                                  <Badge variant="default">Disabled</Badge>
-                                )}
+                          <div
+                            key={channel.id}
+                            className="p-6 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-3 mb-3">
+                                  <div className={`p-2 rounded-lg ${
+                                    channel.type === 'slack'
+                                      ? 'bg-purple-100 dark:bg-purple-900/30'
+                                      : channel.type === 'email'
+                                      ? 'bg-blue-100 dark:bg-blue-900/30'
+                                      : channel.type === 'webhook'
+                                      ? 'bg-green-100 dark:bg-green-900/30'
+                                      : channel.type === 'teams'
+                                      ? 'bg-blue-100 dark:bg-blue-900/30'
+                                      : 'bg-gray-100 dark:bg-gray-700'
+                                  }`}>
+                                    <span className={`material-icons text-xl ${
+                                      channel.type === 'slack'
+                                        ? 'text-purple-600 dark:text-purple-400'
+                                        : channel.type === 'email'
+                                        ? 'text-blue-600 dark:text-blue-400'
+                                        : channel.type === 'webhook'
+                                        ? 'text-green-600 dark:text-green-400'
+                                        : channel.type === 'teams'
+                                        ? 'text-blue-600 dark:text-blue-400'
+                                        : 'text-gray-600 dark:text-gray-400'
+                                    }`}>{iconName}</span>
+                                  </div>
+                                  <div>
+                                    <h3 className="font-semibold text-sre-text text-lg">{channel.name}</h3>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        channel.type === 'slack'
+                                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200'
+                                          : channel.type === 'email'
+                                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200'
+                                          : channel.type === 'webhook'
+                                          ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                                          : channel.type === 'teams'
+                                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200'
+                                          : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                                      }`}>
+                                        {channel.type}
+                                      </span>
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        channel.enabled
+                                          ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                                          : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+                                      }`}>
+                                        {channel.enabled ? 'Enabled' : 'Disabled'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2 text-sm text-sre-text-muted">
+                                  {channel.type === 'email' && channel.config?.to && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="material-icons text-sm">email</span>
+                                      <span>To: {channel.config.to}</span>
+                                    </div>
+                                  )}
+                                  {channel.type === 'slack' && channel.config?.channel && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="material-icons text-sm">tag</span>
+                                      <span>Channel: {channel.config.channel}</span>
+                                    </div>
+                                  )}
+                                  {channel.type === 'webhook' && channel.config?.url && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="material-icons text-sm">link</span>
+                                      <span className="truncate">URL: {channel.config.url}</span>
+                                    </div>
+                                  )}
+                                  {channel.type === 'teams' && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="material-icons text-sm">groups</span>
+                                      <span>Microsoft Teams</span>
+                                    </div>
+                                  )}
+                                  {channel.type === 'pagerduty' && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="material-icons text-sm">notification_important</span>
+                                      <span>PagerDuty Integration</span>
+                                    </div>
+                                  )}
+                                  {channel.type === 'opsgenie' && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="material-icons text-sm">support</span>
+                                      <span>Opsgenie Integration</span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <p className="text-xs text-sre-text-muted">
-                                {channel.type === 'email' && `To: ${channel.config.to}`}
-                                {channel.type === 'slack' && `Channel: ${channel.config.channel || 'default'}`}
-                                {channel.type === 'webhook' && `URL: ${channel.config.url}`}
-                              </p>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button variant="ghost" onClick={() => handleTestChannel(channel.id)}>
-                                <span className="material-icons text-sm">send</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                onClick={() => {
-                                  setEditingChannel(channel)
-                                  setShowChannelEditor(true)
-                                }}
-                              >
-                                <span className="material-icons text-sm">edit</span>
-                              </Button>
-                              <Button variant="ghost" onClick={() => handleDeleteChannel(channel.id)}>
-                                <span className="material-icons text-sm">delete</span>
-                              </Button>
+
+                              <div className="flex gap-1 ml-4">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleTestChannel(channel.id)}
+                                  className="p-2"
+                                  title="Test Channel"
+                                >
+                                  <span className="material-icons text-base">send</span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingChannel(channel)
+                                    setShowChannelEditor(true)
+                                  }}
+                                  className="p-2"
+                                  title="Edit Channel"
+                                >
+                                  <span className="material-icons text-base">edit</span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteChannel(channel.id)}
+                                  className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                                  title="Delete Channel"
+                                >
+                                  <span className="material-icons text-base">delete</span>
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                        </div>
                         )
                       })}
                     </div>
                   ) : (
-                    <div className="text-center py-12">
-                      <span className="material-icons text-6xl text-sre-text-subtle mb-4">send</span>
-                      <p className="text-sre-text-muted mb-4">No notification channels configured</p>
+                    <div className="text-center py-16 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
+                      <span className="material-icons text-5xl text-sre-text-muted mb-4 block">notifications_off</span>
+                      <h3 className="text-xl font-semibold text-sre-text mb-2">No Channels Configured</h3>
+                      <p className="text-sre-text-muted mb-6 max-w-md mx-auto">
+                        Create notification channels to receive alerts via email, Slack, Teams, webhooks, and more.
+                      </p>
                       <Button onClick={() => { setEditingChannel(null); setShowChannelEditor(true); }}>
-                        <span className="material-icons text-sm mr-2">add</span>{' '}Create Your First Channel
+                        <span className="material-icons text-sm mr-2">add</span>
+                        Create Your First Channel
                       </Button>
                     </div>
                   )}
-                </Card>
+                </div>
             </>
           )}
 
           {activeTab === 'silences' && (
             <>
-                    <Card
-                  title="Active Silences"
-                  subtitle={`${silences.length} silence${silences.length === 1 ? '' : 's'} active`}
-                  action={silences.length ? (
-                    <Button onClick={() => setShowSilenceForm(true)}>
-                      <span className="material-icons text-sm mr-2">add</span>{' '}Create Silence
-                    </Button>
-                  ) : null}
-                >
-                  {silences.length ? (
-                    <div className="space-y-3">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="material-icons text-2xl text-sre-primary">volume_off</span>
+                      <div>
+                        <h2 className="text-xl font-semibold text-sre-text">Active Silences</h2>
+                        <p className="text-sm text-sre-text-muted">
+                          {silences.length > 0
+                            ? `${silences.length} silence${silences.length !== 1 ? 's' : ''} active`
+                            : 'No active silences'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    {silences.length > 0 && (
+                      <Button onClick={() => setShowSilenceForm(true)}>
+                        <span className="material-icons text-sm mr-2">add</span>
+                        Create Silence
+                      </Button>
+                    )}
+                  </div>
+
+                  {silences.length > 0 ? (
+                    <div className="space-y-4">
                       {silences.map((s) => {
                         const visibilityLabel = s.visibility === 'tenant'
                           ? 'Public'
@@ -620,54 +859,96 @@ export default function AlertManagerPage() {
                         return (
                           <div
                             key={s.id}
-                            className="p-4 bg-sre-surface/50 border border-sre-border rounded-lg hover:border-sre-primary/30 transition-all"
+                            className="p-6 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
                           >
                             <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="material-icons text-sre-warning">volume_off</span>
-                                  <Badge variant="warning">Silenced</Badge>
-                                  <Badge variant="default">{visibilityLabel}</Badge>
-                                  <span className="text-sm text-sre-text-muted">{s.comment}</span>
-                                </div>
-                                <div className="text-xs text-sre-text-muted mb-2">
-                                  <span className="font-mono">ID: {s.id}</span>
-                                </div>
-                                {s.matchers?.length > 0 && (
-                                  <div className="flex flex-wrap gap-1">
-                                    {s.matchers.map((m) => (
-                                      <span
-                                        key={`${m.name}-${m.isEqual ? 'eq' : 'neq'}-${m.value}`}
-                                        className="text-xs px-2 py-0.5 bg-sre-surface border border-sre-border rounded text-sre-text"
-                                      >
-                                        {m.name}{m.isEqual ? '=' : '!='}{m.value}
-                                      </span>
-                                    ))}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-3 mb-3">
+                                  <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                                    <span className="material-icons text-xl text-orange-600 dark:text-orange-400">volume_off</span>
                                   </div>
+                                  <div>
+                                    <h3 className="font-semibold text-sre-text text-lg">Silence Active</h3>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200">
+                                        Silenced
+                                      </span>
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        s.visibility === 'tenant'
+                                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200'
+                                          : s.visibility === 'group'
+                                          ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                                          : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                                      }`}>
+                                        {visibilityLabel}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {s.comment && (
+                                  <p className="text-sm text-sre-text-muted mb-3">{s.comment}</p>
                                 )}
-                                <div className="text-xs text-sre-text-muted mt-2">
-                                  {new Date(s.starts_at || s.startsAt).toLocaleString()} → {new Date(s.ends_at || s.endsAt).toLocaleString()}
+
+                                <div className="space-y-2 text-sm text-sre-text-muted">
+                                  <div className="flex items-center gap-2">
+                                    <span className="material-icons text-sm">fingerprint</span>
+                                    <span className="font-mono text-xs">ID: {s.id.slice(0, 12)}...</span>
+                                  </div>
+                                  {s.matchers?.length > 0 && (
+                                    <div className="flex items-start gap-2">
+                                      <span className="material-icons text-sm mt-0.5">filter_list</span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {s.matchers.map((m) => (
+                                          <span
+                                            key={`${m.name}-${m.isEqual ? 'eq' : 'neq'}-${m.value}`}
+                                            className="text-xs px-2 py-1 bg-sre-bg-alt border border-sre-border rounded text-sre-text"
+                                          >
+                                            {m.name}{m.isEqual ? '=' : '!='}{m.value}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center gap-2">
+                                    <span className="material-icons text-sm">schedule</span>
+                                    <span>
+                                      {new Date(s.starts_at || s.startsAt).toLocaleString()} → {new Date(s.ends_at || s.endsAt).toLocaleString()}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
-                              <Button variant="ghost" onClick={() => handleDeleteSilence(s.id)}>
-                                <span className="material-icons text-sm">delete</span>
-                              </Button>
+
+                              <div className="flex gap-1 ml-4">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteSilence(s.id)}
+                                  className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                                  title="Delete Silence"
+                                >
+                                  <span className="material-icons text-base">delete</span>
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         )
                       })}
                     </div>
                   ) : (
-                    <div className="text-center py-12">
-                      <span className="material-icons text-6xl text-sre-text-subtle mb-4">volume_up</span>
-                      <p className="text-sre-text-muted mb-4">No active silences</p>
+                    <div className="text-center py-16 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
+                      <span className="material-icons text-5xl text-sre-text-muted mb-4 block">volume_up</span>
+                      <h3 className="text-xl font-semibold text-sre-text mb-2">No Active Silences</h3>
+                      <p className="text-sre-text-muted mb-6 max-w-md mx-auto">
+                        Silences temporarily suppress alert notifications. Create a silence to stop alerts during maintenance.
+                      </p>
                       <Button onClick={() => setShowSilenceForm(true)}>
-                        <span className="material-icons text-sm mr-2">add</span>{' '}
+                        <span className="material-icons text-sm mr-2">add</span>
                         Create Silence
                       </Button>
                     </div>
                   )}
-                </Card>
+                </div>
             </>
           )}
         </>

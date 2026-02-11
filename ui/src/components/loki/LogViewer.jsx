@@ -99,9 +99,12 @@ export default function LogViewer({ logs, searchText, onDownload }) {
   if (filteredLogs.length === 0) {
     return (
       <Card title="Log Results">
-        <div className="text-center py-12">
-          <span className="material-icons text-6xl text-sre-text-subtle mb-4">search_off</span>
-          <p className="text-sre-text-muted">No logs found matching your criteria</p>
+        <div className="text-center py-16 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
+          <span className="material-icons text-5xl text-sre-text-muted mb-4 block">search_off</span>
+          <h3 className="text-xl font-semibold text-sre-text mb-2">No Logs Found</h3>
+          <p className="text-sre-text-muted mb-6 max-w-md mx-auto">
+            No logs found matching your criteria
+          </p>
         </div>
       </Card>
     )
