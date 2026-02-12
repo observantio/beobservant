@@ -346,7 +346,7 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                       className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
                     />
                     {validationErrors.name && (
-                      <p className="text-sm text-red-500 font-medium flex items-center gap-1">
+                      <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
                         <span className="material-icons text-sm">error</span>
                         {validationErrors.name}
                       </p>
@@ -366,7 +366,7 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                       <option value="critical">Critical</option>
                     </Select>
                     {validationErrors.severity && (
-                      <p className="text-sm text-red-500 font-medium flex items-center gap-1">
+                      <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
                         <span className="material-icons text-sm">error</span>
                         {validationErrors.severity}
                       </p>
@@ -466,7 +466,7 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                       className="w-full font-mono text-base py-3 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors min-h-[60px]"
                     />
                     {validationErrors.expr && (
-                      <p className="text-sm text-red-500 font-medium flex items-center gap-1">
+                      <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
                         <span className="material-icons text-sm">error</span>
                         {validationErrors.expr}
                       </p>
@@ -485,7 +485,7 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                         className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
                       />
                       {validationErrors.duration && (
-                        <p className="text-sm text-red-500 font-medium flex items-center gap-1">
+                        <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
                           <span className="material-icons text-sm">error</span>
                           {validationErrors.duration}
                         </p>
@@ -532,7 +532,7 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                     </div>
 
                     {metricsError && (
-                      <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-medium">
+                      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300 font-medium">
                         <span className="material-icons text-base mr-1 align-middle">error</span>
                         {metricsError}
                       </div>
@@ -561,7 +561,7 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                                     const template = base ? `${base}\n${name}` : name
                                     setFormData({ ...formData, expr: template })
                                   }}
-                                  className="px-3 py-2 text-sm rounded-full border border-sre-border bg-white hover:bg-sre-primary/10 hover:border-sre-primary text-sre-text transition-all duration-200 break-words max-w-full shadow-sm hover:shadow-md text-left"
+                                  className="px-3 py-2 text-sm rounded-full border border-sre-border bg-sre-bg-card hover:bg-sre-primary/10 hover:border-sre-primary text-sre-text transition-all duration-200 break-words max-w-full shadow-sm hover:shadow-md text-left"
                                   title={name}
                                 >
                                   {name}
@@ -672,7 +672,7 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                     </div>
                   )}
                   {validationErrors.labels && (
-                    <p className="text-sm text-red-500 font-medium flex items-center gap-1 mt-2">
+                    <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1 mt-2">
                       <span className="material-icons text-sm">error</span>
                       {validationErrors.labels}
                     </p>

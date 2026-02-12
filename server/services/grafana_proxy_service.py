@@ -4,8 +4,8 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 
-from services.grafana_service import GrafanaService
-from services.grafana_user_sync_service import GrafanaUserSyncService
+from services.grafana_service import GrafanaService, GrafanaAPIError
+from fastapi import HTTPException
 from db_models import GrafanaDashboard, GrafanaDatasource, Group
 from models.grafana_models import (
     DashboardCreate, DashboardUpdate, DashboardSearchResult,
@@ -22,7 +22,6 @@ class GrafanaProxyService:
 
     def __init__(self):
         self.grafana_service = GrafanaService()
-        self.grafana_sync = GrafanaUserSyncService()
 
     # ------------------------------------------------------------------
     # Access check helpers
@@ -288,18 +287,27 @@ class GrafanaProxyService:
             # Validate group visibility settings
             if visibility == "group":
                 if not shared_group_ids:
-                    raise ValueError("No groups provided for group visibility")
+                    raise HTTPException(status_code=400, detail="No groups provided for group visibility")
                 groups = db.query(Group).filter(Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id).all()
                 missing = set(shared_group_ids) - {g.id for g in groups}
                 if missing:
-                    raise ValueError(f"Invalid group ids: {missing}")
+                    raise HTTPException(status_code=400, detail=f"Invalid group ids: {list(missing)}")
                 # Admins can share to any group without being a member
                 if not is_admin:
                     not_member = [gid for gid in shared_group_ids if gid not in (group_ids or [])]
                     if not_member:
-                        raise ValueError(f"User not member of groups: {not_member}")
+                        raise HTTPException(status_code=403, detail=f"User not member of groups: {not_member}")
             
-            result = await self.grafana_service.create_dashboard(dashboard_create)
+            try:
+                result = await self.grafana_service.create_dashboard(dashboard_create)
+            except GrafanaAPIError as gae:
+                body = gae.body
+                msg = None
+                if isinstance(body, dict):
+                    # Grafana may return { message: '...' }
+                    msg = body.get('message') or body.get('error') or body.get('detail')
+                msg = msg or (body if isinstance(body, str) else None) or 'Grafana API error'
+                raise HTTPException(status_code=gae.status if 400 <= gae.status < 600 else 500, detail=msg)
             if not result:
                 return None
 
@@ -335,12 +343,15 @@ class GrafanaProxyService:
                     Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id
                 ).all()
                 db_dashboard.shared_groups.extend(groups)
-                await self._sync_dashboard_grafana_permissions(db, uid, user_id, groups)
+                # Grafana dashboard-permissions sync removed (feature deprecated)
 
             db.add(db_dashboard)
             db.commit()
             logger.info("Created dashboard %s for user %s (visibility=%s)", uid, user_id, visibility)
             return result
+        except HTTPException:
+            # Re-raise HTTP errors we intentionally raised above so they propagate to the router
+            raise
         except Exception as e:
             logger.error("Error creating dashboard: %s", e, exc_info=True)
             db.rollback()
@@ -356,7 +367,15 @@ class GrafanaProxyService:
         if not db_dashboard:
             return None
 
-        result = await self.grafana_service.update_dashboard(uid, dashboard_update)
+        try:
+            result = await self.grafana_service.update_dashboard(uid, dashboard_update)
+        except GrafanaAPIError as gae:
+            body = gae.body
+            msg = None
+            if isinstance(body, dict):
+                msg = body.get('message') or body.get('error') or body.get('detail')
+            msg = msg or (body if isinstance(body, str) else None) or 'Grafana API error'
+            raise HTTPException(status_code=gae.status if 400 <= gae.status < 600 else 500, detail=msg)
         if not result:
             return None
 
@@ -373,7 +392,7 @@ class GrafanaProxyService:
                         Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id
                     ).all()
                     db_dashboard.shared_groups.extend(groups)
-                    await self._sync_dashboard_grafana_permissions(db, uid, user_id, groups)
+                    # Grafana dashboard-permissions sync removed (feature deprecated)
             elif visibility != "group":
                 db_dashboard.shared_groups.clear()
 
@@ -495,18 +514,27 @@ class GrafanaProxyService:
 
             if visibility == "group":
                 if not shared_group_ids:
-                    raise ValueError("No groups provided for group visibility")
+                    raise HTTPException(status_code=400, detail="No groups provided for group visibility")
                 groups = db.query(Group).filter(Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id).all()
                 missing = set(shared_group_ids) - {g.id for g in groups}
                 if missing:
-                    raise ValueError(f"Invalid group ids: {missing}")
+                    raise HTTPException(status_code=400, detail=f"Invalid group ids: {list(missing)}")
                 # Admins can share to any group without being a member
                 if not is_admin:
                     not_member = [gid for gid in shared_group_ids if gid not in (group_ids or [])]
                     if not_member:
-                        raise ValueError(f"User not member of groups: {not_member}")
+                        raise HTTPException(status_code=403, detail=f"User not member of groups: {not_member}")
 
-            datasource = await self.grafana_service.create_datasource(datasource_create)
+            try:
+                datasource = await self.grafana_service.create_datasource(datasource_create)
+            except GrafanaAPIError as gae:
+                # Propagate Grafana's status/message to the client
+                body = gae.body
+                msg = None
+                if isinstance(body, dict):
+                    msg = body.get('message') or body.get('error') or body.get('detail')
+                msg = msg or (body if isinstance(body, str) else None) or 'Grafana API error'
+                raise HTTPException(status_code=gae.status if 400 <= gae.status < 600 else 500, detail=msg)
             if not datasource:
                 return None
 
@@ -522,6 +550,9 @@ class GrafanaProxyService:
             db.add(db_datasource)
             db.commit()
             return datasource
+        except HTTPException:
+            # Propagate HTTPExceptions (e.g. mapped Grafana errors)
+            raise
         except Exception as e:
             logger.error("Error creating datasource: %s", e, exc_info=True)
             db.rollback()
@@ -545,7 +576,16 @@ class GrafanaProxyService:
                 secure_json_data["httpHeaderValue1"] = org_id
                 datasource_update = datasource_update.model_copy(update={"json_data": json_data, "secure_json_data": secure_json_data})
 
-        datasource = await self.grafana_service.update_datasource(uid, datasource_update)
+        try:
+            datasource = await self.grafana_service.update_datasource(uid, datasource_update)
+        except GrafanaAPIError as gae:
+            body = gae.body
+            msg = None
+            if isinstance(body, dict):
+                msg = body.get('message') or body.get('error') or body.get('detail')
+            msg = msg or (body if isinstance(body, str) else None) or 'Grafana API error'
+            raise HTTPException(status_code=gae.status if 400 <= gae.status < 600 else 500, detail=msg)
+
         if not datasource:
             return None
 
@@ -624,17 +664,4 @@ class GrafanaProxyService:
     # Grafana-native permission sync
     # ------------------------------------------------------------------
 
-    async def _sync_dashboard_grafana_permissions(self, db: Session, dashboard_uid: str, owner_user_id: str, shared_groups: List) -> None:
-        try:
-            from db_models import User as UserModel
-            owner = db.query(UserModel).filter(UserModel.id == owner_user_id).first()
-            perms = []
-            if owner and owner.grafana_user_id:
-                perms.append({"userId": owner.grafana_user_id, "permission": 4})
-            for group in shared_groups:
-                if group.grafana_team_id:
-                    perms.append({"teamId": group.grafana_team_id, "permission": 2})
-            if perms:
-                await self.grafana_sync.set_dashboard_permissions(dashboard_uid, perms)
-        except Exception as e:
-            logger.warning("Failed to sync Grafana permissions for dashboard %s: %s", dashboard_uid, e)
+

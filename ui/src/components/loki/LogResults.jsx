@@ -90,7 +90,7 @@ export default function LogResults({ queryResult, loading, filterDisplayedLogs, 
                     </span>
                   ))}
                 </div>
-                <Badge variant="secondary">{filteredValues.length}</Badge>
+                <Badge variant="default">{filteredValues.length}</Badge>
               </div>
             </div>
 

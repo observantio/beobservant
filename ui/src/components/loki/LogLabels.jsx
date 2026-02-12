@@ -1,7 +1,7 @@
 import PropTypes from 'prop-types'
 import { Card, Badge } from '../../components/ui'
 
-export default function LogLabels({ labels, labelValuesCache }) {
+export default function LogLabels({ labels = [], labelValuesCache = {} }) {
   const list = labels || []
 
   return (
@@ -10,7 +10,7 @@ export default function LogLabels({ labels, labelValuesCache }) {
         {list.map(label => (
           <div key={label} className="flex items-center justify-between text-sm">
             <span className="font-mono text-sre-text">{label}</span>
-            <Badge variant="secondary" size="sm">
+            <Badge variant="default" size="sm">
               {labelValuesCache?.[label]?.length ?? '...'}
             </Badge>
           </div>
@@ -23,9 +23,4 @@ export default function LogLabels({ labels, labelValuesCache }) {
 LogLabels.propTypes = {
   labels: PropTypes.arrayOf(PropTypes.string),
   labelValuesCache: PropTypes.objectOf(PropTypes.arrayOf(PropTypes.string))
-}
-
-LogLabels.defaultProps = {
-  labels: [],
-  labelValuesCache: {}
 }

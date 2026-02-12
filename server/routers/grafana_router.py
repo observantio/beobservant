@@ -249,23 +249,39 @@ async def get_dashboard(
 
 @router.post("/dashboards")
 async def create_dashboard(
-    dashboard: DashboardCreate = Body(...),
+    payload: Dict = Body(..., description="Dashboard JSON — either a DashboardCreate wrapper or a raw dashboard object"),
     visibility: str = Query("private"),
     shared_group_ids: Optional[List[str]] = Query(None),
     current_user: TokenData = Depends(require_permission(Permission.WRITE_DASHBOARDS)),
     db: Session = Depends(get_db),
 ):
-    """Create a new dashboard with visibility and groups."""
+    """Create a new dashboard with visibility and groups.
+
+    Accepts either the existing DashboardCreate wrapper (contains `dashboard`) or
+    a raw Grafana dashboard object (we will wrap it into DashboardCreate).
+    """
     _rate_limit(current_user)
     if visibility not in ("private", "group", "tenant"):
         raise HTTPException(status_code=400, detail="Invalid visibility value")
+
+    # Normalize incoming payload to DashboardCreate
+    try:
+        if isinstance(payload, dict) and payload.get('dashboard'):
+            dashboard_create = DashboardCreate(**payload)
+        elif isinstance(payload, dict):
+            # assume payload is the raw dashboard object
+            dashboard_create = DashboardCreate(dashboard=payload, folder_id=int(payload.get('folderId', 0)) if payload.get('folderId') is not None else 0, overwrite=bool(payload.get('overwrite', False)))
+        else:
+            raise ValueError('Invalid payload format')
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid dashboard payload: {e}")
 
     # Check if user is admin
     from models.auth_models import Role
     is_admin = current_user.role == Role.ADMIN or current_user.is_superuser
 
     result = await grafana_proxy_service.create_dashboard(
-        db=db, dashboard_create=dashboard, user_id=current_user.user_id,
+        db=db, dashboard_create=dashboard_create, user_id=current_user.user_id,
         tenant_id=current_user.tenant_id, group_ids=_user_group_ids(current_user),
         visibility=visibility, shared_group_ids=shared_group_ids or [],
         is_admin=is_admin,
@@ -278,19 +294,33 @@ async def create_dashboard(
 @router.put("/dashboards/{uid}")
 async def update_dashboard(
     uid: str,
-    dashboard: DashboardUpdate = Body(...),
+    payload: Dict = Body(..., description="Either a DashboardUpdate wrapper or a raw dashboard object"),
     visibility: Optional[str] = Query(None),
     shared_group_ids: Optional[List[str]] = Query(None),
     current_user: TokenData = Depends(require_permission(Permission.WRITE_DASHBOARDS)),
     db: Session = Depends(get_db),
 ):
-    """Update an existing dashboard with access control."""
+    """Update an existing dashboard with access control.
+
+    Accepts either DashboardUpdate (with `dashboard`) or a raw dashboard object
+    which will be wrapped into DashboardUpdate.dashboard.
+    """
     _rate_limit(current_user)
     if visibility and visibility not in ("private", "group", "tenant"):
         raise HTTPException(status_code=400, detail="Invalid visibility value")
 
+    try:
+        if isinstance(payload, dict) and payload.get('dashboard'):
+            dashboard_update = DashboardUpdate(**payload)
+        elif isinstance(payload, dict):
+            dashboard_update = DashboardUpdate(dashboard=payload, overwrite=payload.get('overwrite', True))
+        else:
+            raise ValueError('Invalid payload format')
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid dashboard payload: {e}")
+
     result = await grafana_proxy_service.update_dashboard(
-        db=db, uid=uid, dashboard_update=dashboard, user_id=current_user.user_id,
+        db=db, uid=uid, dashboard_update=dashboard_update, user_id=current_user.user_id,
         tenant_id=current_user.tenant_id, group_ids=_user_group_ids(current_user),
         visibility=visibility, shared_group_ids=shared_group_ids,
     )

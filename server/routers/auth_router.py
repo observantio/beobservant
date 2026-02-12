@@ -16,10 +16,9 @@ from models.api_key_models import (
 )
 from models.auth_models import TokenData, Permission, Role, ROLE_PERMISSIONS, Token
 from services.database_auth_service import DatabaseAuthService
-from services.grafana_user_sync_service import GrafanaUserSyncService
 from middleware.rate_limit import enforce_ip_rate_limit, enforce_rate_limit
+
 auth_service = DatabaseAuthService()
-grafana_sync = GrafanaUserSyncService()
 
 logger = logging.getLogger(__name__)
 
@@ -298,20 +297,7 @@ async def create_user(
     try:
         user = auth_service.create_user(user_create, current_user.tenant_id)
 
-        # Sync user to Grafana (non-blocking – failure doesn't block user creation)
-        try:
-            grafana_user_id = await grafana_sync.sync_user_create(
-                username=user.username,
-                email=user.email,
-                password=user_create.password,
-                full_name=user.full_name,
-                role=user.role.value if hasattr(user.role, "value") else user.role,
-            )
-            if grafana_user_id:
-                auth_service.set_grafana_user_id(user.id, grafana_user_id, current_user.tenant_id)
-                logger.info("Synced Grafana user %s (grafana_id=%s)", user.username, grafana_user_id)
-        except Exception as e:
-            logger.warning("Grafana user sync failed for '%s': %s", user.username, e)
+        # Grafana user sync removed — feature deprecated/disabled (no-op)
 
         permissions = (
             auth_service.get_user_permissions(user)
@@ -391,15 +377,7 @@ async def update_user_password(
             detail="Current password is incorrect"
         )
 
-    # Sync new password to Grafana
-    target_user = auth_service.get_user_by_id(user_id)
-    grafana_uid = getattr(target_user, "grafana_user_id", None) if target_user else None
-    if grafana_uid:
-        try:
-            await grafana_sync.update_grafana_user_password(grafana_uid, password_update.new_password)
-            logger.info("Synced Grafana password for user id=%s", grafana_uid)
-        except Exception as e:
-            logger.warning("Grafana password sync failed for id=%s: %s", grafana_uid, e)
+    # Grafana password sync removed — feature deprecated/disabled (no-op)
 
     return {"message": "Password updated successfully"}
 
@@ -429,13 +407,7 @@ async def delete_user(
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=USER_NOT_FOUND)
 
-    # Clean up Grafana user
-    if grafana_uid:
-        try:
-            await grafana_sync.sync_user_delete(grafana_uid)
-            logger.info("Deleted Grafana user id=%s", grafana_uid)
-        except Exception as e:
-            logger.warning("Grafana user delete failed for id=%s: %s", grafana_uid, e)
+    # Grafana user deletion sync removed — feature deprecated/disabled (no-op)
 
     return {"message": "User deleted successfully"}
 

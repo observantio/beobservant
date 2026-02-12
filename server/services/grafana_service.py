@@ -13,6 +13,20 @@ from middleware.resilience import with_retry, with_timeout
 
 logger = logging.getLogger(__name__)
 
+
+class GrafanaAPIError(Exception):
+    """Raised when Grafana returns a non-2xx response.
+
+    Attributes:
+        status: HTTP status code returned by Grafana
+        body: parsed response body (dict or raw text)
+    """
+    def __init__(self, status: int, body: Any = None):
+        self.status = status
+        self.body = body
+        super().__init__(f"Grafana API error {status}: {body}")
+
+
 class GrafanaService:
     """Service for interacting with Grafana."""
     
@@ -164,9 +178,20 @@ class GrafanaService:
             response.raise_for_status()
             return response.json()
             
+        except httpx.HTTPStatusError as e:
+            parsed = None
+            try:
+                parsed = e.response.json()
+            except Exception:
+                try:
+                    parsed = e.response.text
+                except Exception:
+                    parsed = None
+            logger.error("Error creating dashboard (HTTP %s): %s – response body: %s", e.response.status_code, e, parsed)
+            raise GrafanaAPIError(status=e.response.status_code, body=parsed)
         except httpx.HTTPError as e:
             logger.error("Error creating dashboard: %s", e)
-            return None
+            raise
     
     @with_retry()
     @with_timeout()
@@ -199,9 +224,20 @@ class GrafanaService:
             response.raise_for_status()
             return response.json()
             
+        except httpx.HTTPStatusError as e:
+            parsed = None
+            try:
+                parsed = e.response.json()
+            except Exception:
+                try:
+                    parsed = e.response.text
+                except Exception:
+                    parsed = None
+            logger.error("Error updating dashboard %s (HTTP %s): %s – response body: %s", uid, e.response.status_code, e, parsed)
+            raise GrafanaAPIError(status=e.response.status_code, body=parsed)
         except httpx.HTTPError as e:
             logger.error("Error updating dashboard %s: %s", uid, e)
-            return None
+            raise
     
     @with_retry()
     @with_timeout()
@@ -312,19 +348,24 @@ class GrafanaService:
             return None
             
         except httpx.HTTPStatusError as e:
-            body = ""
+            # try to parse Grafana response body as JSON, fall back to text
+            parsed = None
             try:
-                body = e.response.text
+                parsed = e.response.json()
             except Exception:
-                pass
+                try:
+                    parsed = e.response.text
+                except Exception:
+                    parsed = None
             logger.error(
                 "Error creating datasource (HTTP %s): %s – response body: %s",
-                e.response.status_code, e, body,
+                e.response.status_code, e, parsed,
             )
-            return None
+            # propagate detailed Grafana error to caller
+            raise GrafanaAPIError(status=e.response.status_code, body=parsed)
         except httpx.HTTPError as e:
             logger.error("Error creating datasource: %s", e)
-            return None
+            raise
     
     @with_retry()
     @with_timeout()
@@ -358,19 +399,22 @@ class GrafanaService:
             return await self.get_datasource(uid)
             
         except httpx.HTTPStatusError as e:
-            body = ""
+            parsed = None
             try:
-                body = e.response.text
+                parsed = e.response.json()
             except Exception:
-                pass
+                try:
+                    parsed = e.response.text
+                except Exception:
+                    parsed = None
             logger.error(
                 "Error updating datasource %s (HTTP %s): %s – response body: %s",
-                uid, e.response.status_code, e, body,
+                uid, e.response.status_code, e, parsed,
             )
-            return None
+            raise GrafanaAPIError(status=e.response.status_code, body=parsed)
         except httpx.HTTPError as e:
             logger.error("Error updating datasource %s: %s", uid, e)
-            return None
+            raise
     
     @with_retry()
     @with_timeout()

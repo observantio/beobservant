@@ -26,7 +26,7 @@ export default function GrafanaTabs({ activeTab, onChange }) {
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
-          className={`pl-4 pr-4 py-2 font-medium transition-colors relative flex items-center gap-2 ${
+          className={`pl-4 pr-4 py-2 font-medium text-sm transition-colors relative flex items-center gap-2 ${
             activeTab === tab.id
               ? 'text-sre-primary border-b-2 border-sre-primary'
               : 'text-sre-text-muted hover:text-sre-text'

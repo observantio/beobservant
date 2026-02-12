@@ -414,15 +414,17 @@ export default function UsersPage() {
         </Modal>
       )}
 
-      <ConfirmModal
-        isOpen={confirmDialog.isOpen}
-        title={confirmDialog.title}
-        message={confirmDialog.message}
-        onConfirm={confirmDialog.onConfirm}
-        onCancel={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })}
-        confirmText="Delete"
-        variant="danger"
-      />
+      {confirmDialog.isOpen && (
+        <ConfirmModal
+          isOpen={confirmDialog.isOpen}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm || (() => {})}
+          onCancel={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })}
+          confirmText="Delete"
+          variant="danger"
+        />
+      )}
     </div>
   )
 }

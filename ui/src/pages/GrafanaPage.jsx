@@ -50,7 +50,15 @@ export default function GrafanaPage() { // NOSONAR
 
   function handleApiError(e) {
     if (!e) return
-    if (e.status === 403) return
+
+    // If this is an HTTP error thrown by `api.request`, let the global `api-error`
+    // event (and `ToastContext`) handle showing deduplicated messages.
+    if (e && typeof e.status === 'number') {
+      // keep silent for auth/403 (handled elsewhere) and let global handler run
+      return
+    }
+
+    // Non-HTTP/local errors: show a helpful toast
     const msg = e.message || String(e || '')
     const lower = msg.toLowerCase()
     if (lower.includes('not found') && (lower.includes('access denied') || lower.includes('update failed'))) return
@@ -60,6 +68,10 @@ export default function GrafanaPage() { // NOSONAR
   // Dashboard editor state
   const [showDashboardEditor, setShowDashboardEditor] = useState(false)
   const [editingDashboard, setEditingDashboard] = useState(null)
+  const [editorTab, setEditorTab] = useState('form') // 'form' | 'json'
+  const [jsonContent, setJsonContent] = useState('')
+  const [jsonError, setJsonError] = useState('')
+  const [fileUploaded, setFileUploaded] = useState(false)
   const [dashboardForm, setDashboardForm] = useState({
     title: '',
     tags: '',
@@ -111,10 +123,9 @@ export default function GrafanaPage() { // NOSONAR
     })
   }
 
-  // Confirm and open Grafana in a new tab (dashboard or proxy)
   function confirmOpenInGrafana() {
     const { path } = grafanaConfirmDialog || {}
-    let rawPath = '/dashboards'
+    let rawPath = '/dashboards' // default fallback
     if (typeof path === 'string' && path.trim()) {
       const trimmedPath = path.trim()
       if (trimmedPath.startsWith('http://') || trimmedPath.startsWith('https://')) {
@@ -141,13 +152,14 @@ export default function GrafanaPage() { // NOSONAR
 
     // ALWAYS use port 8080 (the authenticated proxy) - never allow direct Grafana access
     const proxyOrigin = `${window.location.protocol}//${window.location.hostname}:8080`
-    const targetPath = `/grafana${normalizedPath}`
+    const targetPath = normalizedPath
     
     // Always use bootstrap flow to set auth cookie before redirect
     const launchUrl = token
-      ? `${proxyOrigin}/grafana/bootstrap?token=${encodeURIComponent(token)}&next=${encodeURIComponent(targetPath)}`
+      ? `${proxyOrigin}/grafana/bootstrap?token=${encodeURIComponent(token)}&next=${encodeURI(targetPath)}`
       : `${proxyOrigin}${targetPath}`
 
+    console.log(launchUrl)
     // Open in new tab - user will be authenticated via proxy on port 8080
     window.open(launchUrl, '_blank', 'noopener,noreferrer')
     setGrafanaConfirmDialog({ isOpen: false, path: null })
@@ -257,29 +269,71 @@ export default function GrafanaPage() { // NOSONAR
 
   // ---- Dashboard CRUD ----
   function openDashboardEditor(dashboard = null) {
+    setEditorTab('form')
+    setJsonContent('')
+    setJsonError('')
+    setFileUploaded(false)
+
     if (dashboard) {
       setEditingDashboard(dashboard)
 
-      // Try to extract datasource UID from the lightweight dashboard object first
-      const dsFromTemplating = dashboard?.templating?.list?.find(v => v?.type === 'datasource')?.current?.value || ''
+      // Helper: resolve a templating value (could be uid or name) to a datasource.uid
+      const resolveToUid = (val) => {
+        if (!val && val !== 0) return ''
+        // templating current.value may be an object like { text, value } or a plain string
+        const candidate = (typeof val === 'object' && val !== null) ? (val.value || val.text) : String(val)
+        if (!candidate) return ''
+        // direct uid match
+        const byUid = datasources.find(d => String(d.uid) === String(candidate))
+        if (byUid) return byUid.uid
+        // match by friendly name
+        const byName = datasources.find(d => String(d.name) === String(candidate))
+        if (byName) return byName.uid
+        return ''
+      }
+
+      // Try to extract datasource value from the lightweight dashboard object first
+      const lightTemplating = dashboard?.templating || dashboard?.dashboard?.templating
+      const rawDsValue = lightTemplating?.list?.find(v => v?.type === 'datasource')?.current?.value || ''
+      const resolvedUid = resolveToUid(rawDsValue)
 
       setDashboardForm({
-        title: dashboard.title || '',
-        tags: dashboard.tags?.join(', ') || '',
-        folderId: dashboard.folderId || 0,
-        refresh: dashboard.refresh || '30s',
-        datasourceUid: dsFromTemplating || '',
+        title: dashboard.title || dashboard?.dashboard?.title || '',
+        tags: dashboard.tags?.join(', ') || (dashboard?.dashboard?.tags || []).join(', ') || '',
+        folderId: dashboard.folderId || dashboard?.dashboard?.folderId || 0,
+        refresh: dashboard.refresh || (dashboard?.dashboard?.refresh) || '30s',
+        datasourceUid: resolvedUid || '',
         visibility: 'private',
         sharedGroupIds: [],
       })
 
-      // If we couldn't find a datasource in the provided object, fetch the full dashboard
-      if (!dsFromTemplating && dashboard?.uid) {
+      // preload JSON editor with lightweight dashboard object if available, otherwise fetch full dashboard
+      const lightDashboardObj = dashboard?.dashboard || dashboard
+      if (lightDashboardObj) {
+        try {
+          setJsonContent(JSON.stringify(lightDashboardObj, null, 2))
+        } catch (e) { /* ignore */ }
+      }
+
+      if (dashboard?.uid) {
         (async () => {
           try {
             const full = await getDashboard(dashboard.uid).catch(() => null)
-            const ds = full?.templating?.list?.find(v => v?.type === 'datasource')?.current?.value || ''
-            if (ds) setDashboardForm(prev => ({ ...prev, datasourceUid: ds }))
+            const templ = full?.dashboard?.templating || full?.templating
+            const raw = templ?.list?.find(v => v?.type === 'datasource')?.current?.value || ''
+            const uid = resolveToUid(raw)
+            if (uid) setDashboardForm(prev => ({ ...prev, datasourceUid: uid }))
+
+            // Always replace the JSON editor with the full dashboard when available
+            if (full?.dashboard) {
+              try {
+                setJsonContent(JSON.stringify(full.dashboard, null, 2))
+                setJsonError('')
+                setFileUploaded(false)
+              } catch (err) {
+                // ignore stringify errors
+              }
+            }
           } catch (e) {
             /* ignore - leave datasource blank */
           }
@@ -296,47 +350,97 @@ export default function GrafanaPage() { // NOSONAR
         visibility: 'private',
         sharedGroupIds: [],
       })
+      // default JSON template
+      setJsonContent(JSON.stringify({ title: '', panels: [] }, null, 2))
     }
     setShowDashboardEditor(true)
   }
 
   async function saveDashboard() {
     try {
-      const tags = dashboardForm.tags
-        .split(',')
-        .map(t => t.trim())
-        .filter(Boolean)
+      // If JSON editor is active, prefer JSON content (supports exported Grafana JSON or raw dashboard object)
+      let payload = null
+      if (editorTab === 'json') {
+        if (!jsonContent || !jsonContent.trim()) {
+          toast.error('JSON content is empty')
+          return
+        }
+        let parsed
+        try {
+          parsed = JSON.parse(jsonContent)
+          setJsonError('')
+        } catch (err) {
+          setJsonError(err.message)
+          toast.error('Invalid JSON — please fix and try again')
+          return
+        }
 
-      const selectedDatasource = datasources.find(ds => ds.uid === dashboardForm.datasourceUid)
+        // If user pasted an outer wrapper (e.g. { dashboard: { ... }, overwrite: true }), normalize
+        if (parsed.dashboard || parsed?.meta || parsed?.orgId) {
+          // If it's already the Grafana export format (has dashboard at top), use as-is
+          if (parsed.dashboard) {
+            payload = {
+              dashboard: parsed.dashboard,
+              folderId: parsed.folderId || Number.parseInt(dashboardForm.folderId, 10) || 0,
+              overwrite: parsed.overwrite !== undefined ? !!parsed.overwrite : !!editingDashboard,
+            }
+          } else if (parsed?.meta && parsed.dashboard === undefined) {
+            // Grafana search result shape — try to use parsed.dashboard if present; otherwise fall back to wrapped object
+            payload = { dashboard: parsed, folderId: Number.parseInt(dashboardForm.folderId, 10) || 0, overwrite: !!editingDashboard }
+          } else {
+            payload = { dashboard: parsed, folderId: Number.parseInt(dashboardForm.folderId, 10) || 0, overwrite: !!editingDashboard }
+          }
+        } else {
+          // Raw dashboard object provided — wrap it
+          payload = { dashboard: parsed, folderId: Number.parseInt(dashboardForm.folderId, 10) || 0, overwrite: !!editingDashboard }
+        }
+      } else {
+        // Form-based payload (existing behaviour)
+        const tags = dashboardForm.tags
+          .split(',')
+          .map(t => t.trim())
+          .filter(Boolean)
 
-      const payload = {
-        dashboard: {
-          title: dashboardForm.title,
-          tags,
-          refresh: dashboardForm.refresh,
-          panels: [],
-          timezone: 'browser',
-          schemaVersion: 16,
-          editable: true,
-          templating: selectedDatasource
-            ? {
-                list: [
-                  {
-                    name: 'ds_default',
-                    label: 'Datasource',
-                    type: 'datasource',
-                    query: selectedDatasource.type,
-                    current: {
-                      text: selectedDatasource.name,
-                      value: selectedDatasource.uid,
+        const selectedDatasource = datasources.find(ds => ds.uid === dashboardForm.datasourceUid)
+
+        payload = {
+          dashboard: {
+            title: dashboardForm.title,
+            tags,
+            refresh: dashboardForm.refresh,
+            panels: [],
+            timezone: 'browser',
+            schemaVersion: 16,
+            editable: true,
+            templating: selectedDatasource
+              ? {
+                  list: [
+                    {
+                      name: 'ds_default',
+                      label: 'Datasource',
+                      type: 'datasource',
+                      query: selectedDatasource.type,
+                      current: {
+                        text: selectedDatasource.name,
+                        value: selectedDatasource.uid,
+                      },
                     },
-                  },
-                ],
-              }
-            : { list: [] },
-        },
-        folderId: Number.parseInt(dashboardForm.folderId, 10) || 0,
-        overwrite: !!editingDashboard,
+                  ],
+                }
+              : { list: [] },
+          },
+          folderId: Number.parseInt(dashboardForm.folderId, 10) || 0,
+          overwrite: !!editingDashboard,
+        }
+      }
+
+      // If JSON editor was used, allow the form-level tags/visibility to override or supplement
+      if (payload && payload.dashboard) {
+        const tagsFromForm = dashboardForm.tags
+          .split(',')
+          .map(t => t.trim())
+          .filter(Boolean)
+        if (tagsFromForm.length) payload.dashboard.tags = tagsFromForm
       }
 
       const params = new URLSearchParams({ visibility: dashboardForm.visibility })
@@ -345,10 +449,30 @@ export default function GrafanaPage() { // NOSONAR
       }
 
       if (editingDashboard) {
-        payload.dashboard.uid = editingDashboard.uid
+        // Ensure UID is set on update payload and id is null
+        if (payload.dashboard) {
+          payload.dashboard.uid = editingDashboard.uid
+          payload.dashboard.id = null
+        }
         await updateDashboard(editingDashboard.uid, payload, params.toString())
         toast.success('Dashboard updated successfully')
       } else {
+        // For creation: respect a uid provided inside the JSON by appending a short random suffix
+        // This avoids collisions while preserving the author's base uid.
+        if (payload.dashboard) {
+          // always remove numeric id
+          delete payload.dashboard.id
+
+          if (payload.dashboard.uid) {
+            // append a short alphanumeric suffix to keep the original hint but ensure uniqueness
+            const suffix = Math.random().toString(36).slice(2, 8)
+            payload.dashboard.uid = `${String(payload.dashboard.uid)}-${suffix}`
+          } else {
+            // let Grafana generate a UID if none provided
+            delete payload.dashboard.uid
+          }
+        }
+
         await createDashboard(payload, params.toString())
         toast.success('Dashboard created successfully')
       }
@@ -523,12 +647,22 @@ export default function GrafanaPage() { // NOSONAR
 
   return (
     <div className="animate-fade-in">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-sre-text mb-2 flex items-center gap-2">
-          <span className="material-icons text-sre-primary text-3xl">dashboard</span>{' '}
-          Grafana
-        </h1>
-        <p className="text-sre-text-muted">Create and manage dashboards, datasources, and folders</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-sre-text mb-2 flex items-center gap-2">
+            <span className="material-icons text-sre-primary text-3xl">dashboard</span>{' '}
+            Grafana
+          </h1>
+          <p className="text-sre-text-muted">Create and manage dashboards, datasources, and folders</p>
+        </div>
+        <Button
+          onClick={() => openInGrafana('/')}
+          className="flex items-center gap-2"
+          title="Open Grafana in new tab"
+        >
+          <span className="material-icons text-sm">open_in_new</span>
+          Open Grafana
+        </Button>
       </div>
 
       <GrafanaTabs activeTab={activeTab} onChange={setActiveTab} />
@@ -571,63 +705,152 @@ export default function GrafanaPage() { // NOSONAR
         footer={
           <div className="flex gap-3 justify-end">
             <Button variant="ghost" onClick={() => setShowDashboardEditor(false)}>Cancel</Button>
-            <Button variant="primary" onClick={saveDashboard} disabled={!dashboardForm.title.trim()}>
+            <Button variant="primary" onClick={saveDashboard} disabled={editorTab === 'form' ? !dashboardForm.title.trim() : !jsonContent.trim() || !!jsonError}>
               {editingDashboard ? 'Update Dashboard' : 'Create Dashboard'}
             </Button>
           </div>
         }
       >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">
-              Dashboard Title <span className="text-red-500">*</span> <HelpTooltip text="Enter a descriptive title for your dashboard." />
-            </label>
-            <Input value={dashboardForm.title} onChange={(e) => setDashboardForm({ ...dashboardForm, title: e.target.value })} placeholder="My Awesome Dashboard" required />
+        <div>
+          <div className="flex gap-2 mb-4 justify-center">
+            <button type="button" className={`px-3 py-1 rounded ${editorTab === 'form' ? 'text-sre-text border-b-2 border-sre-primary' : 'bg-transparent text-sre-text-muted'}`} onClick={() => setEditorTab('form')}>Form</button>
+            <button type="button" className={`px-3 py-1 rounded ${editorTab === 'json' ? 'text-sre-text border-b-2 border-sre-primary' : 'bg-transparent text-sre-text-muted'}`} onClick={() => setEditorTab('json')}>JSON</button>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">Tags (comma-separated)</label>
-            <Input value={dashboardForm.tags} onChange={(e) => setDashboardForm({ ...dashboardForm, tags: e.target.value })} placeholder="production, metrics, monitoring" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">Folder</label>
-            <Select value={dashboardForm.folderId} onChange={(e) => setDashboardForm({ ...dashboardForm, folderId: e.target.value })}>
-              <option value="0">General</option>
-              {folders.map((folder) => (<option key={folder.id} value={folder.id}>{folder.title}</option>))}
-            </Select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">Default Datasource</label>
-            <Select value={dashboardForm.datasourceUid} onChange={(e) => setDashboardForm({ ...dashboardForm, datasourceUid: e.target.value })}>
-              <option value="">-- None --</option>
-              {datasources.map((ds) => (<option key={ds.uid} value={ds.uid}>{ds.name} ({ds.type})</option>))}
-            </Select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-sre-text mb-2">Auto-refresh</label>
-            <Select value={dashboardForm.refresh} onChange={(e) => setDashboardForm({ ...dashboardForm, refresh: e.target.value })}>
-              {GRAFANA_REFRESH_INTERVALS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-            </Select>
-          </div>
-          <div className="border-t border-sre-border pt-4">
-            <label className="block text-sm font-medium text-sre-text mb-2">Visibility</label>
-            <Select value={dashboardForm.visibility} onChange={(e) => setDashboardForm({ ...dashboardForm, visibility: e.target.value, sharedGroupIds: [] })}>
-              {VISIBILITY_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-            </Select>
-            {dashboardForm.visibility === 'group' && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-sre-text mb-2">Shared Groups</label>
-                <div className="space-y-2 max-h-40 overflow-y-auto border border-sre-border rounded p-3">
-                  {groups.map(group => (
-                    <Checkbox key={group.id} label={group.name} checked={dashboardForm.sharedGroupIds.includes(group.id)} onChange={(e) => {
-                      if (e.target.checked) setDashboardForm({ ...dashboardForm, sharedGroupIds: [...dashboardForm.sharedGroupIds, group.id] })
-                      else setDashboardForm({ ...dashboardForm, sharedGroupIds: dashboardForm.sharedGroupIds.filter(id => id !== group.id) })
-                    }} />
-                  ))}
-                  {groups.length === 0 && <p className="text-sm text-sre-text-muted">No groups available</p>}
+
+          {editorTab === 'form' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">
+                  Dashboard Title <span className="text-red-500">*</span> <HelpTooltip text="Enter a descriptive title for your dashboard." />
+                </label>
+                <Input value={dashboardForm.title} onChange={(e) => setDashboardForm({ ...dashboardForm, title: e.target.value })} placeholder="My Awesome Dashboard" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">Tags (comma-separated)</label>
+                <Input value={dashboardForm.tags} onChange={(e) => setDashboardForm({ ...dashboardForm, tags: e.target.value })} placeholder="production, metrics, monitoring" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">Folder</label>
+                <Select value={dashboardForm.folderId} onChange={(e) => setDashboardForm({ ...dashboardForm, folderId: e.target.value })}>
+                  <option value="0">General</option>
+                  {folders.map((folder) => (<option key={folder.id} value={folder.id}>{folder.title}</option>))}
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">Default Datasource</label>
+                <Select value={dashboardForm.datasourceUid} onChange={(e) => setDashboardForm({ ...dashboardForm, datasourceUid: e.target.value })}>
+                  <option value="">-- None --</option>
+                  {datasources.map((ds) => (<option key={ds.uid} value={ds.uid}>{ds.name} ({ds.type})</option>))}
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">Auto-refresh</label>
+                <Select value={dashboardForm.refresh} onChange={(e) => setDashboardForm({ ...dashboardForm, refresh: e.target.value })}>
+                  {GRAFANA_REFRESH_INTERVALS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                </Select>
+              </div>
+              <div className="border-t border-sre-border pt-4">
+                <label className="block text-sm font-medium text-sre-text mb-2">Visibility</label>
+                <Select value={dashboardForm.visibility} onChange={(e) => setDashboardForm({ ...dashboardForm, visibility: e.target.value, sharedGroupIds: [] })}>
+                  {VISIBILITY_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                </Select>
+                {dashboardForm.visibility === 'group' && (
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-sre-text mb-2">Shared Groups</label>
+                    <div className="space-y-2 max-h-40 overflow-y-auto border border-sre-border rounded p-3">
+                      {groups.map(group => (
+                        <Checkbox key={group.id} label={group.name} checked={dashboardForm.sharedGroupIds.includes(group.id)} onChange={(e) => {
+                          if (e.target.checked) setDashboardForm({ ...dashboardForm, sharedGroupIds: [...dashboardForm.sharedGroupIds, group.id] })
+                          else setDashboardForm({ ...dashboardForm, sharedGroupIds: dashboardForm.sharedGroupIds.filter(id => id !== group.id) })
+                        }} />
+                      ))}
+                      {groups.length === 0 && <p className="text-sm text-sre-text-muted">No groups available</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {editorTab === 'json' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-3">Upload JSON file</label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={async (e) => {
+                        const f = e.target.files && e.target.files[0]
+                        if (!f) return
+                        try {
+                          const txt = await f.text()
+                          setJsonContent(txt)
+                          setJsonError('')
+                          setFileUploaded(true)
+                        } catch (err) {
+                          setJsonError('Failed to read file')
+                          setFileUploaded(false)
+                        }
+                      }}
+                      className="hidden"
+                      id="json-file-upload"
+                    />
+                    <label
+                      htmlFor="json-file-upload"
+                      className="inline-flex items-center gap-2 px-4 py-2 border border-sre-border rounded-lg bg-sre-surface hover:bg-sre-surface-light text-sre-text cursor-pointer transition-colors"
+                    >
+                      <span className="material-icons text-sm">upload_file</span>
+                      Choose File
+                    </label>
+                    <span className="text-sm text-sre-text-muted">
+                      {fileUploaded ? 'File loaded' : 'No file chosen'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-sre-text-muted">You can upload a Grafana-exported JSON or paste a dashboard object in the editor below.</p>
                 </div>
               </div>
-            )}
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-sre-text mb-2">Dashboard JSON</label>
+                <textarea className="w-full min-h-[220px] p-3 border rounded bg-sre-bg" value={jsonContent} onChange={(e) => setJsonContent(e.target.value)} placeholder="Paste dashboard JSON here (export from Grafana or raw dashboard object)" />
+                {jsonError && <p className="text-sm text-red-500 mt-2">JSON error: {jsonError}</p>}
+              </div>
+              <div className="border-t border-sre-border pt-4">
+                <label className="block text-sm font-medium text-sre-text mb-2">Folder</label>
+                <Select value={dashboardForm.folderId} onChange={(e) => setDashboardForm({ ...dashboardForm, folderId: e.target.value })}>
+                  <option value="0">General</option>
+                  {folders.map((folder) => (<option key={folder.id} value={folder.id}>{folder.title}</option>))}
+                </Select>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-sre-text mb-2">Tags (comma-separated)</label>
+                  <Input value={dashboardForm.tags} onChange={(e) => setDashboardForm({ ...dashboardForm, tags: e.target.value })} placeholder="production, metrics, monitoring" />
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-sre-text mb-2">Visibility</label>
+                  <Select value={dashboardForm.visibility} onChange={(e) => setDashboardForm({ ...dashboardForm, visibility: e.target.value, sharedGroupIds: [] })}>
+                    {VISIBILITY_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                  </Select>
+                  {dashboardForm.visibility === 'group' && (
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-sre-text mb-2">Shared Groups</label>
+                      <div className="space-y-2 max-h-40 overflow-y-auto border border-sre-border rounded p-3">
+                        {groups.map(group => (
+                          <Checkbox key={group.id} label={group.name} checked={dashboardForm.sharedGroupIds.includes(group.id)} onChange={(e) => {
+                            if (e.target.checked) setDashboardForm({ ...dashboardForm, sharedGroupIds: [...dashboardForm.sharedGroupIds, group.id] })
+                            else setDashboardForm({ ...dashboardForm, sharedGroupIds: dashboardForm.sharedGroupIds.filter(id => id !== group.id) })
+                          }} />
+                        ))}
+                        {groups.length === 0 && <p className="text-sm text-sre-text-muted">No groups available</p>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 
@@ -751,10 +974,10 @@ export default function GrafanaPage() { // NOSONAR
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
-        onConfirm={confirmDialog.onConfirm}
+        onConfirm={confirmDialog.onConfirm || (() => {})}
         title={confirmDialog.title}
         message={confirmDialog.message}
-        variant={confirmDialog.variant}
+        variant={confirmDialog.variant || 'danger'}
         confirmText="Delete"
         cancelText="Cancel"
       />
@@ -765,7 +988,7 @@ export default function GrafanaPage() { // NOSONAR
         onConfirm={confirmOpenInGrafana}
         title="Open in Grafana"
         message="This will proxy through Be Observant to get a secure, scoped, authenticated, and restricted view of what you can view and share under Grafana. If you want full admin access, please contact an admin and you can log into Grafana directly with a different username and password."
-        variant="info"
+        variant="primary"
         confirmText="Continue to Grafana"
         cancelText="Cancel"
       />

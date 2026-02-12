@@ -25,9 +25,9 @@ export default function LogQueryForm({
   clearAllFilters,
   runQuery,
   onQueryModeChange,
-  onLabelChange,
-  loading,
-  onRemoveFilter,
+  onLabelChange = undefined,
+  loading = false,
+  onRemoveFilter = undefined,
 }) {
   return (
     <form onSubmit={runQuery} className="space-y-4">
@@ -173,10 +173,4 @@ LogQueryForm.propTypes = {
   onLabelChange: PropTypes.func,
   loading: PropTypes.bool,
   onRemoveFilter: PropTypes.func,
-}
-
-LogQueryForm.defaultProps = {
-  onLabelChange: undefined,
-  loading: false,
-  onRemoveFilter: undefined,
 }

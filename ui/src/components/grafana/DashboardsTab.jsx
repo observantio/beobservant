@@ -36,6 +36,18 @@ export default function DashboardsTab({
   openDashboardEditor, onOpenGrafana, onDeleteDashboard,
   onToggleHidden
 }) {
+  // Create a URL slug from the dashboard title (fallback when slug is empty)
+  const slugify = (s = '') => String(s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+
+  const makeDashPath = (d) => {
+    if (d?.url) return d.url
+    const slugOrTitle = d?.slug || slugify(d?.title)
+    return `/grafana/d/${d.uid}/${encodeURIComponent(slugOrTitle)}`
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -146,7 +158,7 @@ export default function DashboardsTab({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onOpenGrafana(d.url || `/grafana/d/${d.uid}${d.slug ? `/${d.slug}` : ''}`)}
+                    onClick={() => onOpenGrafana(d.url || `/grafana/d/${d.uid}/${d.slug || d.title.toLowerCase()}`)}
                     title="Open in Grafana"
                     className="p-2"
                   >

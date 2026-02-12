@@ -279,7 +279,7 @@ export default function AlertManagerPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {metricOrder.map((key) => {
           const metricData = {
-            activeAlerts: { label: 'Active Alerts', value: stats.totalAlerts, detail: <><span className="text-red-500">{stats.critical} critical</span> · <span className="text-yellow-500">{stats.warning} warning</span></> },
+            activeAlerts: { label: 'Active Alerts', value: stats.totalAlerts, detail: <><span className="text-red-500 dark:text-red-400">{stats.critical} critical</span> · <span className="text-yellow-500 dark:text-yellow-400">{stats.warning} warning</span></> },
             alertRules: { label: 'Alert Rules', value: `${stats.enabledRules}/${stats.totalRules}`, detail: 'enabled' },
             channels: { label: 'Notification Channels', value: `${stats.enabledChannels}/${stats.totalChannels}`, detail: 'active' },
             silences: { label: 'Active Silences', value: stats.activeSilences, detail: 'muting alerts' },
@@ -337,7 +337,7 @@ export default function AlertManagerPage() {
             type="button"
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`pl-4 pr-4 py-2 flex items-center justify-center gap-2 border-b-2 transition-colors ${
+            className={`pl-4 pr-4 py-2 text-sm flex items-center justify-center gap-2 border-b-2 transition-colors ${
               activeTab === tab.key
                 ? 'border-sre-primary text-sre-primary'
                 : 'border-transparent text-sre-text-muted hover:text-sre-text'
@@ -1007,25 +1007,29 @@ export default function AlertManagerPage() {
         />
       </Modal>
 
-      <ConfirmModal
-        isOpen={testDialog.isOpen}
-        title={testDialog.title}
-        message={testDialog.message}
-        onConfirm={() => setTestDialog({ isOpen: false, title: '', message: '' })}
-        onCancel={() => setTestDialog({ isOpen: false, title: '', message: '' })}
-        confirmText="OK"
-        variant="primary"
-      />
+      {testDialog.isOpen && (
+        <ConfirmModal
+          isOpen={testDialog.isOpen}
+          title={testDialog.title}
+          message={testDialog.message}
+          onConfirm={() => setTestDialog({ isOpen: false, title: '', message: '' })}
+          onCancel={() => setTestDialog({ isOpen: false, title: '', message: '' })}
+          confirmText="OK"
+          variant="primary"
+        />
+      )}
 
-      <ConfirmModal
-        isOpen={confirmDialog.isOpen}
-        title={confirmDialog.title}
-        message={confirmDialog.message}
-        onConfirm={confirmDialog.onConfirm}
-        onCancel={() => setConfirmDialog(EMPTY_CONFIRM)}
-        confirmText={confirmDialog.confirmText}
-        variant={confirmDialog.variant}
-      />
+      {confirmDialog.isOpen && (
+        <ConfirmModal
+          isOpen={confirmDialog.isOpen}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm || (() => {})}
+          onCancel={() => setConfirmDialog(EMPTY_CONFIRM)}
+          confirmText={confirmDialog.confirmText}
+          variant={confirmDialog.variant}
+        />
+      )}
     </div>
   )
 }

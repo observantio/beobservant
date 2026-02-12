@@ -1,7 +1,12 @@
 import { Card } from '../../components/ui'
 import PropTypes from 'prop-types'
 
-export default function LogQuickFilters({ labelValuesCache, topTerms, onSelectLabelValue, onSelectPattern }) {
+export default function LogQuickFilters({ 
+  labelValuesCache = {}, 
+  topTerms = [], 
+  onSelectLabelValue = () => {}, 
+  onSelectPattern = () => {} 
+}) {
   const hasLabels = Object.keys(labelValuesCache || {}).length > 0
 
   return (
@@ -83,11 +88,4 @@ LogQuickFilters.propTypes = {
   ),
   onSelectLabelValue: PropTypes.func,
   onSelectPattern: PropTypes.func,
-}
-
-LogQuickFilters.defaultProps = {
-  labelValuesCache: {},
-  topTerms: [],
-  onSelectLabelValue: () => {},
-  onSelectPattern: () => {},
 }
