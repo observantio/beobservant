@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 class SystemService:
-    """Service to collect system metrics using psutil for the beObservant process."""
+    """Service to collect system metrics using psutil for the BeObservant process."""
 
     def __init__(self):
         """Initialize with current process."""
@@ -22,7 +22,7 @@ class SystemService:
         return payload
 
     def get_cpu_metrics(self) -> Dict[str, Any]:
-        """Get CPU utilization metrics for the beObservant process."""
+        """Get CPU utilization metrics for the BeObservant process."""
         try:
             cpu_percent = self.process.cpu_percent(interval=None)
             if cpu_percent == 0:
@@ -51,7 +51,7 @@ class SystemService:
             })
 
     def get_memory_metrics(self) -> Dict[str, Any]:
-        """Get memory utilization metrics for the beObservant process."""
+        """Get memory utilization metrics for the BeObservant process."""
         try:
             mem_info = self.process.memory_info()
             mem_percent = self.process.memory_percent()
@@ -72,7 +72,7 @@ class SystemService:
             })
 
     def get_disk_metrics(self) -> Dict[str, Any]:
-        """Get I/O metrics for the beObservant process."""
+        """Get I/O metrics for the BeObservant process."""
         try:
             io_counters = self.process.io_counters()
             
@@ -92,7 +92,7 @@ class SystemService:
             })
 
     def get_network_metrics(self) -> Dict[str, Any]:
-        """Get network connection metrics for the beObservant process."""
+        """Get network connection metrics for the BeObservant process."""
         try:
             connections = self.process.connections(kind='inet')
             
@@ -120,7 +120,7 @@ class SystemService:
             })
 
     def determine_stress_status(self, cpu_percent: float, memory_percent: float, connections: int) -> Dict[str, Any]:
-        """Determine if the beObservant process is under stress."""
+        """Determine if the BeObservant process is under stress."""
         HIGH_CPU_THRESHOLD = 50 
         HIGH_MEMORY_THRESHOLD = 80  
         HIGH_CONNECTIONS_THRESHOLD = 100

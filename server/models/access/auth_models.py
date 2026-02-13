@@ -112,6 +112,10 @@ class Permission(str, Enum):
 ROLE_PERMISSIONS = {
     Role.ADMIN: list(Permission),
     Role.USER: [
+        Permission.READ_API_KEYS,
+        Permission.CREATE_API_KEYS,
+        Permission.UPDATE_API_KEYS,
+        Permission.DELETE_API_KEYS,
         Permission.READ_ALERTS,
         Permission.READ_SILENCES,
         Permission.READ_RULES,
@@ -124,7 +128,7 @@ ROLE_PERMISSIONS = {
         Permission.READ_FOLDERS,
         Permission.READ_AGENTS,
         Permission.READ_USERS,
-        Permission.READ_GROUPS
+        Permission.READ_GROUPS,
     ],
     Role.VIEWER: []
 }

@@ -1,5 +1,5 @@
 /**
- * API client for beObservant backend
+ * API client for Be Observant backend
  */
 import { API_BASE } from './utils/constants'
 

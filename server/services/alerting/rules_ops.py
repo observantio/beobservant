@@ -1,0 +1,56 @@
+"""Rule synchronization operations for AlertManagerService."""
+
+from typing import List, Optional
+from urllib.parse import quote
+
+import httpx
+
+from models.access.auth_models import TokenData
+from models.alerting.rules import AlertRule
+
+
+def resolve_rule_org_id(service, rule_org_id: Optional[str], current_user: TokenData) -> str:
+    user_org_id = getattr(current_user, "org_id", None)
+    return rule_org_id or user_org_id or service.config.DEFAULT_ORG_ID
+
+
+async def sync_mimir_rules_for_org(service, org_id: str, rules: List[AlertRule]) -> None:
+    desired_groups = service._group_enabled_rules(rules)
+    headers = {"X-Scope-OrgID": org_id, "Content-Type": "application/yaml"}
+    base_url = service.config.MIMIR_URL.rstrip("/")
+
+    list_url = f"{base_url}{service.MIMIR_RULER_CONFIG_BASEPATH}/{service.MIMIR_RULES_NAMESPACE}"
+    upsert_url = f"{base_url}{service.MIMIR_RULER_CONFIG_BASEPATH}/{service.MIMIR_RULES_NAMESPACE}"
+
+    existing_group_names: List[str] = []
+    try:
+        response = await service._mimir_client.get(list_url, headers={"X-Scope-OrgID": org_id})
+        if response.status_code == 200:
+            existing_group_names = service._extract_mimir_group_names(response.text)
+    except httpx.HTTPError:
+        existing_group_names = []
+
+    for group_name in existing_group_names:
+        if group_name in desired_groups:
+            continue
+        delete_url = (
+            f"{base_url}{service.MIMIR_RULER_CONFIG_BASEPATH}/"
+            f"{service.MIMIR_RULES_NAMESPACE}/{quote(group_name, safe='')}"
+        )
+        delete_response = await service._mimir_client.delete(delete_url, headers={"X-Scope-OrgID": org_id})
+        if delete_response.status_code not in {200, 202, 204, 404}:
+            raise httpx.HTTPStatusError(
+                f"Unexpected Mimir delete response: {delete_response.status_code}",
+                request=delete_response.request,
+                response=delete_response,
+            )
+
+    for group_name, group_rules in desired_groups.items():
+        payload = service._build_ruler_group_yaml(group_name, group_rules)
+        post_response = await service._mimir_client.post(upsert_url, content=payload, headers=headers)
+        if post_response.status_code not in {200, 201, 202, 204}:
+            raise httpx.HTTPStatusError(
+                f"Unexpected Mimir upsert response: {post_response.status_code}",
+                request=post_response.request,
+                response=post_response,
+            )

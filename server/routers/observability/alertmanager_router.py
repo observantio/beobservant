@@ -50,17 +50,11 @@ def _parse_filter_labels_or_none(filter_labels: Optional[str]) -> Optional[Dict[
         return None
     return alertmanager_service.parse_filter_labels(filter_labels)
 
-@webhook_router.post(
-    "/alerts/webhook",
-    summary="Alert webhook",
-    description="Receive alert webhook notifications from AlertManager"
-)
-@handle_route_errors(bad_request_exceptions=(Exception,), bad_request_detail="Invalid webhook payload")
-async def alert_webhook(request: Request) -> dict:
-    """Receive alert webhook notifications from AlertManager based on routing configuration."""
+
+def _enforce_webhook_security(request: Request, *, scope: str) -> None:
     enforce_public_endpoint_security(
         request,
-        scope="alertmanager_webhook",
+        scope=scope,
         limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
         window_seconds=60,
         allowlist=config.WEBHOOK_IP_ALLOWLIST,
@@ -71,6 +65,16 @@ async def alert_webhook(request: Request) -> dict:
         expected_token=config.INBOUND_WEBHOOK_TOKEN,
         unauthorized_detail="Invalid webhook token",
     )
+
+@webhook_router.post(
+    "/alerts/webhook",
+    summary="Alert webhook",
+    description="Receive alert webhook notifications from AlertManager"
+)
+@handle_route_errors(bad_request_exceptions=(Exception,), bad_request_detail="Invalid webhook payload")
+async def alert_webhook(request: Request) -> dict:
+    """Receive alert webhook notifications from AlertManager based on routing configuration."""
+    _enforce_webhook_security(request, scope="alertmanager_webhook")
     payload = await request.json()
     alerts = payload.get("alerts", [])
     logger.info("Received webhook payload with %d alerts", len(alerts))
@@ -90,19 +94,7 @@ async def alert_webhook(request: Request) -> dict:
 @handle_route_errors(bad_request_exceptions=(Exception,), bad_request_detail="Invalid payload")
 async def alert_critical(request: Request) -> dict:
     """Receive critical severity alerts routed by AlertManager."""
-    enforce_public_endpoint_security(
-        request,
-        scope="alertmanager_critical",
-        limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
-        window_seconds=60,
-        allowlist=config.WEBHOOK_IP_ALLOWLIST,
-    )
-    enforce_header_token(
-        request,
-        header_name="x-beobservant-webhook-token",
-        expected_token=config.INBOUND_WEBHOOK_TOKEN,
-        unauthorized_detail="Invalid webhook token",
-    )
+    _enforce_webhook_security(request, scope="alertmanager_critical")
     payload = await request.json()
     alerts = payload.get("alerts", [])
     logger.warning("Received %d critical alerts", len(alerts))
@@ -122,19 +114,7 @@ async def alert_critical(request: Request) -> dict:
 @handle_route_errors(bad_request_exceptions=(Exception,), bad_request_detail="Invalid payload")
 async def alert_warning(request: Request) -> dict:
     """Receive warning severity alerts routed by AlertManager."""
-    enforce_public_endpoint_security(
-        request,
-        scope="alertmanager_warning",
-        limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
-        window_seconds=60,
-        allowlist=config.WEBHOOK_IP_ALLOWLIST,
-    )
-    enforce_header_token(
-        request,
-        header_name="x-beobservant-webhook-token",
-        expected_token=config.INBOUND_WEBHOOK_TOKEN,
-        unauthorized_detail="Invalid webhook token",
-    )
+    _enforce_webhook_security(request, scope="alertmanager_warning")
     payload = await request.json()
     alerts = payload.get("alerts", [])
     logger.info("Received warning alerts payload with %d alerts", len(alerts))
@@ -224,7 +204,7 @@ async def delete_alerts(
 @handle_route_errors(bad_request_detail=INVALID_FILTER_LABELS_JSON)
 async def get_silences(
     filter_labels: Optional[str] = Query(None, description='Label filters as JSON string'),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_ALERTS, "alertmanager"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_SILENCES, "alertmanager"))
 ):
     """Get all silences.
     
@@ -244,7 +224,7 @@ async def get_silences(
 @router.get("/silences/{silence_id}", response_model=Silence)
 async def get_silence(
     silence_id: str,
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_ALERTS, "alertmanager"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_SILENCES, "alertmanager"))
 ):
     """Get a specific silence by ID.
     
@@ -332,7 +312,7 @@ async def update_silence(
 @router.delete("/silences/{silence_id}")
 async def delete_silence(
     silence_id: str,
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_ALERTS, "alertmanager"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_SILENCES, "alertmanager"))
 ):
     """Delete a silence.
     
@@ -374,7 +354,7 @@ async def get_receivers(current_user: TokenData = Depends(require_permission_wit
 
 
 @router.get("/rules", response_model=List[AlertRule])
-async def get_alert_rules(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_ALERTS, "alertmanager"))):
+async def get_alert_rules(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RULES, "alertmanager"))):
     """Get all alert rules.
     
     Returns all configured alert rules accessible to the user.
@@ -406,7 +386,7 @@ async def list_metric_names(
     ),
     current_user: TokenData = Depends(
         require_any_permission_with_scope(
-            [Permission.READ_ALERTS, Permission.CREATE_RULES, Permission.UPDATE_RULES, Permission.WRITE_ALERTS],
+            [Permission.READ_METRICS, Permission.CREATE_RULES, Permission.UPDATE_RULES, Permission.WRITE_ALERTS],
             "alertmanager",
         )
     ),
@@ -430,7 +410,7 @@ async def list_metric_names(
 
 
 @router.get("/rules/{rule_id}", response_model=AlertRule)
-async def get_alert_rule(rule_id: str, current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_ALERTS, "alertmanager"))):
+async def get_alert_rule(rule_id: str, current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RULES, "alertmanager"))):
     """Get a specific alert rule by ID.
     
     Returns detailed information about a single alert rule.
@@ -570,7 +550,7 @@ async def test_alert_rule(
 
 
 @router.delete("/rules/{rule_id}")
-async def delete_alert_rule(rule_id: str, current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_ALERTS, "alertmanager"))):
+async def delete_alert_rule(rule_id: str, current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_RULES, "alertmanager"))):
     """Delete an alert rule.
     
     Removes an alert rule from the configuration. Only the owner can delete.

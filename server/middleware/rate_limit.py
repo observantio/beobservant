@@ -12,6 +12,7 @@ import time
 import threading
 from dataclasses import dataclass
 from typing import Dict, Tuple, Optional
+from ipaddress import ip_address
 
 from fastapi import HTTPException, status, Request
 from config import config
@@ -57,18 +58,31 @@ rate_limiter = InMemoryRateLimiter()
 
 
 def client_ip(request: Request) -> str:
+    def _valid_ip(value: str) -> Optional[str]:
+        candidate = (value or "").strip()
+        if not candidate:
+            return None
+        try:
+            ip_address(candidate)
+            return candidate
+        except ValueError:
+            return None
+
     if config.TRUST_PROXY_HEADERS:
         forwarded_for = (request.headers.get("x-forwarded-for") or "").strip()
         if forwarded_for:
             first = forwarded_for.split(",", 1)[0].strip()
-            if first:
-                return first
+            valid_first = _valid_ip(first)
+            if valid_first:
+                return valid_first
 
         real_ip = (request.headers.get("x-real-ip") or "").strip()
-        if real_ip:
-            return real_ip
+        valid_real_ip = _valid_ip(real_ip)
+        if valid_real_ip:
+            return valid_real_ip
 
-    return (request.client.host if request.client else "unknown").strip()
+    direct = (request.client.host if request.client else "unknown").strip()
+    return _valid_ip(direct) or "unknown"
 
 
 def enforce_rate_limit(

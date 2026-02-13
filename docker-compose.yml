@@ -191,12 +191,9 @@ services:
       GF_AUTH_PROXY_ENABLED: "true"
       GF_AUTH_PROXY_HEADER_NAME: "X-WEBAUTH-USER"
       GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
-      # Capture extra user fields from headers.
       GF_AUTH_PROXY_HEADERS: "Email:X-WEBAUTH-EMAIL Name:X-WEBAUTH-NAME Role:X-WEBAUTH-ROLE"
-      # Docker networks commonly use private ranges; keep this restrictive to internal networks.
       GF_AUTH_PROXY_WHITELIST: "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       
-      # ❌ Disable anonymous auth; keep basic auth for backend service-to-service API calls.
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_AUTH_BASIC_ENABLED: "true"
       
@@ -205,7 +202,7 @@ services:
     volumes:
       - ./configs/grafana/grafana-datasource.yaml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - grafana:/var/lib/grafana
-    # Port 3000 NOT exposed - access only via authenticated proxy on 8080
+
     depends_on:
       - mimir
       - loki

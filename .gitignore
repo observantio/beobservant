@@ -6,3 +6,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.log
+*.db
+*.sqlite
+*.env
+*.pem
+*.key

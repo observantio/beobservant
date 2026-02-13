@@ -114,7 +114,7 @@ async def update_current_user_info(
 
 
 @router.get("/api-keys", response_model=List[ApiKey])
-async def list_api_keys(current_user: TokenData = Depends(require_authenticated_with_scope("auth"))):
+async def list_api_keys(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_API_KEYS, "auth"))):
     return auth_service.list_api_keys(current_user.user_id)
 
 
@@ -122,7 +122,7 @@ async def list_api_keys(current_user: TokenData = Depends(require_authenticated_
 @handle_route_errors()
 async def create_api_key(
     key_create: ApiKeyCreate,
-    current_user: TokenData = Depends(require_authenticated_with_scope("auth"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_API_KEYS, "auth"))
 ):
     return auth_service.create_api_key(current_user.user_id, current_user.tenant_id, key_create)
 
@@ -132,7 +132,7 @@ async def create_api_key(
 async def update_api_key(
     key_id: str,
     key_update: ApiKeyUpdate,
-    current_user: TokenData = Depends(require_authenticated_with_scope("auth"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_API_KEYS, "auth"))
 ):
     return auth_service.update_api_key(current_user.user_id, key_id, key_update)
 
@@ -141,7 +141,7 @@ async def update_api_key(
 @handle_route_errors()
 async def delete_api_key(
     key_id: str,
-    current_user: TokenData = Depends(require_authenticated_with_scope("auth"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_API_KEYS, "auth"))
 ):
     success = auth_service.delete_api_key(current_user.user_id, key_id)
     if not success:
@@ -310,7 +310,7 @@ async def update_user_permissions(
     user_id: str,
     permission_names: List[str],
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.UPDATE_USERS, Permission.MANAGE_USERS], "auth")
+        require_any_permission_with_scope([Permission.UPDATE_USER_PERMISSIONS, Permission.MANAGE_USERS], "auth")
     )
 ):
     """Update user's direct permissions."""
@@ -325,7 +325,7 @@ async def update_group_permissions(
     group_id: str,
     permission_names: List[str],
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.UPDATE_GROUPS, Permission.MANAGE_GROUPS], "auth")
+        require_any_permission_with_scope([Permission.UPDATE_GROUP_PERMISSIONS, Permission.MANAGE_GROUPS], "auth")
     )
 ):
     """Update group's permissions."""
@@ -340,7 +340,7 @@ async def update_group_members(
     group_id: str,
     members: GroupMembersUpdate,
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.UPDATE_GROUPS, Permission.MANAGE_GROUPS], "auth")
+        require_any_permission_with_scope([Permission.UPDATE_GROUP_MEMBERS, Permission.MANAGE_GROUPS], "auth")
     )
 ):
     """Update group membership."""
@@ -351,13 +351,27 @@ async def update_group_members(
 
 
 @router.get("/permissions")
-async def list_all_permissions(current_user: TokenData = Depends(require_authenticated_with_scope("auth"))):
+async def list_all_permissions(
+    current_user: TokenData = Depends(
+        require_any_permission_with_scope(
+            [Permission.READ_USERS, Permission.READ_GROUPS, Permission.MANAGE_USERS, Permission.MANAGE_GROUPS],
+            "auth",
+        )
+    )
+):
     """List all available permissions."""
     return auth_service.list_all_permissions()
 
 
 @router.get("/role-defaults")
-async def list_role_defaults(current_user: TokenData = Depends(require_authenticated_with_scope("auth"))):
+async def list_role_defaults(
+    current_user: TokenData = Depends(
+        require_any_permission_with_scope(
+            [Permission.READ_USERS, Permission.READ_GROUPS, Permission.MANAGE_USERS, Permission.MANAGE_GROUPS],
+            "auth",
+        )
+    )
+):
     """List role default permissions."""
     return {
         role.value: [perm.value for perm in perms]

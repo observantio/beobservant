@@ -97,12 +97,12 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(200))
-    org_id = Column(String(100), nullable=False, default=config.DEFAULT_ORG_ID, index=True)  # Tenant ID for Mimir/Loki/Tempo
-    role = Column(String(20), nullable=False, default='user', index=True)  # admin, user, viewer
+    org_id = Column(String(100), nullable=False, default=config.DEFAULT_ORG_ID, index=True)  
+    role = Column(String(20), nullable=False, default='user', index=True)  
     is_active = Column(Boolean, default=True, nullable=False)
     is_superuser = Column(Boolean, default=False, nullable=False)
     needs_password_change = Column(Boolean, default=False, nullable=False)
-    grafana_user_id = Column(Integer, nullable=True, index=True)  # Synced Grafana user ID
+    grafana_user_id = Column(Integer, nullable=True, index=True)  
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     last_login = Column(DateTime)
@@ -129,7 +129,7 @@ class Group(Base):
     name = Column(String(100), nullable=False, index=True)
     description = Column(Text)
     is_active = Column(Boolean, default=True, nullable=False)
-    grafana_team_id = Column(Integer, nullable=True, index=True)  # Synced Grafana team ID
+    grafana_team_id = Column(Integer, nullable=True, index=True)  
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -197,7 +197,7 @@ class AlertRule(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     tenant_id = Column(String, ForeignKey(TENANTS_ID, ondelete='CASCADE'), nullable=False, index=True)
     created_by = Column(String, ForeignKey(USERS_ID, ondelete=ONDELETE_SET_NULL))
-    org_id = Column(String, nullable=True, index=True)  # API key value — scopes the rule to a product/tenant
+    org_id = Column(String, nullable=True, index=True)  
     name = Column(String(200), nullable=False, index=True)
     group = Column(String(100), nullable=False, default=config.DEFAULT_RULE_GROUP)
     expr = Column(Text, nullable=False)
@@ -206,8 +206,8 @@ class AlertRule(Base):
     labels = Column(JSON, default=dict)
     annotations = Column(JSON, default=dict)
     enabled = Column(Boolean, default=True, nullable=False)
-    notification_channels = Column(JSON, default=list)  # List of channel IDs
-    visibility = Column(String(20), nullable=False, default='private', index=True)  # private, group, tenant
+    notification_channels = Column(JSON, default=list)  
+    visibility = Column(String(20), nullable=False, default='private', index=True)  
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -296,14 +296,14 @@ class GrafanaDashboard(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     tenant_id = Column(String, ForeignKey(TENANTS_ID, ondelete='CASCADE'), nullable=False, index=True)
     created_by = Column(String, ForeignKey(USERS_ID, ondelete=ONDELETE_SET_NULL))
-    grafana_uid = Column(String(100), nullable=False, index=True)  # UID in Grafana
-    grafana_id = Column(Integer)  # Numeric ID in Grafana
+    grafana_uid = Column(String(100), nullable=False, index=True)  
+    grafana_id = Column(Integer)  
     title = Column(String(200), nullable=False)
-    folder_uid = Column(String(100))  # Folder UID in Grafana
-    visibility = Column(String(20), nullable=False, default='private', index=True)  # private, group, tenant
+    folder_uid = Column(String(100))  
+    visibility = Column(String(20), nullable=False, default='private', index=True)  
     tags = Column(JSON, default=list)
-    is_hidden = Column(Boolean, default=False, nullable=False, index=True)  # User can hide dashboards from their view
-    hidden_by = Column(JSON, default=list)  # List of user IDs who have hidden this dashboard
+    is_hidden = Column(Boolean, default=False, nullable=False, index=True)  
+    hidden_by = Column(JSON, default=list)  
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -332,11 +332,11 @@ class GrafanaDatasource(Base):
     type = Column(String(100), nullable=False)  
     visibility = Column(String(20), nullable=False, default='private', index=True)  
     is_hidden = Column(Boolean, default=False, nullable=False, index=True)
-    hidden_by = Column(JSON, default=list)  # List of user IDs who have hidden this datasource
+    hidden_by = Column(JSON, default=list) 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
-    # Relationshipsadmin
+
     tenant = relationship('Tenant')
     creator = relationship('User', foreign_keys=[created_by])
     shared_groups = relationship('Group', secondary=datasource_groups)
