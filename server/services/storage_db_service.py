@@ -12,11 +12,11 @@ from typing import List, Optional, Dict, Any
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.orm import Session, joinedload
 
-from models.rules import (
+from models.alerting.rules import (
     AlertRule as AlertRulePydantic,
     AlertRuleCreate,
 )
-from models.channels import (
+from models.alerting.channels import (
     NotificationChannel as NotificationChannelPydantic,
     NotificationChannelCreate,
 )

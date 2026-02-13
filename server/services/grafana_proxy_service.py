@@ -1,16 +1,16 @@
 """Grafana proxy service with multi-tenancy, team scoping, and access control."""
 import logging
+import re
 from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_
 
 from services.grafana_service import GrafanaService, GrafanaAPIError
 from fastapi import HTTPException
 from db_models import GrafanaDashboard, GrafanaDatasource, Group
-from models.grafana_models import (
-    DashboardCreate, DashboardUpdate, DashboardSearchResult,
-    Datasource, DatasourceCreate, DatasourceUpdate
-)
+from models.access.auth_models import Permission, TokenData, Role
+from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate, DashboardSearchResult
+from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from config import config
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,210 @@ class GrafanaProxyService:
 
     def __init__(self):
         self.grafana_service = GrafanaService()
+
+    @staticmethod
+    def _raise_http_from_grafana_error(gae: GrafanaAPIError) -> None:
+        body = gae.body
+        message = None
+        if isinstance(body, dict):
+            message = body.get("message") or body.get("error") or body.get("detail")
+        message = message or (body if isinstance(body, str) else None) or "Grafana API error"
+        raise HTTPException(status_code=gae.status if 400 <= gae.status < 600 else 500, detail=message)
+
+    def _validate_group_visibility(
+        self,
+        db: Session,
+        *,
+        tenant_id: str,
+        group_ids: List[str] | None,
+        shared_group_ids: List[str] | None,
+        is_admin: bool,
+    ) -> List[Group]:
+        if not shared_group_ids:
+            raise HTTPException(status_code=400, detail="No groups provided for group visibility")
+
+        groups = db.query(Group).filter(Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id).all()
+        found_ids = {group.id for group in groups}
+        missing = set(shared_group_ids) - found_ids
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Invalid group ids: {list(missing)}")
+
+        if not is_admin:
+            user_groups = set(group_ids or [])
+            not_member = [gid for gid in shared_group_ids if gid not in user_groups]
+            if not_member:
+                raise HTTPException(status_code=403, detail=f"User not member of groups: {not_member}")
+
+        return groups
+
+    def _is_admin_user(self, token_data: TokenData) -> bool:
+        return token_data.role == Role.ADMIN or token_data.is_superuser
+
+    def _is_resource_accessible(self, resource, token_data: TokenData) -> bool:
+        if not resource:
+            return False
+
+        if resource.tenant_id != token_data.tenant_id:
+            return False
+
+        hidden_by = getattr(resource, "hidden_by", None) or []
+        if token_data.user_id in hidden_by:
+            return False
+
+        if self._is_admin_user(token_data):
+            return True
+
+        if resource.created_by == token_data.user_id:
+            return True
+
+        visibility = getattr(resource, "visibility", "private") or "private"
+        if visibility == "tenant":
+            return True
+
+        if visibility == "group":
+            user_group_ids = set(token_data.group_ids or [])
+            resource_group_ids = {group.id for group in (resource.shared_groups or [])}
+            return bool(user_group_ids.intersection(resource_group_ids))
+
+        return False
+
+    def _extract_dashboard_uid(self, path: str) -> Optional[str]:
+        patterns = [
+            r"^/grafana/d/([^/]+)",
+            r"^/grafana/d-solo/([^/]+)",
+            r"^/grafana/api/dashboards/uid/([^/?]+)",
+        ]
+        for pattern in patterns:
+            match = re.match(pattern, path)
+            if match:
+                return match.group(1)
+        return None
+
+    def _extract_datasource_uid(self, path: str) -> Optional[str]:
+        patterns = [
+            r"^/grafana/api/datasources/uid/([^/?]+)",
+            r"^/grafana/api/datasources/proxy/uid/([^/?]+)",
+            r"^/grafana/connections/datasources/edit/([^/?]+)",
+        ]
+        for pattern in patterns:
+            match = re.match(pattern, path)
+            if match:
+                return match.group(1)
+        return None
+
+    def _extract_datasource_id(self, path: str) -> Optional[int]:
+        patterns = [
+            r"^/grafana/api/datasources/proxy/(\d+)(?:/|$)",
+        ]
+        for pattern in patterns:
+            match = re.match(pattern, path)
+            if match:
+                try:
+                    return int(match.group(1))
+                except ValueError:
+                    return None
+        return None
+
+    def _extract_proxy_token(self, request, token: Optional[str] = None) -> Optional[str]:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            return auth_header.split(" ", 1)[1]
+
+        cookie_token = request.cookies.get("beobservant_token")
+        if cookie_token:
+            return cookie_token
+
+        access_token = request.cookies.get("access_token")
+        if access_token:
+            return access_token
+
+        return request.headers.get("X-Auth-Token") or token
+
+    def authorize_proxy_request(
+        self,
+        request,
+        db: Session,
+        auth_service,
+        token: Optional[str] = None,
+        orig: Optional[str] = None,
+    ) -> Dict[str, str]:
+        token_to_verify = self._extract_proxy_token(request, token)
+        if not token_to_verify:
+            raise HTTPException(status_code=401, detail="Authentication required")
+
+        token_data = auth_service.decode_token(token_to_verify)
+        if not token_data:
+            raise HTTPException(status_code=401, detail="Invalid authentication token")
+
+        if isinstance(token_data, dict):
+            token_data = TokenData(**token_data)
+
+        user_permissions = set(token_data.permissions or [])
+        allowed_grafana_perms = {
+            Permission.READ_DASHBOARDS.value,
+            Permission.CREATE_DASHBOARDS.value,
+            Permission.UPDATE_DASHBOARDS.value,
+            Permission.DELETE_DASHBOARDS.value,
+            Permission.READ_DATASOURCES.value,
+            Permission.QUERY_DATASOURCES.value,
+            Permission.READ_FOLDERS.value,
+            Permission.CREATE_FOLDERS.value,
+            Permission.DELETE_FOLDERS.value,
+            Permission.WRITE_DASHBOARDS.value,
+        }
+        if not user_permissions.intersection(allowed_grafana_perms) and not token_data.is_superuser:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+        is_admin = self._is_admin_user(token_data)
+        original_uri = orig or request.headers.get("X-Original-URI", "")
+        original_path = original_uri.split("?", 1)[0] if original_uri else ""
+
+        if not is_admin:
+            dashboard_uid = self._extract_dashboard_uid(original_path)
+            if dashboard_uid:
+                dashboard = db.query(GrafanaDashboard).options(joinedload(GrafanaDashboard.shared_groups)).filter(
+                    GrafanaDashboard.grafana_uid == dashboard_uid
+                ).first()
+                if dashboard and not self._is_resource_accessible(dashboard, token_data):
+                    raise HTTPException(status_code=403, detail="Dashboard access denied")
+
+            datasource_uid = self._extract_datasource_uid(original_path)
+            if datasource_uid:
+                datasource = db.query(GrafanaDatasource).options(joinedload(GrafanaDatasource.shared_groups)).filter(
+                    GrafanaDatasource.grafana_uid == datasource_uid
+                ).first()
+                if datasource and not self._is_resource_accessible(datasource, token_data):
+                    raise HTTPException(status_code=403, detail="Datasource access denied")
+
+            datasource_id = self._extract_datasource_id(original_path)
+            if datasource_id is not None:
+                datasource = db.query(GrafanaDatasource).options(joinedload(GrafanaDatasource.shared_groups)).filter(
+                    GrafanaDatasource.grafana_id == datasource_id
+                ).first()
+                if datasource and not self._is_resource_accessible(datasource, token_data):
+                    raise HTTPException(status_code=403, detail="Datasource access denied")
+
+        grafana_role = "Viewer"
+        if is_admin:
+            grafana_role = "Admin"
+        elif user_permissions.intersection({
+            Permission.CREATE_DASHBOARDS.value,
+            Permission.UPDATE_DASHBOARDS.value,
+            Permission.DELETE_DASHBOARDS.value,
+            Permission.CREATE_DATASOURCES.value,
+            Permission.UPDATE_DATASOURCES.value,
+            Permission.DELETE_DATASOURCES.value,
+            Permission.CREATE_FOLDERS.value,
+            Permission.DELETE_FOLDERS.value,
+            Permission.WRITE_DASHBOARDS.value,
+        }):
+            grafana_role = "Editor"
+
+        return {
+            "X-WEBAUTH-USER": token_data.username,
+            "X-WEBAUTH-TENANT": token_data.tenant_id,
+            "X-WEBAUTH-ROLE": grafana_role,
+        }
 
     # ------------------------------------------------------------------
     # Access check helpers
@@ -95,6 +299,103 @@ class GrafanaProxyService:
                 return datasource
 
         return None
+
+    def _check_datasource_access_by_id(
+        self,
+        db: Session,
+        datasource_id: int,
+        user_id: str,
+        tenant_id: str,
+        group_ids: List[str],
+        require_write: bool = False,
+    ) -> Optional[GrafanaDatasource]:
+        datasource = db.query(GrafanaDatasource).filter(
+            GrafanaDatasource.grafana_id == datasource_id,
+            GrafanaDatasource.tenant_id == tenant_id,
+        ).first()
+
+        if not datasource:
+            return None
+
+        if datasource.created_by == user_id:
+            return datasource
+
+        if require_write:
+            return None
+
+        if datasource.visibility == "tenant":
+            return datasource
+        if datasource.visibility == "group":
+            shared_group_ids = [group.id for group in datasource.shared_groups]
+            if any(group_id in shared_group_ids for group_id in group_ids):
+                return datasource
+
+        return None
+
+    def enforce_datasource_query_access(
+        self,
+        db: Session,
+        payload: Dict[str, Any],
+        user_id: str,
+        tenant_id: str,
+        group_ids: List[str],
+        is_admin: bool = False,
+    ) -> None:
+        if is_admin:
+            return
+
+        datasource_uids: set[str] = set()
+        datasource_ids: set[int] = set()
+
+        def collect(node: Any) -> None:
+            if isinstance(node, dict):
+                datasource = node.get("datasource")
+                if isinstance(datasource, dict):
+                    uid = datasource.get("uid")
+                    if isinstance(uid, str) and uid:
+                        datasource_uids.add(uid)
+                    dsid = datasource.get("id")
+                    if isinstance(dsid, int):
+                        datasource_ids.add(dsid)
+                    elif isinstance(dsid, str) and dsid.isdigit():
+                        datasource_ids.add(int(dsid))
+
+                for uid_key in ("datasourceUid", "datasourceUID"):
+                    value = node.get(uid_key)
+                    if isinstance(value, str) and value:
+                        datasource_uids.add(value)
+
+                dsid_value = node.get("datasourceId")
+                if isinstance(dsid_value, int):
+                    datasource_ids.add(dsid_value)
+                elif isinstance(dsid_value, str) and dsid_value.isdigit():
+                    datasource_ids.add(int(dsid_value))
+
+                for child in node.values():
+                    collect(child)
+            elif isinstance(node, list):
+                for child in node:
+                    collect(child)
+
+        collect(payload)
+
+        for uid in datasource_uids:
+            registered = db.query(GrafanaDatasource).filter(GrafanaDatasource.grafana_uid == uid).first()
+            if not registered:
+                continue
+            if registered.tenant_id != tenant_id:
+                raise HTTPException(status_code=403, detail="Datasource access denied")
+            if self._check_datasource_access(db, uid, user_id, tenant_id, group_ids) is None:
+                raise HTTPException(status_code=403, detail="Datasource access denied")
+
+        for datasource_id in datasource_ids:
+            registered = db.query(GrafanaDatasource).filter(GrafanaDatasource.grafana_id == datasource_id).first()
+            if not registered:
+                continue
+            if registered.tenant_id != tenant_id:
+                raise HTTPException(status_code=403, detail="Datasource access denied")
+            if self._check_datasource_access_by_id(db, datasource_id, user_id, tenant_id, group_ids) is None:
+                raise HTTPException(status_code=403, detail="Datasource access denied")
 
     def _get_accessible_dashboard_uids(
         self,
@@ -218,19 +519,31 @@ class GrafanaProxyService:
         )
 
         # Admin users see ALL dashboards
-        logger.info(f"search_dashboards: user_id={user_id}, is_admin={is_admin}, total_dashboards={len(all_dashboards)}")
+        logger.info(
+            "search_dashboards: user_id=%s, is_admin=%s, total_dashboards=%d",
+            user_id,
+            is_admin,
+            len(all_dashboards),
+        )
         if is_admin:
             accessible_uids = {d.uid for d in all_dashboards}
             allow_system = True
-            logger.info(f"Admin user - granting access to all {len(accessible_uids)} dashboards")
+            logger.info("Admin user - granting access to all %d dashboards", len(accessible_uids))
         else:
             accessible_uids, allow_system = self._get_accessible_dashboard_uids(
                 db, user_id, tenant_id, group_ids
             )
             accessible_uids = set(accessible_uids)
-            logger.info(f"Non-admin user - accessible_uids={len(accessible_uids)}, allow_system={allow_system}")
+            logger.info(
+                "Non-admin user - accessible_uids=%d, allow_system=%s",
+                len(accessible_uids),
+                allow_system,
+            )
 
-        all_registered_uids = {d.grafana_uid for d in db.query(GrafanaDashboard).all()}
+        all_registered_uids = {
+            d.grafana_uid
+            for d in db.query(GrafanaDashboard).filter(GrafanaDashboard.tenant_id == tenant_id).all()
+        }
 
         db_dashboards = {
             d.grafana_uid: d
@@ -285,29 +598,20 @@ class GrafanaProxyService:
         """Create a dashboard with ownership tracking and Grafana permissions."""
         try:
             # Validate group visibility settings
+            groups: List[Group] = []
             if visibility == "group":
-                if not shared_group_ids:
-                    raise HTTPException(status_code=400, detail="No groups provided for group visibility")
-                groups = db.query(Group).filter(Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id).all()
-                missing = set(shared_group_ids) - {g.id for g in groups}
-                if missing:
-                    raise HTTPException(status_code=400, detail=f"Invalid group ids: {list(missing)}")
-                # Admins can share to any group without being a member
-                if not is_admin:
-                    not_member = [gid for gid in shared_group_ids if gid not in (group_ids or [])]
-                    if not_member:
-                        raise HTTPException(status_code=403, detail=f"User not member of groups: {not_member}")
+                groups = self._validate_group_visibility(
+                    db,
+                    tenant_id=tenant_id,
+                    group_ids=group_ids,
+                    shared_group_ids=shared_group_ids,
+                    is_admin=is_admin,
+                )
             
             try:
                 result = await self.grafana_service.create_dashboard(dashboard_create)
             except GrafanaAPIError as gae:
-                body = gae.body
-                msg = None
-                if isinstance(body, dict):
-                    # Grafana may return { message: '...' }
-                    msg = body.get('message') or body.get('error') or body.get('detail')
-                msg = msg or (body if isinstance(body, str) else None) or 'Grafana API error'
-                raise HTTPException(status_code=gae.status if 400 <= gae.status < 600 else 500, detail=msg)
+                self._raise_http_from_grafana_error(gae)
             if not result:
                 return None
 
@@ -326,8 +630,8 @@ class GrafanaProxyService:
                             if f.id == folder_id:
                                 folder_uid = f.uid
                                 break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Unable to resolve folder uid for created dashboard: %s", exc)
 
             db_dashboard = GrafanaDashboard(
                 tenant_id=tenant_id, created_by=user_id, grafana_uid=uid,
@@ -339,9 +643,6 @@ class GrafanaProxyService:
             )
 
             if visibility == "group" and shared_group_ids:
-                groups = db.query(Group).filter(
-                    Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id
-                ).all()
                 db_dashboard.shared_groups.extend(groups)
                 # Grafana dashboard-permissions sync removed (feature deprecated)
 
@@ -361,6 +662,7 @@ class GrafanaProxyService:
         self, db: Session, uid: str, dashboard_update: DashboardUpdate,
         user_id: str, tenant_id: str, group_ids: List[str],
         visibility: Optional[str] = None, shared_group_ids: Optional[List[str]] = None,
+        is_admin: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Update a dashboard with access control and label support."""
         db_dashboard = self._check_dashboard_access(db, uid, user_id, tenant_id, group_ids, require_write=True)
@@ -370,12 +672,7 @@ class GrafanaProxyService:
         try:
             result = await self.grafana_service.update_dashboard(uid, dashboard_update)
         except GrafanaAPIError as gae:
-            body = gae.body
-            msg = None
-            if isinstance(body, dict):
-                msg = body.get('message') or body.get('error') or body.get('detail')
-            msg = msg or (body if isinstance(body, str) else None) or 'Grafana API error'
-            raise HTTPException(status_code=gae.status if 400 <= gae.status < 600 else 500, detail=msg)
+            self._raise_http_from_grafana_error(gae)
         if not result:
             return None
 
@@ -386,13 +683,16 @@ class GrafanaProxyService:
         if visibility:
             db_dashboard.visibility = visibility
             if visibility == "group" and shared_group_ids is not None:
+                groups = self._validate_group_visibility(
+                    db,
+                    tenant_id=tenant_id,
+                    group_ids=group_ids,
+                    shared_group_ids=shared_group_ids,
+                    is_admin=is_admin,
+                )
                 db_dashboard.shared_groups.clear()
-                if shared_group_ids:
-                    groups = db.query(Group).filter(
-                        Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id
-                    ).all()
-                    db_dashboard.shared_groups.extend(groups)
-                    # Grafana dashboard-permissions sync removed (feature deprecated)
+                db_dashboard.shared_groups.extend(groups)
+                # Grafana dashboard-permissions sync removed (feature deprecated)
             elif visibility != "group":
                 db_dashboard.shared_groups.clear()
 
@@ -465,7 +765,10 @@ class GrafanaProxyService:
             accessible_uids, allow_system = self._get_accessible_datasource_uids(db, user_id, tenant_id, group_ids)
             accessible_uids = set(accessible_uids)
         
-        all_registered_uids = {ds.grafana_uid for ds in db.query(GrafanaDatasource).all()}
+        all_registered_uids = {
+            ds.grafana_uid
+            for ds in db.query(GrafanaDatasource).filter(GrafanaDatasource.tenant_id == tenant_id).all()
+        }
         db_datasources = {d.grafana_uid: d for d in db.query(GrafanaDatasource).filter(GrafanaDatasource.tenant_id == tenant_id).all()}
 
         filtered = []
@@ -512,29 +815,20 @@ class GrafanaProxyService:
                 secure_json_data.setdefault("httpHeaderValue1", org_id)
                 datasource_create = datasource_create.model_copy(update={"json_data": json_data, "secure_json_data": secure_json_data})
 
+            groups: List[Group] = []
             if visibility == "group":
-                if not shared_group_ids:
-                    raise HTTPException(status_code=400, detail="No groups provided for group visibility")
-                groups = db.query(Group).filter(Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id).all()
-                missing = set(shared_group_ids) - {g.id for g in groups}
-                if missing:
-                    raise HTTPException(status_code=400, detail=f"Invalid group ids: {list(missing)}")
-                # Admins can share to any group without being a member
-                if not is_admin:
-                    not_member = [gid for gid in shared_group_ids if gid not in (group_ids or [])]
-                    if not_member:
-                        raise HTTPException(status_code=403, detail=f"User not member of groups: {not_member}")
+                groups = self._validate_group_visibility(
+                    db,
+                    tenant_id=tenant_id,
+                    group_ids=group_ids,
+                    shared_group_ids=shared_group_ids,
+                    is_admin=is_admin,
+                )
 
             try:
                 datasource = await self.grafana_service.create_datasource(datasource_create)
             except GrafanaAPIError as gae:
-                # Propagate Grafana's status/message to the client
-                body = gae.body
-                msg = None
-                if isinstance(body, dict):
-                    msg = body.get('message') or body.get('error') or body.get('detail')
-                msg = msg or (body if isinstance(body, str) else None) or 'Grafana API error'
-                raise HTTPException(status_code=gae.status if 400 <= gae.status < 600 else 500, detail=msg)
+                self._raise_http_from_grafana_error(gae)
             if not datasource:
                 return None
 
@@ -545,7 +839,6 @@ class GrafanaProxyService:
                 visibility=visibility, hidden_by=[],
             )
             if visibility == "group" and shared_group_ids:
-                groups = db.query(Group).filter(Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id).all()
                 db_datasource.shared_groups.extend(groups)
             db.add(db_datasource)
             db.commit()
@@ -562,6 +855,7 @@ class GrafanaProxyService:
         self, db: Session, uid: str, datasource_update: DatasourceUpdate,
         user_id: str, tenant_id: str, group_ids: List[str],
         visibility: Optional[str] = None, shared_group_ids: Optional[List[str]] = None,
+        is_admin: bool = False,
     ) -> Optional[Datasource]:
         db_datasource = self._check_datasource_access(db, uid, user_id, tenant_id, group_ids, require_write=True)
         if not db_datasource:
@@ -579,12 +873,7 @@ class GrafanaProxyService:
         try:
             datasource = await self.grafana_service.update_datasource(uid, datasource_update)
         except GrafanaAPIError as gae:
-            body = gae.body
-            msg = None
-            if isinstance(body, dict):
-                msg = body.get('message') or body.get('error') or body.get('detail')
-            msg = msg or (body if isinstance(body, str) else None) or 'Grafana API error'
-            raise HTTPException(status_code=gae.status if 400 <= gae.status < 600 else 500, detail=msg)
+            self._raise_http_from_grafana_error(gae)
 
         if not datasource:
             return None
@@ -594,11 +883,13 @@ class GrafanaProxyService:
 
         if visibility:
             if visibility == "group" and shared_group_ids is not None:
-                if not shared_group_ids:
-                    return None
-                groups = db.query(Group).filter(Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id).all()
-                if set(shared_group_ids) - {g.id for g in groups}:
-                    return None
+                groups = self._validate_group_visibility(
+                    db,
+                    tenant_id=tenant_id,
+                    group_ids=group_ids,
+                    shared_group_ids=shared_group_ids,
+                    is_admin=is_admin,
+                )
                 db_datasource.visibility = visibility
                 db_datasource.shared_groups.clear()
                 db_datasource.shared_groups.extend(groups)
@@ -659,9 +950,5 @@ class GrafanaProxyService:
         return {
             "team_ids": sorted(all_teams),
         }
-
-    # ------------------------------------------------------------------
-    # Grafana-native permission sync
-    # ------------------------------------------------------------------
 
 

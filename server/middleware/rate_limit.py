@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Dict, Tuple, Optional
 
 from fastapi import HTTPException, status, Request
+from config import config
 
 
 @dataclass
@@ -56,6 +57,17 @@ rate_limiter = InMemoryRateLimiter()
 
 
 def client_ip(request: Request) -> str:
+    if config.TRUST_PROXY_HEADERS:
+        forwarded_for = (request.headers.get("x-forwarded-for") or "").strip()
+        if forwarded_for:
+            first = forwarded_for.split(",", 1)[0].strip()
+            if first:
+                return first
+
+        real_ip = (request.headers.get("x-real-ip") or "").strip()
+        if real_ip:
+            return real_ip
+
     return (request.client.host if request.client else "unknown").strip()
 
 

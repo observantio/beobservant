@@ -4,12 +4,12 @@ import logging
 from typing import List, Optional, Dict, Any
 import base64
 
-from models.grafana_models import (
-    DashboardCreate, DashboardUpdate, DashboardSearchResult,
-    Datasource, DatasourceCreate, DatasourceUpdate, Folder
-)
+from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate, DashboardSearchResult
+from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
+from models.grafana.grafana_folder_models import Folder
 from config import config
 from middleware.resilience import with_retry, with_timeout
+from services.common.http_client import create_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,9 @@ class GrafanaService:
         self.timeout = config.DEFAULT_TIMEOUT
         self._using_api_key = False
         self._basic_auth_header: Optional[str] = None
+        credentials = f"{username}:{password}"
+        encoded = base64.b64encode(credentials.encode()).decode()
+        basic_auth_header = f"Basic {encoded}"
         
         # Prefer API key (Bearer token) over Basic auth for better security
         api_key = api_key or config.GRAFANA_API_KEY
@@ -57,19 +60,12 @@ class GrafanaService:
             self._using_api_key = True
             logger.info("Using Grafana API key authentication")
         else:
-            credentials = f"{username}:{password}"
-            encoded = base64.b64encode(credentials.encode()).decode()
-            self.auth_header = f"Basic {encoded}"
+            self.auth_header = basic_auth_header
             logger.info("Using Grafana Basic authentication (consider using API key)")
 
-        credentials = f"{username}:{password}"
-        encoded = base64.b64encode(credentials.encode()).decode()
-        self._basic_auth_header = f"Basic {encoded}"
+        self._basic_auth_header = basic_auth_header
         
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(self.timeout),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-        )
+        self._client = create_async_client(self.timeout)
     
     def _get_headers(self) -> Dict[str, str]:
         """Get headers for Grafana API requests."""
@@ -77,6 +73,16 @@ class GrafanaService:
             "Authorization": self.auth_header,
             "Content-Type": "application/json"
         }
+
+    @staticmethod
+    def _parse_http_error_body(exc: httpx.HTTPStatusError) -> Any:
+        try:
+            return exc.response.json()
+        except Exception:
+            try:
+                return exc.response.text
+            except Exception:
+                return None
 
     async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
         """Perform request and fallback to basic auth if API key is invalid."""
@@ -179,14 +185,7 @@ class GrafanaService:
             return response.json()
             
         except httpx.HTTPStatusError as e:
-            parsed = None
-            try:
-                parsed = e.response.json()
-            except Exception:
-                try:
-                    parsed = e.response.text
-                except Exception:
-                    parsed = None
+            parsed = self._parse_http_error_body(e)
             logger.error("Error creating dashboard (HTTP %s): %s – response body: %s", e.response.status_code, e, parsed)
             raise GrafanaAPIError(status=e.response.status_code, body=parsed)
         except httpx.HTTPError as e:
@@ -225,14 +224,7 @@ class GrafanaService:
             return response.json()
             
         except httpx.HTTPStatusError as e:
-            parsed = None
-            try:
-                parsed = e.response.json()
-            except Exception:
-                try:
-                    parsed = e.response.text
-                except Exception:
-                    parsed = None
+            parsed = self._parse_http_error_body(e)
             logger.error("Error updating dashboard %s (HTTP %s): %s – response body: %s", uid, e.response.status_code, e, parsed)
             raise GrafanaAPIError(status=e.response.status_code, body=parsed)
         except httpx.HTTPError as e:
@@ -258,6 +250,14 @@ class GrafanaService:
         except httpx.HTTPError as e:
             logger.error("Error deleting dashboard %s: %s", uid, e)
             return False
+
+    @with_retry()
+    @with_timeout()
+    async def query_datasource(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute Grafana datasource queries via /api/ds/query."""
+        response = await self._request("POST", "/api/ds/query", json=payload)
+        response.raise_for_status()
+        return response.json()
     
     
     
@@ -348,20 +348,11 @@ class GrafanaService:
             return None
             
         except httpx.HTTPStatusError as e:
-            # try to parse Grafana response body as JSON, fall back to text
-            parsed = None
-            try:
-                parsed = e.response.json()
-            except Exception:
-                try:
-                    parsed = e.response.text
-                except Exception:
-                    parsed = None
+            parsed = self._parse_http_error_body(e)
             logger.error(
                 "Error creating datasource (HTTP %s): %s – response body: %s",
                 e.response.status_code, e, parsed,
             )
-            # propagate detailed Grafana error to caller
             raise GrafanaAPIError(status=e.response.status_code, body=parsed)
         except httpx.HTTPError as e:
             logger.error("Error creating datasource: %s", e)
@@ -399,14 +390,7 @@ class GrafanaService:
             return await self.get_datasource(uid)
             
         except httpx.HTTPStatusError as e:
-            parsed = None
-            try:
-                parsed = e.response.json()
-            except Exception:
-                try:
-                    parsed = e.response.text
-                except Exception:
-                    parsed = None
+            parsed = self._parse_http_error_body(e)
             logger.error(
                 "Error updating datasource %s (HTTP %s): %s – response body: %s",
                 uid, e.response.status_code, e, parsed,

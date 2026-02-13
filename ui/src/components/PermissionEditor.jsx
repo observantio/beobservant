@@ -26,17 +26,20 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
 
   const getCategoryDescription = (category) => {
     const descriptions = {
-      agents: 'Control access to OTEL agents and system metrics monitoring',
-      alerts: 'Manage alert rules, active alerts, and notification channels',
-      channels: 'Configure notification channels for alert delivery',
-      dashboards: 'Access and manage Grafana dashboards',
-      groups: 'Control user group creation, modification, and membership',
-      logs: 'Query and view application logs from Loki',
-      tenants: 'Manage multi-tenant settings and configurations',
-      traces: 'Query and view distributed traces from Tempo',
-      users: 'Control user account creation, modification, and access'
+      agents: 'Granular OTEL agent access by action (read/create/update/delete/test).',
+      alerts: 'Granular alert and silence access by action (read/create/update/delete).',
+      channels: 'Granular notification channel access (read/create/update/delete/test).',
+      dashboards: 'Granular dashboard access (read/create/update/delete).',
+      datasources: 'Granular datasource access (read/query/create/update/delete).',
+      folders: 'Granular Grafana folder access (read/create/delete).',
+      groups: 'Granular group access (read/create/update/delete).',
+      logs: 'Read/query Loki logs.',
+      rules: 'Granular alert rule access (read/create/update/delete/test).',
+      tenants: 'Tenant administration permissions.',
+      traces: 'Read/query Tempo traces.',
+      users: 'Granular user access (read/create/update/delete).'
     }
-    return descriptions[category] || `Manage ${category} permissions and access`
+    return descriptions[category] || `Granular ${category} permissions by action (read/create/update/delete/test).`
   }
 
   const getPermissionDescription = (permissionName) => {
@@ -76,7 +79,17 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
       'Read Users': 'View user information and accounts',
       'View user information': 'View user information and accounts'
     }
-    return descriptions[permissionName] || permissionName
+    if (descriptions[permissionName]) return descriptions[permissionName]
+
+    const normalized = String(permissionName || '').toLowerCase()
+    if (normalized.includes(':')) {
+      const [action, resource] = normalized.split(':')
+      const readableResource = (resource || 'resource').replace(/_/g, ' ')
+      const readableAction = action || 'manage'
+      return `${readableAction.charAt(0).toUpperCase()}${readableAction.slice(1)} ${readableResource}`
+    }
+
+    return permissionName
   }
 
   const allPermissionNames = useMemo(
@@ -252,7 +265,7 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
                 <option value="admin">Admin - Full access</option>
               </select>
             </div>
-            <HelpTooltip text="Roles provide baseline permissions. Admin has full access to all features, User can read and modify most resources, Viewer has read-only access." />
+            <HelpTooltip text="Roles provide baseline access. Direct and group permissions then add granular action-level rights (for example create, update, delete, test)." />
           </div>
 
           {/* Group Membership */}
@@ -332,7 +345,7 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
               <label htmlFor="direct-permissions" className="block text-sm font-semibold text-sre-text">
                 Direct Permissions (additive to role and group access)
               </label>
-              <HelpTooltip text="Direct permissions are granted individually to this user, in addition to permissions from their role and groups. These override any restrictions." />
+              <HelpTooltip text="Direct permissions are additive to role and group access, and are best used for targeted action-level exceptions." />
             </div>
             <div id="direct-permissions" className="space-y-4">
               {loadingPermissions && (

@@ -3,9 +3,10 @@ import httpx
 import logging
 import json
 from typing import List, Optional, Dict, Any
-from models.tempo_models import Trace, TraceQuery, TraceResponse, Span
+from models.observability.tempo_models import Trace, TraceQuery, TraceResponse, Span
 from config import config
 from middleware.resilience import with_retry, with_timeout
+from services.common.http_client import create_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +26,7 @@ class TempoService:
         """
         self.tempo_url = tempo_url.rstrip('/')
         self.timeout = config.DEFAULT_TIMEOUT
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(self.timeout),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-        )
+        self._client = create_async_client(self.timeout)
     
     def _get_headers(self, tenant_id: str = config.DEFAULT_ORG_ID) -> dict:
         """Get headers including tenant ID for multi-tenancy.

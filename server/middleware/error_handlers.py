@@ -1,0 +1,59 @@
+"""Shared router-level error handling helpers (moved from routers).
+
+Decorators for mapping expected exceptions to HTTP status codes consistently
+across route handlers.
+"""
+
+from functools import wraps
+from typing import Any, Awaitable, Callable, TypeVar
+import logging
+
+import httpx
+from fastapi import HTTPException, status
+
+
+F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
+logger = logging.getLogger(__name__)
+
+
+def handle_route_errors(
+    *,
+    bad_request_exceptions: tuple[type[Exception], ...] = (ValueError,),
+    bad_request_detail: str | None = None,
+    bad_gateway_exceptions: tuple[type[Exception], ...] = (httpx.HTTPError,),
+    bad_gateway_detail: str = "Upstream request failed",
+    internal_detail: str | None = None,
+) -> Callable[[F], F]:
+    """Decorate async route handlers to map expected exceptions to HTTP errors.
+
+    - `HTTPException` is always re-raised unchanged.
+    - `bad_request_exceptions` are mapped to 400.
+    - `bad_gateway_exceptions` are mapped to 502.
+    - any other exception is mapped to 500 only when `internal_detail` is provided.
+    """
+
+    def decorator(func: F) -> F:
+        @wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return await func(*args, **kwargs)
+            except HTTPException:
+                raise
+            except bad_request_exceptions as exc:
+                detail = bad_request_detail or str(exc) or "Invalid request"
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
+            except bad_gateway_exceptions as exc:
+                logger.warning("Upstream request failed in %s: %s", func.__name__, exc)
+                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=bad_gateway_detail) from exc
+            except Exception as exc:
+                logger.exception("Unhandled exception in route %s: %s", func.__name__, exc)
+                if internal_detail:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=internal_detail,
+                    ) from exc
+                raise
+
+        return wrapper
+
+    return decorator

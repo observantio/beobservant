@@ -266,17 +266,20 @@ export default function GroupsPage() {
 
   const getCategoryDescription = (category) => {
     const descriptions = {
-      agents: 'Control access to OTEL agents and system metrics monitoring',
-      alerts: 'Manage alert rules, active alerts, and notification channels',
-      channels: 'Configure notification channels for alert delivery',
-      dashboards: 'Access and manage Grafana dashboards',
-      groups: 'Control user group creation, modification, and membership',
-      logs: 'Query and view application logs from Loki',
-      tenants: 'Manage multi-tenant settings and configurations',
-      traces: 'Query and view distributed traces from Tempo',
-      users: 'Control user account creation, modification, and access'
+      agents: 'Granular OTEL agent permissions (read/create/update/delete/test).',
+      alerts: 'Granular alert and silence permissions (read/create/update/delete).',
+      channels: 'Granular notification channel permissions (read/create/update/delete/test).',
+      dashboards: 'Granular dashboard access (read/create/update/delete).',
+      datasources: 'Granular datasource access (read/query/create/update/delete).',
+      folders: 'Granular Grafana folder permissions (read/create/delete).',
+      groups: 'Granular group permissions (read/create/update/delete).',
+      logs: 'Read/query Loki logs.',
+      rules: 'Granular alert rule permissions (read/create/update/delete/test).',
+      tenants: 'Tenant administration permissions.',
+      traces: 'Read/query Tempo traces.',
+      users: 'Granular user permissions (read/create/update/delete).'
     }
-    return descriptions[category] || `Manage ${category} permissions and access`
+    return descriptions[category] || `Granular ${category} permissions by action (read/create/update/delete/test).`
   }
 
   const groupPermissionsByResource = () => {
@@ -481,7 +484,7 @@ export default function GroupsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-sre-text">Permissions (Optional)</h3>
-                <HelpTooltip text="Configure which permissions members of this group will inherit. Permissions are organized by resource type." />
+                <HelpTooltip text="Configure action-level permissions members inherit (for example read/create/update/delete/test), grouped by resource type." />
               </div>
               <div className="flex gap-3 text-xs">
                 <button
@@ -503,7 +506,7 @@ export default function GroupsPage() {
             
             <Alert variant="info">
               <div className="text-xs">
-                Members of this group will inherit these permissions. You can add permissions now or later.
+                Members of this group inherit action-level permissions. You can set least-privilege access now and refine later.
               </div>
             </Alert>
 
@@ -690,7 +693,7 @@ export default function GroupsPage() {
 
           <div className="flex items-center gap-2 mb-4">
             <h3 className="font-semibold text-sre-text">Permissions</h3>
-            <HelpTooltip text="Configure which permissions members of this group will inherit. Permissions are organized by resource type." />
+            <HelpTooltip text="Configure action-level permissions members inherit (for example read/create/update/delete/test), grouped by resource type." />
           </div>
 
           <div className="max-h-96 overflow-y-auto space-y-4">

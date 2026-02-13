@@ -5,12 +5,10 @@ import re
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
-from models import (
-    LogQuery, LogResponse, LogLabelsResponse, 
-    LogLabelValuesResponse
-)
+from models.observability.loki_models import LogQuery, LogResponse, LogLabelsResponse, LogLabelValuesResponse
 from middleware.resilience import with_retry, with_timeout
 from config import config
+from services.common.http_client import create_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -22,18 +20,15 @@ SERVICE_LABEL_EXACT_RE = re.compile(r'(?P<label>service_name|service\.name)\s*=\
 class LokiService:
     """Service for interacting with Loki logging backend."""
     
-    def __init__(self, loki_url: str = "http://loki:3100"):
+    def __init__(self, loki_url: str = config.LOKI_URL):
         """Initialize Loki service.
         
         Args:
             loki_url: Base URL for Loki instance
         """
         self.loki_url = loki_url.rstrip('/')
-        self.timeout = 30.0
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(self.timeout),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-        )
+        self.timeout = config.DEFAULT_TIMEOUT
+        self._client = create_async_client(self.timeout)
 
     def _get_headers(self, tenant_id: str = config.DEFAULT_ORG_ID) -> dict:
         """Get headers including tenant ID for multi-tenancy.
@@ -256,7 +251,8 @@ class LokiService:
                     params["query"] = candidate
                     response = await self._client.get(
                         f"{self.loki_url}/loki/api/v1/query",
-                        params=params
+                        params=params,
+                        headers=headers,
                     )
                     response.raise_for_status()
                     data = response.json()
@@ -511,7 +507,7 @@ class LokiService:
             end=end
         )
         
-        return await self.query_logs(query)
+        return await self.query_logs(query, tenant_id=tenant_id)
     
     @with_retry()
     @with_timeout()
@@ -551,7 +547,7 @@ class LokiService:
             end=end
         )
         
-        return await self.query_logs(query)
+        return await self.query_logs(query, tenant_id=tenant_id)
     
     def _build_query_params(self, query: LogQuery) -> Dict[str, Any]:
         """Build query parameters for Loki API.

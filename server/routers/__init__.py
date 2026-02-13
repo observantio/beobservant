@@ -1,12 +1,12 @@
 """Router modules."""
-from . import tempo_router
-from . import loki_router
-from . import alertmanager_router
-from . import grafana_router
-from . import auth_router
-from . import agents_router
-from . import system_router
-from . import gateway_router
+from .observability import tempo_router
+from .observability import loki_router
+from .observability import alertmanager_router
+from .observability import grafana_router
+from .access import auth_router
+from .observability import agents_router
+from .platform import system_router
+from .platform import gateway_router
 
 __all__ = [
     "tempo_router",

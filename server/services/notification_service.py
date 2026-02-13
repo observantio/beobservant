@@ -4,9 +4,11 @@ import logging
 from typing import Optional
 from datetime import datetime
 
-from models.channels import NotificationChannel, ChannelType
-from models.alerts import Alert
+from models.alerting.channels import NotificationChannel, ChannelType
+from models.alerting.alerts import Alert
 from config import config
+from services.common.url_utils import is_safe_http_url
+from services.common.http_client import create_async_client
 
 logger = logging.getLogger(__name__)
 NO_VALUE = "(none)"
@@ -15,11 +17,8 @@ class NotificationService:
     """Service for sending notifications through various channels."""
     
     def __init__(self):
-        self.timeout = 30.0
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(self.timeout),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-        )
+        self.timeout = config.DEFAULT_TIMEOUT
+        self._client = create_async_client(self.timeout)
     
     async def send_notification(
         self,
@@ -42,32 +41,31 @@ class NotificationService:
             return False
         
         try:
+            async_senders = {
+                ChannelType.SLACK: self._send_slack,
+                ChannelType.TEAMS: self._send_teams,
+                ChannelType.WEBHOOK: self._send_webhook,
+                ChannelType.PAGERDUTY: self._send_pagerduty,
+                ChannelType.OPSGENIE: self._send_opsgenie,
+            }
             if channel.type == ChannelType.EMAIL:
                 return self._send_email(channel, alert, action)
-            elif channel.type == ChannelType.SLACK:
-                return await self._send_slack(channel, alert, action)
-            elif channel.type == ChannelType.TEAMS:
-                return await self._send_teams(channel, alert, action)
-            elif channel.type == ChannelType.WEBHOOK:
-                return await self._send_webhook(channel, alert, action)
-            elif channel.type == ChannelType.PAGERDUTY:
-                return await self._send_pagerduty(channel, alert, action)
-            elif channel.type == ChannelType.OPSGENIE:
-                return await self._send_opsgenie(channel, alert, action)
-            else:
+            sender = async_senders.get(channel.type)
+            if not sender:
                 logger.error(f"Unknown channel type: {channel.type}")
                 return False
+            return await sender(channel, alert, action)
         except Exception as e:
-            logger.error(f"Error sending notification via {channel.name}: {e}")
+            logger.exception("Error sending notification via %s: %s", channel.name, e)
             return False
     
     def _send_email(self, channel: NotificationChannel, alert: Alert, action: str) -> bool:
         """Send email notification."""
-        config = channel.config
+        channel_config = channel.config
         
         subject = f"[{action.upper()}] {alert.labels.get('alertname', 'Alert')}"
-        logger.info(f"Email notification: {config.get('to')} - {subject}")
-        logger.info(f"Would send email via SMTP: {config.get('smtp_host')}:{config.get('smtp_port')}")
+        logger.info(f"Email notification: {channel_config.get('to')} - {subject}")
+        logger.info(f"Would send email via SMTP: {channel_config.get('smtp_host')}:{channel_config.get('smtp_port')}")
         
         return True
     
@@ -76,8 +74,8 @@ class NotificationService:
         channel_config = channel.config
         webhook_url = channel_config.get('webhook_url') or channel_config.get('webhookUrl')
         
-        if not webhook_url:
-            logger.error("Slack webhook URL not configured")
+        if not is_safe_http_url(webhook_url):
+            logger.error("Slack webhook URL is missing or invalid")
             return False
         
         color = "danger" if action == "firing" else "good"
@@ -131,8 +129,8 @@ class NotificationService:
         channel_config = channel.config
         webhook_url = channel_config.get('webhook_url') or channel_config.get('webhookUrl')
         
-        if not webhook_url:
-            logger.error("Teams webhook URL not configured")
+        if not is_safe_http_url(webhook_url):
+            logger.error("Teams webhook URL is missing or invalid")
             return False
         
         theme_color = "FF0000" if action == "firing" else "00FF00"
@@ -165,11 +163,11 @@ class NotificationService:
     
     async def _send_webhook(self, channel: NotificationChannel, alert: Alert, action: str) -> bool:
         """Send webhook notification."""
-        config = channel.config
-        webhook_url = config.get('url') or config.get('webhook_url') or config.get('webhookUrl')
+        channel_config = channel.config
+        webhook_url = channel_config.get('url') or channel_config.get('webhook_url') or channel_config.get('webhookUrl')
         
-        if not webhook_url:
-            logger.error("Webhook URL not configured")
+        if not is_safe_http_url(webhook_url):
+            logger.error("Webhook URL is missing or invalid")
             return False
         
         payload = {
@@ -183,7 +181,7 @@ class NotificationService:
             }
         }
         
-        headers = config.get('headers', {})
+        headers = channel_config.get('headers', {})
         
         response = await self._client.post(webhook_url, json=payload, headers=headers)
         response.raise_for_status()
@@ -192,8 +190,8 @@ class NotificationService:
     
     async def _send_pagerduty(self, channel: NotificationChannel, alert: Alert, action: str) -> bool:
         """Send PagerDuty notification."""
-        config = channel.config
-        routing_key = config.get('routing_key') or config.get('integrationKey')
+        channel_config = channel.config
+        routing_key = channel_config.get('routing_key') or channel_config.get('integrationKey')
         
         if not routing_key:
             logger.error("PagerDuty routing key not configured")
@@ -230,8 +228,8 @@ class NotificationService:
     
     async def _send_opsgenie(self, channel: NotificationChannel, alert: Alert, action: str) -> bool:
         """Send Opsgenie notification."""
-        config = channel.config
-        api_key = config.get('api_key') or config.get('apiKey')
+        channel_config = channel.config
+        api_key = channel_config.get('api_key') or channel_config.get('apiKey')
         
         if not api_key:
             logger.error("Opsgenie API key not configured")

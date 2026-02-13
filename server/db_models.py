@@ -307,7 +307,7 @@ class GrafanaDashboard(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
-    # Relationships
+
     tenant = relationship('Tenant')
     creator = relationship('User', foreign_keys=[created_by])
     shared_groups = relationship('Group', secondary=dashboard_groups)
@@ -336,7 +336,7 @@ class GrafanaDatasource(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
-    # Relationships
+    # Relationshipsadmin
     tenant = relationship('Tenant')
     creator = relationship('User', foreign_keys=[created_by])
     shared_groups = relationship('Group', secondary=datasource_groups)

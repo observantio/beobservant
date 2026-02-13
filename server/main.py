@@ -15,7 +15,7 @@ from fastapi.exceptions import RequestValidationError
 
 from config import config, constants
 from routers import tempo_router, loki_router, alertmanager_router, grafana_router, auth_router, agents_router, system_router, gateway_router
-from database import init_database, init_db, run_column_migration
+from database import init_database, init_db
 from middleware.limits import RequestSizeLimitMiddleware, ConcurrencyLimitMiddleware
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -31,20 +31,11 @@ init_database(config.DATABASE_URL, config.LOG_LEVEL == "debug")
 init_db()
 logger.info("✓ Database initialized")
 
-run_column_migration("user_api_keys", "otlp_token", "VARCHAR(200)")
-run_column_migration("alert_rules", "org_id", "VARCHAR")
 
-# Grafana enterprise feature columns
-run_column_migration("users", "grafana_user_id", "INTEGER")
-run_column_migration("groups", "grafana_team_id", "INTEGER")
-run_column_migration("grafana_dashboards", "is_hidden", "BOOLEAN DEFAULT FALSE")
-run_column_migration("grafana_dashboards", "hidden_by", "JSON DEFAULT '[]'")
-run_column_migration("grafana_datasources", "is_hidden", "BOOLEAN DEFAULT FALSE")
-run_column_migration("grafana_datasources", "hidden_by", "JSON DEFAULT '[]'")
 
-logger.info("✓ Database migrations checked")
+logger.info("✓ Database schema ready")
 
-from routers.auth_router import auth_service
+from middleware.dependencies import auth_service
 auth_service._lazy_init()
 
 auth_service.backfill_otlp_tokens()
@@ -64,12 +55,13 @@ async def lifespan(app: FastAPI):
             getattr(alertmanager_router, "alertmanager_service", None),
             getattr(alertmanager_router, "notification_service", None),
             getattr(grafana_router, "grafana_service", None),
-            getattr(agents_router, "loki_service", None),
-            getattr(agents_router, "tempo_service", None),
         ):
             client = getattr(svc, "_client", None)
             if client is not None:
                 clients.append(client)
+            extra_client = getattr(svc, "_mimir_client", None)
+            if extra_client is not None:
+                clients.append(extra_client)
 
         extra = getattr(agents_router, "_mimir_client", None)
         if extra is not None:

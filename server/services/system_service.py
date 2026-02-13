@@ -17,6 +17,10 @@ class SystemService:
         except Exception as e:
             logger.warning(f"Unable to prime CPU percent: {e}")
 
+    @staticmethod
+    def _fallback(payload: Dict[str, Any]) -> Dict[str, Any]:
+        return payload
+
     def get_cpu_metrics(self) -> Dict[str, Any]:
         """Get CPU utilization metrics for the beObservant process."""
         try:
@@ -38,23 +42,20 @@ class SystemService:
             }
         except Exception as e:
             logger.error(f"Error getting CPU metrics: {e}")
-            return {
+            return self._fallback({
                 "utilization": 0,
                 "raw_utilization": 0,
                 "count": 0,
                 "threads": 0,
                 "frequency_mhz": None
-            }
+            })
 
     def get_memory_metrics(self) -> Dict[str, Any]:
         """Get memory utilization metrics for the beObservant process."""
         try:
             mem_info = self.process.memory_info()
             mem_percent = self.process.memory_percent()
-            
-            # RSS (Resident Set Size) - actual physical memory used
             rss_mb = mem_info.rss / (1024 ** 2)
-            # VMS (Virtual Memory Size) - total virtual memory
             vms_mb = mem_info.vms / (1024 ** 2)
             
             return {
@@ -64,11 +65,11 @@ class SystemService:
             }
         except Exception as e:
             logger.error(f"Error getting memory metrics: {e}")
-            return {
+            return self._fallback({
                 "rss_mb": 0,
                 "vms_mb": 0,
                 "utilization": 0
-            }
+            })
 
     def get_disk_metrics(self) -> Dict[str, Any]:
         """Get I/O metrics for the beObservant process."""
@@ -83,12 +84,12 @@ class SystemService:
             }
         except Exception as e:
             logger.error(f"Error getting I/O metrics: {e}")
-            return {
+            return self._fallback({
                 "read_mb": 0,
                 "write_mb": 0,
                 "read_count": 0,
                 "write_count": 0
-            }
+            })
 
     def get_network_metrics(self) -> Dict[str, Any]:
         """Get network connection metrics for the beObservant process."""
@@ -110,19 +111,18 @@ class SystemService:
             }
         except Exception as e:
             logger.error(f"Error getting network metrics: {e}")
-            return {
+            return self._fallback({
                 "total_connections": 0,
                 "established": 0,
                 "listen": 0,
                 "time_wait": 0,
                 "close_wait": 0
-            }
+            })
 
     def determine_stress_status(self, cpu_percent: float, memory_percent: float, connections: int) -> Dict[str, Any]:
         """Determine if the beObservant process is under stress."""
-        # Define thresholds for process metrics
-        HIGH_CPU_THRESHOLD = 50  # 50% of one core
-        HIGH_MEMORY_THRESHOLD = 80  # 80% of available memory
+        HIGH_CPU_THRESHOLD = 50 
+        HIGH_MEMORY_THRESHOLD = 80  
         HIGH_CONNECTIONS_THRESHOLD = 100
         
         MODERATE_CPU_THRESHOLD = 25
@@ -130,8 +130,6 @@ class SystemService:
         MODERATE_CONNECTIONS_THRESHOLD = 50
         
         issues = []
-        
-        # Check CPU (process can use up to 100% of one core)
         if cpu_percent >= HIGH_CPU_THRESHOLD:
             issues.append(f"High CPU usage ({cpu_percent}%)")
         elif cpu_percent >= MODERATE_CPU_THRESHOLD:

@@ -10,13 +10,15 @@ import logging
 
 from fastapi import APIRouter, Request, Response, HTTPException, status
 
-from services.database_auth_service import DatabaseAuthService
+from config import config
+from middleware.dependencies import enforce_public_endpoint_security
+from services.gateway_service import GatewayService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/gateway", tags=["gateway"])
 
-auth_service = DatabaseAuthService()
+gateway_service = GatewayService()
 
 
 @router.get("/validate")
@@ -27,7 +29,15 @@ async def validate_otlp_token(request: Request):
     HTTP 200 with the ``X-Org-Id`` response header set to the org_id that
     nginx will forward as ``X-Scope-OrgID`` to the backend.
     """
-    token = request.headers.get("x-otlp-token", "").strip()
+    enforce_public_endpoint_security(
+        request,
+        scope="gateway_validate",
+        limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
+        window_seconds=60,
+        allowlist=config.GATEWAY_IP_ALLOWLIST,
+    )
+
+    token = gateway_service.extract_otlp_token(request.headers.get("x-otlp-token"))
 
     if not token:
         raise HTTPException(
@@ -35,23 +45,17 @@ async def validate_otlp_token(request: Request):
             detail="Missing x-otlp-token header",
         )
 
-    org_id = auth_service.validate_otlp_token(token)
+    org_id = gateway_service.validate_otlp_token(token)
 
     if org_id is None:
         logger.warning(
             "OTLP token validation failed – token_prefix=%s",
-            token[:12] + "..." if len(token) > 12 else token,
+            token[:3] + "..." if len(token) > 3 else token,
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or disabled OTLP token",
         )
-
-    logger.info(
-        "OTLP token validated – token_prefix=%s → org_id=%s",
-        token[:12] + "..." if len(token) > 12 else token,
-        org_id,
-    )
 
     response = Response(status_code=200)
     response.headers["X-Org-Id"] = org_id

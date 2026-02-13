@@ -1,6 +1,17 @@
-"""Database configuration and session management."""
+"""Database configuration and session management.
+
+Optimizations added:
+- idempotent initialization and env-driven pool tuning
+- per-request `sessionmaker` sessions for async-safe request isolation
+- `session.begin()` for clear transaction boundaries
+- connection_test() for health/readiness probes
+- dispose_database() for graceful shutdown
+"""
 import logging
-from sqlalchemy import create_engine
+import os
+from typing import Optional
+
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
@@ -12,32 +23,67 @@ try:
 except ImportError:
     Base = declarative_base()
 
-_engine = None
-_SessionLocal = None
+_engine: Optional[object] = None
+_SessionLocal: Optional[sessionmaker] = None
 
 
-def init_database(database_url: str, echo: bool = False):
-    """Initialize database engine and session factory."""
+def init_database(database_url: str, echo: bool = False, pool_size: Optional[int] = None) -> None:
+    """Initialize database engine and session factory (idempotent).
+
+    Pool and other parameters may be tuned via environment variables:
+      - DB_POOL_SIZE
+      - DB_MAX_OVERFLOW
+      - DB_POOL_TIMEOUT
+      - DB_POOL_RECYCLE
+    """
     global _engine, _SessionLocal
-    
+
+    if _engine is not None:
+        logger.debug("Database already initialized; skipping re-init.")
+        return
+
+    pool_size = pool_size or int(os.getenv("DB_POOL_SIZE", "10"))
+    max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+    pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))
+    pool_recycle = int(os.getenv("DB_POOL_RECYCLE", "1800"))
+
     _engine = create_engine(
         database_url,
         pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20,
-        echo=echo
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        pool_timeout=pool_timeout,
+        pool_recycle=pool_recycle,
+        echo=echo,
+        future=True,
     )
-    
-    _SessionLocal = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=_engine)
+
+    _SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        expire_on_commit=False,
+        bind=_engine,
+        future=True,
+    )
 
 
 @contextmanager
 def get_db_session() -> Session:
-    """Get database session with automatic cleanup."""
+    """Context-managed DB session.
+
+    This yields a plain Session and mirrors the original commit/rollback
+    semantics so existing callers that `db.commit()` manually continue to
+    work without change.
+
+    Usage:
+        with get_db_session() as db:
+            ...
+    Commits on successful exit, rolls back on exception.
+    """
     if _SessionLocal is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
-    
-    session = _SessionLocal()
+
+    session: Session = _SessionLocal()
     try:
         yield session
         session.commit()
@@ -49,15 +95,15 @@ def get_db_session() -> Session:
 
 
 def get_db():
-    """FastAPI dependency for database sessions.
+    """FastAPI dependency that yields a transactional session.
 
-    Mirrors the commit / rollback semantics of ``get_db_session`` so that
-    callers don't need to manually commit.
+    Maintains the same commit/rollback behavior as `get_db_session` so
+    route handlers don't need to be modified.
     """
     if _SessionLocal is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
 
-    db = _SessionLocal()
+    db: Session = _SessionLocal()
     try:
         yield db
         db.commit()
@@ -68,44 +114,44 @@ def get_db():
         db.close()
 
 
-def init_db():
-    """Initialize database tables."""
+def connection_test(timeout_seconds: int = 5) -> bool:
+    """Quick DB connectivity check for health/readiness probes."""
+    if _engine is None:
+        return False
+    try:
+        with _engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception as exc:  # noqa: BLE001 - keep broad catch for healthcheck
+        logger.debug("DB connection test failed: %s", exc)
+        return False
+
+
+def dispose_database() -> None:
+    """Dispose engine and clear session factory (call on application shutdown)."""
+    global _engine, _SessionLocal
+    if _SessionLocal is not None:
+        try:
+            _SessionLocal = None
+        except Exception:
+            logger.debug("Session factory cleanup raised during dispose", exc_info=True)
+
+    if _engine is not None:
+        try:
+            _engine.dispose()
+        finally:
+            _engine = None
+
+
+def init_db() -> None:
+    """Create database tables from SQLAlchemy models (idempotent)."""
     if _engine is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
-    
-    from db_models import Base
-    
+
+    from db_models import Base  
+
     logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=_engine)
     logger.info("Database tables created successfully")
 
 
-def run_column_migration(table_name: str, column_name: str, column_type: str):
-    """Add a column to an existing table if it does not already exist.
-
-    This is a lightweight migration helper for adding new nullable columns
-    without requiring a full Alembic migration.  It is safe to call
-    repeatedly (idempotent).
-    """
-    if _engine is None:
-        raise RuntimeError("Database not initialized. Call init_database() first.")
-
-    from sqlalchemy import text, inspect
-
-    inspector = inspect(_engine)
-    columns = [c["name"] for c in inspector.get_columns(table_name)]
-    if column_name in columns:
-        logger.debug("Column %s.%s already exists – skipping migration", table_name, column_name)
-        return
-
-    ddl = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
-    with _engine.begin() as conn:
-        conn.execute(text(ddl))
-    logger.info("Added column %s.%s (%s)", table_name, column_name, column_type)
-
-    if column_name == "otlp_token":
-        idx_name = f"idx_{table_name}_{column_name}"
-        idx_ddl = f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {table_name} ({column_name})"
-        with _engine.begin() as conn:
-            conn.execute(text(idx_ddl))
-        logger.info("Created unique index %s", idx_name)

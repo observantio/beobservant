@@ -1,16 +1,36 @@
 """AlertManager service for alert operations."""
 import httpx
 import logging
+import json
 from typing import List, Optional, Dict
 from datetime import datetime, timezone, timedelta
+from urllib.parse import quote
 
-from models.alerts import Alert, AlertGroup
-from models.silences import Silence, SilenceCreate, Matcher
-from models.receivers import AlertManagerStatus
+from models.alerting.alerts import Alert, AlertGroup, AlertStatus, AlertState
+from models.alerting.silences import Silence, SilenceCreate, Matcher, Visibility
+from models.alerting.rules import AlertRule
+from models.alerting.receivers import AlertManagerStatus
+from models.access.auth_models import TokenData
 from config import config
 from middleware.resilience import with_retry, with_timeout
+from services.common.http_client import create_async_client
+from services.alerting.silence_metadata import (
+    SILENCE_META_PREFIX,
+    normalize_visibility,
+    encode_silence_comment,
+    decode_silence_comment,
+)
+from services.alerting.ruler_yaml import (
+    yaml_quote,
+    group_enabled_rules,
+    build_ruler_group_yaml,
+    extract_mimir_group_names,
+)
 
 logger = logging.getLogger(__name__)
+LABELS_JSON_ERROR = "Invalid filter_labels JSON"
+MIMIR_RULES_NAMESPACE = "beobservant"
+MIMIR_RULER_CONFIG_BASEPATH = "/prometheus/config/v1/rules"
 
 
 class AlertManagerService:
@@ -24,11 +44,171 @@ class AlertManagerService:
         """
         self.alertmanager_url = alertmanager_url.rstrip('/')
         self.timeout = config.DEFAULT_TIMEOUT
-        # Shared client with connection pooling – avoids TCP handshake per request
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(self.timeout),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        self._client = create_async_client(self.timeout)
+        self._mimir_client = create_async_client(self.timeout)
+
+    def parse_filter_labels(self, filter_labels: Optional[str]) -> Optional[Dict[str, str]]:
+        if not filter_labels:
+            return None
+        try:
+            parsed = json.loads(filter_labels)
+        except json.JSONDecodeError as exc:
+            raise ValueError(LABELS_JSON_ERROR) from exc
+        if not isinstance(parsed, dict):
+            raise ValueError(LABELS_JSON_ERROR)
+        return {str(key): str(value) for key, value in parsed.items()}
+
+    def normalize_visibility(self, value: Optional[str]) -> str:
+        return normalize_visibility(value)
+
+    def encode_silence_comment(self, comment: str, visibility: str, shared_group_ids: List[str]) -> str:
+        return encode_silence_comment(comment, visibility, shared_group_ids)
+
+    def decode_silence_comment(self, comment: Optional[str]) -> Dict[str, object]:
+        return decode_silence_comment(comment)
+
+    def apply_silence_metadata(self, silence: Silence) -> Silence:
+        data = self.decode_silence_comment(silence.comment)
+        silence.comment = data["comment"]
+        silence.visibility = data["visibility"]
+        silence.shared_group_ids = data["shared_group_ids"]
+        return silence
+
+    def silence_accessible(self, silence: Silence, current_user: TokenData) -> bool:
+        visibility = silence.visibility or Visibility.TENANT.value
+        if silence.created_by == current_user.username:
+            return True
+        if visibility == Visibility.TENANT.value:
+            return True
+        if visibility == Visibility.GROUP.value:
+            user_group_ids = getattr(current_user, "group_ids", []) or []
+            return any(group_id in silence.shared_group_ids for group_id in user_group_ids)
+        return False
+
+    def resolve_rule_org_id(self, rule_org_id: Optional[str], current_user: TokenData) -> str:
+        user_org_id = getattr(current_user, "org_id", None)
+        return rule_org_id or user_org_id or config.DEFAULT_ORG_ID
+
+    async def notify_for_alerts(self, alerts_list, storage_service, notification_service) -> None:
+        for incoming_alert in alerts_list:
+            alertname = incoming_alert.get("labels", {}).get("alertname")
+            if not alertname:
+                logger.debug("Alert without alertname label, skipping")
+                continue
+
+            channels = storage_service.get_notification_channels_for_rule_name(alertname)
+            if not channels:
+                logger.info("No notification channels configured for rule %s", alertname)
+                continue
+
+            raw_status = incoming_alert.get("status") or {}
+            state_value = None
+            silenced = []
+            inhibited = []
+            if isinstance(raw_status, dict):
+                state_value = raw_status.get("state")
+                silenced = raw_status.get("silencedBy", []) or []
+                inhibited = raw_status.get("inhibitedBy", []) or []
+            elif isinstance(raw_status, str):
+                state_value = raw_status
+
+            state_enum = AlertState.ACTIVE if (state_value and str(state_value).lower() in {"active", "firing"}) else AlertState.UNPROCESSED
+            status_obj = AlertStatus(state=state_enum, silencedBy=silenced, inhibitedBy=inhibited)
+
+            starts_at = incoming_alert.get("startsAt") or incoming_alert.get("starts_at") or datetime.now(timezone.utc).isoformat()
+            alert_model = Alert(
+                labels=incoming_alert.get("labels", {}),
+                annotations=incoming_alert.get("annotations", {}),
+                startsAt=starts_at,
+                endsAt=incoming_alert.get("endsAt") or incoming_alert.get("ends_at"),
+                generatorURL=incoming_alert.get("generatorURL"),
+                status=status_obj,
+                fingerprint=incoming_alert.get("fingerprint") or incoming_alert.get("fingerPrint"),
+            )
+
+            action = "firing" if state_enum == AlertState.ACTIVE else "resolved"
+            for channel in channels:
+                try:
+                    sent = await notification_service.send_notification(channel, alert_model, action)
+                    logger.info("Sent notification to channel %s ok=%s", channel.name, sent)
+                except Exception as exc:
+                    logger.exception(
+                        "Failed to send notification for rule %s to channel %s: %s",
+                        alertname,
+                        getattr(channel, "name", "unknown"),
+                        exc,
+                    )
+
+    async def list_metric_names(self, org_id: str) -> List[str]:
+        response = await self._mimir_client.get(
+            f"{config.MIMIR_URL.rstrip('/')}/prometheus/api/v1/label/__name__/values",
+            headers={"X-Scope-OrgID": org_id},
         )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("status") != "success":
+            raise httpx.HTTPStatusError(
+                "Mimir returned non-success status",
+                request=response.request,
+                response=response,
+            )
+        metrics = payload.get("data") or []
+        if not isinstance(metrics, list):
+            return []
+        return metrics
+
+    def _yaml_quote(self, value: object) -> str:
+        return yaml_quote(value)
+
+    def _group_enabled_rules(self, rules: List[AlertRule]) -> Dict[str, List[AlertRule]]:
+        return group_enabled_rules(rules)
+
+    def _build_ruler_group_yaml(self, group_name: str, rules: List[AlertRule]) -> str:
+        return build_ruler_group_yaml(group_name, rules)
+
+    def _extract_mimir_group_names(self, namespace_yaml: str) -> List[str]:
+        return extract_mimir_group_names(namespace_yaml)
+
+    async def sync_mimir_rules_for_org(self, org_id: str, rules: List[AlertRule]) -> None:
+        desired_groups = self._group_enabled_rules(rules)
+        headers = {"X-Scope-OrgID": org_id, "Content-Type": "application/yaml"}
+        base_url = config.MIMIR_URL.rstrip("/")
+
+        list_url = f"{base_url}{MIMIR_RULER_CONFIG_BASEPATH}/{MIMIR_RULES_NAMESPACE}"
+        upsert_url = f"{base_url}{MIMIR_RULER_CONFIG_BASEPATH}/{MIMIR_RULES_NAMESPACE}"
+
+        existing_group_names: List[str] = []
+        try:
+            response = await self._mimir_client.get(list_url, headers={"X-Scope-OrgID": org_id})
+            if response.status_code == 200:
+                existing_group_names = self._extract_mimir_group_names(response.text)
+        except httpx.HTTPError:
+            existing_group_names = []
+
+        for group_name in existing_group_names:
+            if group_name in desired_groups:
+                continue
+            delete_url = (
+                f"{base_url}{MIMIR_RULER_CONFIG_BASEPATH}/"
+                f"{MIMIR_RULES_NAMESPACE}/{quote(group_name, safe='')}"
+            )
+            delete_response = await self._mimir_client.delete(delete_url, headers={"X-Scope-OrgID": org_id})
+            if delete_response.status_code not in {200, 202, 204, 404}:
+                raise httpx.HTTPStatusError(
+                    f"Unexpected Mimir delete response: {delete_response.status_code}",
+                    request=delete_response.request,
+                    response=delete_response,
+                )
+
+        for group_name, group_rules in desired_groups.items():
+            payload = self._build_ruler_group_yaml(group_name, group_rules)
+            post_response = await self._mimir_client.post(upsert_url, content=payload, headers=headers)
+            if post_response.status_code not in {200, 201, 202, 204}:
+                raise httpx.HTTPStatusError(
+                    f"Unexpected Mimir upsert response: {post_response.status_code}",
+                    request=post_response.request,
+                    response=post_response,
+                )
     
     @with_retry()
     @with_timeout()

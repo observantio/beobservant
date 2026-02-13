@@ -28,18 +28,19 @@ except Exception:
         from db_models import User, Tenant, Group, Permission, AuditLog, UserApiKey
     else:
         raise
-from models.user_models import (
-    User as UserSchema, UserCreate, UserUpdate, UserPasswordUpdate
+from models.access.user_models import (
+    User as UserSchema, UserCreate, UserUpdate, UserPasswordUpdate, UserResponse
 )
-from models.group_models import (
+from models.access.group_models import (
     Group as GroupSchema, GroupCreate, GroupUpdate, PermissionInfo
 )
-from models.api_key_models import (
+from models.access.api_key_models import (
     ApiKey, ApiKeyCreate, ApiKeyUpdate
 )
-from models.auth_models import Role, Token, TokenData, ROLE_PERMISSIONS
+from models.access.auth_models import Role, Token, TokenData, ROLE_PERMISSIONS
 from config import config
 from database import get_db_session
+from services.auth.permission_defs import PERMISSION_DEFS
 
 logger = logging.getLogger(__name__)
 
@@ -115,42 +116,7 @@ class DatabaseAuthService:
     
     def _ensure_permissions(self, db: Session):
         """Create all predefined permissions."""
-        permission_defs = [
-            ("read:alerts", "Read Alerts", "View alert rules and active alerts", "alerts", "read"),
-            ("write:alerts", "Write Alerts", "Create and update alert rules", "alerts", "write"),
-            ("delete:alerts", "Delete Alerts", "Delete alert rules", "alerts", "delete"),
-            
-            
-            ("read:channels", "Read Channels", "View notification channels", "channels", "read"),
-            ("write:channels", "Write Channels", "Create and update notification channels", "channels", "write"),
-            ("delete:channels", "Delete Channels", "Delete notification channels", "channels", "delete"),
-            
-            
-            ("read:logs", "Read Logs", "Query and view logs", "logs", "read"),
-            
-            
-            ("read:traces", "Read Traces", "Query and view traces", "traces", "read"),
-            
-            
-            ("read:dashboards", "Read Dashboards", "View Grafana dashboards", "dashboards", "read"),
-            ("write:dashboards", "Write Dashboards", "Create and update dashboards", "dashboards", "write"),
-            ("delete:dashboards", "Delete Dashboards", "Delete dashboards", "dashboards", "delete"),
-            
-            ("read:agents", "Read Agents", "View OTEL agents and system metrics", "agents", "read"),
-            
-            
-            ("manage:users", "Manage Users", "Create, update, and delete users", "users", "manage"),
-            ("read:users", "Read Users", "View user information", "users", "read"),
-            
-            
-            ("manage:groups", "Manage Groups", "Create, update, and delete groups", "groups", "manage"),
-            ("read:groups", "Read Groups", "View group information", "groups", "read"),
-            
-            
-            ("manage:tenants", "Manage Tenants", "Manage tenant settings", "tenants", "manage"),
-        ]
-        
-        for name, display_name, description, resource_type, action in permission_defs:
+        for name, display_name, description, resource_type, action in PERMISSION_DEFS:
             if not db.query(Permission).filter_by(name=name).first():
                 perm = Permission(
                     name=name,
@@ -375,6 +341,20 @@ class DatabaseAuthService:
         if grafana_uid is not None:
             schema_kwargs["grafana_user_id"] = grafana_uid
         return UserSchema(**schema_kwargs)
+
+    def build_user_response(
+        self,
+        user: UserSchema,
+        fallback_permissions: Optional[List[str]] = None,
+    ) -> UserResponse:
+        permissions = self.get_user_permissions(user)
+        if not permissions and fallback_permissions is not None:
+            permissions = fallback_permissions
+        return UserResponse(
+            **user.model_dump(exclude={"hashed_password"}),
+            permissions=permissions,
+            direct_permissions=self.get_user_direct_permissions(user),
+        )
 
     def _to_api_key_schema(self, key: UserApiKey) -> ApiKey:
         return ApiKey(
