@@ -3,6 +3,7 @@ import PropTypes from 'prop-types'
 import { Button, Input, Select } from '../ui'
 import HelpTooltip from '../HelpTooltip'
 import { getGroups } from '../../api'
+import EmailChannelFields from './channelForms/EmailChannelFields'
 
 /**
  * ChannelEditor component with group/user scoping
@@ -54,48 +55,7 @@ export default function ChannelEditor({ channel, onSave, onCancel }) {
   const renderConfigFields = () => {
     switch (formData.type) {
       case 'email':
-        return (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                Email Address <HelpTooltip text="The email address where alert notifications will be sent." />
-              </label>
-              <Input
-                type="email"
-                value={formData.config.to || ''}
-                onChange={(e) => setFormData({ ...formData, config: { ...formData.config, to: e.target.value }})}
-                placeholder="alerts@example.com"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                SMTP Server <HelpTooltip text="The SMTP server hostname or IP address for sending emails." />
-              </label>
-              <Input
-                value={formData.config.smtpHost || formData.config.smtp_host || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, smtpHost: e.target.value, smtp_host: e.target.value }
-                })}
-                placeholder="smtp.example.com"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                SMTP Port <HelpTooltip text="The port number for the SMTP server (typically 587 for TLS or 465 for SSL)." />
-              </label>
-              <Input
-                type="number"
-                value={formData.config.smtpPort || formData.config.smtp_port || 587}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, smtpPort: Number(e.target.value), smtp_port: Number(e.target.value) }
-                })}
-              />
-            </div>
-          </>
-        )
+        return <EmailChannelFields formData={formData} setFormData={setFormData} />
       case 'slack':
         return (
           <>
@@ -170,6 +130,7 @@ export default function ChannelEditor({ channel, onSave, onCancel }) {
             </div>
           </>
         )
+
       case 'pagerduty':
         return (
           <div>
@@ -187,37 +148,7 @@ export default function ChannelEditor({ channel, onSave, onCancel }) {
             />
           </div>
         )
-      case 'opsgenie':
-        return (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                API Key <HelpTooltip text="Your Opsgenie API key for authentication." />
-              </label>
-              <Input
-                value={formData.config.apiKey || formData.config.api_key || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, apiKey: e.target.value, api_key: e.target.value }
-                })}
-                placeholder="Your Opsgenie API key"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-sre-text mb-2">
-                API URL <HelpTooltip text="The Opsgenie API endpoint URL (usually https://api.opsgenie.com)." />
-              </label>
-              <Input
-                value={formData.config.apiUrl || formData.config.api_url || 'https://api.opsgenie.com'}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, apiUrl: e.target.value, api_url: e.target.value }
-                })}
-              />
-            </div>
-          </>
-        )
+
       default:
         return null
     }
@@ -250,7 +181,6 @@ export default function ChannelEditor({ channel, onSave, onCancel }) {
             <option value="teams">Microsoft Teams</option>
             <option value="webhook">Webhook</option>
             <option value="pagerduty">PagerDuty</option>
-            <option value="opsgenie">Opsgenie</option>
           </Select>
         </div>
       </div>

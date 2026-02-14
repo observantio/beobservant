@@ -9,70 +9,9 @@ import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToast } from '../contexts/ToastContext';
 import HelpTooltip from '../components/HelpTooltip';
+import MemberList from '../components/groups/MemberList';
+import { getCategoryDescription, groupPermissionsByResource, filterGroups, sortUsersByDisplayName } from '../utils/groupManagementUtils';
 import * as api from '../api';
-
-/**
- * Reusable member list for group modals (Create, Edit, Permissions)
- */
-function MemberList({ users, selectedMembers, toggleMember }) {
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  if (!users.length) {
-    return <div className="text-sm text-sre-text-muted">No users available.</div>
-  }
-
-  // Filter users based on search query
-  const filteredUsers = users.filter(user => {
-    const query = searchQuery.toLowerCase();
-    return (
-      (user.full_name || user.username).toLowerCase().includes(query) ||
-      user.email.toLowerCase().includes(query)
-    );
-  });
-
-  // Limit to 5 users
-  const displayedUsers = filteredUsers.slice(0, 5);
-  const hasMore = filteredUsers.length > 5;
-
-  return (
-    <div className="space-y-3">
-      <Input
-        placeholder="Search users by name or email..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        className="text-sm"
-      />
-      
-      <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
-        {displayedUsers.length === 0 ? (
-          <div className="text-sm text-sre-text-muted">
-            {searchQuery ? 'No users match your search.' : 'No users available.'}
-          </div>
-        ) : (
-          <>
-            {displayedUsers.map((user) => (
-              <label key={user.id} className="flex items-center gap-3 p-2 border border-sre-border rounded hover:bg-sre-surface/50 cursor-pointer">
-                <Checkbox
-                  checked={selectedMembers.includes(user.id)}
-                  onChange={() => toggleMember(user.id)}
-                />
-                <div className="text-sm text-sre-text">
-                  {user.full_name || user.username}
-                  <span className="text-xs text-sre-text-muted ml-2">{user.email}</span>
-                </div>
-              </label>
-            ))}
-            {hasMore && (
-              <div className="text-xs text-sre-text-muted text-center py-2">
-                Showing first 5 of {filteredUsers.length} users. Use search to find specific users.
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
 
 export default function GroupsPage() {
   const { canManageGroups } = usePermissions();
@@ -264,47 +203,9 @@ export default function GroupsPage() {
   const getPermLabel = (perm) => perm.display_name || perm.name || perm.id || 'Permission';
   const getPermDescription = (perm) => perm.description || perm.name || '';
 
-  const getCategoryDescription = (category) => {
-    const descriptions = {
-      agents: 'Granular OTEL agent permissions (read/create/update/delete/test).',
-      alerts: 'Granular alert and silence permissions (read/create/update/delete).',
-      channels: 'Granular notification channel permissions (read/create/update/delete/test).',
-      dashboards: 'Granular dashboard access (read/create/update/delete).',
-      datasources: 'Granular datasource access (read/query/create/update/delete).',
-      folders: 'Granular Grafana folder permissions (read/create/delete).',
-      groups: 'Granular group permissions (read/create/update/delete).',
-      logs: 'Read/query Loki logs.',
-      rules: 'Granular alert rule permissions (read/create/update/delete/test).',
-      tenants: 'Tenant administration permissions.',
-      traces: 'Read/query Tempo traces.',
-      users: 'Granular user permissions (read/create/update/delete).'
-    }
-    return descriptions[category] || `Granular ${category} permissions by action (read/create/update/delete/test).`
-  }
-
-  const groupPermissionsByResource = () => {
-    const grouped = {};
-    permissions.forEach(p => {
-      const resourceType = p.resource_type || 'general';
-      if (!grouped[resourceType]) {
-        grouped[resourceType] = [];
-      }
-      grouped[resourceType].push(p);
-    });
-    return grouped;
-  };
-
-  const filteredGroups = groups.filter(g => 
-    !searchQuery || 
-    g.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    g.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const sortedUsers = (users || []).slice().sort((a, b) => {
-    const nameA = (a.full_name || a.username || '').toLowerCase();
-    const nameB = (b.full_name || b.username || '').toLowerCase();
-    return nameA.localeCompare(nameB);
-  });
+  const filteredGroups = filterGroups(groups, searchQuery);
+  const sortedUsers = sortUsersByDisplayName(users);
+  const permissionsByResource = groupPermissionsByResource(permissions);
 
   if (!canManageGroups) {
     return (
@@ -514,7 +415,7 @@ export default function GroupsPage() {
               {permissions.length === 0 && (
                 <div className="text-sm text-sre-text-muted">No permissions available.</div>
               )}
-              {Object.entries(groupPermissionsByResource()).map(([resource, perms]) => (
+              {Object.entries(permissionsByResource).map(([resource, perms]) => (
                 <div key={resource} className="border border-sre-border rounded-lg p-3 bg-sre-surface/20">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -697,7 +598,7 @@ export default function GroupsPage() {
           </div>
 
           <div className="max-h-96 overflow-y-auto space-y-4">
-            {Object.entries(groupPermissionsByResource()).map(([resource, perms]) => (
+            {Object.entries(permissionsByResource).map(([resource, perms]) => (
               <div key={resource} className="border border-sre-border rounded-lg p-3 bg-sre-surface/30">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">

@@ -9,6 +9,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import HelpTooltip from '../components/HelpTooltip'
 import * as api from '../api'
 import { USER_ROLES } from '../utils/constants'
+import { getRoleVariant, getRoleBorderColor, getUserInitials } from '../components/users/userUiUtils'
 
 export default function UsersPage() {
   const toast = useToast();
@@ -226,15 +227,9 @@ export default function UsersPage() {
                 </div>
               ) : (
                 filteredUsers.map((u) => {
-                let roleVariant = 'default';
-                if (u.role === 'admin') roleVariant = 'error';
-                else if (u.role === 'user') roleVariant = 'warning';
-                else if (u.role === 'viewer') roleVariant = 'success';
-                const initials = (u.full_name || u.username || 'U').split(' ').map(s => s[0]).join('').substring(0,2).toUpperCase();
-                let roleBorderColor = 'border-sre-border/50';
-                if (u.role === 'admin') roleBorderColor = 'border-red-500';
-                else if (u.role === 'user') roleBorderColor = 'border-yellow-500';
-                else if (u.role === 'viewer') roleBorderColor = 'border-green-500';
+                const roleVariant = getRoleVariant(u.role)
+                const initials = getUserInitials(u)
+                const roleBorderColor = getRoleBorderColor(u.role)
                 return (
                 <Card key={u.id} className={`p-0 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 ${roleBorderColor} hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm rounded-lg group`}>
                   <div className="p-6">
@@ -384,7 +379,7 @@ export default function UsersPage() {
           <div className="space-y-6">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 rounded-md bg-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold text-lg border border-sre-border">
-                {(selectedUser.full_name || selectedUser.username).split(' ').map(s => s[0]).join('').substring(0,2).toUpperCase()}
+                {getUserInitials(selectedUser)}
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-sre-text">{selectedUser.username}</h3>

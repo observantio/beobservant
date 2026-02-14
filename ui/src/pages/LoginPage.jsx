@@ -1,19 +1,32 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Card, Button, Input } from '../components/ui'
+import { Card, Spinner } from '../components/ui'
+import PasswordLoginForm from '../components/auth/PasswordLoginForm'
+import OIDCLoginButton from '../components/auth/OIDCLoginButton'
+import { OIDC_PROVIDER_LABEL } from '../utils/constants'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
+  const [oidcLoading, setOidcLoading] = useState(false)
+  const { login, startOIDCLogin, authMode, authModeLoading } = useAuth()
   const navigate = useNavigate()
+
+  const hasOIDC = Boolean(authMode?.oidc_enabled)
+  const hasPassword = Boolean(authMode?.password_enabled)
+  const showDivider = hasOIDC && hasPassword
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+
+    if (!hasPassword) {
+      setError('Password login is disabled. Use Single Sign-On.')
+      return
+    }
 
     if (!username.trim()) {
       setError('Username is required')
@@ -35,6 +48,19 @@ export default function LoginPage() {
     }
   }
 
+  const handleOIDCLogin = async () => {
+    setError('')
+    setOidcLoading(true)
+    try {
+      await startOIDCLogin()
+    } catch (err) {
+      setError(err?.message || 'Unable to start Single Sign-On')
+      setOidcLoading(false)
+    }
+  }
+
+  const providerLabel = hasOIDC ? OIDC_PROVIDER_LABEL : 'Single Sign-On'
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4">
       <Card className="w-full max-w-md">
@@ -55,47 +81,43 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-sre-text mb-1">
-              Username
-            </label>
-            <Input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value.toLowerCase())}
-              placeholder="Enter your username"
-              required
-              autoFocus
-              autoComplete="username"
-            />
+        {authModeLoading && (
+          <div className="flex items-center justify-center py-6">
+            <Spinner size="md" />
           </div>
+        )}
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-sre-text mb-1">
-              Password
-            </label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              required
-              autoComplete="current-password"
-            />
+        {!authModeLoading && hasOIDC && (
+          <OIDCLoginButton
+            loading={oidcLoading}
+            onClick={handleOIDCLogin}
+            providerLabel={providerLabel}
+          />
+        )}
+
+        {!authModeLoading && showDivider && (
+          <div className="my-4 text-center text-xs text-sre-text-muted uppercase tracking-wide">
+            or use password
           </div>
+        )}
 
-          <Button
-            type="submit"
-            variant="primary"
-            className="w-full"
+        {!authModeLoading && hasPassword && (
+          <PasswordLoginForm
+            username={username}
+            password={password}
+            onUsernameChange={setUsername}
+            onPasswordChange={setPassword}
+            onSubmit={handleSubmit}
             loading={loading}
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </Button>
-        </form>
+            disabled={oidcLoading}
+          />
+        )}
+
+        {!authModeLoading && !hasOIDC && !hasPassword && (
+          <p className="text-sm text-red-500 text-center">
+            Authentication is not configured. Contact your administrator.
+          </p>
+        )}
 
         <p className="text-xs text-sre-text-muted text-center mt-6">
           Contact your administrator if you need access or have forgotten your credentials.

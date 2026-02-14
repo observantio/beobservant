@@ -1,6 +1,7 @@
 """User-related operations for DatabaseAuthService."""
 
 from datetime import datetime, timezone
+import secrets
 from typing import Optional, List
 
 from fastapi import HTTPException, status
@@ -45,6 +46,26 @@ def create_user(service, user_create: UserCreate, tenant_id: str, creator_id: st
         if db.query(User).filter_by(email=user_create.email).first():
             raise ValueError("Email already exists")
 
+        is_external = service.is_external_auth_enabled()
+        external_subject = None
+        auth_provider = "local"
+
+        if is_external:
+            external_subject = service.provision_external_user(
+                email=user_create.email,
+                username=normalized_username,
+                full_name=user_create.full_name,
+            )
+            if config.KEYCLOAK_USER_PROVISIONING_ENABLED and not external_subject:
+                raise ValueError("External identity provisioning failed; user was not created")
+            auth_provider = config.AUTH_PROVIDER
+
+        raw_password = user_create.password
+        if is_external and not raw_password:
+            raw_password = secrets.token_urlsafe(24)
+        if not raw_password:
+            raise ValueError("Password is required when local authentication is enabled")
+
         user = User(
             tenant_id=tenant_id,
             username=normalized_username,
@@ -53,8 +74,10 @@ def create_user(service, user_create: UserCreate, tenant_id: str, creator_id: st
             org_id=getattr(user_create, 'org_id', None) or config.DEFAULT_ORG_ID,
             role=user_create.role,
             is_active=user_create.is_active,
-            hashed_password=service.hash_password(user_create.password),
-            needs_password_change=True
+            hashed_password=service.hash_password(raw_password),
+            needs_password_change=(not is_external),
+            auth_provider=auth_provider,
+            external_subject=external_subject,
         )
 
         if user_create.group_ids:
@@ -114,6 +137,12 @@ def update_user(service, user_id: str, user_update: UserUpdate, tenant_id: str, 
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Only administrators can modify admin accounts"
                     )
+
+        if getattr(user, "auth_provider", "local") != "local" and "email" in update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email is managed by the external identity provider"
+            )
 
         for field, value in update_data.items():
             if field == 'group_ids' and value is not None:

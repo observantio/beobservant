@@ -66,6 +66,24 @@ class Config:
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change-this-secret-key-in-production")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     JWT_EXPIRATION_MINUTES: int = int(os.getenv("JWT_EXPIRATION_MINUTES", "1440"))
+
+    # Identity provider / OIDC (Keycloak recommended)
+    AUTH_PROVIDER: str = os.getenv("AUTH_PROVIDER", "local").strip().lower()  # local | keycloak
+    AUTH_PASSWORD_FLOW_ENABLED: bool = os.getenv("AUTH_PASSWORD_FLOW_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+    OIDC_ISSUER_URL: Optional[str] = os.getenv("OIDC_ISSUER_URL")
+    OIDC_CLIENT_ID: Optional[str] = os.getenv("OIDC_CLIENT_ID")
+    OIDC_CLIENT_SECRET: Optional[str] = os.getenv("OIDC_CLIENT_SECRET")
+    OIDC_AUDIENCE: Optional[str] = os.getenv("OIDC_AUDIENCE")
+    OIDC_JWKS_URL: Optional[str] = os.getenv("OIDC_JWKS_URL")
+    OIDC_SCOPES: str = os.getenv("OIDC_SCOPES", "openid profile email")
+    OIDC_AUTO_PROVISION_USERS: bool = os.getenv("OIDC_AUTO_PROVISION_USERS", "true").lower() in ("1", "true", "yes", "on")
+
+    # Keycloak admin API (optional, for app-driven user provisioning)
+    KEYCLOAK_ADMIN_URL: Optional[str] = os.getenv("KEYCLOAK_ADMIN_URL")
+    KEYCLOAK_ADMIN_REALM: Optional[str] = os.getenv("KEYCLOAK_ADMIN_REALM")
+    KEYCLOAK_ADMIN_CLIENT_ID: Optional[str] = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID")
+    KEYCLOAK_ADMIN_CLIENT_SECRET: Optional[str] = os.getenv("KEYCLOAK_ADMIN_CLIENT_SECRET")
+    KEYCLOAK_USER_PROVISIONING_ENABLED: bool = os.getenv("KEYCLOAK_USER_PROVISIONING_ENABLED", "false").lower() in ("1", "true", "yes", "on")
     
     # Default admin bootstrap (can be overridden via environment)
     DEFAULT_ADMIN_USERNAME: str = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")

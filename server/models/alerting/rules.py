@@ -34,16 +34,19 @@ class RuleSeverity(str, Enum):
 class AlertRule(BaseModel):
     """Alert rule configuration."""
     id: Optional[str] = Field(None, description=DESC_UNIQUE_IDENTIFIER)
+    org_id: Optional[str] = Field(None, alias="orgId", description="Organization ID / API key scoped to this rule")
     name: str = Field(..., description=DESC_RULE_NAME)
-    expression: str = Field(..., description=DESC_RULE_EXPRESSION)
+    # backend code expects `expr`/`duration`/`group` attributes; accept UI aliases as well
+    expr: str = Field(..., alias="expression", description=DESC_RULE_EXPRESSION)
     severity: RuleSeverity = Field(..., description=DESC_RULE_SEVERITY)
     description: Optional[str] = Field(None, description=DESC_RULE_DESCRIPTION)
     enabled: bool = Field(True, description=DESC_RULE_ENABLED)
     labels: Dict[str, str] = Field(default_factory=dict, description=DESC_RULE_LABELS)
     annotations: Dict[str, str] = Field(default_factory=dict, description=DESC_RULE_ANNOTATIONS)
-    for_duration: Optional[str] = Field(None, alias="for", description=DESC_RULE_FOR_DURATION)
-    group_name: str = Field(..., alias="groupName", description=DESC_RULE_GROUP_NAME)
+    duration: Optional[str] = Field(None, alias="for", description=DESC_RULE_FOR_DURATION)
+    group: str = Field(..., alias="groupName", description=DESC_RULE_GROUP_NAME)
     group_interval: Optional[str] = Field(None, alias="groupInterval", description=DESC_RULE_GROUP_INTERVAL)
+    notification_channels: List[str] = Field(default_factory=list, alias="notificationChannels", description="Notification channel IDs for this rule")
     visibility: Visibility = Field(Visibility.PRIVATE, description=DESC_VISIBILITY_SCOPE)
     shared_group_ids: List[str] = Field(default_factory=list, alias="sharedGroupIds", description=DESC_GROUP_IDS_RULE_SHARED_WITH)
     
@@ -54,16 +57,18 @@ class AlertRule(BaseModel):
 
 class AlertRuleCreate(BaseModel):
     """Create an alert rule."""
+    org_id: Optional[str] = Field(None, alias="orgId", description="Optional org_id (API key) to scope this rule to")
     name: str = Field(..., min_length=1, max_length=100, description=DESC_RULE_NAME)
-    expression: str = Field(..., description=DESC_RULE_EXPRESSION)
+    expr: str = Field(..., alias="expression", description=DESC_RULE_EXPRESSION)
     severity: RuleSeverity = Field(..., description=DESC_RULE_SEVERITY)
     description: Optional[str] = Field(None, description=DESC_RULE_DESCRIPTION)
     enabled: bool = Field(True, description=DESC_RULE_ENABLED)
     labels: Dict[str, str] = Field(default_factory=dict, description=DESC_RULE_LABELS)
     annotations: Dict[str, str] = Field(default_factory=dict, description=DESC_RULE_ANNOTATIONS)
-    for_duration: Optional[str] = Field(None, alias="for", description=DESC_RULE_FOR_DURATION)
-    group_name: str = Field(..., alias="groupName", description=DESC_RULE_GROUP_NAME)
+    duration: Optional[str] = Field(None, alias="for", description=DESC_RULE_FOR_DURATION)
+    group: str = Field(..., alias="groupName", description=DESC_RULE_GROUP_NAME)
     group_interval: Optional[str] = Field(None, alias="groupInterval", description=DESC_RULE_GROUP_INTERVAL)
+    notification_channels: List[str] = Field(default_factory=list, alias="notificationChannels", description="Notification channel IDs for this rule")
     visibility: Visibility = Field(Visibility.PRIVATE, description=DESC_VISIBILITY_SCOPE)
     shared_group_ids: List[str] = Field(default_factory=list, alias="sharedGroupIds", description=DESC_GROUP_IDS_SHARE_WITH)
     

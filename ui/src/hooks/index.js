@@ -79,13 +79,15 @@ export function useLocalStorage(key, initialValue) {
 
   const setValue = useCallback((value) => {
     try {
-      const valueToStore = typeof value === 'function' ? value(storedValue) : value
-      setStoredValue(valueToStore)
-      globalThis.window.localStorage.setItem(key, JSON.stringify(valueToStore))
+      setStoredValue((previousValue) => {
+        const valueToStore = typeof value === 'function' ? value(previousValue) : value
+        globalThis.window.localStorage.setItem(key, JSON.stringify(valueToStore))
+        return valueToStore
+      })
     } catch (error) {
       console.error(`Error setting localStorage key "${key}":`, error)
     }
-  }, [key, storedValue])
+  }, [key])
 
   return [storedValue, setValue]
 }

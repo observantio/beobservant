@@ -8,7 +8,6 @@ DESC_RECEIVER_EMAIL_CONFIGS = "Email configurations for this receiver"
 DESC_RECEIVER_SLACK_CONFIGS = "Slack configurations for this receiver"
 DESC_RECEIVER_WEBHOOK_CONFIGS = "Webhook configurations for this receiver"
 DESC_RECEIVER_PAGERDUTY_CONFIGS = "PagerDuty configurations for this receiver"
-DESC_RECEIVER_OPSGENIE_CONFIGS = "OpsGenie configurations for this receiver"
 DESC_RECEIVER_TEAMS_CONFIGS = "Teams configurations for this receiver"
 DESC_ALERTMANAGER_VERSION = "AlertManager version"
 DESC_ALERTMANAGER_UPTIME = "AlertManager uptime"
@@ -23,7 +22,6 @@ class Receiver(BaseModel):
     slack_configs: List[Dict[str, Any]] = Field(default_factory=list, alias="slackConfigs", description=DESC_RECEIVER_SLACK_CONFIGS)
     webhook_configs: List[Dict[str, Any]] = Field(default_factory=list, alias="webhookConfigs", description=DESC_RECEIVER_WEBHOOK_CONFIGS)
     pagerduty_configs: List[Dict[str, Any]] = Field(default_factory=list, alias="pagerdutyConfigs", description=DESC_RECEIVER_PAGERDUTY_CONFIGS)
-    opsgenie_configs: List[Dict[str, Any]] = Field(default_factory=list, alias="opsgenieConfigs", description=DESC_RECEIVER_OPSGENIE_CONFIGS)
     msteams_configs: List[Dict[str, Any]] = Field(default_factory=list, alias="msteamsConfigs", description=DESC_RECEIVER_TEAMS_CONFIGS)
     
     class Config:

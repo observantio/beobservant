@@ -23,7 +23,6 @@ class ChannelType(str, Enum):
     TEAMS = "teams"
     WEBHOOK = "webhook"
     PAGERDUTY = "pagerduty"
-    OPSGENIE = "opsgenie"
 
 
 class NotificationChannel(BaseModel):

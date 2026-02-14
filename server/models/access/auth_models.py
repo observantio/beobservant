@@ -149,3 +149,26 @@ class TokenData(BaseModel):
     is_superuser: bool = False
     permissions: List[str]
     group_ids: List[str] = Field(default_factory=list)
+
+
+class OIDCAuthURLRequest(BaseModel):
+    redirect_uri: str
+    state: str
+    nonce: str
+
+
+class OIDCCodeExchangeRequest(BaseModel):
+    code: str
+    redirect_uri: str
+
+
+class OIDCAuthURLResponse(BaseModel):
+    authorization_url: str
+
+
+class AuthModeResponse(BaseModel):
+    provider: str
+    oidc_enabled: bool
+    password_enabled: bool
+    registration_enabled: bool
+    oidc_scopes: str

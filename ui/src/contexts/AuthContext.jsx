@@ -3,6 +3,8 @@ import PropTypes from 'prop-types'
 import * as api from '../api'
 
 const AuthContext = createContext(null)
+const OIDC_STATE_KEY = 'oidc_state'
+const OIDC_NONCE_KEY = 'oidc_nonce'
 
 function syncGrafanaAuthCookie(authToken) {
   if (typeof document === 'undefined') return
@@ -35,7 +37,40 @@ function resolveActiveOrgId(userData) {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('auth_token'))
+  const [authMode, setAuthMode] = useState({
+    provider: 'local',
+    oidc_enabled: false,
+    password_enabled: true,
+    registration_enabled: true,
+    oidc_scopes: 'openid profile email',
+  })
+  const [authModeLoading, setAuthModeLoading] = useState(true)
   const [loading, setLoading] = useState(true)
+
+  const loadAuthMode = useCallback(async () => {
+    setAuthModeLoading(true)
+    try {
+      const mode = await api.getAuthMode()
+      setAuthMode(mode)
+      return mode
+    } catch {
+      const fallbackMode = {
+        provider: 'local',
+        oidc_enabled: false,
+        password_enabled: true,
+        registration_enabled: true,
+        oidc_scopes: 'openid profile email',
+      }
+      setAuthMode(fallbackMode)
+      return fallbackMode
+    } finally {
+      setAuthModeLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadAuthMode()
+  }, [loadAuthMode])
 
   useEffect(() => {
     if (token) {
@@ -64,6 +99,48 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (username, password) => {
     const response = await api.login(username, password)
     const { access_token } = response
+    localStorage.setItem('auth_token', access_token)
+    setToken(access_token)
+    api.setAuthToken(access_token)
+    syncGrafanaAuthCookie(access_token)
+    await loadUser()
+    return response
+  }, [loadUser])
+
+  const startOIDCLogin = useCallback(async () => {
+    const state = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+    const nonce = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+
+    sessionStorage.setItem(OIDC_STATE_KEY, state)
+    sessionStorage.setItem(OIDC_NONCE_KEY, nonce)
+
+    const redirectUri = `${globalThis.location.origin}/#/auth/callback`
+    const response = await api.getOIDCAuthorizeUrl(redirectUri, state, nonce)
+    if (!response?.authorization_url) {
+      throw new Error('OIDC authorization URL was not returned by the server')
+    }
+    globalThis.location.href = response.authorization_url
+  }, [])
+
+  const finishOIDCLogin = useCallback(async ({ code, state }) => {
+    const expectedState = sessionStorage.getItem(OIDC_STATE_KEY)
+    if (!code) {
+      throw new Error('Missing OIDC authorization code')
+    }
+    if (!state || !expectedState || state !== expectedState) {
+      throw new Error('Invalid OIDC state')
+    }
+
+    const redirectUri = `${globalThis.location.origin}/#/auth/callback`
+    const response = await api.exchangeOIDCCode(code, redirectUri)
+    const { access_token } = response || {}
+    if (!access_token) {
+      throw new Error('OIDC login succeeded but no access token was returned')
+    }
+
+    sessionStorage.removeItem(OIDC_STATE_KEY)
+    sessionStorage.removeItem(OIDC_NONCE_KEY)
+
     localStorage.setItem('auth_token', access_token)
     setToken(access_token)
     api.setAuthToken(access_token)
@@ -107,15 +184,20 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     user,
     token,
+    authMode,
+    authModeLoading,
     loading,
     login,
+    startOIDCLogin,
+    finishOIDCLogin,
+    loadAuthMode,
     register,
     logout,
     refreshUser,
     updateUser,
     isAuthenticated: !!token && !!user,
     hasPermission
-  }), [user, token, loading, login, register, logout, refreshUser, updateUser, hasPermission])
+  }), [user, token, authMode, authModeLoading, loading, login, startOIDCLogin, finishOIDCLogin, loadAuthMode, register, logout, refreshUser, updateUser, hasPermission])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

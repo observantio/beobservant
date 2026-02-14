@@ -1,13 +1,11 @@
 """Database-backed authentication service with enterprise IAM."""
 import logging
 import secrets
-import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from passlib.context import CryptContext
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from fastapi import HTTPException
 
 try:
@@ -41,6 +39,7 @@ from models.access.auth_models import Role, Token, TokenData, ROLE_PERMISSIONS
 from config import config
 from database import get_db_session
 from services.auth.permission_defs import PERMISSION_DEFS
+from services.auth.oidc_service import OIDCService
 from services.auth.auth_ops import (
     authenticate_user as authenticate_user_op,
     create_access_token as create_access_token_op,
@@ -85,6 +84,13 @@ class DatabaseAuthService:
     def __init__(self):
         self._initialized = False
         self.logger = logger
+        self.oidc_service = OIDCService()
+
+    def is_external_auth_enabled(self) -> bool:
+        return config.AUTH_PROVIDER == "keycloak" and self.oidc_service.is_enabled()
+
+    def is_password_auth_enabled(self) -> bool:
+        return bool(config.AUTH_PASSWORD_FLOW_ENABLED)
     
     def _lazy_init(self):
         """Lazy initialization to ensure database is ready."""
@@ -235,10 +241,195 @@ class DatabaseAuthService:
     def create_access_token(self, user: User) -> Token:
         """Create JWT access token for user."""
         return create_access_token_op(self, user)
+
+    def _build_token_data_for_user(self, user: User) -> TokenData:
+        permissions = self.get_user_permissions(user)
+        return TokenData(
+            user_id=user.id,
+            username=user.username,
+            tenant_id=user.tenant_id,
+            org_id=user.org_id,
+            role=Role(user.role),
+            is_superuser=user.is_superuser,
+            permissions=permissions,
+            group_ids=[g.id for g in (getattr(user, "groups", None) or [])],
+        )
+
+    def _extract_permissions_from_oidc_claims(self, claims: Dict[str, Any]) -> List[str]:
+        extracted: set[str] = set()
+
+        scope_raw = claims.get("scope")
+        if isinstance(scope_raw, str):
+            extracted.update(part.strip() for part in scope_raw.split(" ") if part.strip())
+
+        scp = claims.get("scp")
+        if isinstance(scp, list):
+            extracted.update(str(item).strip() for item in scp if str(item).strip())
+
+        direct_permissions = claims.get("permissions")
+        if isinstance(direct_permissions, list):
+            extracted.update(str(item).strip() for item in direct_permissions if str(item).strip())
+
+        return [value for value in extracted if ":" in value]
+
+    def _sync_user_from_oidc_claims(self, claims: Dict[str, Any]) -> Optional[User]:
+        email = (claims.get("email") or "").strip().lower()
+        subject = (claims.get("sub") or "").strip()
+        if not email:
+            self.logger.warning("OIDC token missing email claim")
+            return None
+
+        preferred_username = (claims.get("preferred_username") or email.split("@", 1)[0] or "").strip().lower()
+        full_name = (claims.get("name") or "").strip() or None
+
+        with get_db_session() as db:
+            user = None
+            if subject:
+                user = db.query(User).filter(User.external_subject == subject).first()
+            if not user:
+                user = db.query(User).filter(func.lower(User.email) == email).first()
+
+            if not user and not config.OIDC_AUTO_PROVISION_USERS:
+                return None
+
+            if not user:
+                default_tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+                if not default_tenant:
+                    default_tenant = Tenant(
+                        name=config.DEFAULT_ADMIN_TENANT,
+                        display_name="Default Organization",
+                        is_active=True,
+                    )
+                    db.add(default_tenant)
+                    db.flush()
+
+                base_username = preferred_username or email.split("@", 1)[0]
+                candidate_username = base_username
+                suffix = 1
+                while db.query(User).filter(func.lower(User.username) == candidate_username.lower()).first():
+                    candidate_username = f"{base_username}{suffix}"
+                    suffix += 1
+
+                user = User(
+                    tenant_id=default_tenant.id,
+                    username=candidate_username,
+                    email=email,
+                    full_name=full_name,
+                    org_id=config.DEFAULT_ORG_ID,
+                    role=Role.USER,
+                    is_active=True,
+                    is_superuser=False,
+                    hashed_password=self.hash_password(secrets.token_urlsafe(24)),
+                    needs_password_change=False,
+                    auth_provider=config.AUTH_PROVIDER,
+                    external_subject=subject or None,
+                )
+                db.add(user)
+                db.flush()
+                self._ensure_default_api_key(db, user)
+            else:
+                user.auth_provider = config.AUTH_PROVIDER
+                if subject:
+                    user.external_subject = subject
+                if email and user.email.lower() != email:
+                    conflicting = db.query(User).filter(
+                        and_(func.lower(User.email) == email, User.id != user.id)
+                    ).first()
+                    if not conflicting:
+                        user.email = email
+                if full_name and user.full_name != full_name:
+                    user.full_name = full_name
+
+            user.last_login = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(user)
+            return user
+
+    def login(self, username: str, password: str) -> Optional[Token]:
+        """Authenticate using configured provider and return access token."""
+        if self.is_external_auth_enabled():
+            if not self.is_password_auth_enabled():
+                return None
+            try:
+                oidc_token = self.oidc_service.exchange_password(username, password)
+            except Exception as exc:
+                self.logger.error("OIDC password login failed: %s", exc)
+                return None
+
+            access_token = oidc_token.get("access_token")
+            if not access_token:
+                return None
+            claims = self.oidc_service.verify_access_token(access_token)
+            if not claims:
+                return None
+            user = self._sync_user_from_oidc_claims(claims)
+            if not user or not user.is_active:
+                return None
+            return Token(
+                access_token=access_token,
+                token_type=oidc_token.get("token_type", "bearer"),
+                expires_in=int(oidc_token.get("expires_in", config.JWT_EXPIRATION_MINUTES * 60)),
+            )
+
+        user = self.authenticate_user(username, password)
+        if not user:
+            return None
+        return self.create_access_token(user)
+
+    def exchange_oidc_authorization_code(self, code: str, redirect_uri: str) -> Optional[Token]:
+        if not self.is_external_auth_enabled():
+            return None
+        try:
+            oidc_token = self.oidc_service.exchange_authorization_code(code, redirect_uri)
+            access_token = oidc_token.get("access_token")
+            if not access_token:
+                return None
+            claims = self.oidc_service.verify_access_token(access_token)
+            if not claims:
+                return None
+            user = self._sync_user_from_oidc_claims(claims)
+            if not user or not user.is_active:
+                return None
+            return Token(
+                access_token=access_token,
+                token_type=oidc_token.get("token_type", "bearer"),
+                expires_in=int(oidc_token.get("expires_in", config.JWT_EXPIRATION_MINUTES * 60)),
+            )
+        except Exception as exc:
+            self.logger.error("OIDC code exchange failed: %s", exc)
+            return None
+
+    def get_oidc_authorization_url(self, redirect_uri: str, state: str, nonce: str) -> str:
+        return self.oidc_service.build_authorization_url(redirect_uri, state, nonce)
+
+    def provision_external_user(self, *, email: str, username: str, full_name: Optional[str]) -> Optional[str]:
+        if not self.is_external_auth_enabled():
+            return None
+        try:
+            return self.oidc_service.create_keycloak_user(email=email, username=username, full_name=full_name)
+        except Exception as exc:
+            self.logger.error("External user provisioning failed: %s", exc)
+            return None
     
     def decode_token(self, token: str) -> Optional[TokenData]:
-        """Decode and validate JWT token."""
-        return decode_token_op(self, token)
+        """Decode and validate local JWT or OIDC access token."""
+        local_token = decode_token_op(self, token)
+        if local_token:
+            return local_token
+
+        if not self.is_external_auth_enabled():
+            return None
+
+        claims = self.oidc_service.verify_access_token(token)
+        if not claims:
+            return None
+
+        user = self._sync_user_from_oidc_claims(claims)
+        if not user or not user.is_active:
+            return None
+        token_data = self._build_token_data_for_user(user)
+        token_data.permissions = list(set(token_data.permissions).union(self._extract_permissions_from_oidc_claims(claims)))
+        return token_data
     
     def get_user_permissions(self, user: User) -> List[str]:
         """Get all permissions for a user (role + direct + group permissions)."""
@@ -362,6 +553,8 @@ class DatabaseAuthService:
     
     def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """Authenticate user with username and password."""
+        if self.is_external_auth_enabled() and not self.is_password_auth_enabled():
+            return None
         return authenticate_user_op(self, username, password)
     
     def get_user_by_id(self, user_id: str) -> Optional[UserSchema]:
@@ -454,6 +647,8 @@ class DatabaseAuthService:
     
     def update_password(self, user_id: str, password_update: UserPasswordUpdate, tenant_id: str) -> bool:
         """Update user password."""
+        if self.is_external_auth_enabled():
+            raise ValueError("Password updates are managed by the external identity provider")
         return update_password_op(self, user_id, password_update, tenant_id)
     
     def validate_otlp_token(self, token: str) -> Optional[str]:

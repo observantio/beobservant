@@ -14,6 +14,8 @@ from models.access.api_key_models import (
     ApiKey, ApiKeyCreate, ApiKeyUpdate
 )
 from models.access.auth_models import TokenData, Permission, Role, ROLE_PERMISSIONS, Token
+from models.access.auth_models import OIDCAuthURLRequest, OIDCCodeExchangeRequest, OIDCAuthURLResponse
+from models.access.auth_models import AuthModeResponse
 
 from middleware.dependencies import (
     get_current_user,
@@ -34,6 +36,19 @@ GROUP_NOT_FOUND = "Group not found"
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 
+@router.get("/mode", response_model=AuthModeResponse)
+async def auth_mode():
+    oidc_enabled = auth_service.is_external_auth_enabled()
+    password_enabled = auth_service.is_password_auth_enabled() if oidc_enabled else True
+    return AuthModeResponse(
+        provider=config.AUTH_PROVIDER,
+        oidc_enabled=oidc_enabled,
+        password_enabled=password_enabled,
+        registration_enabled=not oidc_enabled,
+        oidc_scopes=config.OIDC_SCOPES,
+    )
+
+
 @router.post("/login", response_model=Token)
 async def login(request: Request, login_request: LoginRequest):
     enforce_public_endpoint_security(
@@ -43,22 +58,57 @@ async def login(request: Request, login_request: LoginRequest):
         window_seconds=60,
         allowlist=config.AUTH_PUBLIC_IP_ALLOWLIST,
     )
-    user = auth_service.authenticate_user(login_request.username, login_request.password)
-    
-    if not user:
+    token = auth_service.login(login_request.username, login_request.password)
+
+    if not token:
+        if auth_service.is_external_auth_enabled() and not auth_service.is_password_auth_enabled():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Password login is disabled. Use OIDC login.",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    token = auth_service.create_access_token(user)
+
+    return token
+
+
+@router.post("/oidc/authorize-url", response_model=OIDCAuthURLResponse)
+async def oidc_authorize_url(payload: OIDCAuthURLRequest):
+    if not auth_service.is_external_auth_enabled():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OIDC is not enabled")
+    try:
+        url = auth_service.get_oidc_authorization_url(
+            redirect_uri=payload.redirect_uri,
+            state=payload.state,
+            nonce=payload.nonce,
+        )
+        return OIDCAuthURLResponse(authorization_url=url)
+    except Exception as exc:
+        logger.error("Failed to build OIDC authorization URL: %s", exc)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to initialize OIDC login")
+
+
+@router.post("/oidc/exchange", response_model=Token)
+async def oidc_exchange_token(payload: OIDCCodeExchangeRequest):
+    if not auth_service.is_external_auth_enabled():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OIDC is not enabled")
+    token = auth_service.exchange_oidc_authorization_code(payload.code, payload.redirect_uri)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC authentication failed")
     return token
 
 
 @router.post("/register", response_model=UserResponse)
 @handle_route_errors()
 async def register(request: Request, register_request: RegisterRequest):
+    if auth_service.is_external_auth_enabled():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is managed by the external identity provider",
+        )
     enforce_public_endpoint_security(
         request,
         scope="auth_register",

@@ -9,20 +9,7 @@ import { formatDuration } from '../utils/formatters'
 import { getServiceName, hasSpanError } from '../utils/helpers'
 import { TIME_RANGES, DEFAULT_DURATION_RANGE, TRACE_STATUS_OPTIONS } from '../utils/constants'
 import HelpTooltip from '../components/HelpTooltip'
-
-/**
- * Extract unique service names from an array of traces
- */
-function discoverServices(traces) {
-  const discovered = new Set()
-  traces.forEach(t => {
-    (t.spans || []).forEach(s => {
-      const name = getServiceName(s)
-      if (name && name !== 'unknown') discovered.add(name)
-    })
-  })
-  return Array.from(discovered).sort((a, b) => a.localeCompare(b))
-}
+import { discoverServices, computeTraceStats } from '../utils/tempoTraceUtils'
 
 export default function TempoPage() {
   const [services, setServices] = useState([])
@@ -155,29 +142,7 @@ export default function TempoPage() {
   }, [traces, statusFilter])
 
   const traceStats = useMemo(() => {
-    if (!filteredTraces.length) return null
-
-    const durations = filteredTraces.map(t => {
-      if (!t.spans?.length) return 0
-      const rootSpan = t.spans.find(s => !s.parentSpanId && !s.parentSpanID) || t.spans[0]
-      return rootSpan?.duration || 0
-    })
-
-    const errorCount = filteredTraces.filter(t => t.spans?.some(hasSpanError)).length
-    const validDurations = durations.filter(d => d > 0)
-    const avgDuration = validDurations.length ? validDurations.reduce((a, b) => a + b, 0) / validDurations.length : 0
-    const maxDuration = validDurations.length ? Math.max(...validDurations) : 0
-    const minDuration = validDurations.length ? Math.min(...validDurations) : 0
-    const errorRate = filteredTraces.length ? (errorCount / filteredTraces.length) * 100 : 0
-
-    return {
-      total: filteredTraces.length,
-      avgDuration,
-      maxDuration,
-      minDuration,
-      errorRate,
-      errorCount
-    }
+    return computeTraceStats(filteredTraces)
   }, [filteredTraces])
 
   function clearFilters() {

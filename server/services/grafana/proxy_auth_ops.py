@@ -1,13 +1,99 @@
 """Proxy authorization and path extraction operations for GrafanaProxyService."""
 
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from db_models import GrafanaDashboard, GrafanaDatasource
 from models.access.auth_models import Permission, TokenData, Role
+
+
+def _has_any_permission(token_data: TokenData, required: Set[str]) -> bool:
+    if not required:
+        return True
+    if getattr(token_data, "is_superuser", False):
+        return True
+    user_permissions = set(token_data.permissions or [])
+    return bool(user_permissions.intersection(required))
+
+
+def _required_permissions_for_path(path: str, method: str) -> Set[str]:
+    """Map Grafana proxy requests to required Be Observant permissions."""
+    p = (path or "").lower()
+    m = (method or "GET").upper()
+
+    if p.startswith("/grafana/d/") or p.startswith("/grafana/d-solo/"):
+        return {Permission.READ_DASHBOARDS.value}
+
+    if p.startswith("/grafana/connections/datasources/edit/"):
+        return {
+            Permission.UPDATE_DATASOURCES.value,
+            Permission.CREATE_DATASOURCES.value,
+        }
+
+    if p.startswith("/grafana/api/search"):
+        return {Permission.READ_DASHBOARDS.value}
+
+    if p.startswith("/grafana/api/ds/query"):
+        return {Permission.QUERY_DATASOURCES.value}
+
+    if p.startswith("/grafana/api/datasources/proxy/"):
+        return {Permission.QUERY_DATASOURCES.value}
+
+    if p.startswith("/grafana/api/dashboards/db") and m == "POST":
+        return {
+            Permission.CREATE_DASHBOARDS.value,
+            Permission.UPDATE_DASHBOARDS.value,
+            Permission.WRITE_DASHBOARDS.value,
+        }
+
+    if p.startswith("/grafana/api/dashboards/uid/"):
+        if m == "GET":
+            return {Permission.READ_DASHBOARDS.value}
+        if m == "DELETE":
+            return {Permission.DELETE_DASHBOARDS.value}
+
+    if p.startswith("/grafana/api/datasources/uid/"):
+        if m == "GET":
+            return {Permission.READ_DATASOURCES.value}
+        if m == "PUT":
+            return {Permission.UPDATE_DATASOURCES.value}
+        if m == "DELETE":
+            return {Permission.DELETE_DATASOURCES.value}
+
+    if p.startswith("/grafana/api/datasources"):
+        if m == "GET":
+            return {Permission.READ_DATASOURCES.value}
+        if m == "POST":
+            return {Permission.CREATE_DATASOURCES.value}
+
+    if p.startswith("/grafana/api/folders"):
+        if m == "GET":
+            return {Permission.READ_FOLDERS.value}
+        if m == "POST":
+            return {Permission.CREATE_FOLDERS.value}
+        if m == "DELETE":
+            return {Permission.DELETE_FOLDERS.value}
+
+    if p.startswith("/grafana/api/live"):
+        return {Permission.READ_DASHBOARDS.value}
+
+    if m in {"GET", "HEAD", "OPTIONS"}:
+        return {
+            Permission.READ_DASHBOARDS.value,
+            Permission.READ_DATASOURCES.value,
+            Permission.READ_FOLDERS.value,
+        }
+
+    return set()
+
+
+def _is_dashboard_save_request(path: str, method: str) -> bool:
+    p = (path or "").lower()
+    m = (method or "GET").upper()
+    return p.startswith("/grafana/api/dashboards/db") and m == "POST"
 
 
 def is_admin_user(service, token_data: TokenData) -> bool:
@@ -125,6 +211,9 @@ def authorize_proxy_request(
         Permission.UPDATE_DASHBOARDS.value,
         Permission.DELETE_DASHBOARDS.value,
         Permission.READ_DATASOURCES.value,
+        Permission.CREATE_DATASOURCES.value,
+        Permission.UPDATE_DATASOURCES.value,
+        Permission.DELETE_DATASOURCES.value,
         Permission.QUERY_DATASOURCES.value,
         Permission.READ_FOLDERS.value,
         Permission.CREATE_FOLDERS.value,
@@ -136,7 +225,22 @@ def authorize_proxy_request(
 
     is_admin = is_admin_user(service, token_data)
     original_uri = orig or request.headers.get("X-Original-URI", "")
+    original_method = (request.headers.get("X-Original-Method") or request.method or "GET").upper()
     original_path = original_uri.split("?", 1)[0] if original_uri else ""
+    if not original_path:
+        raise HTTPException(status_code=400, detail="Missing original URI context")
+
+    required_permissions = _required_permissions_for_path(original_path, original_method)
+
+    if not is_admin and _is_dashboard_save_request(original_path, original_method):
+        has_write = Permission.WRITE_DASHBOARDS.value in user_permissions
+        has_create = Permission.CREATE_DASHBOARDS.value in user_permissions
+        has_update = Permission.UPDATE_DASHBOARDS.value in user_permissions
+        if not has_write and not (has_create and has_update):
+            raise HTTPException(status_code=403, detail="Insufficient permissions for dashboard create/update")
+
+    if not is_admin and (not required_permissions or not _has_any_permission(token_data, required_permissions)):
+        raise HTTPException(status_code=403, detail="Insufficient permissions for this Grafana action")
 
     if not is_admin:
         dashboard_uid = extract_dashboard_uid(service, original_path)

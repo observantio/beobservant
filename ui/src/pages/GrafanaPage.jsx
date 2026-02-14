@@ -12,18 +12,9 @@ import HelpTooltip from '../components/HelpTooltip'
 import GrafanaTabs from '../components/grafana/GrafanaTabs'
 import GrafanaContent from '../components/grafana/GrafanaContent'
 import { useAuth } from '../contexts/AuthContext'
-import { API_BASE, GRAFANA_URL, MIMIR_PROMETHEUS_URL, LOKI_BASE, TEMPO_URL, DATASOURCE_TYPES as DS_TYPES, VISIBILITY_OPTIONS, GRAFANA_REFRESH_INTERVALS } from '../utils/constants'
-
-const DATASOURCE_TYPES = DS_TYPES
-  .filter(dt => ['prometheus', 'loki', 'tempo'].includes(dt.value))
-  .map(dt => {
-  const icons = {
-    prometheus: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="11" width="4" height="10" rx="1" /><rect x="9" y="7" width="4" height="14" rx="1" /><rect x="15" y="3" width="4" height="18" rx="1" /></svg>,
-    loki: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18M3 12h18M3 17h18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
-    tempo: <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="6" strokeWidth="2" /><path d="M21 21l-4.3-4.3" strokeWidth="2" strokeLinecap="round" /></svg>,
-  }
-  return { ...dt, icon: icons[dt.value] || null }
-})
+import { API_BASE, GRAFANA_URL, MIMIR_PROMETHEUS_URL, LOKI_BASE, TEMPO_URL, VISIBILITY_OPTIONS, GRAFANA_REFRESH_INTERVALS } from '../utils/constants'
+import { GRAFANA_DATASOURCE_TYPES as DATASOURCE_TYPES } from '../utils/grafanaUtils'
+import { buildGrafanaLaunchUrl } from '../utils/grafanaLaunchUtils'
 // handlers moved into the component so they can access component state
 
 
@@ -125,42 +116,14 @@ export default function GrafanaPage() { // NOSONAR
 
   function confirmOpenInGrafana() {
     const { path } = grafanaConfirmDialog || {}
-    let rawPath = '/dashboards' // default fallback
-    if (typeof path === 'string' && path.trim()) {
-      const trimmedPath = path.trim()
-      if (trimmedPath.startsWith('http://') || trimmedPath.startsWith('https://')) {
-        try {
-          const absoluteUrl = new URL(trimmedPath)
-          rawPath = `${absoluteUrl.pathname || '/'}${absoluteUrl.search || ''}${absoluteUrl.hash || ''}`
-        } catch {
-          rawPath = '/dashboards'
-        }
-      } else {
-        rawPath = trimmedPath.startsWith('/') ? trimmedPath : `/${trimmedPath}`
-      }
-    }
-    
-    // Normalize: strip any /grafana prefix, ensure leading slash, fallback to dashboards
-    let normalizedPath = rawPath.replace(/^\/grafana(?=\/|$)/, '') || '/dashboards'
-    
-    // Ensure path starts with /
-    if (!normalizedPath.startsWith('/')) {
-      normalizedPath = `/${normalizedPath}`
-    }
-    
     const token = localStorage.getItem('auth_token')
+    const launchUrl = buildGrafanaLaunchUrl({
+      path,
+      token,
+      protocol: window.location.protocol,
+      hostname: window.location.hostname,
+    })
 
-    // ALWAYS use port 8080 (the authenticated proxy) - never allow direct Grafana access
-    const proxyOrigin = `${window.location.protocol}//${window.location.hostname}:8080`
-    const targetPath = normalizedPath
-    
-    // Always use bootstrap flow to set auth cookie before redirect
-    const launchUrl = token
-      ? `${proxyOrigin}/grafana/bootstrap?token=${encodeURIComponent(token)}&next=${encodeURI(targetPath)}`
-      : `${proxyOrigin}${targetPath}`
-
-    console.log(launchUrl)
-    // Open in new tab - user will be authenticated via proxy on port 8080
     window.open(launchUrl, '_blank', 'noopener,noreferrer')
     setGrafanaConfirmDialog({ isOpen: false, path: null })
   }

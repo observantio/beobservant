@@ -63,12 +63,7 @@ async def grafana_auth(
 @handle_route_errors()
 async def datasource_query(
     payload: Dict = Body(..., description="Grafana datasource query payload"),
-    current_user: TokenData = Depends(
-        require_any_permission_with_scope(
-            [Permission.QUERY_DATASOURCES, Permission.READ_DASHBOARDS, Permission.WRITE_DASHBOARDS],
-            "grafana",
-        )
-    ),
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.QUERY_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),
 ):
     """Proxy Grafana datasource queries after datasource access validation."""
@@ -233,7 +228,7 @@ async def get_datasources(
     team_id: Optional[str] = Query(None),
     show_hidden: bool = Query(False),
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.READ_DATASOURCES, Permission.READ_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")
     ),
     db: Session = Depends(get_db),
 ):
@@ -249,7 +244,7 @@ async def get_datasources(
 async def get_datasource_by_uid(
     uid: str,
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.READ_DATASOURCES, Permission.READ_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")
     ),
     db: Session = Depends(get_db),
 ):
@@ -267,7 +262,7 @@ async def get_datasource_by_uid(
 async def get_datasource_by_name(
     name: str,
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.READ_DATASOURCES, Permission.READ_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")
     ),
     db: Session = Depends(get_db),
 ):
@@ -291,7 +286,7 @@ async def create_datasource(
     visibility: str = Query("private"),
     shared_group_ids: Optional[List[str]] = Query(None),
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.CREATE_DATASOURCES, Permission.WRITE_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.CREATE_DATASOURCES, "grafana")
     ),
     db: Session = Depends(get_db),
 ):
@@ -319,7 +314,7 @@ async def update_datasource(
     visibility: Optional[str] = Query(None),
     shared_group_ids: Optional[List[str]] = Query(None),
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.UPDATE_DATASOURCES, Permission.WRITE_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.UPDATE_DATASOURCES, "grafana")
     ),
     db: Session = Depends(get_db),
 ):
@@ -340,7 +335,7 @@ async def update_datasource(
 async def delete_datasource(
     uid: str,
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.DELETE_DATASOURCES, Permission.DELETE_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.DELETE_DATASOURCES, "grafana")
     ),
     db: Session = Depends(get_db),
 ):
@@ -359,7 +354,7 @@ async def hide_datasource(
     uid: str,
     hidden: bool = Body(True, embed=True),
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.READ_DATASOURCES, Permission.READ_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")
     ),
     db: Session = Depends(get_db),
 ):
@@ -385,7 +380,7 @@ async def get_dashboard_filter_metadata(
 @router.get("/datasources/meta/filters")
 async def get_datasource_filter_metadata(
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.READ_DATASOURCES, Permission.READ_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")
     ),
     db: Session = Depends(get_db),
 ):
@@ -396,7 +391,7 @@ async def get_datasource_filter_metadata(
 @router.get("/folders", response_model=List[Folder])
 async def get_folders(
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.READ_FOLDERS, Permission.READ_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.READ_FOLDERS, "grafana")
     )
 ):
     return await grafana_service.get_folders()
@@ -406,7 +401,7 @@ async def get_folders(
 async def create_folder(
     title: str = Body(..., embed=True),
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.CREATE_FOLDERS, Permission.WRITE_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.CREATE_FOLDERS, "grafana")
     ),
 ):
     result = await grafana_service.create_folder(title)
@@ -419,7 +414,7 @@ async def create_folder(
 async def delete_folder(
     uid: str,
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.DELETE_FOLDERS, Permission.DELETE_DASHBOARDS], "grafana")
+        require_permission_with_scope(Permission.DELETE_FOLDERS, "grafana")
     ),
 ):
     success = await grafana_service.delete_folder(uid)

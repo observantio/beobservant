@@ -31,3 +31,5 @@ bcrypt==3.2.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 email-validator==2.1.0
+aiosmtplib==1.1.6
+tenacity==8.2.2

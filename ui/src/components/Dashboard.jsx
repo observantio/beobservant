@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
-import { fetchHealth, getAlerts, getLogVolume, getActiveAgents, searchDashboards, getSilences, getDatasources, fetchSystemMetrics, fetchTraceMetrics } from '../api'
+import { fetchHealth, getAlerts, getLogVolume, getActiveAgents, searchDashboards, getSilences, getDatasources, fetchSystemMetrics, fetchTraceMetrics, getTraceVolume } from '../api'
 import { Card, Badge, MetricCard, Spinner } from './ui'
+import LogVolume from '../components/loki/LogVolume'
+import TraceVolume from '../components/tempo/TraceVolume'
+import { getVolumeValues } from '../utils/lokiQueryUtils'
 import { useAuth } from '../contexts/AuthContext'
 import PropTypes from 'prop-types'
 
@@ -109,7 +112,10 @@ export default function Dashboard({ info }) {
   const [traceErrorCount, setTraceErrorCount] = useState(null)
   const [loadingTraces, setLoadingTraces] = useState(true)
   const [logVolume, setLogVolume] = useState(null)
+  const [logVolumeSeries, setLogVolumeSeries] = useState([])
   const [loadingLogs, setLoadingLogs] = useState(true)
+  const [tempoVolumeSeries, setTempoVolumeSeries] = useState([])
+  const [loadingTempoVolume, setLoadingTempoVolume] = useState(true)
   const [agentActivity, setAgentActivity] = useState([])
   const [loadingAgents, setLoadingAgents] = useState(true)
   const [dashboardCount, setDashboardCount] = useState(null)
@@ -142,7 +148,7 @@ export default function Dashboard({ info }) {
   })
   const [layoutOrder, setLayoutOrder] = useState(() => {
     const saved = localStorage.getItem('dashboard-layout-order')
-    return saved ? JSON.parse(saved) : [0, 1, 2]
+    return saved ? JSON.parse(saved) : [0, 1, 2, 3]
   })
 
   const computeLogTotal = (vol) => {
@@ -209,10 +215,37 @@ export default function Dashboard({ info }) {
           total = null
         }
         setLogVolume(total)
+        // store series for LogVolume sparkline
+        try {
+          const series = getVolumeValues(vol)
+          setLogVolumeSeries(series)
+        } catch (e) {
+          setLogVolumeSeries([])
+        }
       } catch {
         setLogVolume(null)
+        setLogVolumeSeries([])
       } finally {
         setLoadingLogs(false)
+      }
+    })()
+
+    ;(async () => {
+      try {
+        setLoadingTempoVolume(true)
+        const endUs = Date.now() * 1000 // ms -> µs
+        const startUs = endUs - (60 * 60 * 1000000) // last 1 hour in µs
+        const res = await getTraceVolume({ start: Math.floor(startUs), end: Math.floor(endUs), step: 60 })
+        try {
+          const series = getVolumeValues(res)
+          setTempoVolumeSeries(series)
+        } catch (e) {
+          setTempoVolumeSeries([])
+        }
+      } catch (e) {
+        setTempoVolumeSeries([])
+      } finally {
+        setLoadingTempoVolume(false)
       }
     })()
 
@@ -542,9 +575,29 @@ const layoutComponents = [
       id: 'active-otel-agents',
       title: "Active OTEL Agents",
       subtitle: "Metrics activity by API key (last 1 hour)",
-      className: "",
+      className: "lg:col-span-2",
       content: (
         <AgentActivityContent loading={loadingAgents} agents={agentActivity} />
+      )
+    },
+
+    {
+      id: 'data-volume',
+      className: "",
+      content: (
+        <div className="space-y-4">
+          {loadingLogs ? (
+            <div className="flex items-center gap-2 text-sre-text-muted"><Spinner size="sm" /> Loading logs...</div>
+          ) : (
+            <LogVolume volume={logVolumeSeries} />
+          )}
+
+          {loadingTempoVolume ? (
+            <div className="flex items-center gap-2 text-sre-text-muted"><Spinner size="sm" /> Loading traces...</div>
+          ) : (
+            <TraceVolume volume={tempoVolumeSeries} />
+          )}
+        </div>
       )
     },
 

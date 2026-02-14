@@ -63,10 +63,11 @@ async function requestWithHeaders(path, opts = {}, headers = {}) {
 
     globalThis.window.dispatchEvent(new CustomEvent('api-error', { detail: { status: res.status, body } }))
 
-    if (res.status === 401 && path !== '/api/auth/login') {
+    const isAuthLoginEndpoint = path === '/api/auth/login' || path === '/api/auth/oidc/exchange'
+    if (res.status === 401 && !isAuthLoginEndpoint) {
       authToken = null
       localStorage.removeItem('auth_token')
-      globalThis.window.location.href = '/login'
+      globalThis.window.location.href = '/#/login'
     }
 
     const err = new Error(body?.message || body?.detail || text || res.statusText)
@@ -95,6 +96,16 @@ async function request(path, opts = {}) {
   return requestWithHeaders(path, opts)
 }
 
+function requestJson(path, { method = 'POST', payload, headers = {}, ...opts } = {}) {
+  const body = payload === undefined ? undefined : JSON.stringify(payload)
+  return request(path, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...headers },
+    ...(body !== undefined ? { body } : {}),
+    ...opts
+  })
+}
+
 // Health & Info
 export async function fetchInfo() {
   return request(`/`)
@@ -108,19 +119,23 @@ export async function fetchSystemMetrics() {
 }
 
 export async function login(username, password) {
-  return request('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  })
+  return requestJson('/api/auth/login', { payload: { username, password } })
+}
+
+export async function getAuthMode() {
+  return request('/api/auth/mode')
+}
+
+export async function getOIDCAuthorizeUrl(redirect_uri, state, nonce) {
+  return requestJson('/api/auth/oidc/authorize-url', { payload: { redirect_uri, state, nonce } })
+}
+
+export async function exchangeOIDCCode(code, redirect_uri) {
+  return requestJson('/api/auth/oidc/exchange', { payload: { code, redirect_uri } })
 }
 
 export async function register(username, email, password, full_name) {
-  return request('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, email, password, full_name })
-  })
+  return requestJson('/api/auth/register', { payload: { username, email, password, full_name } })
 }
 
 export async function getCurrentUser() {
@@ -128,11 +143,7 @@ export async function getCurrentUser() {
 }
 
 export async function updateCurrentUser(updates) {
-  return request('/api/auth/me', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates)
-  })
+  return requestJson('/api/auth/me', { method: 'PUT', payload: updates })
 }
 
 export async function listApiKeys() {
@@ -140,19 +151,11 @@ export async function listApiKeys() {
 }
 
 export async function createApiKey(payload) {
-  return request('/api/auth/api-keys', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  return requestJson('/api/auth/api-keys', { payload })
 }
 
 export async function updateApiKey(keyId, payload) {
-  return request(`/api/auth/api-keys/${keyId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  return requestJson(`/api/auth/api-keys/${keyId}`, { method: 'PATCH', payload })
 }
 
 export async function deleteApiKey(keyId) {
@@ -166,19 +169,11 @@ export async function getUsers() {
 }
 
 export async function createUser(user) {
-  return request('/api/auth/users', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(user)
-  })
+  return requestJson('/api/auth/users', { payload: user })
 }
 
 export async function updateUser(userId, user) {
-  return request(`/api/auth/users/${userId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(user)
-  })
+  return requestJson(`/api/auth/users/${userId}`, { method: 'PUT', payload: user })
 }
 
 export async function deleteUser(userId) {
@@ -192,19 +187,11 @@ export async function getGroups() {
 }
 
 export async function createGroup(group) {
-  return request('/api/auth/groups', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(group)
-  })
+  return requestJson('/api/auth/groups', { payload: group })
 }
 
 export async function updateGroup(groupId, group) {
-  return request(`/api/auth/groups/${groupId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(group)
-  })
+  return requestJson(`/api/auth/groups/${groupId}`, { method: 'PUT', payload: group })
 }
 
 export async function deleteGroup(groupId) {
@@ -214,10 +201,9 @@ export async function deleteGroup(groupId) {
 }
 
 export async function updateGroupMembers(groupId, userIds) {
-  return request(`/api/auth/groups/${groupId}/members`, {
+  return requestJson(`/api/auth/groups/${groupId}/members`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_ids: userIds })
+    payload: { user_ids: userIds }
   })
 }
 
@@ -237,28 +223,25 @@ export async function fetchTraceMetrics(params = {}) {
   return request(path)
 }
 
+export async function getTraceVolume({ service, start, end, step = 300 } = {}) {
+  const params = new URLSearchParams()
+  if (service) params.append('service', service)
+  params.append('step', step.toString())
+  if (start) params.append('start', start)
+  if (end) params.append('end', end)
+  return request(`/api/tempo/volume?${params.toString()}`)
+}
+
 export async function updateUserPermissions(userId, permissions) {
-  return request(`/api/auth/users/${userId}/permissions`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(permissions)
-  })
+  return requestJson(`/api/auth/users/${userId}/permissions`, { method: 'PUT', payload: permissions })
 }
 
 export async function updateGroupPermissions(groupId, permissions) {
-  return request(`/api/auth/groups/${groupId}/permissions`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(permissions)
-  })
+  return requestJson(`/api/auth/groups/${groupId}/permissions`, { method: 'PUT', payload: permissions })
 }
 
 export async function updateUserPassword(userId, passwords) {
-  return request(`/api/auth/users/${userId}/password`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(passwords)
-  })
+  return requestJson(`/api/auth/users/${userId}/password`, { method: 'PUT', payload: passwords })
 }
 
 export async function getActiveAgents() {
@@ -279,11 +262,7 @@ export async function getSilences() {
   return request('/api/alertmanager/silences')
 }
 export async function createSilence(payload) {
-  return request('/api/alertmanager/silences', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  return requestJson('/api/alertmanager/silences', { payload })
 }
 export async function deleteSilence(silenceId) {
   return request(`/api/alertmanager/silences/${encodeURIComponent(silenceId)}`, {
@@ -291,11 +270,7 @@ export async function deleteSilence(silenceId) {
   })
 }
 export async function postAlerts(payload) {
-  return request('/api/alertmanager/alerts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  return requestJson('/api/alertmanager/alerts', { payload })
 }
 export async function deleteAlerts(filter) {
   return request(`/api/alertmanager/alerts?filter_labels=${encodeURIComponent(JSON.stringify(filter))}`, {
@@ -306,17 +281,12 @@ export async function getAlertRules() {
   return request('/api/alertmanager/rules')
 }
 export async function createAlertRule(payload) {
-  return request('/api/alertmanager/rules', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  return requestJson('/api/alertmanager/rules', { payload })
 }
 export async function updateAlertRule(ruleId, payload) {
-  return request(`/api/alertmanager/rules/${encodeURIComponent(ruleId)}`, {
+  return requestJson(`/api/alertmanager/rules/${encodeURIComponent(ruleId)}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    payload
   })
 }
 export async function deleteAlertRule(ruleId) {
@@ -333,17 +303,12 @@ export async function getNotificationChannels() {
   return request('/api/alertmanager/channels')
 }
 export async function createNotificationChannel(payload) {
-  return request('/api/alertmanager/channels', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  return requestJson('/api/alertmanager/channels', { payload })
 }
 export async function updateNotificationChannel(channelId, payload) {
-  return request(`/api/alertmanager/channels/${encodeURIComponent(channelId)}`, {
+  return requestJson(`/api/alertmanager/channels/${encodeURIComponent(channelId)}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    payload
   })
 }
 export async function deleteNotificationChannel(channelId) {
@@ -390,17 +355,13 @@ export async function getLabelValues(label, { query, start, end } = {}) {
   return request(`/api/loki/label/${encodeURIComponent(label)}/values${suffix}`)
 }
 export async function searchLogs({ pattern, labels, start, end, limit = 100 }) {
-  return request('/api/loki/search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pattern, labels, start, end, limit })
+  return requestJson('/api/loki/search', {
+    payload: { pattern, labels, start, end, limit }
   })
 }
 export async function filterLogs({ labels, filters, start, end, limit = 100 }) {
-  return request('/api/loki/filter', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ labels, filters, start, end, limit })
+  return requestJson('/api/loki/filter', {
+    payload: { labels, filters, start, end, limit }
   })
 }
 export async function aggregateLogs(query, { start, end, step = 60 } = {}) {
@@ -458,19 +419,11 @@ export async function getDashboard(uid) {
 }
 export async function createDashboard(payload, queryParams = '') {
   const url = queryParams ? `/api/grafana/dashboards?${queryParams}` : '/api/grafana/dashboards'
-  return request(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  return requestJson(url, { payload })
 }
 export async function updateDashboard(uid, payload, queryParams = '') {
   const url = queryParams ? `/api/grafana/dashboards/${encodeURIComponent(uid)}?${queryParams}` : `/api/grafana/dashboards/${encodeURIComponent(uid)}`
-  return request(url, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  return requestJson(url, { method: 'PUT', payload })
 }
 export async function deleteDashboard(uid) {
   return request(`/api/grafana/dashboards/${encodeURIComponent(uid)}`, {
@@ -478,10 +431,8 @@ export async function deleteDashboard(uid) {
   })
 }
 export async function toggleDashboardHidden(uid, hidden = true) {
-  return request(`/api/grafana/dashboards/${encodeURIComponent(uid)}/hide`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hidden })
+  return requestJson(`/api/grafana/dashboards/${encodeURIComponent(uid)}/hide`, {
+    payload: { hidden }
   })
 }
 export async function getDashboardFilterMeta() {
@@ -503,19 +454,11 @@ export async function getDatasource(uid) {
 }
 export async function createDatasource(payload, queryParams = '') {
   const url = queryParams ? `/api/grafana/datasources?${queryParams}` : '/api/grafana/datasources'
-  return request(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  return requestJson(url, { payload })
 }
 export async function updateDatasource(uid, payload, queryParams = '') {
   const url = queryParams ? `/api/grafana/datasources/${encodeURIComponent(uid)}?${queryParams}` : `/api/grafana/datasources/${encodeURIComponent(uid)}`
-  return request(url, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  return requestJson(url, { method: 'PUT', payload })
 }
 export async function deleteDatasource(uid) {
   return request(`/api/grafana/datasources/${encodeURIComponent(uid)}`, {
@@ -523,10 +466,8 @@ export async function deleteDatasource(uid) {
   })
 }
 export async function toggleDatasourceHidden(uid, hidden = true) {
-  return request(`/api/grafana/datasources/${encodeURIComponent(uid)}/hide`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hidden })
+  return requestJson(`/api/grafana/datasources/${encodeURIComponent(uid)}/hide`, {
+    payload: { hidden }
   })
 }
 export async function getDatasourceFilterMeta() {
@@ -537,11 +478,7 @@ export async function getFolders() {
   return request('/api/grafana/folders')
 }
 export async function createFolder(title) {
-  return request('/api/grafana/folders', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title })
-  })
+  return requestJson('/api/grafana/folders', { payload: { title } })
 }
 export async function deleteFolder(uid) {
   return request(`/api/grafana/folders/${encodeURIComponent(uid)}`, {

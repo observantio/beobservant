@@ -220,7 +220,7 @@ export function Input({ label, error, helperText, className, ...props }) {
 }
 
 Input.propTypes = {
-  label: PropTypes.node,
+  label: PropTypes.string,
   error: PropTypes.string,
   helperText: PropTypes.string,
   className: PropTypes.string,
@@ -261,7 +261,7 @@ export function Select({ label, error, helperText, children, className, ...props
 }
 
 Select.propTypes = {
-  label: PropTypes.node,
+  label: PropTypes.string,
   error: PropTypes.string,
   helperText: PropTypes.string,
   children: PropTypes.node.isRequired,

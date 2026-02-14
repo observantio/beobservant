@@ -1,11 +1,19 @@
 import { useState } from 'react'
 import { Modal, Input, Button, Checkbox } from '../ui'
 import { useToast } from '../../contexts/ToastContext'
+import { useAuth } from '../../contexts/AuthContext'
 import HelpTooltip from '../HelpTooltip'
 import * as api from '../../api'
+import {
+  USERNAME_REGEX,
+  generateStrongPassword,
+  validateCreateUserForm,
+  buildCreateUserPayload,
+} from './createUserFormUtils'
 
 export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [] }) {
   const toast = useToast()
+  const { authMode } = useAuth()
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -17,6 +25,9 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
   const [groupSearchQuery, setGroupSearchQuery] = useState('')
+  const isOidcEnabled = Boolean(authMode?.oidc_enabled)
+  const isPasswordEnabled = Boolean(authMode?.password_enabled)
+  const requirePassword = !isOidcEnabled || isPasswordEnabled
 
   // Filter and limit groups
   const filteredGroups = groups.filter(group => {
@@ -27,19 +38,9 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
   const displayedGroups = filteredGroups.slice(0, 5)
   const hasMoreGroups = filteredGroups.length > 5
 
-  const generatePassword = () => {
-    const length = 16;
-    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
-    let password = '';
-    for (let i = 0; i < length; i++) {
-      password += charset.charAt(Math.floor(Math.random() * charset.length));
-    }
-    return password;
-  };
-
   const handleGeneratePassword = () => {
-    const newPassword = generatePassword();
-    setFormData({ ...formData, password: newPassword });
+    const newPassword = generateStrongPassword()
+    setFormData({ ...formData, password: newPassword })
     toast.success('Password generated successfully');
   };
 
@@ -55,25 +56,15 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
   const handleSubmit = async (e) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault()
 
-    // Client-side validation
-    const email = (formData.email || '').trim()
-    const password = formData.password || ''
-    const usernameRaw = (formData.username || '').trim()
-    const username = usernameRaw.toLowerCase()
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    const usernameRegex = /^[a-z0-9._-]{3,50}$/
-    const newErrors = {}
-    if (!username) newErrors.username = 'Please enter a username'
-    else if (!usernameRegex.test(username)) newErrors.username = 'Username must be 3-50 chars and use a-z, 0-9, ., _ or - (no spaces)'
-    if (!emailRegex.test(email)) newErrors.email = 'Please enter a valid email address'
-    if (password.length < 8) newErrors.password = 'Password must be at least 8 characters'
+    const { normalized, errors: newErrors } = validateCreateUserForm(formData, { requirePassword })
     if (Object.keys(newErrors).length) {
       setErrors(newErrors)
       return
     }
 
-    // Ensure username sent to API is normalized
-    const payload = { ...formData, username: username }
+    const payload = buildCreateUserPayload(normalized, {
+      includePassword: Boolean(normalized.password),
+    })
 
 
     setLoading(true)
@@ -163,8 +154,7 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
                   setFormData({ ...formData, username: lower })
                   // live validation
                   if (errors.username) {
-                    const usernameRegex = /^[a-z0-9._-]{3,50}$/
-                    if (lower && usernameRegex.test(lower)) {
+                    if (lower && USERNAME_REGEX.test(lower)) {
                       const { username, ...rest } = errors
                       setErrors(rest)
                     }
@@ -210,9 +200,11 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
                         setErrors(rest)
                       }
                     }}
-                    required
+                    required={requirePassword}
                     error={errors.password}
-                    helperText={!errors.password && (formData.password || '').length < 8 ? `${8 - (formData.password || '').length} characters to go` : undefined}
+                    helperText={!errors.password && (formData.password || '').length < 8 && requirePassword
+                      ? `${8 - (formData.password || '').length} characters to go`
+                      : undefined}
                     className="w-full"
                   />
                 </div>
@@ -245,6 +237,11 @@ export default function CreateUserModal({ isOpen, onClose, onCreated, groups = [
             </div>
             <HelpTooltip text="Secure password for account access. Must be at least 8 characters. Use the generate button for a strong random password." />
           </div>
+          {isOidcEnabled && !isPasswordEnabled && (
+            <p className="text-xs text-sre-text-muted">
+              OIDC is enabled and password login is disabled. Leave password blank to create an externally managed user.
+            </p>
+          )}
         </div>
 
         <div className="flex items-start gap-2">

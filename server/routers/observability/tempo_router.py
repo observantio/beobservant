@@ -112,3 +112,21 @@ async def get_trace_metrics(
     tenant_id = resolve_tenant_id(request, current_user)
     metrics = await tempo_service.get_trace_metrics(service, start, end, tenant_id=tenant_id)
     return metrics
+
+
+@router.get(
+    "/volume",
+    summary="Trace volume over time",
+    description="Return trace counts over time for the given time range and step (response shape is compatible with Loki volume)."
+)
+async def get_trace_volume(
+    request: Request,
+    service: Optional[str] = Query(None, description="Service name filter"),
+    start: Optional[int] = Query(None, description="Start time in microseconds"),
+    end: Optional[int] = Query(None, description="End time in microseconds"),
+    step: int = Query(300, ge=1, description="Resolution step in seconds"),
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
+) -> dict:
+    tenant_id = resolve_tenant_id(request, current_user)
+    result = await tempo_service.get_trace_volume(service=service, start=start, end=end, step=step, tenant_id=tenant_id)
+    return result

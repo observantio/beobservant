@@ -20,6 +20,7 @@ const LokiPage = lazy(() => import('./pages/LokiPage'))
 const AlertManagerPage = lazy(() => import('./pages/AlertManagerPage'))
 const GrafanaPage = lazy(() => import('./pages/GrafanaPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
+const OIDCCallbackPage = lazy(() => import('./pages/OIDCCallbackPage'))
 const UsersPage = lazy(() => import('./pages/UsersPage'))
 const GroupsPage = lazy(() => import('./pages/GroupsPage'))
 const ApiKeyPage = lazy(() => import('./pages/ApiKeyPage'))
@@ -30,6 +31,10 @@ function PageLoader() {
       <Spinner size="lg" />
     </div>
   )
+}
+
+function AccessDenied() {
+  return <div className="p-6 text-center text-sre-text-muted">You don't have access to this page.</div>
 }
 
 function ProtectedRoute({ children }) {
@@ -49,6 +54,23 @@ function ProtectedRoute({ children }) {
 
 ProtectedRoute.propTypes = {
   children: PropTypes.node
+}
+
+function ProtectedPermissionRoute({ children, permissions }) {
+  return (
+    <ProtectedRoute>
+      {permissions?.length > 0 ? (
+        <PermissionGuard any={permissions} fallback={<AccessDenied />}>
+          {children}
+        </PermissionGuard>
+      ) : children}
+    </ProtectedRoute>
+  )
+}
+
+ProtectedPermissionRoute.propTypes = {
+  children: PropTypes.node,
+  permissions: PropTypes.arrayOf(PropTypes.string)
 }
 
 function AppContent() {
@@ -76,6 +98,17 @@ function AppContent() {
     await refreshUser()
   }
 
+  const protectedRoutes = [
+    { path: '/', element: <Dashboard info={info} /> },
+    { path: '/tempo', element: <TempoPage />, permissions: ['read:traces'] },
+    { path: '/loki', element: <LokiPage />, permissions: ['read:logs'] },
+    { path: '/alertmanager', element: <AlertManagerPage />, permissions: ['read:alerts'] },
+    { path: '/grafana', element: <GrafanaPage />, permissions: ['read:dashboards'] },
+    { path: '/users', element: <UsersPage /> },
+    { path: '/groups', element: <GroupsPage /> },
+    { path: '/apikey', element: <ApiKeyPage /> }
+  ]
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-sre-bg via-sre-bg-alt to-sre-bg">
       {isAuthenticated && <Header />}
@@ -91,54 +124,18 @@ function AppContent() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/" element={
-              <ProtectedRoute>
-                <Dashboard info={info} />
-              </ProtectedRoute>
-            } />
-            <Route path="/tempo" element={
-              <ProtectedRoute>
-                <PermissionGuard any={["read:traces"]} fallback={<div className="p-6 text-center text-sre-text-muted">You don't have access to this page.</div>}>
-                  <TempoPage />
-                </PermissionGuard>
-              </ProtectedRoute>
-            } />
-            <Route path="/loki" element={
-              <ProtectedRoute>
-                <PermissionGuard any={["read:logs"]} fallback={<div className="p-6 text-center text-sre-text-muted">You don't have access to this page.</div>}>
-                  <LokiPage />
-                </PermissionGuard>
-              </ProtectedRoute>
-            } />
-            <Route path="/alertmanager" element={
-              <ProtectedRoute>
-                <PermissionGuard any={["read:alerts"]} fallback={<div className="p-6 text-center text-sre-text-muted">You don't have access to this page.</div>}>
-                  <AlertManagerPage />
-                </PermissionGuard>
-              </ProtectedRoute>
-            } />
-            <Route path="/grafana" element={
-              <ProtectedRoute>
-                <PermissionGuard any={["read:dashboards"]} fallback={<div className="p-6 text-center text-sre-text-muted">You don't have access to this page.</div>}>
-                  <GrafanaPage />
-                </PermissionGuard>
-              </ProtectedRoute>
-            } />
-            <Route path="/users" element={
-              <ProtectedRoute>
-                <UsersPage />
-              </ProtectedRoute>
-            } />
-            <Route path="/groups" element={
-              <ProtectedRoute>
-                <GroupsPage />
-              </ProtectedRoute>
-            } />
-            <Route path="/apikey" element={
-              <ProtectedRoute>
-                <ApiKeyPage />
-              </ProtectedRoute>
-            } />
+            <Route path="/auth/callback" element={<OIDCCallbackPage />} />
+            {protectedRoutes.map((route) => (
+              <Route
+                key={route.path}
+                path={route.path}
+                element={(
+                  <ProtectedPermissionRoute permissions={route.permissions}>
+                    {route.element}
+                  </ProtectedPermissionRoute>
+                )}
+              />
+            ))}
           </Routes>
         </Suspense>
       </main>

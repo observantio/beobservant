@@ -1,68 +1,89 @@
-# User Guide
+# Be Observant User Guide
 
-## 1) Sign in
+Welcome to Be Observant, your observability platform. This guide walks you through authentication, core features, and best practices for effective system monitoring.
 
-1. Open `http://localhost:8080/grafana/` (or your hosted URL).
-2. Log in with your beObservant user.
-3. If first run, use the bootstrap admin from environment (`DEFAULT_ADMIN_USERNAME` / `DEFAULT_ADMIN_PASSWORD`).
+## Authentication and Access
 
-## 2) Core areas
+### Signing In
 
-- **Dashboards**: View/create/update dashboards based on your permissions.
-- **Datasources**: Query and manage allowed datasources.
-- **Logs (Loki)**: Run log queries and filtering.
-- **Traces (Tempo)**: Search traces and inspect spans.
-- **Alerts (Alertmanager)**: Review alerts/silences and manage rules/channels.
-- **Users/Groups/API Keys**: Admin area for access management.
+1. Navigate to `http://localhost:8080/grafana/` (or your deployed URL).
+2. **OIDC Authentication**: If configured (Keycloak/Microsoft SSO), select **Continue with SSO** and authenticate via your identity provider.
+3. **Password Authentication**: If enabled, use your Be Observant username and password.
+4. **Initial Setup**: For first-time access, use the bootstrap admin credentials from environment variables (`DEFAULT_ADMIN_USERNAME` / `DEFAULT_ADMIN_PASSWORD`).
 
-## 3) Visibility model
+**Note**: When OIDC is active and password fallback is disabled, self-registration is blocked. Users are provisioned based on email claims from OIDC.
 
-Most shared resources use one of:
+## Core Platform Features
 
-- `private`: only owner
-- `group`: owner + selected groups
-- `tenant`: everyone in tenant
+Be Observant integrates multiple observability tools into a unified interface:
 
-If you cannot see a resource, check its visibility and your group membership.
+- **Dashboards**: Create, view, and manage Grafana dashboards with role-based permissions
+- **Datasources**: Configure and query data sources for metrics, logs, and traces
+- **Logs (Loki)**: Execute log queries with advanced filtering and search capabilities
+- **Traces (Tempo)**: Search and analyze distributed traces and spans
+- **Alerts (Alertmanager)**: Manage alert rules, silences, and notification channels
+- **Access Management**: Administer users, groups, and API keys for secure access control
 
-## 4) OTLP ingestion tokens
+## Resource Visibility Model
 
-For app/agent ingest through the gateway (`:4320`):
+Resources in Be Observant follow a hierarchical visibility system:
 
-- Send token as header: `x-otlp-token: <token>`
-- Gateway validates token and maps tenant/org automatically.
+- **`private`**: Accessible only to the resource owner
+- **`group`**: Shared with the owner and designated user groups
+- **`tenant`**: Available to all users within the tenant organization
 
-## 5) Common operations
+If a resource is inaccessible, verify its visibility settings and your group memberships.
 
-### Create a dashboard
+## OTLP Data Ingestion
 
-1. Go to dashboards.
-2. Create/save dashboard.
-3. Set visibility (`private`, `group`, `tenant`).
-4. For `group`, choose one or more groups.
+For application and agent telemetry ingestion via the OTLP gateway (`:4320`):
 
-### Silence noisy alerts
+- Include the authentication token in requests: `x-otlp-token: <token>`
+- The gateway validates the token and automatically maps requests to the appropriate tenant and organization.
 
-1. Go to silences.
-2. Create silence with matchers and time range.
-3. Choose visibility and optional shared groups.
+## Common Workflows
 
-### Manage API keys
+### Creating a Dashboard
 
-1. Open API keys page.
-2. Create key for service/user workflows.
-3. Disable or delete old keys immediately.
+1. Navigate to the Dashboards section
+2. Create a new dashboard or modify an existing one
+3. Configure panels, queries, and visualizations
+4. Set visibility level (`private`, `group`, or `tenant`)
+5. For group visibility, select applicable user groups
 
-## 6) Troubleshooting
+### Managing Alert Silences
 
-- **401/403 errors**: token expired, missing permission, or wrong tenant scope.
-- **No data in dashboards**: datasource visibility/ownership mismatch or backend unavailable.
-- **Missing alerts/logs/traces**: verify OTLP token, tenant header mapping, and backend health.
-- **Webhook/gateway rejected**: check allowlist and shared token configuration.
+1. Access the Silences interface
+2. Create a new silence with appropriate matchers and time range
+3. Configure visibility and optional group sharing
+4. Monitor and extend silences as needed
 
-## 7) Best practices
+### API Key Management
 
-- Use least privilege permissions.
-- Prefer group-level access over tenant-wide when possible.
-- Rotate API keys and OTLP tokens regularly.
-- Keep default credentials disabled in hosted/production environments.
+1. Visit the API Keys management page
+2. Generate new keys for automated workflows or service accounts
+3. Immediately disable or delete unused keys to maintain security
+
+## Troubleshooting Guide
+
+### Common Issues
+
+- **Authentication Errors (401/403)**: Check token expiration, permissions, or tenant scope configuration
+- **Missing Dashboard Data**: Verify datasource permissions and backend service availability
+- **Absent Logs/Traces/Alerts**: Confirm OTLP token validity, tenant mapping, and service health
+- **Rejected Webhooks/Gateway Requests**: Review IP allowlists and token configurations
+
+### Diagnostic Steps
+
+1. Check service logs: `docker compose logs <service>`
+2. Verify API health: `curl http://localhost:4319/health`
+3. Validate configuration in `.env` file
+4. Review network connectivity and firewall rules
+
+## Best Practices
+
+- **Security**: Implement least-privilege access controls
+- **Access Control**: Prefer group-level sharing over tenant-wide visibility when possible
+- **Key Rotation**: Regularly rotate API keys and OTLP tokens
+- **Environment Hygiene**: Disable default credentials in production deployments
+- **Monitoring**: Set up alerts for critical system metrics and service health

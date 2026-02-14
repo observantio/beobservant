@@ -274,6 +274,52 @@ class TempoService:
             "service": service
         }
 
+    async def get_trace_volume(
+        self,
+        service: Optional[str] = None,
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        step: int = 300,
+        tenant_id: str = config.DEFAULT_ORG_ID
+    ) -> Dict[str, Any]:
+        """Return trace counts over time as a Prometheus-style matrix response.
+
+        Time range is in microseconds (matches other Tempo endpoints).
+        Buckets the range into `step`-second intervals and counts traces in
+        each bucket using `count_traces`. Returns shape compatible with the
+        frontend `getVolumeValues` helper (i.e. data.result[0].values).
+        """
+        import time
+
+        now_us = int(time.time() * 1_000_000)
+        if end is None:
+            end = now_us
+        if start is None:
+            # default to last 1 hour
+            start = end - (60 * 60 * 1000000)
+
+        if step <= 0:
+            step = 300
+
+        # limit number of buckets to avoid excessive load
+        max_buckets = 240
+        total_seconds = max(0, int((end - start) / 1_000_000))
+        num_buckets = int(max(1, min(max_buckets, (total_seconds + step - 1) // step)))
+
+        values = []
+        for i in range(num_buckets):
+            bucket_start = int(start + i * step * 1_000_000)
+            bucket_end = int(min(end, bucket_start + step * 1_000_000))
+            try:
+                q = TraceQuery(service=service, start=bucket_start, end=bucket_end, limit=1000)
+                cnt = await self.count_traces(q, tenant_id=tenant_id)
+            except Exception:
+                cnt = 0
+            ts_seconds = int(bucket_start / 1_000_000)
+            values.append([ts_seconds, str(cnt)])
+
+        return {"data": {"result": [{"metric": {}, "values": values}]}}
+
     async def count_traces(
         self,
         query: TraceQuery,

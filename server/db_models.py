@@ -103,6 +103,8 @@ class User(Base):
     is_superuser = Column(Boolean, default=False, nullable=False)
     needs_password_change = Column(Boolean, default=False, nullable=False)
     grafana_user_id = Column(Integer, nullable=True, index=True)  
+    auth_provider = Column(String(50), nullable=False, default="local", index=True)
+    external_subject = Column(String(255), nullable=True, unique=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     last_login = Column(DateTime)

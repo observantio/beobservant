@@ -14,31 +14,17 @@ import ChannelEditor from '../components/alertmanager/ChannelEditor'
 import SilenceForm from '../components/alertmanager/SilenceForm'
 import { ALERT_SEVERITY_OPTIONS } from '../utils/constants'
 import { useAuth } from '../contexts/AuthContext'
-
-function normalizeChannelPayload(channelData) {
-  const normalized = { ...channelData, config: channelData.config || {} }
-
-  const mappings = {
-    email: { smtpHost: 'smtp_host', smtpPort: 'smtp_port' },
-    slack: { webhookUrl: 'webhook_url' },
-    teams: { webhookUrl: 'webhook_url' },
-    pagerduty: { integrationKey: 'routing_key' },
-    opsgenie: { apiKey: 'api_key', apiUrl: 'api_url' }
-  }
-
-  const map = mappings[normalized.type]
-  if (map) {
-    for (const [from, to] of Object.entries(map)) {
-      if (normalized.config[from] && !normalized.config[to]) {
-        normalized.config[to] = normalized.config[from]
-      }
-    }
-  }
-
-  return normalized
-}
-
-const EMPTY_CONFIRM = { isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Delete', variant: 'danger' }
+import {
+  normalizeChannelPayload,
+  EMPTY_CONFIRM_DIALOG,
+  readMetricOrderFromStorage,
+  writeMetricOrderToStorage,
+} from '../utils/alertmanagerChannelUtils'
+import {
+  shouldIgnoreAlertManagerError,
+  normalizeRuleForUI,
+  buildRulePayload,
+} from '../utils/alertmanagerRuleUtils'
 
 export default function AlertManagerPage() {
   const { user } = useAuth()
@@ -56,37 +42,18 @@ export default function AlertManagerPage() {
   const [editingRule, setEditingRule] = useState(null)
   const [editingChannel, setEditingChannel] = useState(null)
   const [filterSeverity, setFilterSeverity] = useState('all')
-  const [confirmDialog, setConfirmDialog] = useState(EMPTY_CONFIRM)
+  const [confirmDialog, setConfirmDialog] = useState(EMPTY_CONFIRM_DIALOG)
 
   const [testDialog, setTestDialog] = useState({ isOpen: false, title: '', message: '' })
 
-  const defaultMetricKeys = ['activeAlerts','alertRules','channels','silences']
-  const [metricOrder, setMetricOrder] = useState(() => {
-    try {
-      const raw = localStorage.getItem('alertmanager-metric-order')
-      if (!raw) return defaultMetricKeys
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return defaultMetricKeys
-      const setp = new Set(parsed)
-      if (!defaultMetricKeys.every(k => setp.has(k))) return defaultMetricKeys
-      return parsed
-    } catch (e) {
-      return defaultMetricKeys
-    }
-  })
+  const [metricOrder, setMetricOrder] = useState(() => readMetricOrderFromStorage())
 
   useEffect(() => {
-    try {
-      localStorage.setItem('alertmanager-metric-order', JSON.stringify(metricOrder))
-    } catch (e) {
-      // Silently handle localStorage failure
-    }
+    writeMetricOrderToStorage(metricOrder)
   }, [metricOrder])
 
   function handleApiError(e) {
-    if (!e) return
-    if (e.status === 403) return
-    if (e.message?.includes('Error sending test notification')) return
+    if (shouldIgnoreAlertManagerError(e)) return
     setError(e.message || String(e))
   }
 
@@ -102,7 +69,7 @@ export default function AlertManagerPage() {
       ])
       setAlerts(alertsData)
       setSilences(silencesData)
-      setRules(rulesData)
+      setRules(Array.isArray(rulesData) ? rulesData.map(normalizeRuleForUI) : [])
       setChannels(channelsData)
     } catch (e) {
       handleApiError(e)
@@ -116,11 +83,13 @@ export default function AlertManagerPage() {
   }, [])
 
   async function handleSaveRule(ruleData) {
+    const payload = buildRulePayload(ruleData)
+
     try {
       if (editingRule) {
-        await updateAlertRule(editingRule.id, ruleData)
+        await updateAlertRule(editingRule.id, payload)
       } else {
-        await createAlertRule(ruleData)
+        await createAlertRule(payload)
       }
       await loadData()
       return true
@@ -141,10 +110,10 @@ export default function AlertManagerPage() {
         try {
           await deleteAlertRule(ruleId)
           await loadData()
-          setConfirmDialog(EMPTY_CONFIRM)
+          setConfirmDialog(EMPTY_CONFIRM_DIALOG)
         } catch (e) {
           handleApiError(e)
-          setConfirmDialog(EMPTY_CONFIRM)
+          setConfirmDialog(EMPTY_CONFIRM_DIALOG)
         }
       }
     })
@@ -177,10 +146,10 @@ export default function AlertManagerPage() {
         try {
           await deleteNotificationChannel(channelId)
           await loadData()
-          setConfirmDialog(EMPTY_CONFIRM)
+          setConfirmDialog(EMPTY_CONFIRM_DIALOG)
         } catch (e) {
           handleApiError(e)
-          setConfirmDialog(EMPTY_CONFIRM)
+          setConfirmDialog(EMPTY_CONFIRM_DIALOG)
         }
       }
     })
@@ -225,10 +194,10 @@ export default function AlertManagerPage() {
         try {
           await deleteSilence(silenceId)
           await loadData()
-          setConfirmDialog(EMPTY_CONFIRM)
+          setConfirmDialog(EMPTY_CONFIRM_DIALOG)
         } catch (e) {
           handleApiError(e)
-          setConfirmDialog(EMPTY_CONFIRM)
+          setConfirmDialog(EMPTY_CONFIRM_DIALOG)
         }
       }
     })
@@ -731,10 +700,18 @@ export default function AlertManagerPage() {
 
                                 <div className="space-y-2 text-sm text-sre-text-muted">
                                   {channel.type === 'email' && channel.config?.to && (
-                                    <div className="flex items-center gap-2">
-                                      <span className="material-icons text-sm">email</span>
-                                      <span>To: {channel.config.to}</span>
-                                    </div>
+                                    <>
+                                      <div className="flex items-center gap-2">
+                                        <span className="material-icons text-sm">email</span>
+                                        <span>To: {channel.config.to}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="material-icons text-sm">outgoing_mail</span>
+                                        <span>
+                                          Provider: {String(channel.config.email_provider || channel.config.emailProvider || 'smtp').toUpperCase()}
+                                        </span>
+                                      </div>
+                                    </>
                                   )}
                                   {channel.type === 'slack' && channel.config?.channel && (
                                     <div className="flex items-center gap-2">
@@ -760,12 +737,7 @@ export default function AlertManagerPage() {
                                       <span>PagerDuty Integration</span>
                                     </div>
                                   )}
-                                  {channel.type === 'opsgenie' && (
-                                    <div className="flex items-center gap-2">
-                                      <span className="material-icons text-sm">support</span>
-                                      <span>Opsgenie Integration</span>
-                                    </div>
-                                  )}
+
                                 </div>
                               </div>
 
@@ -1025,7 +997,7 @@ export default function AlertManagerPage() {
           title={confirmDialog.title}
           message={confirmDialog.message}
           onConfirm={confirmDialog.onConfirm || (() => {})}
-          onCancel={() => setConfirmDialog(EMPTY_CONFIRM)}
+          onCancel={() => setConfirmDialog(EMPTY_CONFIRM_DIALOG)}
           confirmText={confirmDialog.confirmText}
           variant={confirmDialog.variant}
         />
