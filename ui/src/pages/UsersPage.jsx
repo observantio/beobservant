@@ -10,7 +10,7 @@ import HelpTooltip from '../components/HelpTooltip'
 import TwoFactorModal from '../components/TwoFactorModal'
 import * as api from '../api'
 import { USER_ROLES } from '../utils/constants'
-import { getRoleVariant, getRoleBorderColor, getUserInitials } from '../components/users/userUiUtils'
+import { getRoleVariant, getUserInitials } from '../components/users/userUiUtils'
 
 export default function UsersPage() {
   const toast = useToast();
@@ -195,22 +195,7 @@ export default function UsersPage() {
         </div>
       </Card>
 
-      {/* Role Legend */}
-      <div className="flex items-center gap-4 mb-6 text-sm">
-        <span className="font-medium text-sre-text">Role Legend:</span>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 border-2 border-red-500 rounded"></div>
-          <span className="text-sre-text">Admin</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 border-2 border-yellow-500 rounded"></div>
-          <span className="text-sre-text">User</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 border-2 border-green-500 rounded"></div>
-          <span className="text-sre-text">Viewer</span>
-        </div>
-      </div>
+
 
       <Card
         title="Users"
@@ -234,9 +219,8 @@ export default function UsersPage() {
                 filteredUsers.map((u) => {
                 const roleVariant = getRoleVariant(u.role)
                 const initials = getUserInitials(u)
-                const roleBorderColor = getRoleBorderColor(u.role)
                 return (
-                <Card key={u.id} className={`p-0 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 ${roleBorderColor} hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm rounded-lg group`}>
+                <Card key={u.id} className={`p-0 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border border-sre-border hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm rounded-lg group`}>
                   <div className="p-6">
                     <div className="flex items-start gap-4 mb-4">
                       <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-sre-primary/20 to-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold border border-sre-border/50 flex-shrink-0">
