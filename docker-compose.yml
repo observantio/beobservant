@@ -95,7 +95,7 @@ services:
     volumes:
       - ./configs/otlp-gateway.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      beobservant:
+      gateway-auth:
         condition: service_healthy
       loki:
         condition: service_started
@@ -113,6 +113,27 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+  gateway-auth:
+    build:
+      context: ./gateway-auth-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: "postgresql://beobservant:${POSTGRES_PASSWORD:-1234567890}@postgres:5432/beobservant"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      GATEWAY_IP_ALLOWLIST: "${GATEWAY_IP_ALLOWLIST:-}"
+      GATEWAY_RATE_LIMIT_PER_MINUTE: "${GATEWAY_RATE_LIMIT_PER_MINUTE:-300}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [obs]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4321/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   otel-agent:
     image: otel/opentelemetry-collector-contrib:0.145.0

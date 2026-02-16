@@ -10,6 +10,9 @@ from config import config
 from database import get_db_session
 from db_models import Tenant, User, Group, AlertIncident as AlertIncidentDB
 from models.access.auth_models import TokenData, Role
+from services.common.url_utils import is_safe_http_url
+
+ALLOWED_JIRA_AUTH_MODES = {"api_token", "bearer", "sso"}
 
 
 def _tenant_id_from_scope_header(scoped_header: Optional[str]) -> str:
@@ -85,6 +88,20 @@ def _save_tenant_jira_config(
     api_token: Optional[str],
     bearer: Optional[str],
 ) -> Dict[str, object]:
+    normalized_url = str(base_url or "").strip() or None
+    normalized_email = str(email or "").strip() or None
+    normalized_api_token = str(api_token or "").strip() or None
+    normalized_bearer = str(bearer or "").strip() or None
+
+    if enabled:
+        if not is_safe_http_url(normalized_url):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Jira base URL is missing or invalid")
+        if not (normalized_bearer or (normalized_email and normalized_api_token)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Jira credentials are incomplete; provide bearer token or email + api token",
+            )
+
     with get_db_session() as db:
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         if not tenant:
@@ -95,10 +112,10 @@ def _save_tenant_jira_config(
 
         jira_cfg = {
             "enabled": bool(enabled),
-            "base_url": str(base_url or "").strip() or None,
-            "email": str(email or "").strip() or None,
-            "api_token": _encrypt_tenant_secret(str(api_token or "").strip() or None),
-            "bearer": _encrypt_tenant_secret(str(bearer or "").strip() or None),
+            "base_url": normalized_url,
+            "email": normalized_email,
+            "api_token": _encrypt_tenant_secret(normalized_api_token),
+            "bearer": _encrypt_tenant_secret(normalized_bearer),
         }
         settings["jira"] = jira_cfg
         tenant.settings = settings
@@ -114,7 +131,11 @@ def _save_tenant_jira_config(
 
 def _get_effective_jira_credentials(tenant_id: str) -> Dict[str, Optional[str]]:
     tenant_cfg = _load_tenant_jira_config(tenant_id)
-    if tenant_cfg.get("enabled") and tenant_cfg.get("base_url") and (tenant_cfg.get("api_token") or tenant_cfg.get("bearer")):
+    if (
+        tenant_cfg.get("enabled")
+        and is_safe_http_url(tenant_cfg.get("base_url"))
+        and (tenant_cfg.get("bearer") or (tenant_cfg.get("email") and tenant_cfg.get("api_token")))
+    ):
         return tenant_cfg
     return {}
 
@@ -135,6 +156,61 @@ def _normalize_visibility(value: Optional[str], default_value: str = "private") 
     if normalized == "public":
         return "tenant"
     return default_value
+
+
+def _is_jira_sso_available() -> bool:
+    if config.AUTH_PROVIDER != "keycloak":
+        return False
+    return bool(config.OIDC_ISSUER_URL and config.OIDC_CLIENT_ID)
+
+
+def _normalize_jira_auth_mode(value: Optional[str]) -> str:
+    mode = str(value or "api_token").strip().lower()
+    if mode not in ALLOWED_JIRA_AUTH_MODES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported Jira authMode '{mode}'",
+        )
+    if mode == "sso" and not _is_jira_sso_available():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Jira SSO mode requires OIDC-enabled authentication",
+        )
+    return mode
+
+
+def _validate_jira_credentials(
+    *,
+    base_url: Optional[str],
+    auth_mode: str,
+    email: Optional[str],
+    api_token: Optional[str],
+    bearer_token: Optional[str],
+) -> None:
+    normalized_url = str(base_url or "").strip()
+    if not is_safe_http_url(normalized_url):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Jira base URL is missing or invalid",
+        )
+
+    if auth_mode == "api_token":
+        if not str(email or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Jira email is required for api_token auth mode",
+            )
+        if not str(api_token or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Jira apiToken is required for api_token auth mode",
+            )
+    elif auth_mode in {"bearer", "sso"}:
+        if not str(bearer_token or "").strip():
+            detail = "Jira bearerToken is required for bearer auth mode"
+            if auth_mode == "sso":
+                detail = "Jira SSO mode requires a bearerToken"
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
 def _load_tenant_jira_integrations(tenant_id: str) -> List[Dict[str, object]]:
@@ -251,6 +327,7 @@ def _resolve_jira_integration(
 
 def _jira_integration_credentials(item: Dict[str, object]) -> Dict[str, Optional[str]]:
     return {
+        "auth_mode": _normalize_jira_auth_mode(item.get("authMode")),
         "base_url": str(item.get("baseUrl") or "").strip() or None,
         "email": str(item.get("email") or "").strip() or None,
         "api_token": _decrypt_tenant_secret(item.get("apiToken")) or None,
@@ -262,7 +339,12 @@ def _integration_is_usable(item: Dict[str, object]) -> bool:
     if not bool(item.get("enabled", True)):
         return False
     credentials = _jira_integration_credentials(item)
-    return bool(credentials.get("base_url") and (credentials.get("api_token") or credentials.get("bearer")))
+    auth_mode = _normalize_jira_auth_mode(credentials.get("auth_mode"))
+    if not is_safe_http_url(credentials.get("base_url")):
+        return False
+    if auth_mode == "api_token":
+        return bool(credentials.get("email") and credentials.get("api_token"))
+    return bool(credentials.get("bearer"))
 
 
 def _sync_jira_comments_to_incident_notes(incident_id: str, tenant_id: str, comments: List[Dict[str, object]]) -> int:

@@ -17,10 +17,15 @@ from services.grafana.route_payloads import (
 from services.grafana_proxy_service import GrafanaProxyService
 from services.grafana_service import GrafanaService
 from models.access.auth_models import Permission, TokenData
+from config import config
 from database import get_db
 from sqlalchemy.orm import Session
 
-from middleware.dependencies import require_permission_with_scope, require_any_permission_with_scope
+from middleware.dependencies import (
+    require_permission_with_scope,
+    require_any_permission_with_scope,
+    enforce_public_endpoint_security,
+)
 from middleware.error_handlers import handle_route_errors
 from services.database_auth_service import DatabaseAuthService
 
@@ -48,6 +53,14 @@ async def grafana_auth(
     orig: Optional[str] = Query(None, description="Original proxied URI"),
     db: Session = Depends(get_db),
 ):
+    enforce_public_endpoint_security(
+        request,
+        scope="grafana_proxy_auth",
+        limit=config.RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE,
+        window_seconds=60,
+        allowlist=config.GRAFANA_PROXY_IP_ALLOWLIST,
+    )
+
     headers = await grafana_proxy_service.authorize_proxy_request(
         request=request,
         db=db,

@@ -9,7 +9,7 @@ from sqlalchemy import func
 
 from config import config
 from database import get_db_session
-from db_models import User, Group, UserApiKey
+from db_models import User, Group, UserApiKey, Tenant
 from models.access.auth_models import Role, Token, TokenData
 
 # expose a reference to the create_mfa_setup_token operation for service layer
@@ -172,9 +172,12 @@ def validate_otlp_token(service, token: str) -> Optional[str]:
         api_key = (
             db.query(UserApiKey)
             .join(User, User.id == UserApiKey.user_id)
+            .join(Tenant, Tenant.id == User.tenant_id)
             .filter(
                 UserApiKey.otlp_token == token,
+                UserApiKey.is_enabled.is_(True),
                 User.is_active.is_(True),
+                Tenant.is_active.is_(True),
             )
             .first()
         )

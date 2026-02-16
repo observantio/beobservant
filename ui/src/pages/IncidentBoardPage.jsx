@@ -9,6 +9,7 @@ import {
 import { Card, Button, Select, Badge, Spinner, Modal, Input } from '../components/ui'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
+import HelpTooltip from '../components/HelpTooltip'
 
 export default function IncidentBoardPage() {
   const { user, hasPermission } = useAuth()
@@ -627,6 +628,7 @@ export default function IncidentBoardPage() {
                     <span className="material-icons text-sm mr-2">group</span>
                     Group
                   </Button>
+                  <HelpTooltip text="Filter incidents by visibility: Public (visible to all), Private (only you), Group (members of selected group)." />
                   {incidentVisibilityTab === 'group' && (
                     groups.length > 0 ? (
                       <Select
@@ -657,16 +659,19 @@ export default function IncidentBoardPage() {
                   <span className="material-icons text-base text-orange-500">warning</span>
                   <span className="font-medium text-sre-text">{stats.unresolved}</span>
                   <span className="text-sre-text-muted">unresolved</span>
+                  <HelpTooltip text="Number of incidents that are still open and require attention." />
                 </div>
                 <div className="flex items-center gap-2 px-3 py-2 bg-sre-surface rounded-lg border border-sre-border">
                   <span className="material-icons text-base text-blue-500">person_off</span>
                   <span className="font-medium text-sre-text">{stats.unassigned}</span>
                   <span className="text-sre-text-muted">unassigned</span>
+                  <HelpTooltip text="Number of open incidents that haven't been assigned to anyone yet." />
                 </div>
                 <div className="flex items-center gap-2 px-3 py-2 bg-sre-surface rounded-lg border border-sre-border">
                   <span className="material-icons text-base text-gray-500">assignment_turned_in</span>
                   <span className="font-medium text-sre-text">{stats.totalIncidents}</span>
                   <span className="text-sre-text-muted">total</span>
+                  <HelpTooltip text="Total number of incidents currently visible based on your filters." />
                 </div>
               </div>
 
@@ -680,6 +685,7 @@ export default function IncidentBoardPage() {
                     onChange={(e) => { setShowHiddenResolved(e.target.checked); loadData() }}
                   />
                   <span>Show hidden resolved</span>
+                  <HelpTooltip text="Include resolved incidents that are normally hidden from the board. Useful for reviewing recent incident history." />
                 </label>
               </div>
             </div>
@@ -696,6 +702,7 @@ export default function IncidentBoardPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
                     <h3 className="text-lg font-semibold text-sre-text">Unassigned</h3>
+                    <HelpTooltip text="Incidents that haven't been assigned to anyone yet. These need immediate attention." />
                     <span className="px-2 py-1 bg-sre-surface text-sre-text-muted text-xs font-medium rounded-full border border-sre-border">
                       {incidentsByState.unassigned.length}
                     </span>
@@ -731,6 +738,7 @@ export default function IncidentBoardPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                     <h3 className="text-lg font-semibold text-sre-text">Assigned Active</h3>
+                    <HelpTooltip text="Incidents that have been assigned to someone and are currently being worked on." />
                     <span className="px-2 py-1 bg-sre-surface text-sre-text-muted text-xs font-medium rounded-full border border-sre-border">
                       {incidentsByState.assigned.length}
                     </span>
@@ -766,6 +774,7 @@ export default function IncidentBoardPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
                     <h3 className="text-lg font-semibold text-sre-text">Resolved</h3>
+                    <HelpTooltip text="Incidents that have been resolved and closed. These may be hidden by default." />
                     <span className="px-2 py-1 bg-sre-surface text-sre-text-muted text-xs font-medium rounded-full border border-sre-border">
                       {incidentsByState.resolved.length}
                     </span>
@@ -823,18 +832,22 @@ export default function IncidentBoardPage() {
                 <button type="button" onClick={() => setIncidentModalTab('details')} className={`pl-4 pr-4 py-2 text-sm flex items-center gap-2 border-b-2 transition-colors ${incidentModalTab === 'details' ? 'border-sre-primary text-sre-primary' : 'border-transparent text-sre-text-muted hover:text-sre-text'}`}>
                   <span className="material-icons text-sm">info</span>
                   Details
+                  <HelpTooltip content="View and edit incident details including status, priority, and description" />
                 </button>
                 <button type="button" onClick={() => setIncidentModalTab('assignment')} className={`pl-4 pr-4 py-2 text-sm flex items-center gap-2 border-b-2 transition-colors ${incidentModalTab === 'assignment' ? 'border-sre-primary text-sre-primary' : 'border-transparent text-sre-text-muted hover:text-sre-text'}`}>
                   <span className="material-icons text-sm">person</span>
                   Assignment
+                  <HelpTooltip content="Assign incident to team members and track ownership" />
                 </button>
                 <button type="button" onClick={() => setIncidentModalTab('jira')} className={`pl-4 pr-4 py-2 text-sm flex items-center gap-2 border-b-2 transition-colors ${incidentModalTab === 'jira' ? 'border-sre-primary text-sre-primary' : 'border-transparent text-sre-text-muted hover:text-sre-text'}`}>
                   <span className="material-icons text-sm">link</span>
                   Jira
+                  <HelpTooltip content="Link incident to Jira tickets for external tracking and collaboration" />
                 </button>
                 <button type="button" onClick={() => setIncidentModalTab('notes')} className={`pl-4 pr-4 py-2 text-sm flex items-center gap-2 border-b-2 transition-colors ${incidentModalTab === 'notes' ? 'border-sre-primary text-sre-primary' : 'border-transparent text-sre-text-muted hover:text-sre-text'}`}>
                   <span className="material-icons text-sm">notes</span>
                   Notes
+                  <HelpTooltip content="Add and view internal notes and investigation details" />
                 </button>
               </div>
             </div>
@@ -1142,8 +1155,14 @@ export default function IncidentBoardPage() {
                       <Button size="sm" variant="secondary" onClick={() => setIncidentDrafts((prev) => ({
                         ...prev,
                         [activeIncident.id]: { ...(prev[activeIncident.id] || {}), note: '' }
-                      }))}>Clear</Button>
-                      <Button size="sm" onClick={() => handleAddNote(activeIncident.id)} disabled={!canUpdateIncidents || !(activeIncidentDraft.note || '').trim()}>Add note</Button>
+                      }))}>
+                        Clear
+                        <HelpTooltip content="Clear the note draft without saving" />
+                      </Button>
+                      <Button size="sm" onClick={() => handleAddNote(activeIncident.id)} disabled={!canUpdateIncidents || !(activeIncidentDraft.note || '').trim()}>
+                        Add note
+                        <HelpTooltip content="Save the note to the incident record" />
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1172,6 +1191,7 @@ export default function IncidentBoardPage() {
                         >
                           <span className="material-icons text-sm">unfold_more</span>
                           <span className="sr-only">Toggle expand notes</span>
+                          <HelpTooltip content="Expand or collapse all note details" />
                         </button>
                         <button
                           type="button"
@@ -1188,6 +1208,7 @@ export default function IncidentBoardPage() {
                         >
                           <span className="material-icons text-sm">content_copy</span>
                           <span className="sr-only">Copy notes</span>
+                          <HelpTooltip content="Copy all notes to clipboard" />
                         </button>
                       </div>
                     </div>
@@ -1341,6 +1362,7 @@ export default function IncidentBoardPage() {
                 }}
               >
                 Cancel
+                <HelpTooltip content="Close modal without saving changes" />
               </Button>
               <Button
                 onClick={() => handleSaveIncident(activeIncident)}
@@ -1348,6 +1370,7 @@ export default function IncidentBoardPage() {
                 title={!canUpdateIncidents ? 'Missing update:incidents permission' : 'Save Changes'}
               >
                 Save Changes
+                <HelpTooltip content="Save all incident updates and close modal" />
               </Button>
             </div>
           </div>

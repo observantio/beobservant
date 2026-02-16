@@ -26,20 +26,17 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
 
   const getCategoryDescription = (category) => {
     const descriptions = {
-      agents: 'Granular OTEL agent access by action (read/create/update/delete/test).',
-      alerts: 'Granular alert and silence access by action (read/create/update/delete).',
-      channels: 'Granular notification channel access (read/create/update/delete/test).',
-      dashboards: 'Granular dashboard access (read/create/update/delete).',
-      datasources: 'Granular datasource access (read/query/create/update/delete).',
-      folders: 'Granular Grafana folder access (read/create/delete).',
-      groups: 'Granular group access (read/create/update/delete).',
-      logs: 'Read/query Loki logs.',
-      rules: 'Granular alert rule access (read/create/update/delete/test).',
-      tenants: 'Tenant administration permissions.',
-      traces: 'Read/query Tempo traces.',
-      users: 'Granular user access (read/create/update/delete).'
+      agents: 'Control access to OTEL agents and system metrics monitoring',
+      alerts: 'Manage alert rules, active alerts, and notification channels',
+      channels: 'Configure notification channels for alert delivery',
+      dashboards: 'Access and manage Grafana dashboards',
+      groups: 'Control user group creation, modification, and membership',
+      logs: 'Query and view application logs from Loki',
+      tenants: 'Manage multi-tenant settings and configurations',
+      traces: 'Query and view distributed traces from Tempo',
+      users: 'Control user account creation, modification, and access'
     }
-    return descriptions[category] || `Granular ${category} permissions by action (read/create/update/delete/test).`
+    return descriptions[category] || `Manage ${category} permissions and access`
   }
 
   const getPermissionDescription = (permissionName) => {
@@ -79,17 +76,7 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
       'Read Users': 'View user information and accounts',
       'View user information': 'View user information and accounts'
     }
-    if (descriptions[permissionName]) return descriptions[permissionName]
-
-    const normalized = String(permissionName || '').toLowerCase()
-    if (normalized.includes(':')) {
-      const [action, resource] = normalized.split(':')
-      const readableResource = (resource || 'resource').replace(/_/g, ' ')
-      const readableAction = action || 'manage'
-      return `${readableAction.charAt(0).toUpperCase()}${readableAction.slice(1)} ${readableResource}`
-    }
-
-    return permissionName
+    return descriptions[permissionName] || permissionName
   }
 
   const allPermissionNames = useMemo(
@@ -265,7 +252,7 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
                 <option value="admin">Admin - Full access</option>
               </select>
             </div>
-            <HelpTooltip text="Roles provide baseline access. Direct and group permissions then add granular action-level rights (for example create, update, delete, test)." />
+            <HelpTooltip text="Roles provide baseline permissions. Admin has full access to all features, User can read and modify most resources, Viewer has read-only access." />
           </div>
 
           {/* Group Membership */}
@@ -290,11 +277,8 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
                       />
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="font-medium text-sre-text truncate">{group.name}</div>
-                          <Badge variant="secondary" className="text-xs px-2 py-0.5">{(group.permissions || []).length} perm{(group.permissions || []).length === 1 ? '' : 's'}</Badge>
-                        </div>
+                      <div className="flex items-center justify-between">
+                        <div className="font-medium text-sre-text">{group.name}</div>
                         <button
                           type="button"
                           onClick={() => toggleExpanded(group.id)}
@@ -313,29 +297,23 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
                   </div>
 
                   {expandedGroups.has(group.id) && (
-                    <Card className="!p-4 ml-6 mt-3 rounded-lg border border-sre-border">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-sm font-semibold text-sre-text">Group Permissions</div>
-                        <div className="text-xs text-sre-text-muted">{(group.permissions || []).length} permissions</div>
+                    <Card className="!p-3 ml-6 mt-2 rounded-lg border border-sre-border">
+                      <div className="text-sm font-semibold text-sre-text mb-2">Group Permissions</div>
+                      <div className="space-y-2">
+                        {(group.permissions || []).length === 0 && (
+                          <div className="text-xs text-sre-text-muted">No explicit permissions on this group</div>
+                        )}
+                        {(group.permissions || []).map((perm) => {
+                          const name = typeof perm === 'string' ? perm : (perm.display_name || perm.name || perm.id)
+                          const desc = typeof perm === 'string' ? '' : (perm.description || '')
+                          return (
+                            <div key={typeof perm === 'string' ? perm : perm.id} className="flex items-start gap-3">
+                              <div className="text-sm font-medium text-sre-text">{name}</div>
+                              {desc && <div className="text-xs text-sre-text-muted">{desc}</div>}
+                            </div>
+                          )
+                        })}
                       </div>
-
-                      {(group.permissions || []).length === 0 ? (
-                        <div className="text-xs text-sre-text-muted">No explicit permissions on this group</div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {(group.permissions || []).map((perm) => {
-                            const permName = typeof perm === 'string' ? perm : (perm.display_name || perm.name || perm.id)
-                            const permDesc = typeof perm === 'string' ? '' : (perm.description || getPermissionDescription(permName))
-                            const key = typeof perm === 'string' ? perm : perm.id
-                            return (
-                              <div key={key} className="p-3 bg-sre-bg-alt border border-sre-border rounded-lg">
-                                <div className="font-medium text-sm text-sre-text truncate">{permName}</div>
-                                {permDesc && <div className="text-xs text-sre-text-muted mt-1 line-clamp-2">{permDesc}</div>}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
                     </Card>
                   )}
                 </div>
@@ -354,7 +332,7 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
               <label htmlFor="direct-permissions" className="block text-sm font-semibold text-sre-text">
                 Direct Permissions (additive to role and group access)
               </label>
-              <HelpTooltip text="Direct permissions are additive to role and group access, and are best used for targeted action-level exceptions." />
+              <HelpTooltip text="Direct permissions are granted individually to this user, in addition to permissions from their role and groups. These override any restrictions." />
             </div>
             <div id="direct-permissions" className="space-y-4">
               {loadingPermissions && (
@@ -390,7 +368,7 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
                           onClick={() => deselectAllInCategory(category)}
                           disabled={!someSelected}
                         >
-                          Clear All
+                          Clear
                         </Button>
                       </div>
                     </div>

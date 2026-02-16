@@ -985,7 +985,7 @@ export default function AlertManagerPage() {
             <p className="text-xs text-sre-text-muted mb-3">
               Start from a known-good template, then tune the expression and thresholds for your environment.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {[
                 {
                   name: 'Memory Usage',
@@ -1004,21 +1004,37 @@ export default function AlertManagerPage() {
                   yaml: `groups:\n  - name: service-availability\n    rules:\n      - alert: ServiceDown\n        expr: up == 0\n        for: 2m\n        labels:\n          severity: critical\n          service: monitoring\n        annotations:\n          summary: Service is down\n          description: >\n            The service has been down for more than 2 minutes.\n            Check service logs and restart if necessary.\n        beobservant:\n          visibility: private\n          orgId: Av45ZchZsQdKjN8XyG\n          channels: ["channel-id"]\n          sharedGroupIds: ["group-id"]\n\n      - alert: HighErrorRate\n        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05\n        for: 5m\n        labels:\n          severity: warning\n          service: api\n        annotations:\n          summary: High error rate\n          description: >\n            Error rate exceeds 5% for more than 5 minutes.\n            Investigate API issues or database connectivity.\n        beobservant:\n          visibility: private\n          orgId: Av45ZchZsQdKjN8XyG\n          channels: ["channel-id"]\n          sharedGroupIds: ["group-id"]`
                 }
               ].map((template) => (
-                <Button
+                <button
                   key={template.name}
-                  size="sm"
-                  variant="outline"
+                  type="button"
                   onClick={() => {
                     setImportYamlContent(template.yaml)
                     setImportFileName(`${template.name} Template`)
                   }}
-                  className="text-left justify-start h-auto py-2 px-3"
+                  className="group flex items-center gap-3 p-3 rounded-lg border border-sre-border bg-sre-surface/50 hover:bg-sre-surface hover:border-sre-primary/30 transition-all duration-200 text-left"
                 >
-                  <div>
-                    <div className="font-medium text-sre-text">{template.name}</div>
-                    <div className="text-xs text-sre-text-muted">Template</div>
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sre-primary/20 to-sre-primary/10 flex items-center justify-center flex-shrink-0">
+                    <span className="material-icons text-sre-primary text-sm">
+                      {template.name === 'Memory Usage' ? 'memory' :
+                       template.name === 'CPU Usage' ? 'developer_board' :
+                       template.name === 'Disk Space' ? 'storage' :
+                       'dns'}
+                    </span>
                   </div>
-                </Button>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sre-text group-hover:text-sre-primary transition-colors">
+                      {template.name}
+                    </div>
+                    <div className="text-xs text-sre-text-muted">
+                      Pre-configured alert rules with beobservant metadata
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0">
+                    <span className="material-icons text-sre-text-muted text-sm group-hover:text-sre-primary transition-colors">
+                      chevron_right
+                    </span>
+                  </div>
+                </button>
               ))}
             </div>
           </div>

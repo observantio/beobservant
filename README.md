@@ -7,6 +7,7 @@ Be Observant is a comprehensive observability control plane that integrates Graf
 This platform provides:
 
 - **Backend API** (`server`, FastAPI): Core REST API running on `http://localhost:4319`
+- **Gateway Auth Service** (`gateway-auth-service`, FastAPI): Standalone OTLP token validation service used by nginx OTLP gateway
 - **Grafana Integration**: Reverse proxy access at `http://localhost:8080/grafana/`
 - **OTLP Gateway**: Authentication and organization mapping on `http://localhost:4320`
 - **Data Services**: Postgres database, Loki for logs, Tempo for traces, Mimir for metrics, and Alertmanager for alerts
@@ -107,6 +108,10 @@ npm run start
   - `WEBHOOK_IP_ALLOWLIST`
   - `GATEWAY_IP_ALLOWLIST`
   - `AUTH_PUBLIC_IP_ALLOWLIST`
+   - `GRAFANA_PROXY_IP_ALLOWLIST`
+- **Rate limits**: tune public endpoint protection as needed:
+   - `RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE`
+   - `GATEWAY_RATE_LIMIT_PER_MINUTE`
 - **Secrets Management**: Use strong, unique secrets for all tokens and passwords; avoid default values
 - **TLS Termination**: Handle SSL/TLS at your load balancer or edge proxy
 

@@ -47,6 +47,8 @@ from services.alerting.integration_security_service import (
     _jira_integration_credentials,
     _integration_is_usable,
     _sync_jira_comments_to_incident_notes,
+    _normalize_jira_auth_mode,
+    _validate_jira_credentials,
 )
 
 logger = logging.getLogger(__name__)
@@ -269,7 +271,7 @@ async def patch_incident(
     if payload.note and updated.jira_ticket_key:
         try:
             if updated.jira_integration_id:
-                integration = _resolve_jira_integration(current_user.tenant_id, updated.jira_integration_id, current_user, require_write=False)
+                integration = _resolve_jira_integration(current_user.tenant_id, updated.jira_integration_id, current_user, require_write=True)
                 credentials = _jira_integration_credentials(integration)
             else:
                 credentials = _get_effective_jira_credentials(current_user.tenant_id)
@@ -456,6 +458,15 @@ async def create_jira_integration(
             current_user,
         )
 
+    auth_mode = _normalize_jira_auth_mode(payload.authMode)
+    _validate_jira_credentials(
+        base_url=payload.baseUrl,
+        auth_mode=auth_mode,
+        email=payload.email,
+        api_token=payload.apiToken,
+        bearer_token=payload.bearerToken,
+    )
+
     item = {
         "id": str(uuid.uuid4()),
         "name": (payload.name or "Jira").strip() or "Jira",
@@ -467,8 +478,8 @@ async def create_jira_integration(
         "email": (payload.email or "").strip() or None,
         "apiToken": _encrypt_tenant_secret((payload.apiToken or "").strip() or None),
         "bearerToken": _encrypt_tenant_secret((payload.bearerToken or "").strip() or None),
-        "authMode": (payload.authMode or "api_token").strip() or "api_token",
-        "supportsSso": bool(payload.supportsSso),
+        "authMode": auth_mode,
+        "supportsSso": auth_mode == "sso",
     }
     integrations.append(item)
     _save_tenant_jira_integrations(current_user.tenant_id, integrations)
@@ -518,6 +529,17 @@ async def update_jira_integration(
         current["authMode"] = (payload.authMode or "api_token").strip() or "api_token"
     if payload.supportsSso is not None:
         current["supportsSso"] = bool(payload.supportsSso)
+
+    next_auth_mode = _normalize_jira_auth_mode(current.get("authMode"))
+    _validate_jira_credentials(
+        base_url=current.get("baseUrl"),
+        auth_mode=next_auth_mode,
+        email=current.get("email"),
+        api_token=_decrypt_tenant_secret(current.get("apiToken")) if current.get("apiToken") else None,
+        bearer_token=_decrypt_tenant_secret(current.get("bearerToken")) if current.get("bearerToken") else None,
+    )
+    current["authMode"] = next_auth_mode
+    current["supportsSso"] = next_auth_mode == "sso"
 
     integrations[index] = current
     _save_tenant_jira_integrations(current_user.tenant_id, integrations)
@@ -649,7 +671,7 @@ async def create_incident_jira(
     if not payload.integrationId:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="integrationId is required")
 
-    integration = _resolve_jira_integration(current_user.tenant_id, payload.integrationId, current_user, require_write=False)
+    integration = _resolve_jira_integration(current_user.tenant_id, payload.integrationId, current_user, require_write=True)
     if not _integration_is_usable(integration):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected Jira integration is not enabled or incomplete")
 
@@ -713,7 +735,7 @@ async def list_incident_jira_comments(
         return {"comments": []}
     integration_id = incident.jira_integration_id
     if integration_id:
-        integration = _resolve_jira_integration(current_user.tenant_id, integration_id, current_user, require_write=False)
+        integration = _resolve_jira_integration(current_user.tenant_id, integration_id, current_user, require_write=True)
         if not _integration_is_usable(integration):
             return {"comments": []}
         credentials = _jira_integration_credentials(integration)
@@ -746,7 +768,7 @@ async def sync_incident_jira_comments(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incident has no Jira ticket key")
     integration_id = incident.jira_integration_id
     if integration_id:
-        integration = _resolve_jira_integration(current_user.tenant_id, integration_id, current_user, require_write=False)
+        integration = _resolve_jira_integration(current_user.tenant_id, integration_id, current_user, require_write=True)
         if not _integration_is_usable(integration):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected Jira integration is not enabled or incomplete")
         credentials = _jira_integration_credentials(integration)
@@ -781,7 +803,7 @@ async def create_incident_jira_comment(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incident has no Jira ticket key")
     integration_id = incident.jira_integration_id
     if integration_id:
-        integration = _resolve_jira_integration(current_user.tenant_id, integration_id, current_user, require_write=False)
+        integration = _resolve_jira_integration(current_user.tenant_id, integration_id, current_user, require_write=True)
         if not _integration_is_usable(integration):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected Jira integration is not enabled or incomplete")
         credentials = _jira_integration_credentials(integration)
@@ -1298,6 +1320,9 @@ async def create_notification_channel(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Channel type '{requested_type}' is disabled by organization policy",
         )
+    validation_errors = notification_service.validate_channel_config(requested_type, channel.config)
+    if validation_errors:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"errors": validation_errors})
     created_channel = storage_service.create_notification_channel(channel, tenant_id, user_id, group_ids)
     return created_channel
 
@@ -1323,6 +1348,9 @@ async def update_notification_channel(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Channel type '{requested_type}' is disabled by organization policy",
         )
+    validation_errors = notification_service.validate_channel_config(requested_type, channel.config)
+    if validation_errors:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"errors": validation_errors})
     updated_channel = storage_service.update_notification_channel(channel_id, channel, tenant_id, user_id, group_ids)
     if not updated_channel:
         raise HTTPException(status_code=404, detail=f"Notification channel {channel_id} not found or access denied")

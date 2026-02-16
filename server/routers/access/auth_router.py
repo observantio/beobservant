@@ -90,7 +90,14 @@ async def login(request: Request, login_request: LoginRequest):
 
 
 @router.post("/oidc/authorize-url", response_model=OIDCAuthURLResponse)
-async def oidc_authorize_url(payload: OIDCAuthURLRequest):
+async def oidc_authorize_url(request: Request, payload: OIDCAuthURLRequest):
+    enforce_public_endpoint_security(
+        request,
+        scope="auth_oidc_authorize",
+        limit=config.RATE_LIMIT_LOGIN_PER_MINUTE,
+        window_seconds=60,
+        allowlist=config.AUTH_PUBLIC_IP_ALLOWLIST,
+    )
     if not auth_service.is_external_auth_enabled():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OIDC is not enabled")
     try:
@@ -106,7 +113,14 @@ async def oidc_authorize_url(payload: OIDCAuthURLRequest):
 
 
 @router.post("/oidc/exchange", response_model=Token)
-async def oidc_exchange_token(payload: OIDCCodeExchangeRequest):
+async def oidc_exchange_token(request: Request, payload: OIDCCodeExchangeRequest):
+    enforce_public_endpoint_security(
+        request,
+        scope="auth_oidc_exchange",
+        limit=config.RATE_LIMIT_LOGIN_PER_MINUTE,
+        window_seconds=60,
+        allowlist=config.AUTH_PUBLIC_IP_ALLOWLIST,
+    )
     if not auth_service.is_external_auth_enabled():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OIDC is not enabled")
     token_or_challenge = auth_service.exchange_oidc_authorization_code(payload.code, payload.redirect_uri)
