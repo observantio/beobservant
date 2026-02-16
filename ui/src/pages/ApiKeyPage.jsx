@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
+import PageHeader from '../components/ui/PageHeader'
 import { Card, Input, Button, Select, Modal } from '../components/ui'
 import ConfirmModal from '../components/ConfirmModal'
 import { useAuth } from '../contexts/AuthContext'
-import { useToast } from '../contexts/ToastContext'
+import { useToast } from '../contexts/ToastContext' 
 import HelpTooltip from '../components/HelpTooltip'
 import * as api from '../api'
 import { OTLP_GATEWAY_HOST } from '../utils/constants'
@@ -168,15 +169,19 @@ export default function ApiKeyPage() {
 
   const enabledCount = apiKeys.filter((k) => k.is_enabled).length
 
+  function formatDisplayKey(key) {
+    if (showKeyId === key.id) return key.key || '-'
+    if (key.key) return `${key.key.slice(0, 6)}...${key.key.slice(-4)}`
+    return '-'
+  }
+
   return (
     <div className="animate-fade-in max-w-7xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-semibold text-sre-text mb-2 flex items-center gap-3">
-          <span className="material-icons text-sre-primary text-3xl">key</span>
-          <span>API Keys</span>
-        </h1>
-        <p className="text-sre-text-muted max-w-2xl">Manage tenant keys for logs, traces and metrics. Use keys to isolate datasets per product or team.</p>
-      </div>
+      <PageHeader
+        icon="key"
+        title="API Keys"
+        subtitle="Manage tenant keys for logs, traces and metrics. Use keys to isolate datasets per product or team."
+      />
 
 
 
@@ -222,17 +227,7 @@ export default function ApiKeyPage() {
                       <td className="py-3 px-4 text-xs text-sre-text-muted break-all">
                         <div className="flex items-center gap-3">
                           <div className="font-mono text-xs">
-                            {(() => {
-                              let displayKey;
-                              if (showKeyId === key.id) {
-                                displayKey = key.key;
-                              } else if (key.key) {
-                                displayKey = `${key.key.slice(0, 6)}...${key.key.slice(-4)}`;
-                              } else {
-                                displayKey = '-';
-                              }
-                              return displayKey;
-                            })()}
+                            {formatDisplayKey(key)}
                           </div>
                           <div className="flex items-center gap-2">
                             <Button size="sm" variant="ghost" onClick={() => setShowKeyId(showKeyId === key.id ? null : key.id)}>
