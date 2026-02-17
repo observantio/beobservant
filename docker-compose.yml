@@ -7,6 +7,7 @@ volumes:
   grafana:
   alertmanager:
   postgres_data:
+  redis_data:
 
 services:
   postgres:
@@ -34,6 +35,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      RATE_LIMIT_BACKEND: redis
+      RATE_LIMIT_REDIS_URL: redis://redis:6379/0
     deploy:
       resources:
         limits:
@@ -84,6 +90,19 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      GATEWAY_RATE_LIMIT_BACKEND: redis
+      GATEWAY_RATE_LIMIT_REDIS_URL: redis://redis:6379/1
+    networks: [obs]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
     networks: [obs]
     restart: unless-stopped
 

@@ -498,7 +498,8 @@ class LokiService:
         """
         
         label_selector = self._build_label_selector(labels) if labels else '{}'
-        query_str = f'{label_selector} |= "{pattern}"'
+        escaped = self._escape_logql_string(pattern)
+        query_str = f'{label_selector} |= "{escaped}"'
         
         query = LogQuery(
             query=query_str,
@@ -538,7 +539,8 @@ class LokiService:
         
         if filters:
             for f in filters:
-                query_str += f' |= "{f}"'
+                escaped = self._escape_logql_string(f)
+                query_str += f' |= "{escaped}"'
         
         query = LogQuery(
             query=query_str,
@@ -573,19 +575,23 @@ class LokiService:
         
         return params
     
-    def _build_label_selector(self, labels: Dict[str, str]) -> str:
-        """Build LogQL label selector from dictionary.
-        
-        Args:
-            labels: Dictionary of label key-value pairs
-            
-        Returns:
-            LogQL label selector string
+    def _escape_logql_string(self, value: str) -> str:
+        """Escape special characters for embedding in LogQL double-quoted strings.
+
+        This escapes backslashes, double quotes and normalizes newlines to avoid
+        breaking the surrounding LogQL selector or text match.
         """
+        if not isinstance(value, str):
+            return value
+        # escape backslash first, then double quotes and CR/LF
+        return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+
+    def _build_label_selector(self, labels: Dict[str, str]) -> str:
+        """Build LogQL label selector from dictionary, safely escaping values."""
         if not labels:
             return "{}"
-        
-        selectors = [f'{k}="{v}"' for k, v in labels.items()]
+
+        selectors = [f'{k}="{self._escape_logql_string(v)}"' for k, v in labels.items()]
         return "{" + ", ".join(selectors) + "}"
     
     def _calculate_stats(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:

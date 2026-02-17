@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import time
+import logging
 from threading import Lock
 from typing import Optional, List
 from ipaddress import ip_network, ip_address
@@ -22,33 +23,124 @@ from sqlalchemy.exc import SQLAlchemyError
 
 import db_models
 
+try:
+    import redis
+except Exception:
+    redis = None
+
 RATE_LIMIT_PER_MINUTE = int(os.getenv("GATEWAY_RATE_LIMIT_PER_MINUTE", "300"))
 IP_ALLOWLIST = (os.getenv("GATEWAY_IP_ALLOWLIST") or "").strip()
+RATE_LIMIT_BACKEND = (os.getenv("GATEWAY_RATE_LIMIT_BACKEND", "auto") or "auto").strip().lower()
+RATE_LIMIT_REDIS_URL = (os.getenv("GATEWAY_RATE_LIMIT_REDIS_URL", "") or "").strip()
+
+logger = logging.getLogger(__name__)
 
 
 class TokenRateLimiter:
     def __init__(self, limit_per_minute: int):
         self.limit = max(1, int(limit_per_minute))
         self.window_seconds = 60
-        self._hits: dict[str, list[float]] = {}
+        self._hits: dict[str, tuple[float, int]] = {}
         self._lock = Lock()
+        self._ops = 0
+
+    def _cleanup(self, now: float) -> None:
+        self._ops += 1
+        if self._ops % 1024 != 0:
+            return
+        threshold = now - (self.window_seconds * 2)
+        stale = [key for key, (window_start, _count) in self._hits.items() if window_start < threshold]
+        for key in stale:
+            self._hits.pop(key, None)
 
     def enforce(self, key: str) -> None:
-        now = time.monotonic()
-        cutoff = now - self.window_seconds
+        now = time.time()
 
         with self._lock:
-            bucket = self._hits.setdefault(key, [])
-            while bucket and bucket[0] < cutoff:
-                bucket.pop(0)
+            self._cleanup(now)
+            window_start, count = self._hits.get(key, (now, 0))
+            if (now - window_start) >= self.window_seconds:
+                window_start, count = now, 0
 
-            if len(bucket) >= self.limit:
+            count += 1
+            self._hits[key] = (window_start, count)
+
+            if count > self.limit:
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Rate limit exceeded",
                 )
 
-            bucket.append(now)
+
+class RedisTokenRateLimiter:
+    def __init__(self, limit_per_minute: int, redis_url: str, *, key_prefix: str = "beobs:gateway:rl"):
+        if redis is None:
+            raise RuntimeError("redis package is not installed")
+        self.limit = max(1, int(limit_per_minute))
+        self.window_seconds = 60
+        self.key_prefix = key_prefix
+        self.client = redis.from_url(
+            redis_url,
+            socket_timeout=0.25,
+            socket_connect_timeout=0.25,
+            decode_responses=True,
+        )
+
+    def enforce(self, key: str) -> None:
+        now = int(time.time())
+        window_id = now // self.window_seconds
+        bucket_key = f"{self.key_prefix}:{key}:{window_id}"
+
+        pipe = self.client.pipeline(transaction=True)
+        pipe.incr(bucket_key)
+        pipe.expire(bucket_key, self.window_seconds + 1)
+        count, _ = pipe.execute()
+
+        if int(count) > self.limit:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded",
+            )
+
+
+class HybridTokenRateLimiter:
+    def __init__(self, primary: Optional[RedisTokenRateLimiter], fallback: TokenRateLimiter):
+        self.primary = primary
+        self.fallback = fallback
+        self._last_warning = 0.0
+
+    def enforce(self, key: str) -> None:
+        if self.primary is not None:
+            try:
+                self.primary.enforce(key)
+                return
+            except Exception as exc:
+                now = time.monotonic()
+                if now - self._last_warning > 30:
+                    logger.warning("Gateway Redis limiter unavailable, using in-memory fallback: %s", exc)
+                    self._last_warning = now
+        self.fallback.enforce(key)
+
+
+def _build_rate_limiter(limit_per_minute: int) -> HybridTokenRateLimiter:
+    fallback = TokenRateLimiter(limit_per_minute)
+
+    if RATE_LIMIT_BACKEND in {"memory", "in-memory", "inmemory"}:
+        logger.info("Gateway rate limiting backend: in-memory")
+        return HybridTokenRateLimiter(None, fallback)
+
+    if not RATE_LIMIT_REDIS_URL:
+        if RATE_LIMIT_BACKEND == "redis":
+            logger.warning("GATEWAY_RATE_LIMIT_BACKEND=redis but GATEWAY_RATE_LIMIT_REDIS_URL is not set; using in-memory limiter")
+        return HybridTokenRateLimiter(None, fallback)
+
+    try:
+        primary = RedisTokenRateLimiter(limit_per_minute, RATE_LIMIT_REDIS_URL)
+        logger.info("Gateway rate limiting backend: redis")
+        return HybridTokenRateLimiter(primary, fallback)
+    except Exception as exc:
+        logger.warning("Failed to initialize gateway Redis limiter; using in-memory fallback: %s", exc)
+        return HybridTokenRateLimiter(None, fallback)
 
 
 def _parse_ip_allowlist(allowlist: str) -> List:
@@ -73,7 +165,7 @@ class GatewayAuthService:
     """Service providing the gateway auth checks."""
 
     def __init__(self, rate_limit_per_minute: int = RATE_LIMIT_PER_MINUTE, ip_allowlist: str = IP_ALLOWLIST):
-        self.rate_limiter = TokenRateLimiter(rate_limit_per_minute)
+        self.rate_limiter = _build_rate_limiter(rate_limit_per_minute)
         self._networks = _parse_ip_allowlist(ip_allowlist)
 
     @staticmethod

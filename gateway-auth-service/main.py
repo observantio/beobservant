@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-import time
+import asyncio
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
                 exc,
                 backoff,
             )
-            time.sleep(backoff)
+            await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 30.0)
 
     yield
