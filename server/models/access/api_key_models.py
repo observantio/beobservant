@@ -11,7 +11,7 @@ API Key models.
 
 Defines Pydantic models for API key creation, update, and retrieval.
 """
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -29,11 +29,27 @@ class ApiKeyUpdate(BaseModel):
     is_enabled: Optional[bool] = None
     is_default: Optional[bool] = None
 
+class ApiKeyShareUser(BaseModel):
+    user_id: str
+    username: Optional[str] = None
+    email: Optional[str] = None
+    can_use: bool = True
+    created_at: datetime
+
+
+class ApiKeyShareUpdateRequest(BaseModel):
+    user_ids: List[str] = Field(default_factory=list)
+    group_ids: List[str] = Field(default_factory=list)
+
 
 class ApiKey(ApiKeyBase):
     id: str
     key: str
     otlp_token: Optional[str] = Field(None, description="Secure OTLP ingest token for gateway authentication")
+    owner_user_id: Optional[str] = None
+    is_shared: bool = False
+    can_use: bool = True
+    shared_with: List[ApiKeyShareUser] = Field(default_factory=list)
     is_default: bool = False
     is_enabled: bool = True
     created_at: datetime

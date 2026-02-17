@@ -27,7 +27,7 @@ from typing import Optional, List
 from ipaddress import ip_network, ip_address
 
 from fastapi import Request, HTTPException, status
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 
 import db_models
@@ -39,10 +39,15 @@ except Exception:
 
 RATE_LIMIT_PER_MINUTE = int(os.getenv("GATEWAY_RATE_LIMIT_PER_MINUTE", "300"))
 IP_ALLOWLIST = (os.getenv("GATEWAY_IP_ALLOWLIST") or "").strip()
+GATEWAY_ALLOWLIST_FAIL_OPEN = str(os.getenv("GATEWAY_ALLOWLIST_FAIL_OPEN", "false")).strip().lower() in ("1","true","yes","on")
 RATE_LIMIT_BACKEND = (os.getenv("GATEWAY_RATE_LIMIT_BACKEND", "auto") or "auto").strip().lower()
 RATE_LIMIT_REDIS_URL = (os.getenv("GATEWAY_RATE_LIMIT_REDIS_URL", "") or "").strip()
 
 logger = logging.getLogger(__name__)
+
+
+class DatabaseUnavailable(Exception):
+    """Raised when the auth database is unavailable or returns an internal error."""
 
 
 class TokenRateLimiter:
@@ -196,7 +201,9 @@ class GatewayAuthService:
 
     def enforce_ip_allowlist(self, request: Request) -> None:
         if not self._networks:
-            return
+            if GATEWAY_ALLOWLIST_FAIL_OPEN:
+                return
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Source IP not allowed")
 
         client = self._client_ip(request)
         try:
@@ -216,13 +223,18 @@ class GatewayAuthService:
         if not token:
             return None
 
+        # Support both dedicated OTLP token and legacy key-based token to
+        # preserve compatibility with existing agents/configs.
         stmt = (
             select(db_models.UserApiKey.key)
             .join(db_models.User, db_models.User.id == db_models.UserApiKey.user_id)
             .join(db_models.Tenant, db_models.Tenant.id == db_models.User.tenant_id)
             .where(
                 and_(
-                    db_models.UserApiKey.otlp_token == token,
+                    or_(
+                        db_models.UserApiKey.otlp_token == token,
+                        db_models.UserApiKey.key == token,
+                    ),
                     db_models.UserApiKey.is_enabled.is_(True),
                     db_models.User.is_active.is_(True),
                     db_models.Tenant.is_active.is_(True),
@@ -234,8 +246,11 @@ class GatewayAuthService:
         try:
             with db_models.SessionLocal() as db:
                 return db.execute(stmt).scalar_one_or_none()
-        except SQLAlchemyError:
-            raise
+        except SQLAlchemyError as exc:
+            logger.warning("Database error validating OTLP token")
+            # Normalize internal DB errors to a service-level exception so the
+            # HTTP layer can return an appropriate 503 without leaking internals.
+            raise DatabaseUnavailable("Auth database unavailable") from exc
 
     def health(self) -> dict:
         try:

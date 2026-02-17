@@ -11,6 +11,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 """Dashboard-focused operations for GrafanaProxyService."""
 
+import uuid
 from typing import List, Optional, Dict, Any
 
 from fastapi import HTTPException
@@ -20,6 +21,44 @@ from sqlalchemy.orm import Session
 from db_models import GrafanaDashboard, Group
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate, DashboardSearchResult
 from config import config
+from services.grafana_service import GrafanaAPIError
+
+
+def _normalize_title(title: Optional[str]) -> str:
+    return str(title or "").strip().lower()
+
+
+async def _has_accessible_title_conflict(
+    service,
+    db: Session,
+    *,
+    tenant_id: str,
+    user_id: str,
+    group_ids: List[str],
+    title: str,
+    exclude_uid: Optional[str] = None,
+) -> bool:
+    target = _normalize_title(title)
+    if not target:
+        return False
+
+    dashboards = await search_dashboards(
+        service,
+        db,
+        user_id=user_id,
+        tenant_id=tenant_id,
+        group_ids=group_ids,
+        show_hidden=False,
+        is_admin=False,
+        limit=int(config.MAX_QUERY_LIMIT),
+        offset=0,
+    )
+    for dashboard in dashboards:
+        if exclude_uid and str(dashboard.uid) == str(exclude_uid):
+            continue
+        if _normalize_title(getattr(dashboard, "title", "")) == target:
+            return True
+    return False
 
 
 def check_dashboard_access(
@@ -122,7 +161,7 @@ async def search_dashboards(
         return [DashboardSearchResult(
             id=dash_data.get("id", 0),
             uid=uid,
-            title=dash_data.get("title", ""),
+            title=(db_dash.title if db_dash and db_dash.title else dash_data.get("title", "")),
             uri=f"db/{meta.get('slug', '')}",
             url=meta.get("url", f"/d/{uid}"),
             slug=meta.get("slug", ""),
@@ -187,6 +226,8 @@ async def search_dashboards(
                 continue
 
         payload = d.model_dump()
+        if db_dash and db_dash.title:
+            payload["title"] = db_dash.title
         payload["created_by"] = db_dash.created_by if db_dash else None
         payload["is_hidden"] = bool(db_dash and user_id in (db_dash.hidden_by or []))
         payload["is_owned"] = bool(db_dash and db_dash.created_by == user_id)
@@ -280,6 +321,19 @@ async def create_dashboard(
     is_admin: bool = False,
 ) -> Optional[Dict[str, Any]]:
     try:
+        requested_title = ""
+        if getattr(dashboard_create, "dashboard", None) is not None:
+            requested_title = str(getattr(dashboard_create.dashboard, "title", "") or "").strip()
+        if requested_title and await _has_accessible_title_conflict(
+            service,
+            db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            group_ids=group_ids,
+            title=requested_title,
+        ):
+            raise HTTPException(status_code=409, detail="Dashboard title already exists in your visible scope")
+
         # Validate dashboard JSON contains datasource references early
         try:
             dash_obj = dashboard_create.dashboard if hasattr(dashboard_create, 'dashboard') else None
@@ -304,7 +358,16 @@ async def create_dashboard(
         try:
             result = await service.grafana_service.create_dashboard(dashboard_create)
         except Exception as gae:
-            service._raise_http_from_grafana_error(gae)
+            if isinstance(gae, GrafanaAPIError) and gae.status in {409, 412} and getattr(dashboard_create.dashboard, "uid", None):
+                next_uid = f"{str(dashboard_create.dashboard.uid)}-{uuid.uuid4().hex[:6]}"
+                retry_dashboard = dashboard_create.dashboard.model_copy(update={"uid": next_uid})
+                retry_payload = dashboard_create.model_copy(update={"dashboard": retry_dashboard})
+                try:
+                    result = await service.grafana_service.create_dashboard(retry_payload)
+                except Exception as retry_exc:
+                    service._raise_http_from_grafana_error(retry_exc)
+            else:
+                service._raise_http_from_grafana_error(gae)
         if not result:
             return None
 
@@ -329,7 +392,7 @@ async def create_dashboard(
         db_dashboard = GrafanaDashboard(
             tenant_id=tenant_id, created_by=user_id, grafana_uid=uid,
             grafana_id=result.get("id"),
-            title=dashboard_data.get("title", "Untitled"),
+            title=requested_title or dashboard_data.get("title", "Untitled"),
             folder_uid=folder_uid, visibility=visibility,
             tags=dashboard_data.get("tags", []),
             hidden_by=[],
@@ -365,6 +428,20 @@ async def update_dashboard(
     if not db_dashboard:
         return None
 
+    requested_title = ""
+    if getattr(dashboard_update, "dashboard", None) is not None:
+        requested_title = str(getattr(dashboard_update.dashboard, "title", "") or "").strip()
+    if requested_title and await _has_accessible_title_conflict(
+        service,
+        db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        group_ids=group_ids,
+        title=requested_title,
+        exclude_uid=uid,
+    ):
+        raise HTTPException(status_code=409, detail="Dashboard title already exists in your visible scope")
+
     # Validate incoming dashboard JSON contains datasource references
     try:
         dash_obj = dashboard_update.dashboard if hasattr(dashboard_update, 'dashboard') else None
@@ -384,7 +461,7 @@ async def update_dashboard(
         return None
 
     dashboard_data = result.get("dashboard", {})
-    db_dashboard.title = dashboard_data.get("title", db_dashboard.title)
+    db_dashboard.title = requested_title or dashboard_data.get("title", db_dashboard.title)
     db_dashboard.tags = dashboard_data.get("tags", [])
 
     if visibility:

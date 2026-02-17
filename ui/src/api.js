@@ -269,6 +269,42 @@ export async function deleteApiKey(keyId) {
   })
 }
 
+export async function getApiKeyShares(keyId) {
+  return request(`/api/auth/api-keys/${keyId}/shares`)
+}
+
+export async function replaceApiKeyShares(keyId, userIds, groupIds = []) {
+  return requestJson(`/api/auth/api-keys/${keyId}/shares`, { method: 'PUT', payload: { user_ids: userIds, group_ids: groupIds } })
+}
+
+export async function deleteApiKeyShare(keyId, userId) {
+  return request(`/api/auth/api-keys/${keyId}/shares/${userId}`, { method: 'DELETE' })
+}
+
+export async function getAuditLogs(params = {}) {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && `${value}` !== '') {
+      search.set(key, String(value))
+    }
+  })
+  const qs = search.toString()
+  return request(`/api/auth/audit-logs${qs ? `?${qs}` : ''}`)
+}
+
+export async function exportAuditLogs(params = {}) {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && `${value}` !== '') {
+      search.set(key, String(value))
+    }
+  })
+  const qs = search.toString()
+  const path = `/api/auth/audit-logs/export${qs ? `?${qs}` : ''}`
+  const res = await request(path)
+  return res
+}
+
 export async function getUsers() {
   return request('/api/auth/users')
 }

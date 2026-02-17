@@ -16,6 +16,7 @@ and Grafana (dashboards/datasources).
 import logging
 import asyncio
 import uvloop
+from urllib.parse import parse_qsl, urlencode
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -25,8 +26,11 @@ import httpx
 
 from config import config, constants
 from routers import tempo_router, loki_router, alertmanager_router, grafana_router, auth_router, agents_router, system_router
-from database import init_database, init_db, connection_test
+from database import init_database, init_db, connection_test, get_db_session
+from db_models import AuditLog
 from middleware.limits import RequestSizeLimitMiddleware, ConcurrencyLimitMiddleware
+from middleware.rate_limit import client_ip
+from services.audit_context import set_request_audit_context, reset_request_audit_context
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -52,6 +56,52 @@ auth_service.backfill_otlp_tokens()
 logger.info("✓ Auth service initialized")
 
 from contextlib import asynccontextmanager
+
+RESOURCE_VIEW_AUDIT_EXCLUDED_PATHS = {
+    "/api/auth/me",
+    "/api/auth/users",
+}
+RESOURCE_VIEW_AUDIT_EXCLUDED_PREFIXES = (
+    "/api/auth/audit-logs",
+)
+
+
+def _skip_resource_view_audit(path: str) -> bool:
+    if path in RESOURCE_VIEW_AUDIT_EXCLUDED_PATHS:
+        return True
+    return any(path.startswith(prefix) for prefix in RESOURCE_VIEW_AUDIT_EXCLUDED_PREFIXES)
+
+
+SENSITIVE_AUDIT_KEYS = (
+    "token",
+    "secret",
+    "password",
+    "passcode",
+    "authorization",
+    "bearer",
+    "jwt",
+    "mfa_code",
+    "setup_token",
+    "code",
+)
+
+
+def _is_sensitive_audit_key(key: str) -> bool:
+    lowered = str(key or "").strip().lower()
+    return any(marker in lowered for marker in SENSITIVE_AUDIT_KEYS)
+
+
+def _sanitize_query_string(raw_query: str) -> str:
+    if not raw_query:
+        return ""
+    pairs = parse_qsl(raw_query, keep_blank_values=True)
+    sanitized = []
+    for key, value in pairs:
+        if _is_sensitive_audit_key(key):
+            sanitized.append((key, "[REDACTED]"))
+        else:
+            sanitized.append((key, value))
+    return urlencode(sanitized, doseq=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -93,7 +143,41 @@ app = FastAPI(
 
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
-    response = await call_next(request)
+    context_tokens = set_request_audit_context(client_ip(request), request.headers.get("user-agent"))
+    try:
+        response = await call_next(request)
+    finally:
+        reset_request_audit_context(context_tokens)
+
+    try:
+        if request.method == "GET" and request.url.path.startswith("/api/") and not _skip_resource_view_audit(request.url.path):
+            auth_header = request.headers.get("authorization", "")
+            cookie_token = request.cookies.get("beobservant_token")
+            bearer = auth_header.split(" ", 1)[1].strip() if auth_header.lower().startswith("bearer ") else None
+            token = bearer or cookie_token
+            if token:
+                token_data = auth_service.decode_token(token)
+                if token_data:
+                    with get_db_session() as db:
+                        db.add(
+                            AuditLog(
+                                tenant_id=token_data.tenant_id,
+                                user_id=token_data.user_id,
+                                action="resource.view",
+                                resource_type="http",
+                                resource_id=request.url.path,
+                                details={
+                                    "method": request.method,
+                                    "status_code": response.status_code,
+                                    "query": _sanitize_query_string(str(request.query_params)),
+                                },
+                                ip_address=client_ip(request),
+                                user_agent=request.headers.get("user-agent"),
+                            )
+                        )
+    except Exception:
+        logger.debug("Skipping middleware audit write for request %s", request.url.path)
+
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")

@@ -13,6 +13,8 @@ Defines all available permissions in the system with their metadata. This is use
 """
 
 PERMISSION_DEFS = [
+    ("read:audit_logs", "Read Audit Logs", "View immutable audit and compliance logs", "audit_logs", "read"),
+
     ("read:alerts", "Read Alerts", "View alert rules and active alerts", "alerts", "read"),
     ("create:alerts", "Create Alerts", "Create alerts", "alerts", "create"),
     ("update:alerts", "Update Alerts", "Update alerts", "alerts", "update"),

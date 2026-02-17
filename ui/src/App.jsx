@@ -31,6 +31,7 @@ const UsersPage = lazy(() => import('./pages/UsersPage'))
 const GroupsPage = lazy(() => import('./pages/GroupsPage'))
 const ApiKeyPage = lazy(() => import('./pages/ApiKeyPage'))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'))
+const AuditCompliancePage = lazy(() => import('./pages/AuditCompliancePage'))
 
 function PageLoader() {
   return (
@@ -115,7 +116,8 @@ function AppContent() {
     { path: '/users', element: <UsersPage /> },
     { path: '/groups', element: <GroupsPage /> },
     { path: '/apikey', element: <ApiKeyPage /> },
-    { path: '/integrations', element: <IntegrationsPage />, permissions: ['read:channels'] }
+    { path: '/integrations', element: <IntegrationsPage />, permissions: ['read:channels'] },
+    { path: '/audit-compliance', element: <AuditCompliancePage />, permissions: ['read:audit_logs'] }
   ]
 
   return (

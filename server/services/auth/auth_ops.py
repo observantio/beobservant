@@ -226,19 +226,24 @@ def update_password(service, user_id: str, password_update, tenant_id: str) -> b
 def validate_otlp_token(service, token: str) -> Optional[str]:
     if not token:
         return None
-    with get_db_session() as db:
-        api_key = (
-            db.query(UserApiKey)
-            .join(User, User.id == UserApiKey.user_id)
-            .join(Tenant, Tenant.id == User.tenant_id)
-            .filter(
-                UserApiKey.otlp_token == token,
-                UserApiKey.is_enabled.is_(True),
-                User.is_active.is_(True),
-                Tenant.is_active.is_(True),
+    try:
+        with get_db_session() as db:
+            api_key = (
+                db.query(UserApiKey)
+                .join(User, User.id == UserApiKey.user_id)
+                .join(Tenant, Tenant.id == User.tenant_id)
+                .filter(
+                    UserApiKey.otlp_token == token,
+                    UserApiKey.is_enabled.is_(True),
+                    User.is_active.is_(True),
+                    Tenant.is_active.is_(True),
+                )
+                .first()
             )
-            .first()
-        )
-        if not api_key:
-            return None
-        return api_key.key
+            if not api_key:
+                return None
+            return api_key.key
+    except Exception as exc:
+        service.logger.warning("OTLP token validation failed due to internal error")
+        service.logger.debug("OTLP validation error detail: %s", exc)
+        return None

@@ -291,6 +291,12 @@ function UserMenu({ user, logout, hasPermission, openChangePassword }) {
             <span className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted" aria-hidden>integration_instructions</span>{' '}Integrations
           </NavLink>
 
+          {hasPermission('read:audit_logs') && user?.role === 'admin' && (
+            <NavLink to="/audit-compliance" role="menuitem" tabIndex={0} className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50" onClick={() => setOpen(false)}>
+              <span className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted" aria-hidden>policy</span>{' '}Audit
+            </NavLink>
+          )}
+
           <button type="button" role="menuitem" onClick={() => { setOpen(false); openChangePassword?.() }} className="w-full text-left px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50">
             <span className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted" aria-hidden>lock</span>{' '}Password
           </button>

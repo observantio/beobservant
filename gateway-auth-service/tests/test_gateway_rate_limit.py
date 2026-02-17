@@ -56,6 +56,94 @@ class GatewayRateLimitTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             service.enforce_ip_allowlist(_request("198.51.100.1"))
 
+    def test_allowlist_blocks_when_empty_by_default(self):
+        service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
+        with self.assertRaises(HTTPException):
+            service.enforce_ip_allowlist(_request("198.51.100.1"))
+
+    def test_allowlist_allows_when_fail_open_env_set(self):
+        import importlib
+        import os
+
+        prev = os.environ.get("GATEWAY_ALLOWLIST_FAIL_OPEN")
+        try:
+            os.environ["GATEWAY_ALLOWLIST_FAIL_OPEN"] = "true"
+            # reload module so the module-level flag picks up the env change
+            importlib.reload(__import__("services.gateway_service", fromlist=["*"]))
+            from services.gateway_service import GatewayAuthService
+            service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
+            # should not raise
+            service.enforce_ip_allowlist(_request("198.51.100.1"))
+        finally:
+            if prev is None:
+                os.environ.pop("GATEWAY_ALLOWLIST_FAIL_OPEN", None)
+            else:
+                os.environ["GATEWAY_ALLOWLIST_FAIL_OPEN"] = prev
+            importlib.reload(__import__("services.gateway_service", fromlist=["*"]))
+
+    def test_validate_otlp_token_raises_database_unavailable_on_db_error(self):
+        service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
+
+        from sqlalchemy.exc import SQLAlchemyError
+
+        class BrokenSession:
+            def __enter__(self):
+                raise SQLAlchemyError("db down")
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        # patch the module-level SessionLocal used by the service
+        import services.gateway_service as svc_mod
+        prev = svc_mod.db_models.SessionLocal
+        try:
+            svc_mod.db_models.SessionLocal = BrokenSession
+            with self.assertRaises(svc_mod.DatabaseUnavailable):
+                service.validate_otlp_token("tok")
+        finally:
+            svc_mod.db_models.SessionLocal = prev
+
+    def test_validate_endpoint_returns_503_on_database_unavailable(self):
+        # Ensure allowlist permits our test IP
+        import ipaddress
+        from routers import gateway_router
+
+        gateway_router._service._networks = [ipaddress.ip_network("127.0.0.1/32")]
+
+        # stub the validate_otlp_token to simulate DB outage
+        import services.gateway_service as svc_mod
+
+        def _boom(token):
+            raise svc_mod.DatabaseUnavailable("db down")
+
+        prev = gateway_router._service.validate_otlp_token
+        try:
+            gateway_router._service.validate_otlp_token = _boom
+            scope = {
+                "type": "http",
+                "http_version": "1.1",
+                "method": "GET",
+                "path": "/api/gateway/validate",
+                "headers": [(b"x-otlp-token", b"tok"), (b"x-forwarded-for", b"127.0.0.1")],
+                "client": ("127.0.0.1", 1234),
+                "scheme": "http",
+                "query_string": b"",
+            }
+            req = Request(scope)
+            import asyncio
+            with self.assertLogs("routers.gateway_router", level="WARNING") as log_ctx:
+                with self.assertRaises(HTTPException) as cm:
+                    asyncio.run(gateway_router.validate_otlp_token(req))
+            # router returns sanitized 503 and logs a friendly warning (no SQL internals)
+            self.assertEqual(cm.exception.status_code, 503)
+            self.assertEqual(cm.exception.detail, "Auth database unavailable")
+            log_output = "\n".join(log_ctx.output)
+            self.assertIn("Auth database unavailable", log_output)
+            self.assertNotIn("SQLAlchemy", log_output)
+            self.assertNotIn("Traceback", log_output)
+        finally:
+            gateway_router._service.validate_otlp_token = prev
+
 
 if __name__ == "__main__":
     unittest.main()

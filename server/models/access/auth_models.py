@@ -50,6 +50,8 @@ class Role(str, Enum):
 
 
 class Permission(str, Enum):
+    READ_AUDIT_LOGS = "read:audit_logs"
+
     READ_ALERTS = "read:alerts"
     CREATE_ALERTS = "create:alerts"
     UPDATE_ALERTS = "update:alerts"

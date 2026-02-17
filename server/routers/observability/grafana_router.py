@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, Body, Depends, Request, sta
 from fastapi.responses import Response, JSONResponse
 from typing import Optional, List, Dict
 import logging
+from ipaddress import ip_address, ip_network
 
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate, DashboardSearchResult
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
@@ -50,7 +51,29 @@ auth_service = DatabaseAuthService()
 
 
 def _cookie_secure(request: Request) -> bool:
-    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").lower() == "https"
+    # Mirror auth cookie trust rules: direct TLS or trusted proxied TLS
+    if request.url.scheme == "https":
+        return True
+    if not config.TRUST_PROXY_HEADERS:
+        return False
+
+    trusted_cidrs = getattr(config, "TRUSTED_PROXY_CIDRS", []) or []
+    direct_peer = (request.client.host if request.client else "").strip()
+
+    if trusted_cidrs:
+        try:
+            peer_ip = ip_address(direct_peer)
+            for cidr in trusted_cidrs:
+                try:
+                    if peer_ip in ip_network(cidr, strict=False):
+                        return request.headers.get("x-forwarded-proto", "").lower() == "https"
+                except ValueError:
+                    continue
+        except ValueError:
+            return False
+        return False
+
+    return request.headers.get("x-forwarded-proto", "").lower() == "https"
 
 
 def _normalize_grafana_next_path(path: Optional[str]) -> str:
@@ -121,11 +144,12 @@ async def bootstrap_grafana_session(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication token unavailable")
 
     response = JSONResponse({"launch_url": f"/grafana{next_path}"})
+    secure_flag = bool(config.FORCE_SECURE_COOKIES) or _cookie_secure(request)
     response.set_cookie(
         key="beobservant_token",
         value=token,
         httponly=True,
-        secure=_cookie_secure(request),
+        secure=secure_flag,
         samesite="lax",
         max_age=config.JWT_EXPIRATION_MINUTES * 60,
         path="/",

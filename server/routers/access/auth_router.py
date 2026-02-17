@@ -12,9 +12,18 @@ Authentication and access management router.
 
 
 import logging
-from typing import List
+from typing import List, Optional
+from datetime import datetime, timedelta, timezone
+import csv
+import io
+import json
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response, Query
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import aliased
+from sqlalchemy import String
+from ipaddress import ip_address, ip_network
 
 from config import config
 from models.access.user_models import (
@@ -26,7 +35,7 @@ from models.access.group_models import (
     Group, GroupCreate, GroupUpdate, GroupMembersUpdate
 )
 from models.access.api_key_models import (
-    ApiKey, ApiKeyCreate, ApiKeyUpdate
+    ApiKey, ApiKeyCreate, ApiKeyUpdate, ApiKeyShareUpdateRequest, ApiKeyShareUser
 )
 from models.access.auth_models import TokenData, Permission, Role, ROLE_PERMISSIONS, Token
 from models.access.auth_models import OIDCAuthURLRequest, OIDCCodeExchangeRequest, OIDCAuthURLResponse
@@ -45,7 +54,8 @@ from middleware.dependencies import (
 from middleware.error_handlers import handle_route_errors
 from services.notification_service import NotificationService
 from database import get_db_session
-from db_models import Tenant
+from db_models import Tenant, AuditLog, User
+from services.audit_context import get_request_audit_context
 
 logger = logging.getLogger(__name__)
 
@@ -56,28 +66,116 @@ router = APIRouter(prefix="/api/auth", tags=["authentication"])
 notification_service = NotificationService()
 
 
+def _require_admin_with_audit_permission(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AUDIT_LOGS, "auth"))):
+    if str(getattr(current_user, "role", "")).lower() != Role.ADMIN.value and not getattr(current_user, "is_superuser", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required to view audit logs")
+    return current_user
+
+
 def _cookie_secure(request: Request) -> bool:
-    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").lower() == "https"
+    # Direct TLS
+    if request.url.scheme == "https":
+        return True
+
+    # Only trust forwarded proto when proxy headers are explicitly enabled.
+    if not config.TRUST_PROXY_HEADERS:
+        return False
+
+    # If TRUSTED_PROXY_CIDRS is empty we accept forwarded headers from any peer.
+    trusted_cidrs = getattr(config, "TRUSTED_PROXY_CIDRS", []) or []
+    direct_peer = (request.client.host if request.client else "").strip()
+
+    if trusted_cidrs:
+        try:
+            peer_ip = ip_address(direct_peer)
+            for cidr in trusted_cidrs:
+                try:
+                    if peer_ip in ip_network(cidr, strict=False):
+                        return request.headers.get("x-forwarded-proto", "").lower() == "https"
+                except ValueError:
+                    continue
+        except ValueError:
+            return False
+        return False
+
+    # No CIDRs configured, but proxy header trust enabled — accept forwarded proto value.
+    return request.headers.get("x-forwarded-proto", "").lower() == "https"
 
 
 def _set_auth_cookie(request: Request, response: Response, token: str) -> None:
+    # FORCE_SECURE_COOKIES can be used to ensure `Secure` is always set in production.
+    secure_flag = bool(config.FORCE_SECURE_COOKIES) or _cookie_secure(request)
     response.set_cookie(
         key="beobservant_token",
         value=token,
         httponly=True,
-        secure=_cookie_secure(request),
+        secure=secure_flag,
         samesite="lax",
         max_age=config.JWT_EXPIRATION_MINUTES * 60,
         path="/",
     )
 
 
+_AUDIT_SENSITIVE_KEYS = (
+    "token",
+    "secret",
+    "password",
+    "passcode",
+    "authorization",
+    "bearer",
+    "jwt",
+    "mfa_code",
+    "setup_token",
+    "code",
+)
+
+
+def _audit_key_is_sensitive(key: str) -> bool:
+    lowered = str(key or "").strip().lower()
+    return any(marker in lowered for marker in _AUDIT_SENSITIVE_KEYS)
+
+
+def _redact_query_string(raw: str) -> str:
+    if not raw:
+        return ""
+    pairs = parse_qsl(raw, keep_blank_values=True)
+    sanitized = []
+    for key, value in pairs:
+        sanitized.append((key, "[REDACTED]" if _audit_key_is_sensitive(key) else value))
+    return urlencode(sanitized, doseq=True)
+
+
+def _sanitize_resource_id(resource_id: Optional[str]) -> str:
+    text = str(resource_id or "")
+    if not text or "?" not in text:
+        return text
+    parsed = urlsplit(text)
+    if not parsed.query:
+        return text
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, _redact_query_string(parsed.query), parsed.fragment))
+
+
+def _sanitize_audit_details(details: Optional[dict]) -> dict:
+    source = details if isinstance(details, dict) else {}
+    sanitized = {}
+    for key, value in source.items():
+        if _audit_key_is_sensitive(key):
+            sanitized[key] = "[REDACTED]"
+            continue
+        if key == "query" and isinstance(value, str):
+            sanitized[key] = _redact_query_string(value)
+            continue
+        sanitized[key] = value
+    return sanitized
+
+
 def _clear_auth_cookie(request: Request, response: Response) -> None:
+    secure_flag = bool(config.FORCE_SECURE_COOKIES) or _cookie_secure(request)
     response.set_cookie(
         key="beobservant_token",
         value="",
         httponly=True,
-        secure=_cookie_secure(request),
+        secure=secure_flag,
         samesite="lax",
         max_age=0,
         expires=0,
@@ -248,8 +346,8 @@ async def mfa_enroll(current_user: TokenData = Depends(get_current_user_or_mfa_s
     try:
         payload = await run_in_threadpool(auth_service.enroll_totp, current_user.user_id)
         return TotpEnrollResponse(**payload)
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to enroll MFA")
 
 
 @router.post('/mfa/verify', response_model=RecoveryCodesResponse)
@@ -258,8 +356,8 @@ async def mfa_verify(payload: MfaVerifyRequest, current_user: TokenData = Depend
     try:
         codes = await run_in_threadpool(auth_service.verify_enable_totp, current_user.user_id, payload.code)
         return RecoveryCodesResponse(recovery_codes=codes)
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to verify MFA code")
 
 
 @router.post('/mfa/disable')
@@ -336,6 +434,210 @@ async def delete_api_key(
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
     return {"message": "API key deleted"}
+
+
+@router.get("/api-keys/{key_id}/shares", response_model=List[ApiKeyShareUser])
+@handle_route_errors()
+async def get_api_key_shares(
+    key_id: str,
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_API_KEYS, "auth"))
+):
+    return await run_in_threadpool(auth_service.list_api_key_shares, current_user.user_id, current_user.tenant_id, key_id)
+
+
+@router.put("/api-keys/{key_id}/shares", response_model=List[ApiKeyShareUser])
+@handle_route_errors()
+async def put_api_key_shares(
+    key_id: str,
+    payload: ApiKeyShareUpdateRequest,
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_API_KEYS, "auth"))
+):
+    return await run_in_threadpool(
+        auth_service.replace_api_key_shares,
+        current_user.user_id,
+        current_user.tenant_id,
+        key_id,
+        payload.user_ids,
+        payload.group_ids,
+    )
+
+
+@router.delete("/api-keys/{key_id}/shares/{shared_user_id}")
+@handle_route_errors()
+async def remove_api_key_share(
+    key_id: str,
+    shared_user_id: str,
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_API_KEYS, "auth"))
+):
+    success = await run_in_threadpool(
+        auth_service.delete_api_key_share,
+        current_user.user_id,
+        current_user.tenant_id,
+        key_id,
+        shared_user_id,
+    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share not found")
+    return {"message": "API key share removed"}
+
+
+@router.get("/audit-logs")
+async def list_audit_logs(
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    user_id: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    resource_type: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    tenant_id: Optional[str] = Query(None),
+    limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
+    offset: int = Query(0, ge=0),
+    current_user: TokenData = Depends(_require_admin_with_audit_permission),
+):
+    actor = aliased(User)
+    with get_db_session() as db:
+        query = (
+            db.query(AuditLog, actor.username, actor.email)
+            .outerjoin(actor, actor.id == AuditLog.user_id)
+        )
+
+        scoped_tenant = tenant_id if (getattr(current_user, "is_superuser", False) and tenant_id) else current_user.tenant_id
+        if not getattr(current_user, "is_superuser", False):
+            query = query.filter(AuditLog.tenant_id == current_user.tenant_id)
+        elif scoped_tenant:
+            query = query.filter(AuditLog.tenant_id == scoped_tenant)
+
+        if start is not None:
+            query = query.filter(AuditLog.created_at >= start)
+        if end is not None:
+            query = query.filter(AuditLog.created_at <= end)
+        if user_id:
+            query = query.filter(AuditLog.user_id == user_id)
+        if action:
+            query = query.filter(AuditLog.action == action)
+        if resource_type:
+            query = query.filter(AuditLog.resource_type == resource_type)
+        if q:
+            query = query.filter(AuditLog.details.cast(String).ilike(f"%{q}%"))
+
+        rows = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit).all()
+        items = []
+        for log, username, email in rows:
+            items.append({
+                "id": log.id,
+                "tenant_id": log.tenant_id,
+                "user_id": log.user_id,
+                "username": username,
+                "email": email,
+                "action": log.action,
+                "resource_type": log.resource_type,
+                "resource_id": _sanitize_resource_id(log.resource_id),
+                "details": _sanitize_audit_details(log.details),
+                "ip_address": log.ip_address,
+                "user_agent": log.user_agent,
+                "created_at": log.created_at,
+            })
+        ip_address, user_agent = get_request_audit_context()
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=5)
+        recent_view = (
+            db.query(AuditLog.id)
+            .filter(
+                AuditLog.tenant_id == current_user.tenant_id,
+                AuditLog.user_id == current_user.user_id,
+                AuditLog.action == "audit_logs.view",
+                AuditLog.resource_type == "audit_logs",
+                AuditLog.resource_id == "list",
+                AuditLog.created_at >= cutoff,
+            )
+            .first()
+        )
+        if not recent_view:
+            db.add(AuditLog(
+                tenant_id=current_user.tenant_id,
+                user_id=current_user.user_id,
+                action="audit_logs.view",
+                resource_type="audit_logs",
+                resource_id="list",
+                details={"limit": limit, "offset": offset},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ))
+        return items
+
+
+@router.get("/audit-logs/export")
+async def export_audit_logs_csv(
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    user_id: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    resource_type: Optional[str] = Query(None),
+    tenant_id: Optional[str] = Query(None),
+    current_user: TokenData = Depends(_require_admin_with_audit_permission),
+):
+    actor = aliased(User)
+    with get_db_session() as db:
+        query = (
+            db.query(AuditLog, actor.username, actor.email)
+            .outerjoin(actor, actor.id == AuditLog.user_id)
+        )
+
+        scoped_tenant = tenant_id if (getattr(current_user, "is_superuser", False) and tenant_id) else current_user.tenant_id
+        if not getattr(current_user, "is_superuser", False):
+            query = query.filter(AuditLog.tenant_id == current_user.tenant_id)
+        elif scoped_tenant:
+            query = query.filter(AuditLog.tenant_id == scoped_tenant)
+
+        if start is not None:
+            query = query.filter(AuditLog.created_at >= start)
+        if end is not None:
+            query = query.filter(AuditLog.created_at <= end)
+        if user_id:
+            query = query.filter(AuditLog.user_id == user_id)
+        if action:
+            query = query.filter(AuditLog.action == action)
+        if resource_type:
+            query = query.filter(AuditLog.resource_type == resource_type)
+
+        rows = query.order_by(AuditLog.created_at.desc()).all()
+
+        ip_address, user_agent = get_request_audit_context()
+        db.add(AuditLog(
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.user_id,
+            action="audit_logs.export",
+            resource_type="audit_logs",
+            resource_id="csv",
+            details={"count": len(rows)},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        ))
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["id", "created_at", "tenant_id", "user_id", "username", "email", "action", "resource_type", "resource_id", "ip_address", "user_agent", "details"])
+    for log, username, email in rows:
+        writer.writerow([
+            log.id,
+            log.created_at.isoformat() if log.created_at else "",
+            log.tenant_id or "",
+            log.user_id or "",
+            username or "",
+            email or "",
+            log.action,
+            log.resource_type,
+            _sanitize_resource_id(log.resource_id) or "",
+            log.ip_address or "",
+            log.user_agent or "",
+            json.dumps(_sanitize_audit_details(log.details)),
+        ])
+
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=audit-logs.csv"},
+    )
 
 
 @router.get("/users", response_model=List[UserResponse])

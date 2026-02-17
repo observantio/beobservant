@@ -171,15 +171,24 @@ async def get_alerts(
         silenced=silenced,
         inhibited=inhibited
     )
+    alert_dicts = [alert.model_dump(by_alias=True) for alert in alerts]
     try:
         await run_in_threadpool(
             storage_service.sync_incidents_from_alerts,
             current_user.tenant_id,
-            [alert.model_dump(by_alias=True) for alert in alerts],
+            alert_dicts,
         )
     except Exception as exc:
         logger.warning("Incident sync skipped due to error: %s", exc)
-    return alerts
+
+    filtered_alert_dicts = await run_in_threadpool(
+        storage_service.filter_alerts_for_user,
+        current_user.tenant_id,
+        current_user.user_id,
+        getattr(current_user, "group_ids", []) or [],
+        alert_dicts,
+    )
+    return [Alert(**alert_dict) for alert_dict in filtered_alert_dicts]
 
 
 @router.get("/incidents", response_model=List[AlertIncident])

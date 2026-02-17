@@ -17,7 +17,7 @@ import logging
 from fastapi import APIRouter, Request, Response, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 
-from services.gateway_service import GatewayAuthService
+from services.gateway_service import GatewayAuthService, DatabaseUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,13 @@ async def validate_otlp_token(request: Request):
 
     try:
         org_id = _service.validate_otlp_token(token)
-    except SQLAlchemyError:
-        logger.exception("Database error while validating OTLP token")
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth database unavailable")
+    except Exception as exc:
+        if isinstance(exc, SQLAlchemyError) or isinstance(exc, DatabaseUnavailable) or exc.__class__.__name__ == "DatabaseUnavailable":
+            # Sanitize internal DB errors and return a stable 503 response. Do not
+            # expose internal stack traces or DB error text to callers.
+            logger.warning("Auth database unavailable")
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth database unavailable")
+        raise
 
     if not org_id:
         logger.warning("OTLP token validation failed – token_prefix=%s", token_prefix)

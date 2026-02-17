@@ -172,15 +172,43 @@ export default function IncidentBoardPage() {
     return map
   }, [incidentUsers])
 
+  const assignableIncidentUsers = useMemo(() => {
+    const incident = incidentModal.incident
+    if (!incident) return []
+
+    const visibility = String(incident.visibility || 'public').toLowerCase()
+    if (visibility === 'private') {
+      return incidentUsers.filter((userItem) => String(userItem?.id || '') === String(user?.id || user?.user_id || ''))
+    }
+
+    if (visibility === 'group') {
+      const sharedGroupIds = new Set((Array.isArray(incident.sharedGroupIds) ? incident.sharedGroupIds : []).map((id) => String(id)))
+      if (sharedGroupIds.size === 0) return []
+      return incidentUsers.filter((userItem) => {
+        const userGroupIds = new Set([
+          ...((Array.isArray(userItem?.group_ids) ? userItem.group_ids : []).map((id) => String(id))),
+          ...((Array.isArray(userItem?.groupIds) ? userItem.groupIds : []).map((id) => String(id))),
+          ...((Array.isArray(userItem?.groups) ? userItem.groups : []).map((group) => String(group?.id || ''))),
+        ].filter(Boolean))
+        for (const gid of userGroupIds) {
+          if (sharedGroupIds.has(gid)) return true
+        }
+        return false
+      })
+    }
+
+    return incidentUsers
+  }, [incidentModal.incident, incidentUsers, user])
+
   const filteredIncidentUsers = useMemo(() => {
     const q = assigneeSearch.trim().toLowerCase()
-    if (!q) return incidentUsers.slice(0, 20)
-    return incidentUsers
+    if (!q) return assignableIncidentUsers.slice(0, 20)
+    return assignableIncidentUsers
       .filter((userItem) => {
         const haystack = [userItem.full_name, userItem.username, userItem.email, userItem.id]
         return haystack.some((h) => h?.toLowerCase().includes(q))
       })
-  }, [incidentUsers, assigneeSearch])
+  }, [assignableIncidentUsers, assigneeSearch])
 
   const getUserLabel = (userItem) => {
     if (!userItem) return 'Unknown user'
@@ -1115,7 +1143,7 @@ export default function IncidentBoardPage() {
                             setExpandedNotes(next)
                           }}
                         >
-                          <span className="material-icons text-sm">unfold_more</span>
+                          <span className="text-xs font-medium">Expand all</span>
                           <span className="sr-only">Toggle expand notes</span>
                           <HelpTooltip content="Expand or collapse all note details" />
                         </button>
@@ -1124,7 +1152,11 @@ export default function IncidentBoardPage() {
                           className="text-xs text-sre-text-muted hover:text-sre-text flex items-center gap-2"
                           onClick={async () => {
                             try {
-                              const allText = activeIncident.notes.slice().reverse().slice(0, 10).map(n => `${n.author}: ${n.text}`).join('\n\n')
+                              const allText = activeIncident.notes.slice().reverse().slice(0, 10).map((n) => {
+                                const userItem = userById[n.author]
+                                const authorLabel = userItem ? getUserLabel(userItem) : (n.author || 'unknown')
+                                return `${authorLabel} (${formatDateTime(n.createdAt)}): ${n.text}`
+                              }).join('\n\n')
                               await navigator.clipboard.writeText(allText)
                               toast.success('Copied notes to clipboard')
                             } catch (e) {
@@ -1132,7 +1164,7 @@ export default function IncidentBoardPage() {
                             }
                           }}
                         >
-                          <span className="material-icons text-sm">content_copy</span>
+                          <span className="text-xs font-medium">Copy all</span>
                           <span className="sr-only">Copy notes</span>
                           <HelpTooltip content="Copy all notes to clipboard" />
                         </button>
@@ -1142,16 +1174,18 @@ export default function IncidentBoardPage() {
                     <div className="space-y-3 max-h-44 overflow-auto pr-2">
                       {activeIncident.notes.slice().reverse().slice(0, 10).map((note, idx) => {
                         const key = note.createdAt ? String(note.createdAt) : `${note.author}-${idx}`
+                        const noteAuthorUser = userById[note.author]
+                        const noteAuthorLabel = noteAuthorUser ? getUserLabel(noteAuthorUser) : (note.author || 'unknown')
                         const collapsed = !expandedNotes.has(key)
                         return (
                           <div key={`${activeIncident.id}-modal-note-${key}`} className="p-3 bg-sre-bg rounded-lg border border-sre-border flex gap-3 items-start">
                             <div className="w-8 h-8 rounded-md bg-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold text-sm flex-shrink-0">
-                              {String(note.author || '').split(' ').map(s => s[0]).slice(0,2).join('').toUpperCase()}
+                              {String(noteAuthorLabel || '').split(' ').map(s => s[0]).slice(0,2).join('').toUpperCase()}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-3">
                                 <div className="text-xs text-sre-text truncate">
-                                  <span className="font-medium text-sre-text">{note.author}</span>
+                                  <span className="font-medium text-sre-text">{noteAuthorLabel}</span>
                                   <span className="text-sre-text-muted ml-2 text-xs">· {formatDateTime(note.createdAt)}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1164,7 +1198,7 @@ export default function IncidentBoardPage() {
                                       [activeIncident.id]: { ...(prev[activeIncident.id] || {}), note: `${prev[activeIncident.id]?.note || ''}> ${note.text}\n\n` }
                                     }))}
                                   >
-                                    <span className="material-icons text-sm">format_quote</span>
+                                    <span className="text-xs">Quote</span>
                                   </button>
                                   <button
                                     type="button"
@@ -1179,7 +1213,7 @@ export default function IncidentBoardPage() {
                                       }
                                     }}
                                   >
-                                    <span className="material-icons text-sm">content_copy</span>
+                                    <span className="text-xs">Copy</span>
                                   </button>
                                   <button
                                     type="button"
@@ -1191,7 +1225,7 @@ export default function IncidentBoardPage() {
                                       setExpandedNotes(next)
                                     }}
                                   >
-                                    <span className="material-icons text-sm">{collapsed ? 'expand_more' : 'expand_less'}</span>
+                                    <span className="text-xs">{collapsed ? 'More' : 'Less'}</span>
                                   </button>
                                 </div>
                               </div>

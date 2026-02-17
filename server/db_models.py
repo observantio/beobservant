@@ -11,7 +11,7 @@ Database models for enterprise IAM system.
 """
 from datetime import datetime, timezone
 from sqlalchemy import (
-    Column, String, Boolean, DateTime, ForeignKey, Table, Text, JSON, Index, Integer
+    Column, String, Boolean, DateTime, ForeignKey, Table, Text, JSON, Index, Integer, UniqueConstraint, event, text
 )
 from sqlalchemy.orm import relationship, declarative_base
 import uuid
@@ -131,6 +131,7 @@ class User(Base):
     groups = relationship('Group', secondary=user_groups, back_populates='members')
     permissions = relationship('Permission', secondary=user_permissions, back_populates='users')
     api_keys = relationship('UserApiKey', back_populates='user', cascade=CASCADE_ALL_DELETE_ORPHAN)
+    shared_api_key_links = relationship('ApiKeyShare', foreign_keys='ApiKeyShare.shared_user_id', back_populates='shared_user', cascade=CASCADE_ALL_DELETE_ORPHAN)
     created_rules = relationship('AlertRule', foreign_keys='AlertRule.created_by', back_populates='creator')
     created_channels = relationship('NotificationChannel', foreign_keys='NotificationChannel.created_by', back_populates='creator')
 
@@ -183,12 +184,36 @@ class UserApiKey(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     user = relationship('User', back_populates='api_keys')
+    shares = relationship('ApiKeyShare', back_populates='api_key', cascade=CASCADE_ALL_DELETE_ORPHAN)
 
     __table_args__ = (
         Index('idx_user_api_keys_user', 'user_id'),
         Index('idx_user_api_keys_tenant', 'tenant_id'),
         Index('idx_user_api_keys_enabled', 'is_enabled'),
         Index('idx_user_api_keys_otlp_token', 'otlp_token'),
+    )
+
+
+class ApiKeyShare(Base):
+    """Share grants for API keys (view + use only)."""
+    __tablename__ = 'api_key_shares'
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    tenant_id = Column(String, ForeignKey(TENANTS_ID, ondelete='CASCADE'), nullable=False, index=True)
+    api_key_id = Column(String, ForeignKey('user_api_keys.id', ondelete='CASCADE'), nullable=False, index=True)
+    owner_user_id = Column(String, ForeignKey(USERS_ID, ondelete='CASCADE'), nullable=False, index=True)
+    shared_user_id = Column(String, ForeignKey(USERS_ID, ondelete='CASCADE'), nullable=False, index=True)
+    can_use = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    api_key = relationship('UserApiKey', back_populates='shares')
+    shared_user = relationship('User', foreign_keys=[shared_user_id], back_populates='shared_api_key_links')
+
+    __table_args__ = (
+        UniqueConstraint('api_key_id', 'shared_user_id', name='uq_api_key_shares_key_user'),
+        Index('idx_api_key_shares_tenant', 'tenant_id'),
+        Index('idx_api_key_shares_owner', 'owner_user_id'),
+        Index('idx_api_key_shares_shared_user', 'shared_user_id'),
     )
 
 
@@ -335,6 +360,32 @@ class AuditLog(Base):
         Index('idx_audit_logs_user_created', 'user_id', 'created_at'),
         Index('idx_audit_logs_action', 'action'),
     )
+
+
+# Ensure audit_logs are immutable at creation time for Postgres-backed schemas.
+# This attaches DB-level DDL to `Base.metadata.create_all()` so fresh installs
+# get the trigger/function without a separate migration step.
+@event.listens_for(AuditLog.__table__, 'after_create')
+def _create_audit_logs_immutable(target, connection, **kw):
+    if connection.dialect.name != 'postgresql':
+        return
+    # create function (idempotent)
+    connection.execute(text("""
+        CREATE OR REPLACE FUNCTION prevent_audit_log_mutation()
+        RETURNS trigger AS $$
+        BEGIN
+            RAISE EXCEPTION 'audit_logs are immutable';
+        END;
+        $$ LANGUAGE plpgsql;
+    """))
+    # create trigger (safe if exists)
+    connection.execute(text("""
+        DROP TRIGGER IF EXISTS trg_audit_logs_immutable ON audit_logs;
+        CREATE TRIGGER trg_audit_logs_immutable
+        BEFORE UPDATE OR DELETE ON audit_logs
+        FOR EACH ROW
+        EXECUTE FUNCTION prevent_audit_log_mutation();
+    """))
 
 
 dashboard_groups = Table(

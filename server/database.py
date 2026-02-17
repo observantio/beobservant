@@ -166,6 +166,6 @@ def init_db() -> None:
 
     logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=_engine)
-    logger.info("Database tables created successfully")
 
+    logger.info("Database tables created successfully")
 

@@ -208,6 +208,13 @@ class Config:
             os.getenv("REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS"),
             default=self.IS_PRODUCTION,
         )
+
+        # Cookie / allowlist hardening
+        # In production we default to forcing Secure cookies; can be overridden with env
+        self.FORCE_SECURE_COOKIES: bool = _to_bool(os.getenv("FORCE_SECURE_COOKIES"), default=self.IS_PRODUCTION)
+        # When true, an explicit-but-empty allowlist will be treated as permissive. Default is false (fail-closed).
+        self.ALLOWLIST_FAIL_OPEN: bool = _to_bool(os.getenv("ALLOWLIST_FAIL_OPEN"), default=False)
+
         self.DB_AUTO_CREATE_SCHEMA: bool = _to_bool(
             os.getenv("DB_AUTO_CREATE_SCHEMA"),
             default=not self.IS_PRODUCTION,

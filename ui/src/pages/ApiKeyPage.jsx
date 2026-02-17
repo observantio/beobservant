@@ -8,7 +8,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 import { useState, useEffect, useMemo } from 'react'
 import PageHeader from '../components/ui/PageHeader'
-import { Card, Input, Button, Select, Modal } from '../components/ui'
+import { Card, Input, Button, Select, Modal, Checkbox } from '../components/ui'
 import ConfirmModal from '../components/ConfirmModal'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext' 
@@ -32,6 +32,13 @@ export default function ApiKeyPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [keyToDelete, setKeyToDelete] = useState(null)
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [keyToShare, setKeyToShare] = useState(null)
+  const [allUsers, setAllUsers] = useState([])
+  const [allGroups, setAllGroups] = useState([])
+  const [shareSearch, setShareSearch] = useState('')
+  const [selectedShareUserIds, setSelectedShareUserIds] = useState([])
+  const [selectedShareGroupIds, setSelectedShareGroupIds] = useState([])
 
   useEffect(() => {
     if (user) {
@@ -47,6 +54,24 @@ export default function ApiKeyPage() {
     const updatedUser = await api.getCurrentUser()
     updateUser(updatedUser)
     setApiKeys(updatedUser.api_keys || [])
+  }
+
+  const loadUsers = async () => {
+    try {
+      const users = await api.getUsers()
+      setAllUsers(Array.isArray(users) ? users : [])
+    } catch {
+      setAllUsers([])
+    }
+  }
+
+  const loadGroups = async () => {
+    try {
+      const groups = await api.getGroups()
+      setAllGroups(Array.isArray(groups) ? groups : [])
+    } catch {
+      setAllGroups([])
+    }
   }
 
   const handleSaveOrgId = async (e) => {
@@ -114,6 +139,38 @@ export default function ApiKeyPage() {
     }
   }
 
+  const openShareModal = async (key) => {
+    setKeyToShare(key)
+    setSelectedShareUserIds((key?.shared_with || []).map((item) => item.user_id))
+    setSelectedShareGroupIds([])
+    setShareSearch('')
+    setShowShareModal(true)
+    if (!allUsers.length) {
+      await loadUsers()
+    }
+    if (!allGroups.length) {
+      await loadGroups()
+    }
+  }
+
+  const handleSaveShares = async () => {
+    if (!keyToShare) return
+    setLoading(true)
+    try {
+      await api.replaceApiKeyShares(keyToShare.id, selectedShareUserIds, selectedShareGroupIds)
+      await refreshUser()
+      toast.success('API key sharing updated')
+      setShowShareModal(false)
+      setKeyToShare(null)
+      setSelectedShareUserIds([])
+      setSelectedShareGroupIds([])
+    } catch (err) {
+      toast.error(err.body?.detail || err.message || 'Failed to update API key sharing')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleCopy = async (value, successMessage) => {
     try {
       await navigator.clipboard.writeText(value)
@@ -175,6 +232,16 @@ export default function ApiKeyPage() {
   }), [yamlModalToken, derivedLoki, derivedTempo, derivedMimir])
 
   const enabledCount = apiKeys.filter((k) => k.is_enabled).length
+  const filteredShareUsers = useMemo(() => {
+    const q = shareSearch.trim().toLowerCase()
+    if (!q) return allUsers
+    return allUsers.filter((u) => [u.username, u.email, u.full_name, u.id].some((v) => `${v || ''}`.toLowerCase().includes(q)))
+  }, [allUsers, shareSearch])
+
+  const myShareableGroups = useMemo(() => {
+    const myGroupIds = new Set((Array.isArray(user?.group_ids) ? user.group_ids : []).map((id) => String(id)))
+    return allGroups.filter((group) => myGroupIds.has(String(group?.id || '')))
+  }, [allGroups, user])
 
   function formatDisplayKey(key) {
     if (showKeyId === key.id) return key.key || '-'
@@ -224,7 +291,7 @@ export default function ApiKeyPage() {
                     <th className="py-3 px-4">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody >
                   {apiKeys.map((key) => (
                     <tr key={key.id} className="align-top hover:bg-sre-background">
                       <td className="py-3 pl-0 pr-4">
@@ -260,8 +327,11 @@ export default function ApiKeyPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
+                      <td className="py-2 px-4">
+                        <div className="flex gap-2">
+                          {!key.is_shared && (
+                            <Button size="sm" variant="primary" onClick={() => openShareModal(key)} aria-label={`Share ${key.name}`}>Share</Button>
+                          )}
                           {!key.is_default && (
                             <Button size="sm" variant="danger" onClick={() => { setKeyToDelete(key); setShowDeleteConfirm(true); }} aria-label={`Delete ${key.name}`}>Delete</Button>
                           )}
@@ -418,6 +488,53 @@ export default function ApiKeyPage() {
 
             <div className="bg-sre-background p-3 rounded border border-sre-border text-xs overflow-auto max-h-72">
               <pre className="whitespace-pre-wrap break-words text-sre-text"><code>{yamlModalContent}</code></pre>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal isOpen={showShareModal} onClose={() => { setShowShareModal(false); setSelectedShareGroupIds([]) }} title={`Share API Key${keyToShare ? `: ${keyToShare.name}` : ''}`} size="lg" closeOnOverlayClick={false}>
+          <div className="space-y-4">
+            <div className="text-xs text-sre-text-muted">Select users who can view and use this key. Owner retains edit/delete control.</div>
+            <div className="p-3 rounded border border-sre-border bg-sre-background">
+              <div className="text-xs font-medium text-sre-text mb-2">Share with groups you are in</div>
+              {myShareableGroups.length > 0 ? (
+                <div className="space-y-2 max-h-32 overflow-auto">
+                  {myShareableGroups.map((group) => (
+                    <div key={group.id} className="flex items-center justify-between p-2 rounded hover:bg-sre-surface/50">
+                      <div className="text-sm text-sre-text">{group.name}</div>
+                      <Checkbox
+                        checked={selectedShareGroupIds.includes(group.id)}
+                        onChange={() => setSelectedShareGroupIds((prev) => prev.includes(group.id) ? prev.filter((id) => id !== group.id) : [...prev, group.id])}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-sre-text-muted">No eligible groups found.</div>
+              )}
+            </div>
+            <Input value={shareSearch} className="text-sm" onChange={(e) => setShareSearch(e.target.value)} placeholder="Search by username or email" />
+
+            <div className="max-h-64 overflow-auto ">
+              {filteredShareUsers
+                .filter((u) => u.id !== user?.id)
+                .map((u) => (
+                  <div key={u.id} className="flex items-center justify-between p-2 rounded hover:bg-sre-surface/50">
+                    <div className="text-sm text-sre-text">{u.username} {u.email ? `<${u.email}>` : ''}</div>
+                    <Checkbox
+                      checked={selectedShareUserIds.includes(u.id)}
+                      onChange={() => setSelectedShareUserIds((prev) => prev.includes(u.id) ? prev.filter((id) => id !== u.id) : [...prev, u.id])}
+                    />
+                  </div>
+                ))}
+              {filteredShareUsers.filter((u) => u.id !== user?.id).length === 0 && (
+                <div className="p-2 text-sm text-sre-text-muted">No users found.</div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => { setShowShareModal(false); setSelectedShareGroupIds([]) }}>Cancel</Button>
+              <Button onClick={handleSaveShares} loading={loading}>Save</Button>
             </div>
           </div>
         </Modal>

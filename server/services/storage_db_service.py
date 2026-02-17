@@ -41,14 +41,50 @@ from db_models import (
     AlertRule as AlertRuleDB,
     AlertIncident as AlertIncidentDB,
     NotificationChannel as NotificationChannelDB,
+    AuditLog,
     Group,
     User,
 )
 from database import get_db_session
 from config import config as app_config
+from services.audit_context import get_request_audit_context
 
 logger = logging.getLogger(__name__)
 INCIDENT_META_KEY = "beobservant_meta"
+
+
+def _normalize_visibility(value: Optional[str]) -> str:
+    visibility = str(value or "public").lower()
+    if visibility in {"public", "private", "group"}:
+        return visibility
+    if visibility == "tenant":
+        return "public"
+    return "public"
+
+
+def _extract_user_group_ids(user_obj: Optional[User]) -> List[str]:
+    if not user_obj:
+        return []
+    result: List[str] = []
+    for group in (getattr(user_obj, "groups", None) or []):
+        group_id = str(getattr(group, "id", "") or "").strip()
+        if group_id:
+            result.append(group_id)
+    return result
+
+
+def _log_incident_audit(db: Session, *, tenant_id: str, user_id: str, action: str, incident_id: str, details: Dict[str, Any]) -> None:
+    ip_address, user_agent = get_request_audit_context()
+    db.add(AuditLog(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        action=action,
+        resource_type="incidents",
+        resource_id=incident_id,
+        details=details,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    ))
 
 def _get_shared_group_ids(db_obj) -> List[str]:
     """Extract group IDs from a DB object's shared_groups relationship."""
@@ -607,6 +643,109 @@ class DatabaseStorageService:
 
             return self._incident_to_pydantic(incident)
 
+    def _incident_meta(self, incident: AlertIncidentDB) -> Dict[str, Any]:
+        annotations = incident.annotations or {}
+        raw_meta = annotations.get(INCIDENT_META_KEY) if isinstance(annotations, dict) else None
+        meta: Dict[str, Any] = {}
+        if isinstance(raw_meta, str):
+            try:
+                meta = json.loads(raw_meta)
+            except JSONDecodeError:
+                meta = {}
+        elif isinstance(raw_meta, dict):
+            meta = raw_meta
+        return meta
+
+    def _is_assignee_allowed(
+        self,
+        db: Session,
+        *,
+        tenant_id: str,
+        actor_user_id: str,
+        assignee_id: Optional[str],
+        visibility: str,
+        shared_group_ids: List[str],
+    ) -> bool:
+        if not assignee_id:
+            return True
+
+        if visibility == "private":
+            return assignee_id == actor_user_id
+
+        assignee_user = (
+            db.query(User)
+            .options(joinedload(User.groups))
+            .filter(User.id == assignee_id, User.tenant_id == tenant_id, User.is_active.is_(True))
+            .first()
+        )
+        if not assignee_user:
+            return False
+
+        if visibility == "group":
+            assignee_group_ids = set(_extract_user_group_ids(assignee_user))
+            return bool(assignee_group_ids & set(shared_group_ids or []))
+
+        return True
+
+    def filter_alerts_for_user(
+        self,
+        tenant_id: str,
+        user_id: str,
+        group_ids: Optional[List[str]],
+        alerts: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        user_group_ids = [str(group_id) for group_id in (group_ids or []) if str(group_id).strip()]
+        if not alerts:
+            return []
+
+        with get_db_session() as db:
+            visible_alerts: List[Dict[str, Any]] = []
+            for alert in alerts:
+                labels = alert.get("labels") or {}
+                alertname = str(labels.get("alertname") or "").strip()
+                if not alertname:
+                    continue
+
+                org_id_hint = str(
+                    labels.get("org_id")
+                    or labels.get("orgId")
+                    or labels.get("tenant")
+                    or labels.get("product")
+                    or ""
+                ).strip()
+
+                rule_candidates = (
+                    db.query(AlertRuleDB)
+                    .options(joinedload(AlertRuleDB.shared_groups))
+                    .filter(AlertRuleDB.tenant_id == tenant_id, AlertRuleDB.name == alertname, AlertRuleDB.enabled.is_(True))
+                    .all()
+                )
+                if not rule_candidates:
+                    continue
+
+                if org_id_hint:
+                    org_matched = [rule for rule in rule_candidates if str(rule.org_id or "") == org_id_hint]
+                    if org_matched:
+                        rule_candidates = org_matched
+                    else:
+                        no_org_matched = [rule for rule in rule_candidates if not rule.org_id]
+                        if no_org_matched:
+                            rule_candidates = no_org_matched
+
+                is_visible = False
+                for rule in rule_candidates:
+                    visibility = _normalize_visibility(getattr(rule, "visibility", None))
+                    shared_group_ids = _get_shared_group_ids(rule)
+                    created_by = getattr(rule, "created_by", None)
+                    if _has_access(visibility, created_by, user_id, shared_group_ids, user_group_ids):
+                        is_visible = True
+                        break
+
+                if is_visible:
+                    visible_alerts.append(alert)
+
+            return visible_alerts
+
     def update_incident(
         self,
         incident_id: str,
@@ -623,8 +762,43 @@ class DatabaseStorageService:
             if not incident:
                 return None
 
+            previous_assignee = incident.assignee
+            previous_status = str(incident.status or "")
+            resolved_note_text: Optional[str] = None
+
+            meta = self._incident_meta(incident)
+            visibility = _normalize_visibility(str(meta.get("visibility") or "public"))
+            shared_group_ids = [
+                str(group_id)
+                for group_id in (meta.get("shared_group_ids") or [])
+                if isinstance(group_id, str) and group_id.strip()
+            ]
+
             if payload.assignee is not None:
-                incident.assignee = payload.assignee.strip() or None
+                requested_assignee = payload.assignee.strip() or None
+                if not self._is_assignee_allowed(
+                    db,
+                    tenant_id=tenant_id,
+                    actor_user_id=user_id,
+                    assignee_id=requested_assignee,
+                    visibility=visibility,
+                    shared_group_ids=shared_group_ids,
+                ):
+                    if visibility == "private":
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Private incidents can only be assigned to yourself",
+                        )
+                    if visibility == "group":
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Assignee must be a member of at least one shared group",
+                        )
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid assignee for this incident",
+                    )
+                incident.assignee = requested_assignee
 
             # track whether the incoming status update represents a manual reopen/resolve
             manual_manage_flag: Optional[bool] = None
@@ -637,6 +811,10 @@ class DatabaseStorageService:
                 if incident.status == "resolved":
                     incident.resolved_at = datetime.now(timezone.utc)
                     manual_manage_flag = False
+                    if previous_status.lower() != "resolved":
+                        actor = db.query(User).filter(User.id == user_id, User.tenant_id == tenant_id).first()
+                        actor_label = str(getattr(actor, "username", "") or user_id)
+                        resolved_note_text = f"{actor_label} marked this incident as resolved"
                 else:
                     incident.resolved_at = None
                     # manual reopen / investigation should prevent auto-resolve
@@ -644,15 +822,7 @@ class DatabaseStorageService:
                         manual_manage_flag = True
 
             annotations = incident.annotations or {}
-            raw_meta = annotations.get(INCIDENT_META_KEY) if isinstance(annotations, dict) else None
-            meta: Dict[str, object] = {}
-            if isinstance(raw_meta, str):
-                try:
-                    meta = json.loads(raw_meta)
-                except JSONDecodeError:
-                    meta = {}
-            elif isinstance(raw_meta, dict):
-                meta = raw_meta
+            meta = self._incident_meta(incident)
             if not meta.get("created_by"):
                 meta["created_by"] = user_id
 
@@ -713,6 +883,47 @@ class DatabaseStorageService:
                 incident.notes = notes
                 logger.debug("Incident %s notes before append: %s", incident_id, str(notes_before))
                 logger.debug("Incident %s notes after append: %s", incident_id, str(incident.notes))
+
+            if resolved_note_text:
+                notes = list(incident.notes or [])
+                notes.append(
+                    {
+                        "author": user_id,
+                        "text": resolved_note_text,
+                        "createdAt": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+                incident.notes = notes
+
+            if payload.note:
+                _log_incident_audit(
+                    db,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    action="incident.note.add",
+                    incident_id=incident_id,
+                    details={"note_preview": str(payload.note)[:200]},
+                )
+
+            if payload.assignee is not None and incident.assignee != previous_assignee:
+                _log_incident_audit(
+                    db,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    action="incident.assign",
+                    incident_id=incident_id,
+                    details={"from": previous_assignee, "to": incident.assignee},
+                )
+
+            if payload.status is not None and str(incident.status or "") != previous_status:
+                _log_incident_audit(
+                    db,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    action="incident.status.change",
+                    incident_id=incident_id,
+                    details={"from": previous_status, "to": str(incident.status or "")},
+                )
 
             db.flush()
             return self._incident_to_pydantic(incident)

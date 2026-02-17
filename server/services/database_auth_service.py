@@ -52,6 +52,7 @@ from models.access.auth_models import Role, Token, TokenData, ROLE_PERMISSIONS
 from config import config
 from database import get_db_session
 from services.auth.permission_defs import PERMISSION_DEFS
+from services.audit_context import get_request_audit_context
 from services.auth.oidc_service import OIDCService
 from services.auth.auth_ops import (
     authenticate_user as authenticate_user_op,
@@ -85,6 +86,9 @@ from services.auth.api_key_ops import (
     create_api_key as create_api_key_op,
     update_api_key as update_api_key_op,
     delete_api_key as delete_api_key_op,
+    list_api_key_shares as list_api_key_shares_op,
+    replace_api_key_shares as replace_api_key_shares_op,
+    delete_api_key_share as delete_api_key_share_op,
     backfill_otlp_tokens as backfill_otlp_tokens_op,
 )
 
@@ -671,7 +675,7 @@ class DatabaseAuthService:
         return list(permissions)
 
     def _to_user_schema(self, user: User) -> UserSchema:
-        api_keys = [self._to_api_key_schema(key) for key in (getattr(user, "api_keys", []) or [])]
+        api_keys = self.list_api_keys(user.id)
         schema_kwargs = dict(
             id=user.id,
             tenant_id=user.tenant_id,
@@ -788,6 +792,22 @@ class DatabaseAuthService:
 
     def delete_api_key(self, user_id: str, key_id: str) -> bool:
         return delete_api_key_op(self, user_id, key_id)
+
+    def list_api_key_shares(self, owner_user_id: str, tenant_id: str, key_id: str):
+        return list_api_key_shares_op(self, owner_user_id, tenant_id, key_id)
+
+    def replace_api_key_shares(
+        self,
+        owner_user_id: str,
+        tenant_id: str,
+        key_id: str,
+        user_ids: List[str],
+        group_ids: Optional[List[str]] = None,
+    ):
+        return replace_api_key_shares_op(self, owner_user_id, tenant_id, key_id, user_ids, group_ids=group_ids)
+
+    def delete_api_key_share(self, owner_user_id: str, tenant_id: str, key_id: str, shared_user_id: str) -> bool:
+        return delete_api_key_share_op(self, owner_user_id, tenant_id, key_id, shared_user_id)
     
     def create_group(self, group_create: GroupCreate, tenant_id: str, creator_id: str = None) -> GroupSchema:
         """Create a new group."""
@@ -851,15 +871,28 @@ class DatabaseAuthService:
         """Generate otlp_token for any existing API keys that lack one."""
         backfill_otlp_tokens_op(self)
 
-    def _log_audit(self, db: Session, tenant_id: str, user_id: str, action: str, 
-                   resource_type: str, resource_id: str, details: Dict[str, Any]):
+    def _log_audit(
+        self,
+        db: Session,
+        tenant_id: str,
+        user_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        details: Dict[str, Any],
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ):
         """Log an audit entry."""
+        ctx_ip, ctx_user_agent = get_request_audit_context()
         log = AuditLog(
             tenant_id=tenant_id,
             user_id=user_id,
             action=action,
             resource_type=resource_type,
             resource_id=resource_id,
-            details=details
+            details=details,
+            ip_address=ip_address or ctx_ip,
+            user_agent=user_agent or ctx_user_agent,
         )
         db.add(log)

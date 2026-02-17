@@ -12,6 +12,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """Datasource-focused operations for GrafanaProxyService."""
 
 import re
+import uuid
 from typing import List, Optional, Dict, Any, Set
 
 from fastapi import HTTPException
@@ -21,6 +22,7 @@ from sqlalchemy.orm import Session
 from db_models import GrafanaDatasource, Group
 from models.grafana.grafana_datasource_models import DatasourceCreate, DatasourceUpdate, Datasource
 from config import config
+from services.grafana_service import GrafanaAPIError
 
 
 def _sanitize_datasource_payload(payload: Dict[str, Any], *, is_owner: bool) -> Dict[str, Any]:
@@ -31,6 +33,60 @@ def _sanitize_datasource_payload(payload: Dict[str, Any], *, is_owner: bool) -> 
         if key in sanitized:
             sanitized[key] = None
     return sanitized
+
+
+def _normalize_name(name: Optional[str]) -> str:
+    return str(name or "").strip().lower()
+
+
+def _build_internal_name(display_name: str, user_id: str) -> str:
+    suffix = uuid.uuid4().hex[:6]
+    return f"{display_name}__bo_{str(user_id)[:8]}_{suffix}"
+
+
+async def _has_accessible_name_conflict(
+    service,
+    db: Session,
+    *,
+    tenant_id: str,
+    user_id: str,
+    group_ids: List[str],
+    name: str,
+    exclude_uid: Optional[str] = None,
+) -> bool:
+    target = _normalize_name(name)
+    if not target:
+        return False
+
+    all_datasources = await service.grafana_service.get_datasources()
+    db_entries = {
+        entry.grafana_uid: entry
+        for entry in db.query(GrafanaDatasource)
+        .filter(GrafanaDatasource.tenant_id == tenant_id)
+        .limit(int(config.MAX_QUERY_LIMIT))
+        .all()
+    }
+
+    accessible_uids, allow_system = get_accessible_datasource_uids(service, db, user_id, tenant_id, group_ids)
+    accessible_uid_set = set(accessible_uids)
+    all_registered_uids = set(db_entries.keys())
+
+    for datasource in all_datasources:
+        uid = str(getattr(datasource, "uid", "") or "")
+        if exclude_uid and uid == exclude_uid:
+            continue
+        if uid not in accessible_uid_set and not (allow_system and uid not in all_registered_uids):
+            continue
+
+        db_ds = db_entries.get(uid)
+        if db_ds and user_id in (db_ds.hidden_by or []):
+            continue
+
+        visible_name = db_ds.name if db_ds and db_ds.name else datasource.name
+        if _normalize_name(visible_name) == target:
+            return True
+
+    return False
 
 
 def check_datasource_access(
@@ -244,6 +300,8 @@ async def get_datasources(
             if not show_hidden and user_id in (db_ds.hidden_by or []):
                 return []
         payload = datasource.model_dump()
+        if db_ds and db_ds.name:
+            payload["name"] = db_ds.name
         payload = _sanitize_datasource_payload(payload, is_owner=bool(db_ds and db_ds.created_by == user_id))
         payload["created_by"] = db_ds.created_by if db_ds else None
         payload["is_hidden"] = bool(db_ds and user_id in (db_ds.hidden_by or []))
@@ -308,6 +366,8 @@ async def get_datasources(
                 continue
 
         payload = d.model_dump()
+        if db_ds and db_ds.name:
+            payload["name"] = db_ds.name
         payload = _sanitize_datasource_payload(payload, is_owner=bool(db_ds and db_ds.created_by == user_id))
         payload["created_by"] = db_ds.created_by if db_ds else None
         payload["is_hidden"] = bool(db_ds and user_id in (db_ds.hidden_by or []))
@@ -349,6 +409,17 @@ async def create_datasource(
     shared_group_ids: List[str] = None,
     is_admin: bool = False,
 ) -> Optional[Datasource]:
+    requested_name = str(getattr(datasource_create, "name", "") or "").strip()
+    if await _has_accessible_name_conflict(
+        service,
+        db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        group_ids=group_ids,
+        name=requested_name,
+    ):
+        raise HTTPException(status_code=409, detail="Datasource name already exists in your visible scope")
+
     if datasource_create.type in {"prometheus", "loki", "tempo"}:
         org_id = getattr(datasource_create, "org_id", None) or config.DEFAULT_ORG_ID
         json_data = dict(datasource_create.json_data or {})
@@ -367,10 +438,19 @@ async def create_datasource(
             is_admin=is_admin,
         )
 
+    result = None
     try:
         result = await service.grafana_service.create_datasource(datasource_create)
     except Exception as gae:
-        service._raise_http_from_grafana_error(gae)
+        if isinstance(gae, GrafanaAPIError) and gae.status in {409, 412}:
+            internal_name = _build_internal_name(requested_name or datasource_create.name, user_id)
+            retry_payload = datasource_create.model_copy(update={"name": internal_name})
+            try:
+                result = await service.grafana_service.create_datasource(retry_payload)
+            except Exception as retry_exc:
+                service._raise_http_from_grafana_error(retry_exc)
+        else:
+            service._raise_http_from_grafana_error(gae)
     if not result:
         return None
 
@@ -378,7 +458,7 @@ async def create_datasource(
         tenant_id=tenant_id, created_by=user_id,
         grafana_uid=result.uid,
         grafana_id=result.id,
-        name=result.name,
+        name=requested_name or result.name,
         type=result.type,
         visibility=visibility,
     )
@@ -391,6 +471,7 @@ async def create_datasource(
 
     # Merge Grafana datasource result with local DB metadata so caller gets visibility/shared groups
     payload = result.model_dump()
+    payload["name"] = db_datasource.name
     payload = _sanitize_datasource_payload(payload, is_owner=True)
     payload["created_by"] = db_datasource.created_by
     payload["is_hidden"] = bool(db_datasource and False)
@@ -431,14 +512,37 @@ async def update_datasource(
             secure_json_data["httpHeaderValue1"] = org_id
             datasource_update = datasource_update.model_copy(update={"json_data": json_data, "secure_json_data": secure_json_data})
 
+    requested_name = None
+    if getattr(datasource_update, "name", None) is not None:
+        requested_name = datasource_update.name.strip()
+        if requested_name and await _has_accessible_name_conflict(
+            service,
+            db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            group_ids=group_ids,
+            name=requested_name,
+            exclude_uid=uid,
+        ):
+            raise HTTPException(status_code=409, detail="Datasource name already exists in your visible scope")
+
+    update_payload = datasource_update
     try:
-        result = await service.grafana_service.update_datasource(uid, datasource_update)
+        result = await service.grafana_service.update_datasource(uid, update_payload)
     except Exception as gae:
-        service._raise_http_from_grafana_error(gae)
+        if isinstance(gae, GrafanaAPIError) and gae.status in {409, 412} and requested_name:
+            internal_name = _build_internal_name(requested_name, user_id)
+            update_payload = datasource_update.model_copy(update={"name": internal_name})
+            try:
+                result = await service.grafana_service.update_datasource(uid, update_payload)
+            except Exception as retry_exc:
+                service._raise_http_from_grafana_error(retry_exc)
+        else:
+            service._raise_http_from_grafana_error(gae)
     if not result:
         return None
 
-    db_datasource.name = result.name
+    db_datasource.name = requested_name or db_datasource.name or result.name
     db_datasource.type = result.type
 
     if visibility:
@@ -460,6 +564,7 @@ async def update_datasource(
 
     # Return merged datasource (Grafana fields + DB visibility/shared groups)
     payload = result.model_dump()
+    payload["name"] = db_datasource.name
     payload = _sanitize_datasource_payload(payload, is_owner=bool(db_datasource and db_datasource.created_by == user_id))
     payload["created_by"] = db_datasource.created_by
     payload["is_hidden"] = bool(db_datasource and user_id in (db_datasource.hidden_by or []))
