@@ -16,7 +16,21 @@ from services.database_auth_service import DatabaseAuthService
 
 
 auth_service = DatabaseAuthService()
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
+
+
+def _extract_bearer_token(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str | None:
+    if credentials and getattr(credentials, "credentials", None):
+        return credentials.credentials
+
+    cookie_token = request.cookies.get("beobservant_token")
+    if cookie_token:
+        return cookie_token
+
+    return None
 
 
 def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
@@ -153,14 +167,21 @@ def enforce_header_token(
 
 def get_current_user(
     request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> TokenData:
     """Decode JWT, validate the user, and resolve fresh permissions in a single pass.
 
     Kept intentionally identical to the previous implementation to avoid
     behavioral changes when moving the dependency.
     """
-    token = credentials.credentials
+    token = _extract_bearer_token(request, credentials)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     token_data = auth_service.decode_token(token)
 
     if token_data is None:
@@ -200,7 +221,7 @@ def get_current_user(
 
 def get_current_user_or_mfa_setup(
     request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> TokenData:
     """Allow either a fully-authenticated token or a short-lived MFA-setup token.
 
@@ -208,7 +229,14 @@ def get_current_user_or_mfa_setup(
     use the provided setup token to enroll/verify TOTP without having full
     application sessions yet.
     """
-    token = credentials.credentials
+    token = _extract_bearer_token(request, credentials)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     token_data = auth_service.decode_token(token)
 
     if token_data is None:

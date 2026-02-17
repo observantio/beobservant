@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useId } from 'react'
 
 export default function HelpTooltip({ text }) {
   const [show, setShow] = useState(false)
@@ -6,6 +6,18 @@ export default function HelpTooltip({ text }) {
   const tooltipRef = useRef(null)
   const [tooltipStyle, setTooltipStyle] = useState({})
   const [arrowStyle, setArrowStyle] = useState({})
+  const tooltipId = useId()
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      setShow((prev) => !prev)
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setShow(false)
+    }
+  }
 
   useEffect(() => {
     if (!show) return
@@ -78,10 +90,12 @@ export default function HelpTooltip({ text }) {
         type="button"
         aria-label="Help"
         aria-expanded={show}
+        aria-describedby={show ? tooltipId : undefined}
         onMouseEnter={() => setShow(true)}
         onMouseLeave={() => setShow(false)}
         onFocus={() => setShow(true)}
         onBlur={() => setShow(false)}
+        onKeyDown={handleKeyDown}
         className="ml-1 text-sre-text-muted cursor-help bg-transparent border-0 p-0"
       >
         <span className="material-icons text-sm">help_outline</span>
@@ -89,6 +103,7 @@ export default function HelpTooltip({ text }) {
 
       {show && (
         <div
+          id={tooltipId}
           ref={tooltipRef}
           role="tooltip"
           style={tooltipStyle}

@@ -41,6 +41,7 @@ async function promoteOrgId(orgId) {
   try {
     await fetch(`${API_BASE}/api/auth/me`, {
       method: 'PUT',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`
@@ -60,7 +61,7 @@ async function requestWithHeaders(path, opts = {}, headers = {}) {
   if (authToken) {
     merged['Authorization'] = `Bearer ${authToken}`
   }
-  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers: merged })
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, credentials: 'include', headers: merged })
   if (!res.ok) {
     const text = await res.text()
     let body
@@ -75,7 +76,11 @@ async function requestWithHeaders(path, opts = {}, headers = {}) {
     const isAuthLoginEndpoint = path === '/api/auth/login' || path === '/api/auth/oidc/exchange'
     if (res.status === 401 && !isAuthLoginEndpoint) {
       authToken = null
-      localStorage.removeItem('auth_token')
+      try {
+        if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('beobservant_access_token')
+      } catch (e) {
+        /* ignore */
+      }
       globalThis.window.location.href = '/#/login'
     }
 
@@ -137,7 +142,7 @@ export async function enrollMFA() {
   // prefer authenticated session, otherwise use setupToken for initial admin/setup flows
   if (authToken) return requestJson('/api/auth/mfa/enroll', { method: 'POST' })
   if (!setupToken) throw new Error('Not authenticated')
-  const res = await fetch(`${API_BASE}/api/auth/mfa/enroll`, { method: 'POST', headers: { 'Authorization': `Bearer ${setupToken}` } })
+  const res = await fetch(`${API_BASE}/api/auth/mfa/enroll`, { method: 'POST', credentials: 'include', headers: { 'Authorization': `Bearer ${setupToken}` } })
   if (!res.ok) {
     const text = await res.text()
     let body
@@ -157,7 +162,7 @@ export async function enrollMFA() {
 export async function verifyMFA(code) {
   if (authToken) return requestJson('/api/auth/mfa/verify', { method: 'POST', payload: { code } })
   if (!setupToken) throw new Error('Not authenticated')
-  const res = await fetch(`${API_BASE}/api/auth/mfa/verify`, { method: 'POST', headers: { 'Authorization': `Bearer ${setupToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) })
+  const res = await fetch(`${API_BASE}/api/auth/mfa/verify`, { method: 'POST', credentials: 'include', headers: { 'Authorization': `Bearer ${setupToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) })
   if (!res.ok) {
     const text = await res.text()
     let body
@@ -176,6 +181,10 @@ export async function verifyMFA(code) {
 
 export async function disableMFA({ current_password, code } = {}) {
   return requestJson('/api/auth/mfa/disable', { method: 'POST', payload: { current_password, code } })
+}
+
+export async function logout() {
+  return request('/api/auth/logout', { method: 'POST' })
 }
 
 export async function resetUserMFA(userId) {

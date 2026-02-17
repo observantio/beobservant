@@ -1,6 +1,6 @@
 import logging
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 
 from config import config
 from models.access.user_models import (
@@ -42,6 +42,35 @@ router = APIRouter(prefix="/api/auth", tags=["authentication"])
 notification_service = NotificationService()
 
 
+def _cookie_secure(request: Request) -> bool:
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").lower() == "https"
+
+
+def _set_auth_cookie(request: Request, response: Response, token: str) -> None:
+    response.set_cookie(
+        key="beobservant_token",
+        value=token,
+        httponly=True,
+        secure=_cookie_secure(request),
+        samesite="lax",
+        max_age=config.JWT_EXPIRATION_MINUTES * 60,
+        path="/",
+    )
+
+
+def _clear_auth_cookie(request: Request, response: Response) -> None:
+    response.set_cookie(
+        key="beobservant_token",
+        value="",
+        httponly=True,
+        secure=_cookie_secure(request),
+        samesite="lax",
+        max_age=0,
+        expires=0,
+        path="/",
+    )
+
+
 @router.get("/mode", response_model=AuthModeResponse)
 async def auth_mode():
     oidc_enabled = auth_service.is_external_auth_enabled()
@@ -56,7 +85,7 @@ async def auth_mode():
 
 
 @router.post("/login", response_model=Token)
-async def login(request: Request, login_request: LoginRequest):
+async def login(request: Request, login_request: LoginRequest, response: Response):
     enforce_public_endpoint_security(
         request,
         scope="auth_login",
@@ -86,6 +115,7 @@ async def login(request: Request, login_request: LoginRequest):
             # return setup token to the client so it can enroll/verify TOTP
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=token_or_challenge)
 
+    _set_auth_cookie(request, response, token_or_challenge.access_token)
     return token_or_challenge
 
 
@@ -113,7 +143,7 @@ async def oidc_authorize_url(request: Request, payload: OIDCAuthURLRequest):
 
 
 @router.post("/oidc/exchange", response_model=Token)
-async def oidc_exchange_token(request: Request, payload: OIDCCodeExchangeRequest):
+async def oidc_exchange_token(request: Request, payload: OIDCCodeExchangeRequest, response: Response):
     enforce_public_endpoint_security(
         request,
         scope="auth_oidc_exchange",
@@ -128,7 +158,14 @@ async def oidc_exchange_token(request: Request, payload: OIDCCodeExchangeRequest
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC authentication failed")
     if isinstance(token_or_challenge, dict) and token_or_challenge.get('mfa_setup_required'):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=token_or_challenge)
+    _set_auth_cookie(request, response, token_or_challenge.access_token)
     return token_or_challenge
+
+
+@router.post("/logout")
+async def logout(request: Request, response: Response):
+    _clear_auth_cookie(request, response)
+    return {"message": "Logged out"}
 
 
 @router.post("/register", response_model=UserResponse)

@@ -12,6 +12,13 @@ import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import HelpTooltip from '../components/HelpTooltip'
 
+export function clearDroppedState(prev, droppedId) {
+  if (typeof droppedId === 'undefined' || droppedId === null || droppedId === '') return prev
+  const next = { ...prev }
+  delete next[droppedId]
+  return next
+}
+
 export default function IncidentBoardPage() {
   const { user, hasPermission } = useAuth()
   const [incidents, setIncidents] = useState([])
@@ -366,18 +373,15 @@ export default function IncidentBoardPage() {
 
   const handleDropOnColumn = async (target, e) => {
     e.preventDefault()
+    let droppedId
     try {
       const id = e.dataTransfer.getData('text/incident')
       if (!id) return
-      const droppedId = id
+      droppedId = id
       setDropping((prev) => ({ ...prev, [droppedId]: true }))
       const incident = incidents.find((it) => String(it.id) === String(droppedId))
       if (!incident) {
-        setDropping((prev) => {
-          const next = { ...prev }
-          delete next[droppedId]
-          return next
-        })
+        setDropping((prev) => clearDroppedState(prev, droppedId))
         return
       }
 
@@ -396,11 +400,7 @@ export default function IncidentBoardPage() {
         try {
           const activeAlerts = await getAlertsByFilter({ fingerprint: incident.fingerprint }, true)
           if (Array.isArray(activeAlerts) && activeAlerts.length > 0) {
-            setDropping((prev) => {
-              const next = { ...prev }
-              delete next[droppedId]
-              return next
-            })
+            setDropping((prev) => clearDroppedState(prev, droppedId))
             try { toast.error('Cannot resolve: underlying alert is still active') } catch (_) {}
             return
           }
@@ -411,23 +411,13 @@ export default function IncidentBoardPage() {
       }
 
       await updateIncident(id, payload)
-      setDropping((prev) => {
-        const next = { ...prev }
-        delete next[droppedId]
-        return next
-      })
+      setDropping((prev) => clearDroppedState(prev, droppedId))
       await loadData()
     } catch (err) {
       setError(err?.body?.detail || err?.message || 'Unable to update incident')
       try { toast.error(err?.body?.detail || err?.message || 'Unable to update incident') } catch (_) {}
     } finally {
-      if (typeof droppedId !== 'undefined') {
-        setDropping((prev) => {
-          const next = { ...prev }
-          delete next[droppedId]
-          return next
-        })
-      }
+      setDropping((prev) => clearDroppedState(prev, droppedId))
     }
   }
 

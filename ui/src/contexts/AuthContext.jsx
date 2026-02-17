@@ -9,12 +9,11 @@ const OIDC_NONCE_KEY = 'oidc_nonce'
 function syncGrafanaAuthCookie(authToken) {
   if (typeof document === 'undefined') return
 
+  // Cookie auth is server-managed (httpOnly). We only perform best-effort cleanup
+  // of a legacy client-managed cookie during logout/migration.
   if (!authToken) {
     document.cookie = 'beobservant_token=; Path=/; Max-Age=0; SameSite=Lax'
-    return
   }
-
-  document.cookie = `beobservant_token=${encodeURIComponent(authToken)}; Path=/; Max-Age=86400; SameSite=Lax`
 }
 
 /**
@@ -35,8 +34,15 @@ function resolveActiveOrgId(userData) {
 }
 
 export function AuthProvider({ children }) {
+  const TOKEN_STORAGE_KEY = 'beobservant_access_token'
   const [user, setUser] = useState(null)
-  const [token, setToken] = useState(localStorage.getItem('auth_token'))
+  const [token, setToken] = useState(() => {
+    try {
+      return (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(TOKEN_STORAGE_KEY)) || null
+    } catch (e) {
+      return null
+    }
+  })
   const [authMode, setAuthMode] = useState({
     provider: 'local',
     oidc_enabled: false,
@@ -75,11 +81,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (token) {
       api.setAuthToken(token)
-      syncGrafanaAuthCookie(token)
-      loadUser()
     } else {
-      syncGrafanaAuthCookie(null)
-      setLoading(false)
+      api.setAuthToken(null)
     }
   }, [token])
 
@@ -96,13 +99,20 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  useEffect(() => {
+    loadUser()
+  }, [loadUser])
+
   const login = useCallback(async (username, password, mfa_code) => {
     const response = await api.login(username, password, mfa_code)
     const { access_token } = response
-    localStorage.setItem('auth_token', access_token)
     setToken(access_token)
+    try {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(TOKEN_STORAGE_KEY, access_token)
+    } catch (e) {
+      /* ignore storage errors */
+    }
     api.setAuthToken(access_token)
-    syncGrafanaAuthCookie(access_token)
     await loadUser()
     return response
   }, [loadUser])
@@ -141,10 +151,13 @@ export function AuthProvider({ children }) {
     sessionStorage.removeItem(OIDC_STATE_KEY)
     sessionStorage.removeItem(OIDC_NONCE_KEY)
 
-    localStorage.setItem('auth_token', access_token)
     setToken(access_token)
+    try {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(TOKEN_STORAGE_KEY, access_token)
+    } catch (e) {
+      /* ignore storage errors */
+    }
     api.setAuthToken(access_token)
-    syncGrafanaAuthCookie(access_token)
     await loadUser()
     return response
   }, [loadUser])
@@ -154,8 +167,17 @@ export function AuthProvider({ children }) {
     return response
   }, [])
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('auth_token')
+  const logout = useCallback(async () => {
+    try {
+      await api.logout()
+    } catch {
+      // best-effort logout; still clear local auth state
+    }
+    try {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(TOKEN_STORAGE_KEY)
+    } catch (e) {
+      /* ignore storage errors */
+    }
     setToken(null)
     setUser(null)
     api.setAuthToken(null)

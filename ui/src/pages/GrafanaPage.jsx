@@ -120,10 +120,8 @@ export default function GrafanaPage() { // NOSONAR
 
   function confirmOpenInGrafana() {
     const { path } = grafanaConfirmDialog || {}
-    const token = localStorage.getItem('auth_token')
     const launchUrl = buildGrafanaLaunchUrl({
       path,
-      token,
       protocol: window.location.protocol,
       hostname: window.location.hostname,
     })

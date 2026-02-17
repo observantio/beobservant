@@ -548,15 +548,48 @@ export function Modal({
   }
 
   const contentRef = React.useRef(null)
+  const previouslyFocusedElementRef = React.useRef(null)
   // keep a ref to the latest onClose to avoid re-running the effect
   // on every render when parent re-creates the onClose callback.
   const onCloseRef = React.useRef(onClose)
   React.useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
   React.useEffect(() => {
+    const getFocusableElements = () => {
+      const root = contentRef.current
+      if (!root) return []
+      return Array.from(root.querySelectorAll(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ))
+    }
+
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
         onCloseRef.current?.()
+        return
+      }
+
+      if (e.key === 'Tab' && isOpen) {
+        const focusable = getFocusableElements()
+        if (focusable.length === 0) {
+          e.preventDefault()
+          contentRef.current?.focus()
+          return
+        }
+
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        const active = document.activeElement
+
+        if (e.shiftKey) {
+          if (active === first || active === contentRef.current) {
+            e.preventDefault()
+            last.focus()
+          }
+        } else if (active === last) {
+          e.preventDefault()
+          first.focus()
+        }
       }
     }
 
@@ -564,13 +597,19 @@ export function Modal({
     const prevHtmlOverflow = document.documentElement.style.overflow
 
     if (isOpen) {
+      previouslyFocusedElementRef.current = document.activeElement
       document.addEventListener('keydown', handleEscape)
       document.body.style.overflow = 'hidden'
       document.documentElement.style.overflow = 'hidden'
       // focus modal content to avoid focus landing on backdrop
       setTimeout(() => {
         try {
-          contentRef.current?.focus({ preventScroll: true })
+          const focusable = getFocusableElements()
+          if (focusable.length > 0) {
+            focusable[0].focus({ preventScroll: true })
+          } else {
+            contentRef.current?.focus({ preventScroll: true })
+          }
         } catch (e) {
           console.warn("Failed to focus modal content:", e)
           contentRef.current?.focus()
@@ -582,6 +621,13 @@ export function Modal({
       document.removeEventListener('keydown', handleEscape)
       document.body.style.overflow = prevBodyOverflow
       document.documentElement.style.overflow = prevHtmlOverflow
+      if (previouslyFocusedElementRef.current && typeof previouslyFocusedElementRef.current.focus === 'function') {
+        try {
+          previouslyFocusedElementRef.current.focus({ preventScroll: true })
+        } catch {
+          previouslyFocusedElementRef.current.focus()
+        }
+      }
     }
   }, [isOpen])
 

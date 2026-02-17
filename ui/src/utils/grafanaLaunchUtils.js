@@ -22,10 +22,8 @@ export function normalizeGrafanaPath(path) {
   return normalizedPath
 }
 
-export function buildGrafanaLaunchUrl({ path, token, protocol, hostname }) {
+export function buildGrafanaLaunchUrl({ path, protocol, hostname }) {
   const proxyOrigin = `${protocol}//${hostname}:8080`
   const normalizedPath = normalizeGrafanaPath(path)
-  return token
-    ? `${proxyOrigin}/grafana/bootstrap?token=${encodeURIComponent(token)}&next=${encodeURI(normalizedPath)}`
-    : `${proxyOrigin}${normalizedPath}`
+  return `${proxyOrigin}${normalizedPath}`
 }

@@ -21,7 +21,8 @@ from routers import router as gateway_router
 from services.gateway_service import GatewayAuthService
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
-PORT = int(os.getenv("PORT", "4321"))
+# Prefer a service-specific port if provided so we don't accidentally inherit a global PORT value
+PORT = int(os.getenv("GATEWAY_PORT", os.getenv("PORT", "4321")))
 
 logger = logging.getLogger("gateway_auth")
 logging.basicConfig(

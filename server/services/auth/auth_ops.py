@@ -16,6 +16,22 @@ from models.access.auth_models import Role, Token, TokenData
 create_mfa_setup_token_op = create_mfa_setup_token if 'create_mfa_setup_token' in globals() else None
 
 
+def _jwt_signing_key() -> str:
+    if config.JWT_ALGORITHM not in {"RS256", "ES256"}:
+        raise ValueError(f"Unsupported JWT algorithm: {config.JWT_ALGORITHM}")
+    if not config.JWT_PRIVATE_KEY:
+        raise ValueError("JWT_PRIVATE_KEY is required for asymmetric JWT signing")
+    return config.JWT_PRIVATE_KEY
+
+
+def _jwt_verification_key() -> str:
+    if config.JWT_ALGORITHM not in {"RS256", "ES256"}:
+        raise ValueError(f"Unsupported JWT algorithm: {config.JWT_ALGORITHM}")
+    if not config.JWT_PUBLIC_KEY:
+        raise ValueError("JWT_PUBLIC_KEY is required for asymmetric JWT verification")
+    return config.JWT_PUBLIC_KEY
+
+
 def create_access_token(service, user: User) -> Token:
     expires_delta = timedelta(minutes=config.JWT_EXPIRATION_MINUTES)
     expire = datetime.now(timezone.utc) + expires_delta
@@ -48,7 +64,7 @@ def create_access_token(service, user: User) -> Token:
             "exp": expire
         }
 
-    encoded_jwt = jwt.encode(to_encode, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, _jwt_signing_key(), algorithm=config.JWT_ALGORITHM)
 
     return Token(
         access_token=encoded_jwt,
@@ -71,13 +87,13 @@ def create_mfa_setup_token(service, user: User, minutes: int = 10) -> Token:
         "mfa_setup": True,
         "exp": expire,
     }
-    encoded_jwt = jwt.encode(to_encode, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, _jwt_signing_key(), algorithm=config.JWT_ALGORITHM)
     return Token(access_token=encoded_jwt, token_type="bearer", expires_in=minutes * 60)
 
 
 def decode_token(service, token: str) -> Optional[TokenData]:
     try:
-        payload = jwt.decode(token, config.JWT_SECRET_KEY, algorithms=[config.JWT_ALGORITHM])
+        payload = jwt.decode(token, _jwt_verification_key(), algorithms=[config.JWT_ALGORITHM])
         user_id: str = payload.get("sub")
         username: str = payload.get("username")
         tenant_id: str = payload.get("tenant_id")

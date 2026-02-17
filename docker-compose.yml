@@ -11,11 +11,8 @@ volumes:
 services:
   postgres:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: beobservant
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-1234567890}
-      POSTGRES_DB: beobservant
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks: [obs]
@@ -30,44 +27,8 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    environment:
-      BACKUP_ENABLED: "${BACKUP_ENABLED:-false}"
-      S3_BUCKET: "${S3_BUCKET:-beobservant-backup}"
-      S3_PREFIX: "${S3_PREFIX:-metrics}"
-      BACKUP_INTERVAL: "${BACKUP_INTERVAL:-3600}"
-      AWS_REGION: "${AWS_REGION:-us-east-1}"
-      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
-      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
-      DATA_ENCRYPTION_KEY: "${DATA_ENCRYPTION_KEY:-yAu-ToEfzrGa3Elozv5jkaq0zLKDYRcmTIEU6oWRdng=}"
-      DATABASE_URL: "postgresql://beobservant:${POSTGRES_PASSWORD:-1234567890}@postgres:5432/beobservant"
-      JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change-this-secret-key-in-production}"
-      DEFAULT_ADMIN_USERNAME: "${DEFAULT_ADMIN_USERNAME:-admin}"
-      DEFAULT_ADMIN_PASSWORD: "${DEFAULT_ADMIN_PASSWORD:-admin}"
-      DEFAULT_ADMIN_EMAIL: "${DEFAULT_ADMIN_EMAIL:-admin@example.com}"
-      DEFAULT_ORG_ID: "${DEFAULT_ORG_ID:-Av45ZchZsQdKjN8XyG}"
-      DEFAULT_OTLP_TOKEN: "${DEFAULT_OTLP_TOKEN:-DAMJ8xlh9UrUgK23yYWfzvLDJYeTRfase}"
-      GRAFANA_API_KEY: "${GRAFANA_API_KEY:-}"
-
-      # User welcome emails (new user onboarding)
-      USER_WELCOME_EMAIL_ENABLED: "${USER_WELCOME_EMAIL_ENABLED:-false}"
-      USER_WELCOME_SMTP_HOST: "${USER_WELCOME_SMTP_HOST:-}"
-      USER_WELCOME_SMTP_PORT: "${USER_WELCOME_SMTP_PORT:-587}"
-      USER_WELCOME_SMTP_USERNAME: "${USER_WELCOME_SMTP_USERNAME:-}"
-      USER_WELCOME_SMTP_PASSWORD: "${USER_WELCOME_SMTP_PASSWORD:-}"
-      USER_WELCOME_FROM: "${USER_WELCOME_FROM:-}"
-      USER_WELCOME_SMTP_STARTTLS: "${USER_WELCOME_SMTP_STARTTLS:-true}"
-      USER_WELCOME_SMTP_USE_SSL: "${USER_WELCOME_SMTP_USE_SSL:-false}"
-      APP_LOGIN_URL: "${APP_LOGIN_URL:-}"
-
-      # Incident assignment emails
-      INCIDENT_ASSIGNMENT_EMAIL_ENABLED: "${INCIDENT_ASSIGNMENT_EMAIL_ENABLED:-false}"
-      INCIDENT_ASSIGNMENT_SMTP_HOST: "${INCIDENT_ASSIGNMENT_SMTP_HOST:-}"
-      INCIDENT_ASSIGNMENT_SMTP_PORT: "${INCIDENT_ASSIGNMENT_SMTP_PORT:-587}"
-      INCIDENT_ASSIGNMENT_SMTP_USERNAME: "${INCIDENT_ASSIGNMENT_SMTP_USERNAME:-}"
-      INCIDENT_ASSIGNMENT_SMTP_PASSWORD: "${INCIDENT_ASSIGNMENT_SMTP_PASSWORD:-}"
-      INCIDENT_ASSIGNMENT_FROM: "${INCIDENT_ASSIGNMENT_FROM:-}"
-      INCIDENT_ASSIGNMENT_SMTP_STARTTLS: "${INCIDENT_ASSIGNMENT_SMTP_STARTTLS:-true}"
-      INCIDENT_ASSIGNMENT_SMTP_USE_SSL: "${INCIDENT_ASSIGNMENT_SMTP_USE_SSL:-false}"
+    env_file:
+      - .env
     ports:
       - "4319:4319"
     depends_on:
@@ -118,30 +79,21 @@ services:
     build:
       context: ./gateway-auth-service
       dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: "postgresql://beobservant:${POSTGRES_PASSWORD:-1234567890}@postgres:5432/beobservant"
-      LOG_LEVEL: "${LOG_LEVEL:-info}"
-      GATEWAY_IP_ALLOWLIST: "${GATEWAY_IP_ALLOWLIST:-}"
-      GATEWAY_RATE_LIMIT_PER_MINUTE: "${GATEWAY_RATE_LIMIT_PER_MINUTE:-300}"
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_healthy
     networks: [obs]
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4321/health')"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
   otel-agent:
     image: otel/opentelemetry-collector-contrib:0.145.0
     command: ["--config=/etc/otel/agent.yaml"]
+    env_file:
+      - .env
     volumes:
       - ./configs/otel-agent.yaml:/etc/otel/agent.yaml:ro
-    environment:
-      OTEL_OTLP_TOKEN: "${DEFAULT_OTLP_TOKEN:-DAMJ8xlh9UrUgK23yYWfzvLDJYeTRfase}"
     depends_on:
       otlp-gateway:
         condition: service_healthy
@@ -219,28 +171,8 @@ services:
 
   grafana:
     image: grafana/grafana:10.4.1
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:-admin}"
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_INSTALL_PLUGINS: ""
-      MIMIR_TENANT_ID: "${DEFAULT_ORG_ID:-Av45ZchZsQdKjN8XyG}"
-      
-      # 🌐 SERVER SETTINGS (serve Grafana behind /grafana/)
-      GF_SERVER_ROOT_URL: "http://localhost:8080/grafana/"
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
-      
-      # 🔐 AUTH PROXY SETTINGS
-      GF_AUTH_PROXY_ENABLED: "true"
-      GF_AUTH_PROXY_HEADER_NAME: "X-WEBAUTH-USER"
-      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
-      GF_AUTH_PROXY_HEADERS: "Email:X-WEBAUTH-EMAIL Name:X-WEBAUTH-NAME Role:X-WEBAUTH-ROLE"
-      GF_AUTH_PROXY_WHITELIST: "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-      
-      GF_AUTH_ANONYMOUS_ENABLED: "false"
-      GF_AUTH_BASIC_ENABLED: "true"
-      
-      # 🔐 SECURITY
-      GF_SECURITY_ALLOW_EMBEDDING: "true"
+    env_file:
+      - .env
     volumes:
       - ./configs/grafana/grafana-datasource.yaml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - grafana:/var/lib/grafana

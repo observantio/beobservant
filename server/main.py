@@ -90,9 +90,15 @@ app.add_middleware(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=config.CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+logger.info(
+    "CORS policy initialized: origins=%s credentials=%s",
+    config.CORS_ORIGINS,
+    config.CORS_ALLOW_CREDENTIALS,
 )
 
 @app.exception_handler(RequestValidationError)

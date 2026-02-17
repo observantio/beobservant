@@ -1,114 +1,224 @@
 """Application configuration and constants."""
+import logging
 import os
-from typing import Optional
+import secrets
+from typing import Optional, List
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+
+
+logger = logging.getLogger(__name__)
+
+
+def _to_bool(value: str, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _to_list(value: Optional[str], default: Optional[List[str]] = None) -> List[str]:
+    if value is None:
+        return default or []
+    parsed = [item.strip() for item in value.split(",") if item.strip()]
+    return parsed if parsed else (default or [])
+
+
+def _is_placeholder(value: Optional[str], placeholders: List[str]) -> bool:
+    if value is None:
+        return True
+    normalized = value.strip()
+    return not normalized or normalized in placeholders
+
+
+def _generate_rsa_keypair() -> tuple[str, str]:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+    public_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("utf-8")
+    return private_pem, public_pem
 
 class Config:
     """Application configuration from environment variables."""
-    # Server configuration
-    HOST: str = os.getenv("HOST", "0.0.0.0")
-    PORT: int = int(os.getenv("PORT", "4319"))
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
-    
-    # Service URLs
-    TEMPO_URL: str = os.getenv("TEMPO_URL", "http://tempo:3200")
-    LOKI_URL: str = os.getenv("LOKI_URL", "http://loki:3100")
-    ALERTMANAGER_URL: str = os.getenv("ALERTMANAGER_URL", "http://alertmanager:9093")
-    GRAFANA_URL: str = os.getenv("GRAFANA_URL", "http://grafana:3000")
-    MIMIR_URL: str = os.getenv("MIMIR_URL", "http://mimir:9009")
-    
-    # Grafana credentials
-    GRAFANA_USERNAME: str = os.getenv("GRAFANA_USERNAME", "admin")
-    GRAFANA_PASSWORD: str = os.getenv("GRAFANA_PASSWORD", "admin")
-    GRAFANA_API_KEY: Optional[str] = os.getenv("GRAFANA_API_KEY")  # Preferred over Basic auth
-    
-    # Encryption key for sensitive data at rest (channel config in DB)
-    DATA_ENCRYPTION_KEY: Optional[str] = os.getenv("DATA_ENCRYPTION_KEY")
-    
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://beobservant:changeme123@localhost:5432/beobservant")
-    
-    # Request settings
-    DEFAULT_TIMEOUT: float = float(os.getenv("DEFAULT_TIMEOUT", "30.0"))
-    MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
-    RETRY_BACKOFF: float = float(os.getenv("RETRY_BACKOFF", "1.0"))
-    
-    # CORS settings
-    CORS_ORIGINS: list = os.getenv("CORS_ORIGINS", "*").split(",")
-    
-    # API limits
-    MAX_QUERY_LIMIT: int = int(os.getenv("MAX_QUERY_LIMIT", "5000"))
-    DEFAULT_QUERY_LIMIT: int = int(os.getenv("DEFAULT_QUERY_LIMIT", "100"))
 
-    # Request protection / backpressure
-    MAX_REQUEST_BYTES: int = int(os.getenv("MAX_REQUEST_BYTES", "1048576"))  # 1 MiB
-    MAX_CONCURRENT_REQUESTS: int = int(os.getenv("MAX_CONCURRENT_REQUESTS", "200"))
-    CONCURRENCY_ACQUIRE_TIMEOUT: float = float(os.getenv("CONCURRENCY_ACQUIRE_TIMEOUT", "1.0"))
+    ALLOWED_JWT_ALGORITHMS = {"RS256", "ES256"}
+    EXAMPLE_DATABASE_URL = "postgresql://beobservant:changeme123@localhost:5432/beobservant"
 
-    # Rate limiting / spam protection (per-process; use an API gateway for global limits)
-    RATE_LIMIT_USER_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_USER_PER_MINUTE", "600"))
-    RATE_LIMIT_PUBLIC_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PUBLIC_PER_MINUTE", "120"))
-    RATE_LIMIT_LOGIN_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_LOGIN_PER_MINUTE", "10"))
-    RATE_LIMIT_REGISTER_PER_HOUR: int = int(os.getenv("RATE_LIMIT_REGISTER_PER_HOUR", "5"))
-    RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE", "3000"))
+    def __init__(self) -> None:
+        # Server configuration
+        self.HOST: str = os.getenv("HOST", "0.0.0.0")
+        self.PORT: int = int(os.getenv("PORT", "4319"))
+        self.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
 
-    # Client IP and network boundary controls
-    TRUST_PROXY_HEADERS: bool = os.getenv("TRUST_PROXY_HEADERS", "false").lower() in ("1", "true", "yes", "on")
-    AUTH_PUBLIC_IP_ALLOWLIST: Optional[str] = os.getenv("AUTH_PUBLIC_IP_ALLOWLIST")
-    GATEWAY_IP_ALLOWLIST: Optional[str] = os.getenv("GATEWAY_IP_ALLOWLIST")
-    WEBHOOK_IP_ALLOWLIST: Optional[str] = os.getenv("WEBHOOK_IP_ALLOWLIST")
-    AGENT_INGEST_IP_ALLOWLIST: Optional[str] = os.getenv("AGENT_INGEST_IP_ALLOWLIST")
-    GRAFANA_PROXY_IP_ALLOWLIST: Optional[str] = os.getenv("GRAFANA_PROXY_IP_ALLOWLIST")
-    AGENT_HEARTBEAT_TOKEN: Optional[str] = os.getenv("AGENT_HEARTBEAT_TOKEN")
+        # Service URLs
+        self.TEMPO_URL: str = os.getenv("TEMPO_URL", "http://tempo:3200")
+        self.LOKI_URL: str = os.getenv("LOKI_URL", "http://loki:3100")
+        self.ALERTMANAGER_URL: str = os.getenv("ALERTMANAGER_URL", "http://alertmanager:9093")
+        self.GRAFANA_URL: str = os.getenv("GRAFANA_URL", "http://grafana:3000")
+        self.MIMIR_URL: str = os.getenv("MIMIR_URL", "http://mimir:9009")
 
-    # Optional shared secrets for inbound endpoints
-    INBOUND_WEBHOOK_TOKEN: Optional[str] = os.getenv("INBOUND_WEBHOOK_TOKEN")
-    OTLP_INGEST_TOKEN: Optional[str] = os.getenv("OTLP_INGEST_TOKEN")
-    
-    # Authentication
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change-this-secret-key-in-production")
-    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
-    JWT_EXPIRATION_MINUTES: int = int(os.getenv("JWT_EXPIRATION_MINUTES", "1440"))
+        # Grafana credentials
+        self.GRAFANA_USERNAME: str = os.getenv("GRAFANA_USERNAME", "admin")
+        self.GRAFANA_PASSWORD: str = os.getenv("GRAFANA_PASSWORD", "admin")
+        self.GRAFANA_API_KEY: Optional[str] = os.getenv("GRAFANA_API_KEY")
 
-    # Identity provider / OIDC (Keycloak recommended)
-    AUTH_PROVIDER: str = os.getenv("AUTH_PROVIDER", "local").strip().lower()  # local | keycloak
-    AUTH_PASSWORD_FLOW_ENABLED: bool = os.getenv("AUTH_PASSWORD_FLOW_ENABLED", "false").lower() in ("1", "true", "yes", "on")
-    OIDC_ISSUER_URL: Optional[str] = os.getenv("OIDC_ISSUER_URL")
-    OIDC_CLIENT_ID: Optional[str] = os.getenv("OIDC_CLIENT_ID")
-    OIDC_CLIENT_SECRET: Optional[str] = os.getenv("OIDC_CLIENT_SECRET")
-    OIDC_AUDIENCE: Optional[str] = os.getenv("OIDC_AUDIENCE")
-    OIDC_JWKS_URL: Optional[str] = os.getenv("OIDC_JWKS_URL")
-    OIDC_SCOPES: str = os.getenv("OIDC_SCOPES", "openid profile email")
-    OIDC_AUTO_PROVISION_USERS: bool = os.getenv("OIDC_AUTO_PROVISION_USERS", "true").lower() in ("1", "true", "yes", "on")
+        # Encryption key for sensitive data at rest (channel config in DB)
+        self.DATA_ENCRYPTION_KEY: Optional[str] = os.getenv("DATA_ENCRYPTION_KEY")
 
-    # Keycloak admin API (optional, for app-driven user provisioning)
-    KEYCLOAK_ADMIN_URL: Optional[str] = os.getenv("KEYCLOAK_ADMIN_URL")
-    KEYCLOAK_ADMIN_REALM: Optional[str] = os.getenv("KEYCLOAK_ADMIN_REALM")
-    KEYCLOAK_ADMIN_CLIENT_ID: Optional[str] = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID")
-    KEYCLOAK_ADMIN_CLIENT_SECRET: Optional[str] = os.getenv("KEYCLOAK_ADMIN_CLIENT_SECRET")
-    KEYCLOAK_USER_PROVISIONING_ENABLED: bool = os.getenv("KEYCLOAK_USER_PROVISIONING_ENABLED", "false").lower() in ("1", "true", "yes", "on")
-    
-    # Default admin bootstrap (can be overridden via environment)
-    DEFAULT_ADMIN_USERNAME: str = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
-    DEFAULT_ADMIN_PASSWORD: str = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
-    DEFAULT_ADMIN_EMAIL: str = os.getenv("DEFAULT_ADMIN_EMAIL", "admin@example.com")
-    DEFAULT_ADMIN_TENANT: str = os.getenv("DEFAULT_ADMIN_TENANT", "default")
-    
-    # Multi-tenancy
-    DEFAULT_ORG_ID: str = os.getenv("DEFAULT_ORG_ID", "default")
-    OTLP_GATEWAY_URL: str = os.getenv("OTLP_GATEWAY_URL", "http://otlp-gateway:4320")
-    DEFAULT_OTLP_TOKEN: Optional[str] = os.getenv("DEFAULT_OTLP_TOKEN")
+        # Database
+        self.DATABASE_URL: str = os.getenv("DATABASE_URL", self.EXAMPLE_DATABASE_URL)
 
-    # Alerting and notifications defaults
-    DEFAULT_RULE_GROUP: str = os.getenv("DEFAULT_RULE_GROUP", "default")
-    DEFAULT_SLACK_CHANNEL: str = os.getenv("DEFAULT_SLACK_CHANNEL", "default")
-    ENABLED_NOTIFICATION_CHANNEL_TYPES: list = [
-        channel_type.strip().lower()
-        for channel_type in os.getenv(
-            "ENABLED_NOTIFICATION_CHANNEL_TYPES",
-            "email,slack,teams,webhook,pagerduty",
-        ).split(",")
-        if channel_type.strip()
-    ]
+        # Request settings
+        self.DEFAULT_TIMEOUT: float = float(os.getenv("DEFAULT_TIMEOUT", "30.0"))
+        self.MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
+        self.RETRY_BACKOFF: float = float(os.getenv("RETRY_BACKOFF", "1.0"))
+
+        # CORS settings
+        self.CORS_ORIGINS: List[str] = _to_list(os.getenv("CORS_ORIGINS"), default=["*"])
+        self.CORS_ALLOW_CREDENTIALS: bool = _to_bool(os.getenv("CORS_ALLOW_CREDENTIALS"), default=True)
+
+        # API limits
+        self.MAX_QUERY_LIMIT: int = int(os.getenv("MAX_QUERY_LIMIT", "5000"))
+        self.DEFAULT_QUERY_LIMIT: int = int(os.getenv("DEFAULT_QUERY_LIMIT", "100"))
+
+        # Request protection / backpressure
+        self.MAX_REQUEST_BYTES: int = int(os.getenv("MAX_REQUEST_BYTES", "1048576"))
+        self.MAX_CONCURRENT_REQUESTS: int = int(os.getenv("MAX_CONCURRENT_REQUESTS", "200"))
+        self.CONCURRENCY_ACQUIRE_TIMEOUT: float = float(os.getenv("CONCURRENCY_ACQUIRE_TIMEOUT", "1.0"))
+
+        # Rate limiting / spam protection (per-process; use an API gateway for global limits)
+        self.RATE_LIMIT_USER_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_USER_PER_MINUTE", "600"))
+        self.RATE_LIMIT_PUBLIC_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PUBLIC_PER_MINUTE", "120"))
+        self.RATE_LIMIT_LOGIN_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_LOGIN_PER_MINUTE", "10"))
+        self.RATE_LIMIT_REGISTER_PER_HOUR: int = int(os.getenv("RATE_LIMIT_REGISTER_PER_HOUR", "5"))
+        self.RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE", "3000"))
+
+        # Client IP and network boundary controls
+        self.TRUST_PROXY_HEADERS: bool = _to_bool(os.getenv("TRUST_PROXY_HEADERS"), default=False)
+        self.AUTH_PUBLIC_IP_ALLOWLIST: Optional[str] = os.getenv("AUTH_PUBLIC_IP_ALLOWLIST")
+        self.GATEWAY_IP_ALLOWLIST: Optional[str] = os.getenv("GATEWAY_IP_ALLOWLIST")
+        self.WEBHOOK_IP_ALLOWLIST: Optional[str] = os.getenv("WEBHOOK_IP_ALLOWLIST")
+        self.AGENT_INGEST_IP_ALLOWLIST: Optional[str] = os.getenv("AGENT_INGEST_IP_ALLOWLIST")
+        self.GRAFANA_PROXY_IP_ALLOWLIST: Optional[str] = os.getenv("GRAFANA_PROXY_IP_ALLOWLIST")
+        self.AGENT_HEARTBEAT_TOKEN: Optional[str] = os.getenv("AGENT_HEARTBEAT_TOKEN")
+
+        # Optional shared secrets for inbound endpoints
+        self.INBOUND_WEBHOOK_TOKEN: Optional[str] = os.getenv("INBOUND_WEBHOOK_TOKEN")
+        self.OTLP_INGEST_TOKEN: Optional[str] = os.getenv("OTLP_INGEST_TOKEN")
+
+        # Authentication
+        self.JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "RS256").strip().upper()
+        self.JWT_EXPIRATION_MINUTES: int = int(os.getenv("JWT_EXPIRATION_MINUTES", "1440"))
+        self.JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
+        self.JWT_PRIVATE_KEY: Optional[str] = os.getenv("JWT_PRIVATE_KEY")
+        self.JWT_PUBLIC_KEY: Optional[str] = os.getenv("JWT_PUBLIC_KEY")
+
+        # Identity provider / OIDC (Keycloak recommended)
+        self.AUTH_PROVIDER: str = os.getenv("AUTH_PROVIDER", "local").strip().lower()
+        self.AUTH_PASSWORD_FLOW_ENABLED: bool = _to_bool(os.getenv("AUTH_PASSWORD_FLOW_ENABLED"), default=False)
+        self.OIDC_ISSUER_URL: Optional[str] = os.getenv("OIDC_ISSUER_URL")
+        self.OIDC_CLIENT_ID: Optional[str] = os.getenv("OIDC_CLIENT_ID")
+        self.OIDC_CLIENT_SECRET: Optional[str] = os.getenv("OIDC_CLIENT_SECRET")
+        self.OIDC_AUDIENCE: Optional[str] = os.getenv("OIDC_AUDIENCE")
+        self.OIDC_JWKS_URL: Optional[str] = os.getenv("OIDC_JWKS_URL")
+        self.OIDC_SCOPES: str = os.getenv("OIDC_SCOPES", "openid profile email")
+        self.OIDC_AUTO_PROVISION_USERS: bool = _to_bool(os.getenv("OIDC_AUTO_PROVISION_USERS"), default=True)
+
+        # Keycloak admin API (optional, for app-driven user provisioning)
+        self.KEYCLOAK_ADMIN_URL: Optional[str] = os.getenv("KEYCLOAK_ADMIN_URL")
+        self.KEYCLOAK_ADMIN_REALM: Optional[str] = os.getenv("KEYCLOAK_ADMIN_REALM")
+        self.KEYCLOAK_ADMIN_CLIENT_ID: Optional[str] = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID")
+        self.KEYCLOAK_ADMIN_CLIENT_SECRET: Optional[str] = os.getenv("KEYCLOAK_ADMIN_CLIENT_SECRET")
+        self.KEYCLOAK_USER_PROVISIONING_ENABLED: bool = _to_bool(
+            os.getenv("KEYCLOAK_USER_PROVISIONING_ENABLED"),
+            default=False,
+        )
+
+        # Default admin bootstrap (can be overridden via environment)
+        self.DEFAULT_ADMIN_USERNAME: str = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
+        self.DEFAULT_ADMIN_PASSWORD: str = os.getenv("DEFAULT_ADMIN_PASSWORD", "")
+        self.DEFAULT_ADMIN_EMAIL: str = os.getenv("DEFAULT_ADMIN_EMAIL", "admin@example.com")
+        self.DEFAULT_ADMIN_TENANT: str = os.getenv("DEFAULT_ADMIN_TENANT", "default")
+
+        # Multi-tenancy
+        self.DEFAULT_ORG_ID: str = os.getenv("DEFAULT_ORG_ID", "default")
+        self.OTLP_GATEWAY_URL: str = os.getenv("OTLP_GATEWAY_URL", "http://otlp-gateway:4320")
+        self.DEFAULT_OTLP_TOKEN: Optional[str] = os.getenv("DEFAULT_OTLP_TOKEN")
+
+        # Alerting and notifications defaults
+        self.DEFAULT_RULE_GROUP: str = os.getenv("DEFAULT_RULE_GROUP", "default")
+        self.DEFAULT_SLACK_CHANNEL: str = os.getenv("DEFAULT_SLACK_CHANNEL", "default")
+        self.ENABLED_NOTIFICATION_CHANNEL_TYPES: list = [
+            channel_type.strip().lower()
+            for channel_type in os.getenv(
+                "ENABLED_NOTIFICATION_CHANNEL_TYPES",
+                "email,slack,teams,webhook,pagerduty",
+            ).split(",")
+            if channel_type.strip()
+        ]
+
+        self._apply_security_defaults()
+        self.validate()
+
+    def _apply_security_defaults(self) -> None:
+        if _is_placeholder(
+            self.DEFAULT_ADMIN_PASSWORD,
+            placeholders=["admin123", "admin", "password", "changeme"],
+        ):
+            self.DEFAULT_ADMIN_PASSWORD = secrets.token_urlsafe(18)
+            logger.warning(
+                "Generated runtime DEFAULT_ADMIN_PASSWORD. Persist this value via env var: %s",
+                self.DEFAULT_ADMIN_PASSWORD,
+            )
+
+        if _is_placeholder(
+            self.JWT_SECRET_KEY,
+            placeholders=["change-this-secret-key-in-production", "changeme", "secret", ""],
+        ):
+            self.JWT_SECRET_KEY = secrets.token_urlsafe(32)
+            logger.warning(
+                "Generated runtime JWT_SECRET_KEY. Persist this value via env var: %s",
+                self.JWT_SECRET_KEY,
+            )
+
+        if self.JWT_ALGORITHM in self.ALLOWED_JWT_ALGORITHMS and (
+            not self.JWT_PRIVATE_KEY or not self.JWT_PUBLIC_KEY
+        ):
+            private_key, public_key = _generate_rsa_keypair()
+            self.JWT_PRIVATE_KEY = private_key
+            self.JWT_PUBLIC_KEY = public_key
+            logger.warning(
+                "Generated ephemeral JWT keypair for %s. Persist JWT_PRIVATE_KEY and JWT_PUBLIC_KEY to avoid token invalidation on restart.",
+                self.JWT_ALGORITHM,
+            )
+
+    def validate(self) -> None:
+        if self.DATABASE_URL == self.EXAMPLE_DATABASE_URL or "changeme123" in self.DATABASE_URL:
+            raise ValueError(
+                "Unsafe DATABASE_URL detected. Set DATABASE_URL to a non-example credentialed connection string."
+            )
+
+        if self.JWT_ALGORITHM not in self.ALLOWED_JWT_ALGORITHMS:
+            raise ValueError(
+                f"Unsupported JWT_ALGORITHM '{self.JWT_ALGORITHM}'. Allowed values: {sorted(self.ALLOWED_JWT_ALGORITHMS)}"
+            )
+
+        if self.JWT_ALGORITHM in self.ALLOWED_JWT_ALGORITHMS and (
+            not self.JWT_PRIVATE_KEY or not self.JWT_PUBLIC_KEY
+        ):
+            raise ValueError("JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be configured for RS256/ES256 tokens")
+
+        wildcard_enabled = any(origin.strip() == "*" for origin in self.CORS_ORIGINS)
+        if wildcard_enabled and self.CORS_ALLOW_CREDENTIALS:
+            raise ValueError(
+                "CORS_ORIGINS cannot contain '*' when CORS_ALLOW_CREDENTIALS is enabled."
+            )
 
 
 class Constants:
