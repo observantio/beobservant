@@ -466,7 +466,15 @@ class LokiService:
             
         except httpx.HTTPError as e:
             self._observe("loki_query_errors_total", 1)
-            logger.error("Error aggregating logs: %s", e)
+            if isinstance(e, httpx.HTTPStatusError) and getattr(e, "response", None) is not None:
+                status_code = getattr(e.response, "status_code", None)
+                if status_code and 400 <= status_code < 500:
+                    logger.debug("Client error aggregating logs (%s): %s", status_code, e)
+                else:
+                    logger.error("Error aggregating logs: %s", e)
+            else:
+                logger.error("Error aggregating logs: %s", e)
+
             return {
                 "status": "error",
                 "error": str(e),
@@ -501,7 +509,9 @@ class LokiService:
             candidates.append(query_str.replace("service.name", "service_name"))
             candidates.append(query_str.replace("service_name", "service"))
             candidates.append('{service=~".+"}')
-        candidates.append("{}")
+        # NOTE: do not add an empty selector `{}` as a fallback — some Loki versions reject
+        # aggregation queries that use an empty selector (e.g. count_over_time({}[..])).
+        # Removing this prevents unnecessary 400 responses and log spam.
 
         candidates = list(dict.fromkeys(candidates))
 

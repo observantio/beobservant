@@ -140,7 +140,7 @@ export const MESSAGES = {
 }
 
 // Max logs options for Loki query
-export const MAX_LOG_OPTIONS = [50, 100, 500, 1000, 5000]
+export const MAX_LOG_OPTIONS = [20, 50, 100,200]
 
 // Auto-refresh intervals for Loki
 export const LOKI_REFRESH_INTERVALS = [

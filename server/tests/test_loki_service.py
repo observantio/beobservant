@@ -53,3 +53,21 @@ def test_get_log_volume_stops_on_first_successful_candidate():
     assert result["status"] == "success"
     assert result["data"]["result"]
     assert len(called) >= 1
+
+
+def test_get_log_volume_does_not_use_empty_selector_fallback():
+    service = LokiService(loki_url="http://loki.test")
+
+    called = []
+
+    async def fake_aggregate(query_str, start=None, end=None, step=300, tenant_id="default"):
+        called.append(query_str)
+        return {"status": "success", "data": {"result": []}, "query": query_str, "step": step}
+
+    service.aggregate_logs = fake_aggregate
+
+    # call with a service selector that previously fell back to `{}`
+    asyncio.run(service.get_log_volume('{service.name="api"}', step=60))
+
+    # ensure we never attempted the empty-selector `{}` as a fallback
+    assert not any('{}' in q for q in called)

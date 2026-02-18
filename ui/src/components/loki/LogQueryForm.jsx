@@ -37,6 +37,12 @@ export default function LogQueryForm({
   loading = false,
   onRemoveFilter = undefined,
 }) {
+  // Find the lowest value from MAX_LOG_OPTIONS for default
+  const minMaxLogs = Math.min(...MAX_LOG_OPTIONS);
+
+  // If maxLogs is not set or invalid, use the lowest as default
+  const effectiveMaxLogs = MAX_LOG_OPTIONS.includes(maxLogs) ? maxLogs : minMaxLogs;
+
   return (
     <form onSubmit={runQuery} className="space-y-4">
       <div className="flex items-center gap-4 pb-3 border-b border-sre-border">
@@ -113,7 +119,11 @@ export default function LogQueryForm({
               <label className="block text-sm font-medium text-sre-text mb-2">
                 <span>Max Logs</span>
                 <HelpTooltip text="Limit the number of log entries returned. Higher limits provide more data but may slow down queries." />
-                <select value={maxLogs} onChange={(e)=>setMaxLogs(Number(e.target.value))} className="mt-2 w-full px-3 pr-10 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary">
+                <select
+                  value={effectiveMaxLogs}
+                  onChange={(e)=>setMaxLogs(Number(e.target.value))}
+                  className="mt-2 w-full px-3 pr-10 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary"
+                >
                   {MAX_LOG_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
               </label>
