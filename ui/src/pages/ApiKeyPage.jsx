@@ -402,7 +402,7 @@ export default function ApiKeyPage() {
                 <label className="block text-sm font-medium text-sre-text mb-2">Key Name</label>
                 <HelpTooltip text="A descriptive name for this API key, e.g., the name of the application or service using it." />
               </div>
-              <Input value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} placeholder="e.g., XYZ Product" required />
+              <Input value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} placeholder="XYZ Product" required />
             </div>
             <div>
               <div className="flex items-center justify-between">
@@ -442,7 +442,7 @@ export default function ApiKeyPage() {
               <div>
                 <div className="flex items-center justify-between">
                   <label className="block text-sm font-medium text-sre-text mb-2">OTLP Gateway Host</label>
-                  <HelpTooltip text="Enter the gateway host only (e.g., http://localhost:4320). Endpoints are derived automatically." />
+                  <HelpTooltip text="Enter the gateway host only. Endpoints are derived automatically." />
                 </div>
                 <Input
                   value={gatewayHost}

@@ -18,6 +18,7 @@ import EmailChannelFields from './channelForms/EmailChannelFields'
  * @param {object} props - Component props
  */
 export default function ChannelEditor({ channel, onSave, onCancel, allowedTypes = [], visibility = 'private' }) {
+  const incomingSharedGroupIds = channel?.sharedGroupIds || channel?.shared_group_ids || []
   const [formData, setFormData] = useState(channel || {
     name: '',
     type: 'webhook',
@@ -25,14 +26,37 @@ export default function ChannelEditor({ channel, onSave, onCancel, allowedTypes 
     config: {},
     // visibility is controlled by the Integrations page tab (passed in via `visibility` prop)
     visibility: channel?.visibility || visibility,
-    sharedGroupIds: channel?.sharedGroupIds || []
+    sharedGroupIds: incomingSharedGroupIds
   })
   const [groups, setGroups] = useState([])
-  const [selectedGroups, setSelectedGroups] = useState(new Set(channel?.sharedGroupIds || []))
+  const [selectedGroups, setSelectedGroups] = useState(new Set(incomingSharedGroupIds))
 
   useEffect(() => {
     loadGroups()
   }, [])
+
+  useEffect(() => {
+    if (channel) {
+      const normalizedSharedGroupIds = channel.sharedGroupIds || channel.shared_group_ids || []
+      setFormData({
+        ...channel,
+        visibility: channel.visibility || visibility,
+        sharedGroupIds: normalizedSharedGroupIds,
+      })
+      setSelectedGroups(new Set(normalizedSharedGroupIds))
+      return
+    }
+
+    setFormData({
+      name: '',
+      type: 'webhook',
+      enabled: true,
+      config: {},
+      visibility,
+      sharedGroupIds: [],
+    })
+    setSelectedGroups(new Set())
+  }, [channel, visibility])
 
   const loadGroups = async () => {
     try {
@@ -198,7 +222,7 @@ export default function ChannelEditor({ channel, onSave, onCancel, allowedTypes 
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
-              placeholder="e.g., Team Slack Channel"
+              placeholder="Team Slack Channel"
               className="bg-sre-bg border-sre-border/60 focus:border-sre-primary"
             />
           </div>

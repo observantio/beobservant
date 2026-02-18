@@ -28,7 +28,7 @@ from models.alerting.receivers import AlertManagerStatus
 from models.alerting.rules import AlertRule, AlertRuleCreate
 from models.alerting.channels import NotificationChannel, NotificationChannelCreate
 from services.alertmanager_service import AlertManagerService
-from services.storage_db_service import DatabaseStorageService
+from services.storage.service import DatabaseStorageService
 from services.notification_service import NotificationService
 from config import config, constants
 from datetime import datetime, timezone
@@ -1123,11 +1123,15 @@ async def get_public_alert_rules(request: Request):
     from database import get_db_session
     from db_models import Tenant
 
-    with get_db_session() as db:
-        tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
-        if not tenant:
-            return []
-        tenant_id = tenant.id
+    def _resolve_default_tenant_id() -> Optional[str]:
+        with get_db_session() as db:
+            tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+            return tenant.id if tenant else None
+
+    resolved_tenant_id = await run_in_threadpool(_resolve_default_tenant_id)
+    if not resolved_tenant_id:
+        return []
+    tenant_id = resolved_tenant_id
 
     return await run_in_threadpool(storage_service.get_public_alert_rules, tenant_id)
 

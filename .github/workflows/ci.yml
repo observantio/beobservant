@@ -7,7 +7,7 @@ on:
 
 jobs:
   ui:
-    name: UI: build, test, lint, a11y
+    name: UI build, test, lint, a11y
     runs-on: ubuntu-latest
     defaults:
       run:

@@ -24,7 +24,7 @@ export default function GroupForm({ formData, setFormData }) {
             label="Group Name *"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="e.g., SRE Team, DevOps, Security"
+            placeholder="SRE Team, DevOps, Security"
             required
             autoFocus
           />

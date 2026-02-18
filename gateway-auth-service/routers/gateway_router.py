@@ -39,13 +39,9 @@ async def validate_otlp_token(request: Request):
 
     try:
         org_id = _service.validate_otlp_token(token)
-    except Exception as exc:
-        if isinstance(exc, SQLAlchemyError) or isinstance(exc, DatabaseUnavailable) or exc.__class__.__name__ == "DatabaseUnavailable":
-            # Sanitize internal DB errors and return a stable 503 response. Do not
-            # expose internal stack traces or DB error text to callers.
-            logger.warning("Auth database unavailable")
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth database unavailable")
-        raise
+    except (SQLAlchemyError, DatabaseUnavailable):
+        logger.warning("Auth database unavailable")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth database unavailable")
 
     if not org_id:
         logger.warning("OTLP token validation failed – token_prefix=%s", token_prefix)

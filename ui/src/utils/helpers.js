@@ -157,12 +157,15 @@ export async function copyToClipboard(text) {
  */
 export function downloadJSON(data, filename = 'data.json') {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  if (typeof URL?.createObjectURL !== 'function') return
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = filename
   a.click()
-  URL.revokeObjectURL(url)
+  if (typeof URL?.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(url)
+  }
 }
 
 /**
@@ -173,6 +176,7 @@ export function downloadJSON(data, filename = 'data.json') {
  */
 export function downloadFile(content, filename = 'file.txt', type = 'text/plain') {
   const blob = content instanceof Blob ? content : new Blob([content], { type })
+  if (typeof URL?.createObjectURL !== 'function') return
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -180,7 +184,9 @@ export function downloadFile(content, filename = 'file.txt', type = 'text/plain'
   document.body.appendChild(a)
   a.click()
   a.remove()
-  URL.revokeObjectURL(url)
+  if (typeof URL?.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(url)
+  }
 }
 
 /**

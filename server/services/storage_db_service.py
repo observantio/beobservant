@@ -48,18 +48,14 @@ from db_models import (
 from database import get_db_session
 from config import config as app_config
 from services.audit_context import get_request_audit_context
+from services.common.visibility import normalize_storage_visibility
 
 logger = logging.getLogger(__name__)
 INCIDENT_META_KEY = "beobservant_meta"
 
 
 def _normalize_visibility(value: Optional[str]) -> str:
-    visibility = str(value or "public").lower()
-    if visibility in {"public", "private", "group"}:
-        return visibility
-    if visibility == "tenant":
-        return "public"
-    return "public"
+    return normalize_storage_visibility(value)
 
 
 def _extract_user_group_ids(user_obj: Optional[User]) -> List[str]:
@@ -262,9 +258,7 @@ class DatabaseStorageService:
                 "createdAt": note.get("createdAt") or datetime.now(timezone.utc),
             })
 
-        # Normalize status so malformed/legacy values (e.g. 'IncidentStatus.OPEN')
-        # don't break Pydantic enum validation. Ensure we pass the raw enum value
-        # string ('open'|'resolved').
+
         status_value = incident.status
         try:
             from models.alerting.incidents import IncidentStatus
@@ -501,7 +495,6 @@ class DatabaseStorageService:
                         meta = raw_meta
 
                     if meta.get("user_managed"):
-                        # do not auto-resolve incidents under manual investigation
                         continue
 
                     if incident.fingerprint not in active_fingerprints:
@@ -1035,7 +1028,7 @@ class DatabaseStorageService:
             if not r:
                 return None
             if not _has_access(r.visibility or "private", r.created_by, user_id,
-                               _get_shared_group_ids(r), group_ids, require_write=True):
+                               _get_shared_group_ids(r), group_ids):
                 return None
             return self._rule_to_pydantic(r)
 

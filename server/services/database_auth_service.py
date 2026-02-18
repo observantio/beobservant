@@ -17,13 +17,15 @@ from typing import Optional, List, Dict, Any
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, func
+from sqlalchemy.exc import SQLAlchemyError
 from fastapi import HTTPException
+import httpx
 import pyotp
 from cryptography.fernet import Fernet, InvalidToken
 
 try:
     from db_models import User, Tenant, Group, Permission, AuditLog, UserApiKey
-except Exception:
+except ImportError:
     
     import importlib.util
     import os
@@ -117,8 +119,8 @@ class DatabaseAuthService:
             try:
                 self._ensure_default_setup()
                 self._initialized = True
-            except Exception as e:
-                logger.warning(f"Failed to initialize auth service: {e}")
+            except (SQLAlchemyError, ValueError) as exc:
+                logger.warning("Failed to initialize auth service: %s", exc)
     
     def _ensure_default_setup(self):
         """Ensure default tenant, permissions, and admin user exist."""
@@ -175,8 +177,8 @@ class DatabaseAuthService:
                 self._ensure_default_api_key(db, admin_user)
                 
                 db.commit()
-        except Exception as e:
-            logger.error(f"Error setting up defaults: {e}")
+        except (SQLAlchemyError, ValueError) as exc:
+            logger.error("Error setting up defaults: %s", exc)
     
     def _ensure_permissions(self, db: Session):
         """Create all predefined permissions."""
@@ -272,7 +274,7 @@ class DatabaseAuthService:
             return None
         try:
             return Fernet(config.DATA_ENCRYPTION_KEY)
-        except Exception:
+        except (TypeError, ValueError):
             raise ValueError("Invalid DATA_ENCRYPTION_KEY format")
 
     def _encrypt_mfa_secret(self, secret: str) -> str:
@@ -306,7 +308,7 @@ class DatabaseAuthService:
                     hashes.pop(i)
                     user.mfa_recovery_hashes = hashes
                     return True
-            except Exception:
+            except (TypeError, ValueError):
                 continue
         return False
 
@@ -363,12 +365,12 @@ class DatabaseAuthService:
                         db_user.mfa_recovery_hashes = hashes
                         db.add(db_user)
                         return True
-                except Exception:
+                except (TypeError, ValueError):
                     continue
             # verify TOTP
             try:
                 secret = self._decrypt_mfa_secret(db_user.totp_secret)
-            except Exception:
+            except ValueError:
                 return False
             return bool(pyotp.TOTP(secret).verify(code, valid_window=1))
 
@@ -527,7 +529,7 @@ class DatabaseAuthService:
                 return None
             try:
                 oidc_token = self.oidc_service.exchange_password(username, password)
-            except Exception as exc:
+            except (httpx.HTTPError, ValueError) as exc:
                 self.logger.error("OIDC password login failed: %s", exc)
                 return None
 
@@ -589,7 +591,7 @@ class DatabaseAuthService:
                 token_type=oidc_token.get("token_type", "bearer"),
                 expires_in=int(oidc_token.get("expires_in", config.JWT_EXPIRATION_MINUTES * 60)),
             )
-        except Exception as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             self.logger.error("OIDC code exchange failed: %s", exc)
             return None
 
@@ -601,7 +603,7 @@ class DatabaseAuthService:
             return None
         try:
             return self.oidc_service.create_keycloak_user(email=email, username=username, full_name=full_name)
-        except Exception as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             self.logger.error("External user provisioning failed: %s", exc)
             return None
     

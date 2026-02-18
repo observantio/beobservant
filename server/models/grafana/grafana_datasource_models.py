@@ -36,7 +36,7 @@ class Datasource(BaseModel):
     uid: Optional[str] = Field(None, description="Unique identifier string for the datasource")
     org_id: Optional[int] = Field(None, alias="orgId", description="Organization ID")
     name: str = Field(..., description=DS_DISPLAY_NAME_DESC)
-    type: str = Field(..., description="Type of the datasource (e.g., prometheus, loki)")
+    type: str = Field(..., description="Type of the datasource (prometheus, loki)")
     type_logo_url: Optional[str] = Field(None, alias="typeLogoUrl", description="URL to the datasource type logo")
     access: str = Field("proxy", description="Access mode (proxy or direct)")
     url: str = Field(..., description=DS_URL_DESC)

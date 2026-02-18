@@ -1,0 +1,56 @@
+name: UI CI
+
+on:
+  push:
+    paths:
+      - 'ui/**'
+  pull_request:
+    paths:
+      - 'ui/**'
+
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Run linters
+        working-directory: ui
+        run: npm run lint
+
+      - name: Run accessibility tests
+        working-directory: ui
+        run: npm run a11y -- --run
+
+      - name: Run unit tests
+        working-directory: ui
+        run: npm test -- --run
+
+      - name: Build
+        working-directory: ui
+        run: npm run build
+
+      - name: Analyze bundle (visualizer)
+        working-directory: ui
+        run: npm run build:analyze || true
+
+      - name: Upload bundle report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-bundle-report
+          path: ui/dist/report.html
+
+      - name: Dependency audit
+        working-directory: ui
+        run: npm audit --audit-level=moderate || true

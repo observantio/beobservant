@@ -7,11 +7,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 `
 
 import { useState, useEffect, useMemo } from 'react'
-import {
-  getAlerts, getSilences, createSilence, deleteSilence,
-  getAlertRules, createAlertRule, updateAlertRule, deleteAlertRule,
-  getNotificationChannels, testAlertRule, importAlertRules,
-} from '../api'
+import { createSilence, deleteSilence, createAlertRule, updateAlertRule, deleteAlertRule, testAlertRule, importAlertRules} from '../api'
 import { Card, Button, Select, Alert, Spinner, Modal } from '../components/ui'
 import { useToast } from '../contexts/ToastContext'
 import ConfirmModal from '../components/ConfirmModal'
@@ -48,7 +44,7 @@ export default function AlertManagerPage() {
   const [importFileName, setImportFileName] = useState('')
   const { toast } = useToast()
 
-  const { alerts, silences, rules, channels, loading, error, stats, reloadData, setError: setHookError } = useAlertManagerData()
+  const { alerts, silences, rules, channels, loading, error, reloadData, setError: setHookError } = useAlertManagerData()
 
   useEffect(() => {
     const defaults = DEFAULT_ALERTMANAGER_METRIC_KEYS

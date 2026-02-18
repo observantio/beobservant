@@ -236,6 +236,9 @@ def get_current_user(
 
     token_data.org_id = getattr(user, "org_id", token_data.org_id)
     token_data.permissions = auth_service.get_user_permissions(user)
+    live_group_ids = getattr(user, "group_ids", None)
+    if isinstance(live_group_ids, list):
+        token_data.group_ids = [str(group_id) for group_id in live_group_ids if str(group_id).strip()]
     enforce_rate_limit(
         key=f"user:{token_data.user_id}",
         limit=config.RATE_LIMIT_USER_PER_MINUTE,

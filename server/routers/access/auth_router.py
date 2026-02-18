@@ -23,7 +23,6 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import aliased
 from sqlalchemy import String
-from ipaddress import ip_address, ip_network
 
 from config import config
 from models.access.user_models import (
@@ -56,6 +55,7 @@ from services.notification_service import NotificationService
 from database import get_db_session
 from db_models import Tenant, AuditLog, User
 from services.audit_context import get_request_audit_context
+from services.common.cookies import is_secure_cookie_request
 
 logger = logging.getLogger(__name__)
 
@@ -73,33 +73,11 @@ def _require_admin_with_audit_permission(current_user: TokenData = Depends(requi
 
 
 def _cookie_secure(request: Request) -> bool:
-    # Direct TLS
-    if request.url.scheme == "https":
-        return True
-
-    # Only trust forwarded proto when proxy headers are explicitly enabled.
-    if not config.TRUST_PROXY_HEADERS:
-        return False
-
-    # If TRUSTED_PROXY_CIDRS is empty we accept forwarded headers from any peer.
-    trusted_cidrs = getattr(config, "TRUSTED_PROXY_CIDRS", []) or []
-    direct_peer = (request.client.host if request.client else "").strip()
-
-    if trusted_cidrs:
-        try:
-            peer_ip = ip_address(direct_peer)
-            for cidr in trusted_cidrs:
-                try:
-                    if peer_ip in ip_network(cidr, strict=False):
-                        return request.headers.get("x-forwarded-proto", "").lower() == "https"
-                except ValueError:
-                    continue
-        except ValueError:
-            return False
-        return False
-
-    # No CIDRs configured, but proxy header trust enabled — accept forwarded proto value.
-    return request.headers.get("x-forwarded-proto", "").lower() == "https"
+    return is_secure_cookie_request(
+        request,
+        trust_proxy_headers=bool(config.TRUST_PROXY_HEADERS),
+        trusted_proxy_cidrs=getattr(config, "TRUSTED_PROXY_CIDRS", []) or [],
+    )
 
 
 def _set_auth_cookie(request: Request, response: Response, token: str) -> None:
@@ -311,9 +289,12 @@ async def register(request: Request, register_request: RegisterRequest):
         full_name=register_request.full_name
     )
 
-    with get_db_session() as db:
-        default_tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
-        tenant_id = default_tenant.id if default_tenant else config.DEFAULT_ADMIN_TENANT
+    def _resolve_default_tenant_id() -> str:
+        with get_db_session() as db:
+            default_tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+            return default_tenant.id if default_tenant else config.DEFAULT_ADMIN_TENANT
+
+    tenant_id = await run_in_threadpool(_resolve_default_tenant_id)
 
     user = await run_in_threadpool(auth_service.create_user, user_create, tenant_id)
 
@@ -498,74 +479,77 @@ async def list_audit_logs(
     current_user: TokenData = Depends(_require_admin_with_audit_permission),
 ):
     actor = aliased(User)
-    with get_db_session() as db:
-        query = (
-            db.query(AuditLog, actor.username, actor.email)
-            .outerjoin(actor, actor.id == AuditLog.user_id)
-        )
-
-        scoped_tenant = tenant_id if (getattr(current_user, "is_superuser", False) and tenant_id) else current_user.tenant_id
-        if not getattr(current_user, "is_superuser", False):
-            query = query.filter(AuditLog.tenant_id == current_user.tenant_id)
-        elif scoped_tenant:
-            query = query.filter(AuditLog.tenant_id == scoped_tenant)
-
-        if start is not None:
-            query = query.filter(AuditLog.created_at >= start)
-        if end is not None:
-            query = query.filter(AuditLog.created_at <= end)
-        if user_id:
-            query = query.filter(AuditLog.user_id == user_id)
-        if action:
-            query = query.filter(AuditLog.action == action)
-        if resource_type:
-            query = query.filter(AuditLog.resource_type == resource_type)
-        if q:
-            query = query.filter(AuditLog.details.cast(String).ilike(f"%{q}%"))
-
-        rows = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit).all()
-        items = []
-        for log, username, email in rows:
-            items.append({
-                "id": log.id,
-                "tenant_id": log.tenant_id,
-                "user_id": log.user_id,
-                "username": username,
-                "email": email,
-                "action": log.action,
-                "resource_type": log.resource_type,
-                "resource_id": _sanitize_resource_id(log.resource_id),
-                "details": _sanitize_audit_details(log.details),
-                "ip_address": log.ip_address,
-                "user_agent": log.user_agent,
-                "created_at": log.created_at,
-            })
-        ip_address, user_agent = get_request_audit_context()
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=5)
-        recent_view = (
-            db.query(AuditLog.id)
-            .filter(
-                AuditLog.tenant_id == current_user.tenant_id,
-                AuditLog.user_id == current_user.user_id,
-                AuditLog.action == "audit_logs.view",
-                AuditLog.resource_type == "audit_logs",
-                AuditLog.resource_id == "list",
-                AuditLog.created_at >= cutoff,
+    def _list_audit_logs_sync() -> list[dict]:
+        with get_db_session() as db:
+            query = (
+                db.query(AuditLog, actor.username, actor.email)
+                .outerjoin(actor, actor.id == AuditLog.user_id)
             )
-            .first()
-        )
-        if not recent_view:
-            db.add(AuditLog(
-                tenant_id=current_user.tenant_id,
-                user_id=current_user.user_id,
-                action="audit_logs.view",
-                resource_type="audit_logs",
-                resource_id="list",
-                details={"limit": limit, "offset": offset},
-                ip_address=ip_address,
-                user_agent=user_agent,
-            ))
-        return items
+
+            scoped_tenant = tenant_id if (getattr(current_user, "is_superuser", False) and tenant_id) else current_user.tenant_id
+            if not getattr(current_user, "is_superuser", False):
+                query = query.filter(AuditLog.tenant_id == current_user.tenant_id)
+            elif scoped_tenant:
+                query = query.filter(AuditLog.tenant_id == scoped_tenant)
+
+            if start is not None:
+                query = query.filter(AuditLog.created_at >= start)
+            if end is not None:
+                query = query.filter(AuditLog.created_at <= end)
+            if user_id:
+                query = query.filter(AuditLog.user_id == user_id)
+            if action:
+                query = query.filter(AuditLog.action == action)
+            if resource_type:
+                query = query.filter(AuditLog.resource_type == resource_type)
+            if q:
+                query = query.filter(AuditLog.details.cast(String).ilike(f"%{q}%"))
+
+            rows = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit).all()
+            items = []
+            for log, username, email in rows:
+                items.append({
+                    "id": log.id,
+                    "tenant_id": log.tenant_id,
+                    "user_id": log.user_id,
+                    "username": username,
+                    "email": email,
+                    "action": log.action,
+                    "resource_type": log.resource_type,
+                    "resource_id": _sanitize_resource_id(log.resource_id),
+                    "details": _sanitize_audit_details(log.details),
+                    "ip_address": log.ip_address,
+                    "user_agent": log.user_agent,
+                    "created_at": log.created_at,
+                })
+            ip_address, user_agent = get_request_audit_context()
+            cutoff = datetime.now(timezone.utc) - timedelta(seconds=5)
+            recent_view = (
+                db.query(AuditLog.id)
+                .filter(
+                    AuditLog.tenant_id == current_user.tenant_id,
+                    AuditLog.user_id == current_user.user_id,
+                    AuditLog.action == "audit_logs.view",
+                    AuditLog.resource_type == "audit_logs",
+                    AuditLog.resource_id == "list",
+                    AuditLog.created_at >= cutoff,
+                )
+                .first()
+            )
+            if not recent_view:
+                db.add(AuditLog(
+                    tenant_id=current_user.tenant_id,
+                    user_id=current_user.user_id,
+                    action="audit_logs.view",
+                    resource_type="audit_logs",
+                    resource_id="list",
+                    details={"limit": limit, "offset": offset},
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ))
+            return items
+
+    return await run_in_threadpool(_list_audit_logs_sync)
 
 
 @router.get("/audit-logs/export")
@@ -579,42 +563,46 @@ async def export_audit_logs_csv(
     current_user: TokenData = Depends(_require_admin_with_audit_permission),
 ):
     actor = aliased(User)
-    with get_db_session() as db:
-        query = (
-            db.query(AuditLog, actor.username, actor.email)
-            .outerjoin(actor, actor.id == AuditLog.user_id)
-        )
+    def _export_audit_rows_sync():
+        with get_db_session() as db:
+            query = (
+                db.query(AuditLog, actor.username, actor.email)
+                .outerjoin(actor, actor.id == AuditLog.user_id)
+            )
 
-        scoped_tenant = tenant_id if (getattr(current_user, "is_superuser", False) and tenant_id) else current_user.tenant_id
-        if not getattr(current_user, "is_superuser", False):
-            query = query.filter(AuditLog.tenant_id == current_user.tenant_id)
-        elif scoped_tenant:
-            query = query.filter(AuditLog.tenant_id == scoped_tenant)
+            scoped_tenant = tenant_id if (getattr(current_user, "is_superuser", False) and tenant_id) else current_user.tenant_id
+            if not getattr(current_user, "is_superuser", False):
+                query = query.filter(AuditLog.tenant_id == current_user.tenant_id)
+            elif scoped_tenant:
+                query = query.filter(AuditLog.tenant_id == scoped_tenant)
 
-        if start is not None:
-            query = query.filter(AuditLog.created_at >= start)
-        if end is not None:
-            query = query.filter(AuditLog.created_at <= end)
-        if user_id:
-            query = query.filter(AuditLog.user_id == user_id)
-        if action:
-            query = query.filter(AuditLog.action == action)
-        if resource_type:
-            query = query.filter(AuditLog.resource_type == resource_type)
+            if start is not None:
+                query = query.filter(AuditLog.created_at >= start)
+            if end is not None:
+                query = query.filter(AuditLog.created_at <= end)
+            if user_id:
+                query = query.filter(AuditLog.user_id == user_id)
+            if action:
+                query = query.filter(AuditLog.action == action)
+            if resource_type:
+                query = query.filter(AuditLog.resource_type == resource_type)
 
-        rows = query.order_by(AuditLog.created_at.desc()).all()
+            rows = query.order_by(AuditLog.created_at.desc()).all()
 
-        ip_address, user_agent = get_request_audit_context()
-        db.add(AuditLog(
-            tenant_id=current_user.tenant_id,
-            user_id=current_user.user_id,
-            action="audit_logs.export",
-            resource_type="audit_logs",
-            resource_id="csv",
-            details={"count": len(rows)},
-            ip_address=ip_address,
-            user_agent=user_agent,
-        ))
+            ip_address, user_agent = get_request_audit_context()
+            db.add(AuditLog(
+                tenant_id=current_user.tenant_id,
+                user_id=current_user.user_id,
+                action="audit_logs.export",
+                resource_type="audit_logs",
+                resource_id="csv",
+                details={"count": len(rows)},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ))
+            return rows
+
+    rows = await run_in_threadpool(_export_audit_rows_sync)
 
     buf = io.StringIO()
     writer = csv.writer(buf)

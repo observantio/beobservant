@@ -17,7 +17,7 @@ import { DEFAULT_FORM, RULE_TEMPLATES, validateRuleForm, createLabelPairsFromRul
 export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCancel }) {
   const [formData, setFormData] = useState(rule || DEFAULT_FORM)
   const [groups, setGroups] = useState([])
-  const [selectedGroups, setSelectedGroups] = useState(new Set(rule?.sharedGroupIds || []))
+  const [selectedGroups, setSelectedGroups] = useState(new Set(rule?.sharedGroupIds || rule?.shared_group_ids || []))
   const [metricNames, setMetricNames] = useState([])
   const [metricFilter, setMetricFilter] = useState('')
   const [loadingMetrics, setLoadingMetrics] = useState(false)
@@ -37,6 +37,15 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
   useEffect(() => {
     loadGroups()
   }, [])
+
+  useEffect(() => {
+    setFormData(rule || DEFAULT_FORM)
+    setLabelPairs(createLabelPairsFromRule(rule))
+    const incomingGroups = Array.isArray(rule?.sharedGroupIds)
+      ? rule.sharedGroupIds
+      : (Array.isArray(rule?.shared_group_ids) ? rule.shared_group_ids : [])
+    setSelectedGroups(new Set(incomingGroups))
+  }, [rule])
 
   useEffect(() => {
     if (labelPairs.length === 0 && Object.keys(formData.labels || {}).length === 0) return
@@ -197,9 +206,12 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
     setSaving(true)
     setSaveError(null)
     try {
-      const success = await onSave(formData)
+      const success = await onSave({
+        ...formData,
+        sharedGroupIds: Array.from(selectedGroups),
+      })
       if (success) {
-        onCancel() // Close the modal on success
+        onCancel()
       }
     } catch (e) {
       setSaveError(e.message || 'Failed to save rule')
@@ -367,7 +379,7 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                       value={formData.expr}
                       onChange={(e) => setFormData({ ...formData, expr: e.target.value })}
                       required
-                      placeholder="e.g., rate(requests_total[5m]) > 100"
+                      placeholder="rate(requests_total[5m]) > 100"
                       className="w-full font-mono text-base py-3 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors min-h-[60px]"
                     />
                     {validationErrors.expr && (
@@ -381,12 +393,12 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-3">
                       <label className="block text-sm font-semibold text-sre-text">
-                        Duration <HelpTooltip text="How long the condition must be true before the alert fires. Use Prometheus duration format (e.g., 5m, 1h)." />
+                        Duration <HelpTooltip text="How long the condition must be true before the alert fires. Use Prometheus duration format (5m, 1h)." />
                       </label>
                       <Input
                         value={formData.duration}
                         onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                        placeholder="e.g., 5m, 1h"
+                        placeholder="5m, 1h"
                         className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
                       />
                       {validationErrors.duration && (
@@ -450,7 +462,7 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                           <Input
                             value={metricFilter}
                             onChange={(e) => setMetricFilter(e.target.value)}
-                            placeholder="e.g., http_requests_total"
+                            placeholder="http_requests_total"
                             className="w-full py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                           />
                         </div>

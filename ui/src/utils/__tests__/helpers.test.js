@@ -8,6 +8,7 @@ import {
   isEmpty,
   percentile,
   copyToClipboard,
+  downloadFile,
 } from '../helpers'
 
 describe('helpers', () => {

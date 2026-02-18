@@ -31,6 +31,7 @@ from services.grafana.proxy_auth_ops import (
 from services.grafana.dashboard_ops import (
     check_dashboard_access,
     get_accessible_dashboard_uids,
+    build_dashboard_search_context,
     search_dashboards,
     get_dashboard,
     create_dashboard,
@@ -43,6 +44,7 @@ from services.grafana.datasource_ops import (
     check_datasource_access,
     check_datasource_access_by_id,
     get_accessible_datasource_uids,
+    build_datasource_list_context,
     enforce_datasource_query_access,
     get_datasources,
     get_datasource,
@@ -194,6 +196,12 @@ class GrafanaProxyService:
     ) -> tuple[List[str], bool]:
         return get_accessible_datasource_uids(self, db, user_id, tenant_id, group_ids)
 
+    def build_dashboard_search_context(self, db: Session, *, tenant_id: str, uid: Optional[str] = None) -> Dict[str, Any]:
+        return build_dashboard_search_context(self, db, tenant_id=tenant_id, uid=uid)
+
+    def build_datasource_list_context(self, db: Session, *, tenant_id: str, uid: Optional[str] = None) -> Dict[str, Any]:
+        return build_datasource_list_context(self, db, tenant_id=tenant_id, uid=uid)
+
 
     async def search_dashboards(
         self,
@@ -210,6 +218,7 @@ class GrafanaProxyService:
         is_admin: bool = False,
         limit: Optional[int] = None,
         offset: int = 0,
+        search_context: Optional[Dict[str, Any]] = None,
     ) -> List[DashboardSearchResult]:
         return await search_dashboards(
             self,
@@ -226,6 +235,7 @@ class GrafanaProxyService:
             is_admin=is_admin,
             limit=limit,
             offset=offset,
+            search_context=search_context,
         )
 
     async def get_dashboard(
@@ -267,8 +277,22 @@ class GrafanaProxyService:
         uid: Optional[str] = None, team_id: Optional[str] = None,
         show_hidden: bool = False, is_admin: bool = False,
         limit: Optional[int] = None, offset: int = 0,
+        datasource_context: Optional[Dict[str, Any]] = None,
     ) -> List[Datasource]:
-        return await get_datasources(self, db, user_id, tenant_id, group_ids, uid, team_id, show_hidden, is_admin, limit, offset)
+        return await get_datasources(
+            self,
+            db,
+            user_id,
+            tenant_id,
+            group_ids,
+            uid,
+            team_id,
+            show_hidden,
+            is_admin,
+            limit,
+            offset,
+            datasource_context,
+        )
 
     async def get_datasource(self, db: Session, uid: str, user_id: str, tenant_id: str, group_ids: List[str]) -> Optional[Datasource]:
         return await get_datasource(self, db, uid, user_id, tenant_id, group_ids)

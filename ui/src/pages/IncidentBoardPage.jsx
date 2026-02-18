@@ -684,7 +684,6 @@ export default function IncidentBoardPage() {
                 </div>
               </div>
 
-              {/* Show hidden resolved toggle */}
               <div className="flex items-center gap-2">
                 <label className="inline-flex items-center gap-2 text-sm text-sre-text-muted">
                   <input
@@ -693,7 +692,7 @@ export default function IncidentBoardPage() {
                     checked={showHiddenResolved}
                     onChange={(e) => { setShowHiddenResolved(e.target.checked) }}
                   />
-                  <span>Show hidden resolved</span>
+                  <span>Show hidden</span>
                   <HelpTooltip text="Include resolved incidents that are normally hidden from the board. Useful for reviewing recent incident history." />
                 </label>
               </div>

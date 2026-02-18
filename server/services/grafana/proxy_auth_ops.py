@@ -263,6 +263,16 @@ async def authorize_proxy_request(
     if isinstance(token_data, dict):
         token_data = TokenData(**token_data)
 
+    user = await run_in_threadpool(auth_service.get_user_by_id, token_data.user_id)
+    if not user or not getattr(user, "is_active", False):
+        raise HTTPException(status_code=401, detail="User not found or inactive")
+
+    token_data.org_id = getattr(user, "org_id", token_data.org_id)
+    token_data.permissions = await run_in_threadpool(auth_service.get_user_permissions, user)
+    live_group_ids = getattr(user, "group_ids", None)
+    if isinstance(live_group_ids, list):
+        token_data.group_ids = [str(group_id) for group_id in live_group_ids if str(group_id).strip()]
+
     user_permissions = set(token_data.permissions or [])
     allowed_grafana_perms = {
         Permission.READ_DASHBOARDS.value,

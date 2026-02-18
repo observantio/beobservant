@@ -265,10 +265,24 @@ export default function IntegrationsPage() {
         listJiraIntegrations().catch(() => ({ items: [] })),
         getAuthMode().catch(() => ({ oidc_enabled: false })),
       ])
-      setChannels(Array.isArray(channelsData) ? channelsData : [])
+      setChannels(
+        Array.isArray(channelsData)
+          ? channelsData.map((channel) => ({
+              ...channel,
+              sharedGroupIds: channel?.sharedGroupIds || channel?.shared_group_ids || [],
+            }))
+          : []
+      )
       setAllowedChannelTypes(Array.isArray(allowedTypesData?.allowedTypes) ? allowedTypesData.allowedTypes : [])
       setGroups(Array.isArray(groupsData) ? groupsData : [])
-      setJiraIntegrations(Array.isArray(jiraData?.items) ? jiraData.items : [])
+      setJiraIntegrations(
+        Array.isArray(jiraData?.items)
+          ? jiraData.items.map((integration) => ({
+              ...integration,
+              sharedGroupIds: integration?.sharedGroupIds || integration?.shared_group_ids || [],
+            }))
+          : []
+      )
       setCanUseSso(!!authModeData?.oidc_enabled)
     } catch (e) {
       setError(e?.message || 'Failed to load integrations')
@@ -322,7 +336,7 @@ export default function IntegrationsPage() {
     setJiraForm({
       name: integration.name || '',
       visibility: integration.visibility || 'private',
-      sharedGroupIds: integration.sharedGroupIds || [],
+      sharedGroupIds: integration.sharedGroupIds || integration.shared_group_ids || [],
       enabled: !!integration.enabled,
       baseUrl: integration.baseUrl || '',
       email: integration.email || '',
@@ -417,7 +431,12 @@ export default function IntegrationsPage() {
 
   async function handleSaveChannel(payload) {
     try {
-      const finalPayload = { ...payload, visibility: editingChannel?.visibility || activeTab, sharedGroupIds: payload.sharedGroupIds || [] }
+      const visibilityToUse = payload?.visibility || editingChannel?.visibility || activeTab
+      const finalPayload = {
+        ...payload,
+        visibility: visibilityToUse,
+        sharedGroupIds: visibilityToUse === 'group' ? (payload.sharedGroupIds || []) : [],
+      }
       if (editingChannel?.id) {
         await updateNotificationChannel(editingChannel.id, finalPayload)
       } else {
@@ -462,7 +481,7 @@ export default function IntegrationsPage() {
     try {
       new URL(jiraForm.baseUrl.trim())
     } catch (e) {
-      toast.error('Jira Base URL must be a valid URL (e.g., https://company.atlassian.net)')
+      toast.error('Jira Base URL must be a valid URL (https://company.atlassian.net)')
       return
     }
 

@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from models.alerting.rules import AlertRuleCreate
+from services.common.visibility import normalize_visibility
 
 
 class RuleImportError(ValueError):
@@ -35,14 +36,12 @@ def _as_str_map(raw: Any) -> Dict[str, str]:
 
 
 def _normalize_visibility(value: Any, default_value: str = "private") -> str:
-    normalized = str(value or default_value).strip().lower()
-    if normalized == "tenant":
-        return "tenant"
-    if normalized == "group":
-        return "group"
-    if normalized == "public":
-        return "public"
-    return "private"
+    return normalize_visibility(
+        str(value) if value is not None else None,
+        default_value=default_value,
+        public_alias="public",
+        allowed={"tenant", "group", "private", "public"},
+    )
 
 
 def _normalize_rule_entry(

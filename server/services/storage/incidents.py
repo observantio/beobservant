@@ -1,0 +1,67 @@
+from typing import Any, Dict, List, Optional
+
+from models.alerting.incidents import AlertIncident, AlertIncidentUpdateRequest
+
+
+class IncidentStorageService:
+    def __init__(self, backend):
+        self._backend = backend
+
+    def sync_incidents_from_alerts(self, tenant_id: str, alerts: List[Dict[str, Any]], resolve_missing: bool = True) -> None:
+        return self._backend.sync_incidents_from_alerts(tenant_id, alerts, resolve_missing)
+
+    def list_incidents(
+        self,
+        tenant_id: str,
+        user_id: str,
+        group_ids: Optional[List[str]] = None,
+        status: Optional[str] = None,
+        visibility: Optional[str] = None,
+        group_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> List[AlertIncident]:
+        return self._backend.list_incidents(
+            tenant_id,
+            user_id,
+            group_ids=group_ids,
+            status=status,
+            visibility=visibility,
+            group_id=group_id,
+            limit=limit,
+            offset=offset,
+        )
+
+    def get_incident_for_user(
+        self,
+        incident_id: str,
+        tenant_id: str,
+        user_id: Optional[str] = None,
+        group_ids: Optional[List[str]] = None,
+        require_write: bool = False,
+    ) -> Optional[AlertIncident]:
+        return self._backend.get_incident_for_user(
+            incident_id,
+            tenant_id,
+            user_id=user_id,
+            group_ids=group_ids,
+            require_write=require_write,
+        )
+
+    def update_incident(
+        self,
+        incident_id: str,
+        tenant_id: str,
+        user_id: str,
+        payload: AlertIncidentUpdateRequest,
+    ) -> Optional[AlertIncident]:
+        return self._backend.update_incident(incident_id, tenant_id, user_id, payload)
+
+    def filter_alerts_for_user(
+        self,
+        tenant_id: str,
+        user_id: str,
+        group_ids: Optional[List[str]],
+        alerts: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        return self._backend.filter_alerts_for_user(tenant_id, user_id, group_ids, alerts)

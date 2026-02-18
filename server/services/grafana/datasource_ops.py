@@ -179,6 +179,33 @@ def get_accessible_datasource_uids(service, db: Session, user_id: str, tenant_id
     return [uid for (uid,) in capped], True
 
 
+def build_datasource_list_context(
+    service,
+    db: Session,
+    *,
+    tenant_id: str,
+    uid: Optional[str] = None,
+) -> Dict[str, Any]:
+    context: Dict[str, Any] = {}
+    if uid:
+        context["uid_db_datasource"] = db.query(GrafanaDatasource).filter(
+            GrafanaDatasource.grafana_uid == uid,
+            GrafanaDatasource.tenant_id == tenant_id,
+        ).first()
+        return context
+
+    db_entries = {
+        datasource.grafana_uid: datasource
+        for datasource in db.query(GrafanaDatasource)
+        .filter(GrafanaDatasource.tenant_id == tenant_id)
+        .limit(int(config.MAX_QUERY_LIMIT))
+        .all()
+    }
+    context["db_entries"] = db_entries
+    context["all_registered_uids"] = set(db_entries.keys())
+    return context
+
+
 def collect_datasource_refs_from_query_payload(service, payload: Any) -> Set[str]:
     refs: Set[str] = set()
 
@@ -283,6 +310,7 @@ async def get_datasources(
     is_admin: bool = False,
     limit: Optional[int] = None,
     offset: int = 0,
+    datasource_context: Optional[Dict[str, Any]] = None,
 ) -> List[Datasource]:
     requested_limit = int(limit) if limit is not None else int(config.DEFAULT_QUERY_LIMIT)
     max_limit = int(config.MAX_QUERY_LIMIT)
@@ -293,7 +321,8 @@ async def get_datasources(
         datasource = await service.grafana_service.get_datasource(uid)
         if not datasource:
             return []
-        db_ds = db.query(GrafanaDatasource).filter(GrafanaDatasource.grafana_uid == uid).first()
+        effective_context = datasource_context or build_datasource_list_context(service, db, tenant_id=tenant_id, uid=uid)
+        db_ds = effective_context.get("uid_db_datasource")
         if db_ds:
             if check_datasource_access(service, db, uid, user_id, tenant_id, group_ids) is None:
                 return []
@@ -315,13 +344,8 @@ async def get_datasources(
 
     if is_admin:
         # For admin responses merge Grafana fields with local DB metadata when present
-        db_entries = {
-            d.grafana_uid: d
-            for d in db.query(GrafanaDatasource)
-            .filter(GrafanaDatasource.tenant_id == tenant_id)
-            .limit(int(config.MAX_QUERY_LIMIT))
-            .all()
-        }
+        effective_context = datasource_context or build_datasource_list_context(service, db, tenant_id=tenant_id)
+        db_entries = effective_context.get("db_entries", {})
         processed = []
         for d in all_datasources:
             payload = d.model_dump()
@@ -339,23 +363,16 @@ async def get_datasources(
     accessible_uids, allow_system = get_accessible_datasource_uids(service, db, user_id, tenant_id, group_ids)
     accessible_uids = set(accessible_uids)
 
-    all_registered_uids = {
-        uid
-        for (uid,) in db.query(GrafanaDatasource.grafana_uid)
-        .filter(GrafanaDatasource.tenant_id == tenant_id)
-        .limit(int(config.MAX_QUERY_LIMIT))
-        .all()
-    }
+    effective_context = datasource_context or build_datasource_list_context(service, db, tenant_id=tenant_id)
+    all_registered_uids = effective_context.get("all_registered_uids", set())
+    db_entries = effective_context.get("db_entries", {})
 
     filtered = []
     for d in all_datasources:
         if d.uid not in accessible_uids and not (allow_system and d.uid not in all_registered_uids):
             continue
 
-        db_ds = db.query(GrafanaDatasource).filter(
-            GrafanaDatasource.grafana_uid == d.uid,
-            GrafanaDatasource.tenant_id == tenant_id,
-        ).first()
+        db_ds = db_entries.get(d.uid)
         if db_ds and not show_hidden and user_id in (db_ds.hidden_by or []):
             continue
         if team_id:
@@ -381,7 +398,10 @@ async def get_datasources(
 
 
 async def get_datasource(service, db: Session, uid: str, user_id: str, tenant_id: str, group_ids: List[str]) -> Optional[Datasource]:
-    db_datasource = db.query(GrafanaDatasource).filter(GrafanaDatasource.grafana_uid == uid).first()
+    db_datasource = db.query(GrafanaDatasource).filter(
+        GrafanaDatasource.grafana_uid == uid,
+        GrafanaDatasource.tenant_id == tenant_id,
+    ).first()
     if db_datasource and check_datasource_access(service, db, uid, user_id, tenant_id, group_ids) is None:
         return None
     ds = await service.grafana_service.get_datasource(uid)

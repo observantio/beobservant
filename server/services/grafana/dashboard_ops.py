@@ -15,7 +15,6 @@ import uuid
 from typing import List, Optional, Dict, Any
 
 from fastapi import HTTPException
-from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
@@ -119,6 +118,38 @@ def get_accessible_dashboard_uids(service, db: Session, user_id: str, tenant_id:
     return [uid for (uid,) in capped], True
 
 
+def build_dashboard_search_context(
+    service,
+    db: Session,
+    *,
+    tenant_id: str,
+    uid: Optional[str] = None,
+) -> Dict[str, Any]:
+    context: Dict[str, Any] = {}
+    if uid:
+        context["uid_db_dashboard"] = db.query(GrafanaDashboard).filter(
+            GrafanaDashboard.grafana_uid == uid,
+            GrafanaDashboard.tenant_id == tenant_id,
+        ).first()
+        return context
+
+    context["all_registered_uids"] = {
+        registered_uid
+        for (registered_uid,) in db.query(GrafanaDashboard.grafana_uid)
+        .filter(GrafanaDashboard.tenant_id == tenant_id)
+        .limit(int(config.MAX_QUERY_LIMIT))
+        .all()
+    }
+    context["db_dashboards"] = {
+        dashboard.grafana_uid: dashboard
+        for dashboard in db.query(GrafanaDashboard)
+        .filter(GrafanaDashboard.tenant_id == tenant_id)
+        .limit(int(config.MAX_QUERY_LIMIT))
+        .all()
+    }
+    return context
+
+
 async def search_dashboards(
     service,
     db: Session,
@@ -134,6 +165,7 @@ async def search_dashboards(
     is_admin: bool = False,
     limit: Optional[int] = None,
     offset: int = 0,
+    search_context: Optional[Dict[str, Any]] = None,
 ) -> List[DashboardSearchResult]:
     requested_limit = int(limit) if limit is not None else int(config.DEFAULT_QUERY_LIMIT)
     max_limit = int(config.MAX_QUERY_LIMIT)
@@ -144,9 +176,8 @@ async def search_dashboards(
         dashboard = await service.grafana_service.get_dashboard(uid)
         if not dashboard:
             return []
-        db_dash = await run_in_threadpool(lambda: db.query(GrafanaDashboard).filter(
-            GrafanaDashboard.grafana_uid == uid
-        ).first())
+        effective_context = search_context or build_dashboard_search_context(service, db, tenant_id=tenant_id, uid=uid)
+        db_dash = effective_context.get("uid_db_dashboard")
         if db_dash:
             if check_dashboard_access(service, db, uid, user_id, tenant_id, group_ids) is None:
                 return []
@@ -193,21 +224,9 @@ async def search_dashboards(
         )
         accessible_uids = set(accessible_uids)
 
-    all_registered_uids = await run_in_threadpool(lambda: {
-        uid
-        for (uid,) in db.query(GrafanaDashboard.grafana_uid)
-        .filter(GrafanaDashboard.tenant_id == tenant_id)
-        .limit(int(config.MAX_QUERY_LIMIT))
-        .all()
-    })
-
-    db_dashboards = await run_in_threadpool(lambda: {
-        d.grafana_uid: d
-        for d in db.query(GrafanaDashboard)
-        .filter(GrafanaDashboard.tenant_id == tenant_id)
-        .limit(int(config.MAX_QUERY_LIMIT))
-        .all()
-    })
+    effective_context = search_context or build_dashboard_search_context(service, db, tenant_id=tenant_id)
+    all_registered_uids = effective_context.get("all_registered_uids", set())
+    db_dashboards = effective_context.get("db_dashboards", {})
 
     filtered = []
     for d in all_dashboards:
@@ -242,10 +261,26 @@ async def search_dashboards(
 
 
 async def get_dashboard(service, db: Session, uid: str, user_id: str, tenant_id: str, group_ids: List[str]) -> Optional[Dict[str, Any]]:
-    db_dashboard = await run_in_threadpool(lambda: db.query(GrafanaDashboard).filter(GrafanaDashboard.grafana_uid == uid).first())
+    db_dashboard = db.query(GrafanaDashboard).filter(
+        GrafanaDashboard.grafana_uid == uid,
+        GrafanaDashboard.tenant_id == tenant_id,
+    ).first()
     if db_dashboard and check_dashboard_access(service, db, uid, user_id, tenant_id, group_ids) is None:
         return None
-    return await service.grafana_service.get_dashboard(uid)
+    result = await service.grafana_service.get_dashboard(uid)
+    if not result:
+        return None
+    if db_dashboard:
+        payload = dict(result)
+        shared_group_ids = [group.id for group in (getattr(db_dashboard, "shared_groups", None) or [])]
+        payload["visibility"] = db_dashboard.visibility or "private"
+        payload["shared_group_ids"] = shared_group_ids
+        payload["sharedGroupIds"] = shared_group_ids
+        payload["created_by"] = db_dashboard.created_by
+        payload["is_owned"] = bool(db_dashboard.created_by == user_id)
+        payload["is_hidden"] = bool(user_id in (getattr(db_dashboard, "hidden_by", None) or []))
+        return payload
+    return result
 
 
 def _dashboard_has_datasource(dashboard_obj: Any) -> bool:
@@ -410,7 +445,15 @@ async def create_dashboard(
 
         db.add(db_dashboard)
         db.commit()
-        return result
+        shared_group_ids = [group.id for group in (getattr(db_dashboard, "shared_groups", None) or [])]
+        payload = dict(result)
+        payload["visibility"] = db_dashboard.visibility or "private"
+        payload["shared_group_ids"] = shared_group_ids
+        payload["sharedGroupIds"] = shared_group_ids
+        payload["created_by"] = db_dashboard.created_by
+        payload["is_owned"] = True
+        payload["is_hidden"] = False
+        return payload
     except HTTPException:
         raise
     except Exception as exc:
@@ -487,7 +530,15 @@ async def update_dashboard(
             db_dashboard.shared_groups.clear()
 
     db.commit()
-    return result
+    shared_group_ids = [group.id for group in (getattr(db_dashboard, "shared_groups", None) or [])]
+    payload = dict(result)
+    payload["visibility"] = db_dashboard.visibility or "private"
+    payload["shared_group_ids"] = shared_group_ids
+    payload["sharedGroupIds"] = shared_group_ids
+    payload["created_by"] = db_dashboard.created_by
+    payload["is_owned"] = bool(db_dashboard.created_by == user_id)
+    payload["is_hidden"] = bool(user_id in (getattr(db_dashboard, "hidden_by", None) or []))
+    return payload
 
 
 async def delete_dashboard(service, db: Session, uid: str, user_id: str, tenant_id: str, group_ids: List[str]) -> bool:

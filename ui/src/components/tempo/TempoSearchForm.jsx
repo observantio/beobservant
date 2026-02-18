@@ -80,7 +80,7 @@ export default function TempoSearchForm({
                 label="Operation"
                 value={operation}
                 onChange={(e) => setOperation(e.target.value)}
-                placeholder="e.g., HTTP GET /api"
+                placeholder="HTTP GET /api"
                 className="flex-1 px-2 py-0.5 text-sm"
               />
               <HelpTooltip text="Filter traces by operation name, such as HTTP methods or function names." />

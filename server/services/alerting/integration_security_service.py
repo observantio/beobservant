@@ -21,6 +21,7 @@ from database import get_db_session
 from db_models import Tenant, User, Group, AlertIncident as AlertIncidentDB
 from models.access.auth_models import TokenData, Role
 from services.common.url_utils import is_safe_http_url
+from services.common.visibility import normalize_visibility
 
 ALLOWED_JIRA_AUTH_MODES = {"api_token", "bearer", "sso"}
 
@@ -160,12 +161,12 @@ def _allowed_channel_types() -> List[str]:
 
 
 def _normalize_visibility(value: Optional[str], default_value: str = "private") -> str:
-    normalized = str(value or default_value).strip().lower()
-    if normalized in {"tenant", "group", "private"}:
-        return normalized
-    if normalized == "public":
-        return "tenant"
-    return default_value
+    return normalize_visibility(
+        value,
+        default_value=default_value,
+        public_alias="tenant",
+        allowed={"tenant", "group", "private"},
+    )
 
 
 def _is_jira_sso_available() -> bool:

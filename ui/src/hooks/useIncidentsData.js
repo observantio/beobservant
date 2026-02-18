@@ -17,10 +17,19 @@ export function useIncidentsData({ visibilityTab = 'public', selectedGroup = '',
           getIncidents('resolved', visibilityTab, visibilityTab === 'group' ? selectedGroup : undefined).catch(() => []),
           canReadUsers ? getUsers().catch(() => []) : Promise.resolve([]),
         ])
-        const map = new Map()
-        for (const i of (resolvedIncidents || [])) map.set(i.id, i)
-        for (const i of (openIncidents || [])) map.set(i.id, i)
-        setIncidents(Array.from(map.values()))
+        const mergedIncidents = []
+        const seenIncidentIds = new Set()
+        for (const incident of (openIncidents || [])) {
+          if (!incident?.id || seenIncidentIds.has(incident.id)) continue
+          seenIncidentIds.add(incident.id)
+          mergedIncidents.push(incident)
+        }
+        for (const incident of (resolvedIncidents || [])) {
+          if (!incident?.id || seenIncidentIds.has(incident.id)) continue
+          seenIncidentIds.add(incident.id)
+          mergedIncidents.push(incident)
+        }
+        setIncidents(mergedIncidents)
         setIncidentUsers(Array.isArray(usersData) ? usersData : [])
       } else {
         const [incidentsData, usersData] = await Promise.all([

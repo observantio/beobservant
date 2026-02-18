@@ -10,10 +10,10 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 Grafana API router with multi-tenancy, hide/show, team filtering, and UID search.
 """
 from fastapi import APIRouter, HTTPException, Query, Body, Depends, Request, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response, JSONResponse
 from typing import Optional, List, Dict
 import logging
-from ipaddress import ip_address, ip_network
 
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate, DashboardSearchResult
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
@@ -40,6 +40,7 @@ from middleware.dependencies import (
 )
 from middleware.error_handlers import handle_route_errors
 from services.database_auth_service import DatabaseAuthService
+from services.common.cookies import is_secure_cookie_request
 
 logger = logging.getLogger(__name__)
 
@@ -51,29 +52,11 @@ auth_service = DatabaseAuthService()
 
 
 def _cookie_secure(request: Request) -> bool:
-    # Mirror auth cookie trust rules: direct TLS or trusted proxied TLS
-    if request.url.scheme == "https":
-        return True
-    if not config.TRUST_PROXY_HEADERS:
-        return False
-
-    trusted_cidrs = getattr(config, "TRUSTED_PROXY_CIDRS", []) or []
-    direct_peer = (request.client.host if request.client else "").strip()
-
-    if trusted_cidrs:
-        try:
-            peer_ip = ip_address(direct_peer)
-            for cidr in trusted_cidrs:
-                try:
-                    if peer_ip in ip_network(cidr, strict=False):
-                        return request.headers.get("x-forwarded-proto", "").lower() == "https"
-                except ValueError:
-                    continue
-        except ValueError:
-            return False
-        return False
-
-    return request.headers.get("x-forwarded-proto", "").lower() == "https"
+    return is_secure_cookie_request(
+        request,
+        trust_proxy_headers=bool(config.TRUST_PROXY_HEADERS),
+        trusted_proxy_cidrs=getattr(config, "TRUSTED_PROXY_CIDRS", []) or [],
+    )
 
 
 def _normalize_grafana_next_path(path: Optional[str]) -> str:
@@ -195,6 +178,12 @@ async def search_dashboards(
     db: Session = Depends(get_db),
 ) -> List[DashboardSearchResult]:
     is_admin = is_admin_user(current_user)
+    search_context = await run_in_threadpool(
+        grafana_proxy_service.build_dashboard_search_context,
+        db,
+        tenant_id=current_user.tenant_id,
+        uid=uid,
+    )
     return await grafana_proxy_service.search_dashboards(
         db=db,
         user_id=current_user.user_id,
@@ -209,6 +198,7 @@ async def search_dashboards(
         is_admin=is_admin,
         limit=limit,
         offset=offset,
+        search_context=search_context,
     )
 
 
@@ -338,11 +328,18 @@ async def get_datasources(
 ):
     """Get all datasources with multi-tenant access control and filtering."""
     is_admin = is_admin_user(current_user)
+    datasource_context = await run_in_threadpool(
+        grafana_proxy_service.build_datasource_list_context,
+        db,
+        tenant_id=current_user.tenant_id,
+        uid=uid,
+    )
     return await grafana_proxy_service.get_datasources(
         db=db, user_id=current_user.user_id,
         tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
         uid=uid, team_id=team_id, show_hidden=show_hidden, is_admin=is_admin,
         limit=limit, offset=offset,
+        datasource_context=datasource_context,
     )
 
 @router.get("/datasources/{uid}", response_model=Datasource)

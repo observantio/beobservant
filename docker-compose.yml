@@ -216,6 +216,20 @@ services:
     networks: [obs]
     restart: unless-stopped
 
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    networks: [obs]
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+    depends_on:
+      beobservant:
+        condition: service_healthy
+
   grafana-proxy:
     image: nginx:1.27-alpine
     volumes:
@@ -229,3 +243,5 @@ services:
     ports:
       - "8080:80"
     restart: unless-stopped
+
+  
