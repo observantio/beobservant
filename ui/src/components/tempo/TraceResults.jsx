@@ -5,7 +5,7 @@ import { formatDuration, formatNsToIso, formatRelativeTime } from '../../utils/f
 import { getServiceName, hasSpanError } from '../../utils/helpers'
 
 function TraceRow({ index, style, data }) {
-  const { traces, handleTraceClick, viewMode } = data
+  const { traces, handleTraceClick, viewMode, selectedIds, onToggleSelect } = data
   const t = traces[index]
   const rootSpan = t.spans?.find(s => !s.parentSpanId && !s.parentSpanID) || t.spans?.[0]
   const duration = rootSpan?.duration || 0
@@ -14,45 +14,56 @@ function TraceRow({ index, style, data }) {
   const serviceCount = new Set(allServices).size
   const rootServiceName = rootSpan ? getServiceName(rootSpan) : 'unknown'
   const traceId = t.traceID || t.traceId
+  const isSelected = selectedIds && selectedIds.has && selectedIds.has(traceId)
 
   return (
-    <div style={style} className="p-4 bg-sre-surface/50 border-b border-sre-border group w-full text-left cursor-pointer">
-      <button
-        onClick={() => handleTraceClick(traceId)}
-        type="button"
-        className="w-full text-left flex items-start justify-between"
-      >
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <span className={`material-icons ${traceHasError ? 'text-red-500' : 'text-green-500'} group-hover:scale-110 transition-transform`}>{traceHasError ? 'error' : 'check_circle'}</span>
-            <span className="font-mono text-sm text-sre-text font-semibold">{traceId?.substring(0, 16)}...</span>
-            <Badge variant={traceHasError ? 'error' : 'success'}>{traceHasError ? 'ERROR' : 'OK'}</Badge>
-            <Badge variant="info">{t.spans?.length || 0} spans</Badge>
-            <Badge variant="default">{serviceCount} service{serviceCount !== 1 ? 's' : ''}</Badge>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <span className="text-sre-text-muted">Service: </span>
-              <span className="text-sre-text font-semibold">{rootServiceName}</span>
-            </div>
-            {rootSpan?.operationName && (
-              <div>
-                <span className="text-sre-text-muted">Operation: </span>
-                <span className="text-sre-text font-semibold">{rootSpan.operationName}</span>
+    <div style={style} className="p-4 bg-sre-surface/50 border-b border-sre-border group w-full text-left">
+      <div className="w-full text-left flex items-start justify-between">
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={!!isSelected}
+            onChange={(e) => onToggleSelect && onToggleSelect(traceId, e.target.checked)}
+            className="mt-2"
+          />
+          <button
+            onClick={() => handleTraceClick(traceId)}
+            type="button"
+            className="text-left"
+          >
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <span className={`material-icons ${traceHasError ? 'text-red-500' : 'text-green-500'} group-hover:scale-110 transition-transform`}>{traceHasError ? 'error' : 'check_circle'}</span>
+                <span className="font-mono text-sm text-sre-text font-semibold">{traceId?.substring(0, 16)}...</span>
+                <Badge variant={traceHasError ? 'error' : 'success'}>{traceHasError ? 'ERROR' : 'OK'}</Badge>
+                <Badge variant="info">{t.spans?.length || 0} spans</Badge>
+                <Badge variant="default">{serviceCount} service{serviceCount !== 1 ? 's' : ''}</Badge>
               </div>
-            )}
-            <div>
-              <span className="text-sre-text-muted">Duration: </span>
-              <span className="text-sre-text font-semibold font-mono">{formatDuration(duration)}</span>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-sre-text-muted">Service: </span>
+                  <span className="text-sre-text font-semibold">{rootServiceName}</span>
+                </div>
+                {rootSpan?.operationName && (
+                  <div>
+                    <span className="text-sre-text-muted">Operation: </span>
+                    <span className="text-sre-text font-semibold">{rootSpan.operationName}</span>
+                  </div>
+                )}
+                <div>
+                  <span className="text-sre-text-muted">Duration: </span>
+                  <span className="text-sre-text font-semibold font-mono">{formatDuration(duration)}</span>
+                </div>
+                <div>
+                  <span className="text-sre-text-muted">Started: </span>
+                  <span className="text-sre-text font-semibold">{new Date(rootSpan?.startTime / 1000).toLocaleTimeString()}</span>
+                </div>
+              </div>
             </div>
-            <div>
-              <span className="text-sre-text-muted">Started: </span>
-              <span className="text-sre-text font-semibold">{new Date(rootSpan?.startTime / 1000).toLocaleTimeString()}</span>
-            </div>
-          </div>
+          </button>
         </div>
         <span className="material-icons text-sre-text-muted group-hover:text-sre-primary transition-colors">chevron_right</span>
-      </button>
+      </div>
     </div>
   )
 }
@@ -63,7 +74,7 @@ TraceRow.propTypes = {
   data: PropTypes.object.isRequired,
 }
 
-export default function TraceResults({ traces, loading, handleTraceClick, viewMode = 'list' }) {
+export default function TraceResults({ traces, loading, handleTraceClick, viewMode = 'list', selectedIds = new Set(), onToggleSelect = null }) {
   if (loading) {
     return (
       <div className="py-12 flex flex-col items-center">
@@ -93,7 +104,7 @@ export default function TraceResults({ traces, loading, handleTraceClick, viewMo
         itemCount={traces.length}
         itemSize={itemSize}
         width="100%"
-        itemData={{ traces, handleTraceClick, viewMode }}
+        itemData={{ traces, handleTraceClick, viewMode, selectedIds, onToggleSelect }}
       >
         {TraceRow}
       </List>
@@ -106,4 +117,6 @@ TraceResults.propTypes = {
   loading: PropTypes.bool,
   handleTraceClick: PropTypes.func.isRequired,
   viewMode: PropTypes.string,
+  selectedIds: PropTypes.object,
+  onToggleSelect: PropTypes.func,
 }

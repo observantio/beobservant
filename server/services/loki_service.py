@@ -42,7 +42,7 @@ class LokiService:
         self.timeout = config.DEFAULT_TIMEOUT
         self._client = create_async_client(self.timeout)
         self._cache_ttl_seconds = max(1, int(config.SERVICE_CACHE_TTL_SECONDS))
-        self._labels_cache: Dict[str, Any] = {"expires": 0.0, "data": []}
+        self._labels_cache: Dict[str, Any] = {}
         self._metrics: Dict[str, float] = {
             "loki_query_total": 0,
             "loki_query_errors_total": 0,
@@ -63,6 +63,25 @@ class LokiService:
             elapsed = time.perf_counter() - started
             self._observe("loki_query_total", 1)
             self._observe("loki_query_duration_sum_seconds", elapsed)
+
+    async def _safe_get_json(self, url: str, *, params: Dict[str, Any], headers: Dict[str, str]) -> Optional[Dict[str, Any]]:
+        """Wrapper around `_timed_get_json` that returns None on HTTP errors and
+        logs client (4xx) responses at debug level to avoid noisy logs.
+        """
+        try:
+            return await self._timed_get_json(url, params=params, headers=headers)
+        except httpx.HTTPStatusError as e:
+            status = getattr(e.response, "status_code", None)
+            self._observe("loki_query_errors_total", 1)
+            if status and 400 <= status < 500:
+                logger.debug("Loki client error for %s: %s", url, status)
+            else:
+                logger.warning("Loki HTTP error for %s: %s", url, e)
+            return None
+        except httpx.HTTPError as e:
+            self._observe("loki_query_errors_total", 1)
+            logger.warning("Loki request failed for %s: %s", url, e)
+            return None
 
     def _get_headers(self, tenant_id: str = config.DEFAULT_ORG_ID) -> dict:
         """Get headers including tenant ID for multi-tenancy.
@@ -226,11 +245,8 @@ class LokiService:
                         async with semaphore:
                             candidate_params = dict(params)
                             candidate_params["query"] = candidate
-                            try:
-                                payload = await self._timed_get_json(endpoint, params=candidate_params, headers=headers)
-                                return candidate, payload
-                            except httpx.HTTPError:
-                                return candidate, None
+                            payload = await self._safe_get_json(endpoint, params=candidate_params, headers=headers)
+                            return candidate, payload
 
                     for task in asyncio.as_completed([_query_candidate(candidate) for candidate in candidates]):
                         _candidate, payload = await task
@@ -289,14 +305,9 @@ class LokiService:
             if query_str and not data.get("data", {}).get("result"):
                 for candidate in self._build_service_fallback_queries(query_str):
                     params["query"] = candidate
-                    response = await self._client.get(
-                        f"{self.loki_url}/loki/api/v1/query",
-                        params=params,
-                        headers=headers,
-                    )
-                    response.raise_for_status()
-                    data = response.json()
-                    if data.get("data", {}).get("result"):
+                    payload = await self._safe_get_json(f"{self.loki_url}/loki/api/v1/query", params=params, headers=headers)
+                    if isinstance(payload, dict) and payload.get("data", {}).get("result"):
+                        data = payload
                         break
 
             data_payload = data.get("data", {})
@@ -341,18 +352,16 @@ class LokiService:
         
         headers = self._get_headers(tenant_id)
         try:
-            response = await self._client.get(
-                f"{self.loki_url}/loki/api/v1/labels",
-                params=params,
-                headers=headers
-            )
-            response.raise_for_status()
-            data = response.json()
+            payload = await self._safe_get_json(f"{self.loki_url}/loki/api/v1/labels", params=params, headers=headers)
+            if not payload:
+                return LogLabelsResponse(status="error", data=[])
+
+            data = payload
             self._labels_cache[cache_key] = {
                 "expires": now + self._cache_ttl_seconds,
                 "data": list(data.get("data", [])),
             }
-            
+
             return LogLabelsResponse(
                 status=data.get("status", "success"),
                 data=data.get("data", [])
@@ -394,14 +403,11 @@ class LokiService:
         
         headers = self._get_headers(tenant_id)
         try:
-            response = await self._client.get(
-                f"{self.loki_url}/loki/api/v1/label/{label}/values",
-                params=params,
-                headers=headers
-            )
-            response.raise_for_status()
-            data = response.json()
-            
+            payload = await self._safe_get_json(f"{self.loki_url}/loki/api/v1/label/{label}/values", params=params, headers=headers)
+            if not payload:
+                return LogLabelValuesResponse(status="error", data=[])
+
+            data = payload
             values = data.get("data", [])
             normalized_values = self._normalize_label_values(label, values)
 
@@ -509,9 +515,6 @@ class LokiService:
             candidates.append(query_str.replace("service.name", "service_name"))
             candidates.append(query_str.replace("service_name", "service"))
             candidates.append('{service=~".+"}')
-        # NOTE: do not add an empty selector `{}` as a fallback — some Loki versions reject
-        # aggregation queries that use an empty selector (e.g. count_over_time({}[..])).
-        # Removing this prevents unnecessary 400 responses and log spam.
 
         candidates = list(dict.fromkeys(candidates))
 
@@ -649,7 +652,6 @@ class LokiService:
         """
         if not isinstance(value, str):
             return value
-        # escape backslash first, then double quotes and CR/LF
         return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
 
     def _build_label_selector(self, labels: Dict[str, str]) -> str:

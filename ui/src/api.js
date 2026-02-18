@@ -616,7 +616,7 @@ export async function getLogVolume(query, { start, end, step = 300 } = {}) {
 }
 
 // Tempo
-export async function searchTraces({ service, operation, minDuration, maxDuration, start, end, limit = 100 }) {
+export async function searchTraces({ service, operation, minDuration, maxDuration, start, end, limit = 100, fetchFull = false }) {
   const qs = []
   if (service) qs.push(`service=${encodeURIComponent(service)}`)
   if (operation) qs.push(`operation=${encodeURIComponent(operation)}`)
@@ -625,6 +625,7 @@ export async function searchTraces({ service, operation, minDuration, maxDuratio
   if (start) qs.push(`start=${start}`)
   if (end) qs.push(`end=${end}`)
   qs.push(`limit=${limit}`)
+  qs.push(`fetchFull=${fetchFull ? 'true' : 'false'}`)
   return request(`/api/tempo/traces/search?${qs.join('&')}`)
 }
 export async function fetchTempoServices() {

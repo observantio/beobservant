@@ -25,6 +25,8 @@ const ServiceNode = ({ data }) => {
         <div className={`w-3 h-3 rounded-full ${isPain ? 'bg-red-500' : errorRate > 1 ? 'bg-yellow-500' : 'bg-green-500'} animate-pulse`}></div>
         <div className="font-bold text-sre-text truncate flex-1">{name}</div>
         {isPain && <span className="material-icons text-red-500 text-sm animate-bounce">warning</span>}
+        {stats.inbound === 0 && <span className="ml-2 px-2 py-0.5 text-[10px] rounded bg-sre-primary text-white">Start</span>}
+        {stats.outbound === 0 && <span className="ml-2 px-2 py-0.5 text-[10px] rounded bg-sre-surface text-sre-text-muted border">End</span>}
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
@@ -87,7 +89,13 @@ export default function ServiceGraphAsync({ traces }) {
   const [activeEdgeId, setActiveEdgeId] = useState(null)
   const [hoverNodeId, setHoverNodeId] = useState(null)
 
-  const graphData = useMemo(() => buildServiceGraphData(traces), [traces])
+  // Service graph requires full trace data with multiple spans per trace.
+  // Summary traces (from efficient list view) often only contain a single
+  // synthetic root span and will not produce meaningful edges. Require at
+  // least one trace with more than one span before attempting to render
+  // the dependency graph.
+  const hasSpanData = traces && traces.length > 0 && traces.some(t => t.spans && t.spans.length > 1)
+  const graphData = useMemo(() => hasSpanData ? buildServiceGraphData(traces) : { services: new Map(), edges: new Map() }, [traces, hasSpanData])
 
   const nodes = useMemo(
     () => buildServiceGraphNodes(graphData, activeNodeId, hoverNodeId),
@@ -103,7 +111,20 @@ export default function ServiceGraphAsync({ traces }) {
 
   const layouted = useMemo(() => layoutServiceGraph(nodes, edges), [nodes, edges])
 
-  if (layouted.nodes.length === 0) return null
+  if (layouted.nodes.length === 0) {
+    if (!hasSpanData) {
+      return (
+        <div className="bg-gradient-to-br from-sre-surface/30 to-sre-surface/10 border-2 border-sre-border/50 rounded-xl p-8 text-center">
+          <span className="material-icons text-5xl text-sre-text-muted mb-4 block">info</span>
+          <h3 className="text-lg font-semibold text-sre-text mb-2">Service Graph Requires Full Trace Data</h3>
+          <p className="text-sre-text-muted text-sm max-w-md mx-auto">
+            The dependency map requires full trace details with spans. Click on individual traces to load them with full span data, or try a new search with a smaller time range.
+          </p>
+        </div>
+      )
+    }
+    return null
+  }
 
   const activeNode = insights.serviceStats.find(s => s.name === activeNodeId)
   const activeEdge = insights.edgeStats.find(e => e.id === activeEdgeId)

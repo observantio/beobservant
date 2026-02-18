@@ -23,7 +23,7 @@ import { TIME_RANGES, DEFAULT_DURATION_RANGE, TRACE_STATUS_OPTIONS, REFRESH_INTE
 import HelpTooltip from '../components/HelpTooltip'
 import { discoverServices, computeTraceStats } from '../utils/tempoTraceUtils'
 
-const TRACE_PAGE_SIZE = 50
+const TRACE_PAGE_SIZE = 20
 
 export default function TempoPage() {
   const [services, setServices] = useState([])
@@ -35,10 +35,13 @@ export default function TempoPage() {
   const [timeRange, setTimeRange] = useState(60)
   const [traces, setTraces] = useState(null)
   const [selectedTrace, setSelectedTrace] = useState(null)
+  const [selectedTraceIds, setSelectedTraceIds] = useState(new Set())
+  const [graphTraces, setGraphTraces] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [viewMode, setViewMode] = useState('list')
   const [tracePage, setTracePage] = useState(1)
+  const [pageSize, setPageSize] = useState(TRACE_PAGE_SIZE)
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [refreshInterval, setRefreshInterval] = useState(30)
 
@@ -91,6 +94,47 @@ export default function TempoPage() {
     }
   }, [])
 
+  function toggleSelectTrace(traceId, checked) {
+    setSelectedTraceIds(prev => {
+      const next = new Set(prev)
+      if (checked) next.add(traceId)
+      else next.delete(traceId)
+      return next
+    })
+  }
+
+  async function showSelectedOnMap() {
+    if (!selectedTraceIds || selectedTraceIds.size === 0) {
+      toast && toast.error && toast.error('No traces selected')
+      return
+    }
+
+    const ids = Array.from(selectedTraceIds)
+    const concurrency = Math.min(8, ids.length)
+    const queue = ids.slice()
+    const results = []
+
+    const worker = async () => {
+      while (queue.length) {
+        const id = queue.shift()
+        try {
+          const t = await getTrace(id)
+          if (t) results.push(t)
+        } catch (e) {
+          // ignore individual failures
+        }
+      }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }).map(() => worker()))
+    if (results.length === 0) {
+      toast && toast.error && toast.error('Failed to load any selected traces')
+      return
+    }
+    setGraphTraces(results)
+    setViewMode('graph')
+  }
+
   async function onSearch(e) {
     if (e) e.preventDefault()
     setError(null)
@@ -111,6 +155,8 @@ export default function TempoPage() {
       const end = Date.now() * 1000
       const start = end - (timeRange * 60 * 1000000)
 
+      // Fetch trace summaries only (fetchFull=false) for efficient list view
+      // Full trace details are fetched on-demand via getTrace when user clicks
       const res = await searchTraces({
         service,
         operation,
@@ -118,7 +164,8 @@ export default function TempoPage() {
         maxDuration: `${Math.floor(durationRange[1] / 1000000)}ms`,
         start: Math.floor(start),
         end: Math.floor(end),
-        limit: TRACE_PAGE_SIZE
+        limit: pageSize,
+        fetchFull: false  // Get summaries only for efficiency
       })
 
       setTraces(res)
@@ -138,8 +185,11 @@ export default function TempoPage() {
   const filteredTraces = useMemo(() => {
     if (!traces?.data) return []
     return traces.data.filter(trace => {
-      if (statusFilter === 'error') return trace.spans?.some(hasSpanError)
-      if (statusFilter === 'ok') return !trace.spans?.some(hasSpanError)
+      // Summary traces (from initial search) won't have spans
+      // Only filter by error status if spans are available
+      if (!trace.spans || trace.spans.length === 0) return true
+      if (statusFilter === 'error') return trace.spans.some(hasSpanError)
+      if (statusFilter === 'ok') return !trace.spans.some(hasSpanError)
       return true
     })
   }, [traces, statusFilter])
@@ -149,9 +199,9 @@ export default function TempoPage() {
   }, [filteredTraces])
 
   const pagedTraces = useMemo(() => {
-    const start = (tracePage - 1) * TRACE_PAGE_SIZE
-    return filteredTraces.slice(start, start + TRACE_PAGE_SIZE)
-  }, [filteredTraces, tracePage])
+    const start = (tracePage - 1) * pageSize
+    return filteredTraces.slice(start, start + pageSize)
+  }, [filteredTraces, tracePage, pageSize])
 
   const totalPages = Math.max(1, Math.ceil(filteredTraces.length / TRACE_PAGE_SIZE))
 
@@ -370,9 +420,17 @@ export default function TempoPage() {
               </Button>
               <HelpTooltip text="Reset all search filters and duration range to their default values." />
             </div>
-            <Button type="submit" size="sm" loading={loading && !traceIdSearch.trim()}>
-              <span className="material-icons text-xs mr-1">search</span> Search Traces
-            </Button>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-sre-text-muted">Page Size</label>
+              <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setTracePage(1) }} className="text-xs px-2 py-1 border rounded bg-white">
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <Button type="submit" size="sm" loading={loading && !traceIdSearch.trim()}>
+                <span className="material-icons text-xs mr-1">search</span> Search Traces
+              </Button>
+            </div>
           </div>
         </form>
       </Card>
@@ -381,16 +439,22 @@ export default function TempoPage() {
       {viewMode === 'graph' && (
         <Card
           title="Dependency Map"
-          subtitle={filteredTraces.length ? `Showing relationships between ${new Set(filteredTraces.flatMap(t => t.spans?.map(s => getServiceName(s)).filter(Boolean) || [])).size} services` : 'Run a search to see the dependency map'}
+          subtitle={
+            graphTraces.length
+              ? `Showing relationships between ${new Set(graphTraces.flatMap(t => t.spans?.map(s => getServiceName(s)).filter(Boolean) || [])).size} services (selected)`
+              : filteredTraces.length
+                ? `Showing relationships between ${new Set(filteredTraces.flatMap(t => t.spans?.map(s => getServiceName(s)).filter(Boolean) || [])).size} services`
+                : 'Run a search to see the dependency map'
+          }
         >
-          {filteredTraces.length > 0 ? (
-            <ServiceGraph traces={filteredTraces} />
+          {(graphTraces.length ? graphTraces : filteredTraces).length > 0 ? (
+            <ServiceGraph traces={graphTraces.length ? graphTraces : filteredTraces} />
           ) : (
             <div className="text-center py-16 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
               <span className="material-icons text-5xl text-sre-text-muted mb-4 block">hub</span>
               <h3 className="text-xl font-semibold text-sre-text mb-2">No Traces Found</h3>
               <p className="text-sre-text-muted mb-6 text-sm max-w-md mx-auto">
-                Try adjusting your search criteria, expanding the time range, or pasting a trace ID above. You also must select the right key to look at
+                Try adjusting your search criteria, expanding the time range, or selecting traces from the list and clicking "Show selected on Map".
               </p>
             </div>
           )}
@@ -405,7 +469,21 @@ export default function TempoPage() {
         >
           <div className="mb-4 flex items-center justify-between pb-4 border-b border-sre-border" />
           <Suspense fallback={<div className="py-12 flex flex-col items-center"><Spinner size="lg" /><p className="text-sre-text-muted mt-4">Searching traces...</p></div>}>
-            <TraceResults traces={pagedTraces} loading={loading} handleTraceClick={handleTraceClick} viewMode={viewMode} />
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <button type="button" className="text-xs text-sre-primary hover:underline" onClick={() => {
+                      // select all visible
+                      const ids = pagedTraces.map(t => t.traceID || t.traceId).filter(Boolean)
+                      setSelectedTraceIds(new Set(ids))
+                    }}>Select visible</button>
+                    <button type="button" className="text-xs text-sre-primary hover:underline" onClick={() => setSelectedTraceIds(new Set())}>Clear selection</button>
+                    <div className="text-xs text-sre-text-muted">{selectedTraceIds.size} selected</div>
+                  </div>
+                  <div>
+                    <button type="button" className="btn btn-sm bg-sre-primary text-white px-3 py-1 rounded text-xs" onClick={showSelectedOnMap} disabled={selectedTraceIds.size === 0}>Show selected on Map</button>
+                  </div>
+                </div>
+                <TraceResults traces={pagedTraces} loading={loading} handleTraceClick={handleTraceClick} viewMode={viewMode} selectedIds={selectedTraceIds} onToggleSelect={toggleSelectTrace} />
             {filteredTraces.length > TRACE_PAGE_SIZE && (
               <div className="mt-4 flex items-center justify-between text-xs text-sre-text-muted">
                 <span>Page {tracePage} of {totalPages}</span>

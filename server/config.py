@@ -127,6 +127,9 @@ class Config:
         self.LOKI_MAX_FALLBACK_QUERIES: int = int(os.getenv("LOKI_MAX_FALLBACK_QUERIES", "4"))
         self.TEMPO_TRACE_FETCH_CONCURRENCY: int = int(os.getenv("TEMPO_TRACE_FETCH_CONCURRENCY", "8"))
         self.TEMPO_VOLUME_BUCKET_CONCURRENCY: int = int(os.getenv("TEMPO_VOLUME_BUCKET_CONCURRENCY", "8"))
+        # When true, use Tempo/Mimir metrics API for trace count/volume queries where possible.
+        # Operators can opt out by setting TEMPO_USE_METRICS_FOR_COUNT=false
+        self.TEMPO_USE_METRICS_FOR_COUNT: bool = _to_bool(os.getenv("TEMPO_USE_METRICS_FOR_COUNT"), default=True)
         self.SERVICE_CACHE_TTL_SECONDS: int = int(os.getenv("SERVICE_CACHE_TTL_SECONDS", "30"))
 
         # CORS settings
@@ -135,7 +138,8 @@ class Config:
 
         # API limits
         self.MAX_QUERY_LIMIT: int = int(os.getenv("MAX_QUERY_LIMIT", "5000"))
-        self.DEFAULT_QUERY_LIMIT: int = int(os.getenv("DEFAULT_QUERY_LIMIT", "100"))
+        # Default number of items returned by list endpoints (can be overridden by client)
+        self.DEFAULT_QUERY_LIMIT: int = int(os.getenv("DEFAULT_QUERY_LIMIT", "20"))
 
         # Request protection / backpressure
         self.MAX_REQUEST_BYTES: int = int(os.getenv("MAX_REQUEST_BYTES", "1048576"))

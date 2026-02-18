@@ -31,7 +31,7 @@ tempo_service = TempoService()
     "/traces/search",
     response_model=TraceResponse,
     summary="Search traces",
-    description="Search for traces matching the given criteria by service, operation, duration, and time range"
+    description="Search for traces matching the given criteria. For efficient list views, use fetchFull=false to get summaries only; fetch full details via /traces/{trace_id} when user clicks into a trace."
 )
 async def search_traces(
     request: Request,
@@ -42,6 +42,7 @@ async def search_traces(
     start: Optional[int] = Query(None, description="Start time in microseconds"),
     end: Optional[int] = Query(None, description="End time in microseconds"),
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT, description="Maximum traces to return"),
+    fetch_full: bool = Query(False, alias="fetchFull", description="If false (recommended), returns only trace summaries; fetch full trace data on-demand via /traces/{trace_id}"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
 ) -> TraceResponse:
     query = TraceQuery(
@@ -55,7 +56,7 @@ async def search_traces(
     )
     
     tenant_id = resolve_tenant_id(request, current_user)
-    result = await tempo_service.search_traces(query, tenant_id=tenant_id)
+    result = await tempo_service.search_traces(query, tenant_id=tenant_id, fetch_full_traces=fetch_full)
     return result
 
 

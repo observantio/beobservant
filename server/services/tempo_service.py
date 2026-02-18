@@ -47,7 +47,10 @@ class TempoService:
             "tempo_search_errors_total": 0,
             "tempo_full_trace_fetch_total": 0,
             "tempo_count_traces_calls_total": 0,
+            "tempo_metrics_queries_total": 0,
+            "tempo_metrics_query_errors_total": 0,
         }
+        self._metrics_enabled = True
 
     def _observe(self, metric: str, value: float = 1.0) -> None:
         self._metrics[metric] = float(self._metrics.get(metric, 0.0) + value)
@@ -73,7 +76,121 @@ class TempoService:
             Dictionary of headers
         """
         return {"X-Scope-OrgID": tenant_id}
-    
+
+    async def _query_metrics_range(
+        self,
+        promql: str,
+        start_us: Optional[int],
+        end_us: Optional[int],
+        step_s: int = 300,
+        tenant_id: str = config.DEFAULT_ORG_ID,
+    ) -> Dict[str, Any]:
+        """Query Tempo's metrics endpoint (`/api/metrics/query_range`) and fallback to Mimir.
+
+        Returns a Prometheus-style response: {"status": "success", "data": {"result": [...]}}
+        On error returns a shape with an empty result so callers can fallback.
+        """
+        params: Dict[str, Any] = {"query": promql, "step": step_s}
+        if start_us:
+            params["start"] = int(start_us / 1_000_000)
+        if end_us:
+            params["end"] = int(end_us / 1_000_000)
+
+        headers = self._get_headers(tenant_id)
+
+        if not getattr(self, "_metrics_enabled", True):
+            return {"status": "error", "data": {"result": []}}
+
+        try:
+            resp = await self._client.get(f"{self.tempo_url}/api/metrics/query_range", params=params, headers=headers)
+            if 400 <= resp.status_code < 500:
+                self._metrics_enabled = False
+                self._observe("tempo_metrics_query_errors_total", 1)
+                logger.debug("Tempo metrics endpoint returned %s, disabling metrics usage", resp.status_code)
+                return {"status": "error", "data": {"result": []}}
+            resp.raise_for_status()
+            self._observe("tempo_metrics_queries_total", 1)
+            return resp.json()
+        except httpx.HTTPError as e:
+            self._observe("tempo_metrics_query_errors_total", 1)
+            logger.debug("Tempo metrics query failed, trying Mimir: %s", e)
+
+        try:
+            resp = await self._client.get(f"{config.MIMIR_URL.rstrip('/')}/api/v1/query_range", params={"query": promql, "start": params.get("start"), "end": params.get("end"), "step": step_s}, headers=headers)
+            if 400 <= resp.status_code < 500:
+                self._metrics_enabled = False
+                self._observe("tempo_metrics_query_errors_total", 1)
+                logger.debug("Mimir metrics endpoint returned %s, disabling metrics usage", resp.status_code)
+                return {"status": "error", "data": {"result": []}}
+            resp.raise_for_status()
+            self._observe("tempo_metrics_queries_total", 1)
+            return resp.json()
+        except httpx.HTTPError as e:
+            self._observe("tempo_metrics_query_errors_total", 1)
+            logger.debug("Mimir metrics query failed for promql=%s: %s", promql, e)
+            return {"status": "error", "data": {"result": []}}
+
+    def _build_count_promql(self, service: Optional[str], range_s: int) -> str:
+        """Build a single PromQL expression that counts traces over `range_s` seconds.
+
+        Uses all candidate selectors and sums their `count_over_time()` results so
+        we can request a single metrics response instead of multiple queries.
+        """
+        selectors = self._build_promql_selector(service)
+        parts = [f"count_over_time({sel}[{range_s}s])" for sel in selectors]
+        return f"sum({ ' + '.join(parts) })"
+
+    def _extract_metric_values(self, metrics_resp: Dict[str, Any]) -> List[List[Any]]:
+        """Normalize a Prometheus-style `query_range` response into a values list.
+
+        Returns a list of [timestamp_seconds, count_str] aggregated across all
+        returned series (summing values for matching timestamps).
+        """
+        if not isinstance(metrics_resp, dict):
+            return []
+        data = metrics_resp.get("data") or {}
+        results = data.get("result") if isinstance(data, dict) else None
+        if not results:
+            return []
+
+        ts_map: Dict[int, int] = {}
+        for series in results:
+            vals = series.get("values") or []
+            for ts, v in vals:
+                try:
+                    tsi = int(float(ts))
+                    vi = int(float(v))
+                except Exception:
+                    continue
+                ts_map[tsi] = ts_map.get(tsi, 0) + vi
+
+        out = [[ts, str(ts_map[ts])] for ts in sorted(ts_map.keys())]
+        return out
+
+    def _build_promql_selector(self, service: Optional[str]) -> List[str]:
+        """Return ordered candidate label selectors for a service.
+
+        We try several common label names so the query works across Tempo/ingest
+        configurations. Callers should try each selector and accept the first
+        that returns non-empty data.
+        """
+        if not service:
+            return ["{}"]
+
+        candidates = [
+            f'{{resource.service.name="{service}"}}',
+            f'{{service_name="{service}"}}',
+            f'{{service="{service}"}}',
+            f'{{service.name="{service}"}}',
+        ]
+        seen = set()
+        out: List[str] = []
+        for c in candidates:
+            if c not in seen:
+                seen.add(c)
+                out.append(c)
+        return out
+
     @with_retry()
     @with_timeout()
     async def search_traces(
@@ -84,9 +201,15 @@ class TempoService:
     ) -> TraceResponse:
         """Search for traces matching query parameters.
         
+        When fetch_full_traces=True (default), fetches complete span data for each trace.
+        When fetch_full_traces=False, returns only trace summaries (traceID, duration, etc.)
+        which is more efficient for list views. Full trace details can be retrieved later
+        via get_trace() when the user clicks on a specific trace.
+        
         Args:
             query: TraceQuery with search parameters
             tenant_id: Organization/tenant ID for data isolation
+            fetch_full_traces: Whether to fetch full span data or just summaries
             
         Returns:
             TraceResponse with matching traces
@@ -122,15 +245,53 @@ class TempoService:
 
                     traces = await asyncio.gather(*[_fetch_full(trace_id) for trace_id in trace_ids])
                 else:
-                    traces = [
-                        Trace(
-                            traceID=trace_id,
-                            spans=[],
-                            processes={},
-                            warnings=["Trace details not fetched"],
+                    traces = []
+                    for trace_data in data.get("traces", []):
+                        trace_id = trace_data.get("traceID")
+                        if not trace_id:
+                            continue
+
+                        start_ns = None
+                        try:
+                            if trace_data.get("startTimeUnixNano"):
+                                start_ns = int(trace_data.get("startTimeUnixNano"))
+                        except Exception:
+                            start_ns = None
+
+                        duration_ms = None
+                        try:
+                            if trace_data.get("durationMs") is not None:
+                                duration_ms = int(trace_data.get("durationMs"))
+                        except Exception:
+                            duration_ms = None
+
+                        root_service = trace_data.get("rootServiceName") or trace_data.get("rootService") or "unknown"
+                        operation_name = trace_data.get("rootTraceName") or ""
+
+                        start_us = int(start_ns // 1000) if start_ns else 0
+                        duration_us = int(duration_ms * 1000) if duration_ms is not None else 0
+
+                        synthetic_span = {
+                            "spanID": "root",
+                            "traceID": trace_id,
+                            "parentSpanID": None,
+                            "operationName": operation_name,
+                            "startTime": start_us,
+                            "duration": duration_us,
+                            "tags": [],
+                            "serviceName": root_service,
+                            "attributes": {},
+                            "processID": root_service,
+                        }
+
+                        traces.append(
+                            Trace(
+                                traceID=trace_id,
+                                spans=[synthetic_span],
+                                processes={},
+                                warnings=["Trace summary only"],
+                            )
                         )
-                        for trace_id in trace_ids
-                    ]
             
             return TraceResponse(
                 data=traces,
@@ -337,32 +498,66 @@ class TempoService:
         if end is None:
             end = now_us
         if start is None:
-            # default to last 1 hour
             start = end - (60 * 60 * 1000000)
 
         if step <= 0:
             step = 300
 
-        # limit number of buckets to avoid excessive load
+        if config.TEMPO_USE_METRICS_FOR_COUNT:
+            try:
+                # Request a single metrics matrix for the requested step range.
+                promql = self._build_count_promql(service, step)
+                metrics_resp = await self._query_metrics_range(promql, start, end, step, tenant_id=tenant_id)
+                values = self._extract_metric_values(metrics_resp)
+                if values:
+                    return {"data": {"result": [{"metric": {}, "values": values}]}}
+            except Exception:
+                logger.debug("Metrics-based volume query failed — falling back to single-search aggregation", exc_info=True)
+
+        # Fallback: perform a single `/api/search` for the entire range and
+        # aggregate into buckets server-side. This avoids issuing per-bucket
+        # `/api/search` calls which have been observed to flood Tempo.
         max_buckets = 240
         total_seconds = max(0, int((end - start) / 1_000_000))
         num_buckets = int(max(1, min(max_buckets, (total_seconds + step - 1) // step)))
 
-        semaphore = asyncio.Semaphore(max(1, config.TEMPO_VOLUME_BUCKET_CONCURRENCY))
+        # Prepare zeroed counts
+        counts = [0 for _ in range(num_buckets)]
 
-        async def _count_bucket(i: int):
-            bucket_start = int(start + i * step * 1_000_000)
-            bucket_end = int(min(end, bucket_start + step * 1_000_000))
-            async with semaphore:
+        try:
+            safe_limit = min(config.MAX_QUERY_LIMIT, max(1000, config.MAX_QUERY_LIMIT))
+            q = TraceQuery(service=service, start=start, end=end, limit=safe_limit)
+            resp = await self.search_traces(q, tenant_id=tenant_id, fetch_full_traces=False)
+
+            for trace in resp.data:
+                # Use the first (synthetic) span's startTime as the trace start (microseconds)
+                if not trace.spans:
+                    continue
+                trace_start_us = 0
                 try:
-                    q = TraceQuery(service=service, start=bucket_start, end=bucket_end, limit=1000)
-                    cnt = await self.count_traces(q, tenant_id=tenant_id)
+                    # traces from search_traces set synthetic span dicts; handle both dict and object
+                    s0 = trace.spans[0]
+                    if isinstance(s0, dict):
+                        trace_start_us = int(s0.get("startTime", 0))
+                    else:
+                        trace_start_us = int(getattr(s0, "startTime", 0))
                 except Exception:
-                    cnt = 0
-            ts_seconds = int(bucket_start / 1_000_000)
-            return [ts_seconds, str(cnt)]
+                    trace_start_us = 0
 
-        values = await asyncio.gather(*[_count_bucket(i) for i in range(num_buckets)])
+                if trace_start_us < start or trace_start_us >= end:
+                    continue
+
+                idx = int((trace_start_us - start) // (step * 1_000_000))
+                if 0 <= idx < num_buckets:
+                    counts[idx] += 1
+        except Exception as e:
+            logger.debug("Trace search aggregation failed: %s", e)
+
+        values = []
+        for i in range(num_buckets):
+            bucket_start = int(start + i * step * 1_000_000)
+            ts_seconds = int(bucket_start / 1_000_000)
+            values.append([ts_seconds, str(counts[i])])
 
         return {"data": {"result": [{"metric": {}, "values": values}]}}
 
@@ -371,9 +566,30 @@ class TempoService:
         query: TraceQuery,
         tenant_id: str = config.DEFAULT_ORG_ID
     ) -> int:
-        """Count traces without fetching full trace details."""
+        """Count traces without fetching full trace details.
+
+        Prefer metrics-based counting when enabled and a time range is provided
+        (this avoids issuing `/api/search` per-bucket). Falls back to existing
+        search-based counting when metrics are unavailable or disabled.
+        """
+        if config.TEMPO_USE_METRICS_FOR_COUNT and query.start and query.end:
+            try:
+                duration_s = max(1, int((query.end - query.start) / 1_000_000))
+                selectors = self._build_promql_selector(query.service)
+                for sel in selectors:
+                    promql = f"sum(count_over_time({sel}[{duration_s}s]))"
+                    metrics_resp = await self._query_metrics_range(promql, query.start, query.end, duration_s, tenant_id=tenant_id)
+                    data = metrics_resp.get("data", {}) if isinstance(metrics_resp, dict) else {}
+                    result = data.get("result") if isinstance(data, dict) else None
+                    if result:
+                        vals = result[0].get("values", [])
+                        if vals:
+                            return int(float(vals[-1][1]))
+            except Exception:
+                logger.debug("metrics-based count failed, falling back to search_traces", exc_info=True)
+
         safe_limit = min(query.limit, 1000)
-        query = TraceQuery(
+        query_copy = TraceQuery(
             service=query.service,
             operation=query.operation,
             min_duration=query.min_duration,
@@ -383,7 +599,7 @@ class TempoService:
             tags=query.tags,
             limit=safe_limit
         )
-        response = await self.search_traces(query, tenant_id=tenant_id, fetch_full_traces=False)
+        response = await self.search_traces(query_copy, tenant_id=tenant_id, fetch_full_traces=False)
         self._observe("tempo_count_traces_calls_total", 1)
         return response.total
     

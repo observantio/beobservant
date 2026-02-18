@@ -23,7 +23,7 @@ describe('tempoTraceUtils', () => {
     ])
 
     expect(stats.total).toBe(2)
-    expect(stats.maxDuration).toBe(200)
+    expect(stats.maxDuration).toBe(200000)
     expect(stats.errorCount).toBe(1)
     expect(stats.errorRate).toBe(50)
   })
