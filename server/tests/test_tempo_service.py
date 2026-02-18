@@ -122,3 +122,56 @@ def test_get_trace_volume_tries_label_candidates_in_order():
     assert any("resource.service.name" in p for p in called)
     values = result["data"]["result"][0]["values"]
     assert values[0][1] == "3"
+
+
+def test_get_trace_volume_estimates_from_total_traces_when_metrics_missing():
+    service = TempoService(tempo_url="http://tempo.test")
+
+    # metrics query returns empty (unavailable)
+    async def fake_query_metrics(promql, start_us=None, end_us=None, step_s=300, tenant_id="default"):
+        return {"status": "success", "data": {"result": []}}
+
+    service._query_metrics_range = fake_query_metrics
+
+    # get_trace_metrics returns a total count we can use to estimate per-bucket values
+    async def fake_get_trace_metrics(service=None, start=None, end=None, tenant_id="default"):
+        return {"total_traces": 95}
+
+    service.get_trace_metrics = fake_get_trace_metrics
+
+    start = 1_700_000_000_000_000
+    end = start + (10 * 60 * 1_000_000)  # 10 minutes
+    result = asyncio.run(service.get_trace_volume(start=start, end=end, step=60))
+
+    values = result["data"]["result"][0]["values"]
+    assert len(values) == 10
+    total = sum(int(v[1]) for v in values)
+    assert total == 95
+
+
+def test_get_trace_volume_caches_results_for_ttl():
+    service = TempoService(tempo_url="http://tempo.test")
+
+    async def fake_query_metrics(promql, start_us=None, end_us=None, step_s=300, tenant_id="default"):
+        return {"status": "success", "data": {"result": []}}
+
+    service._query_metrics_range = fake_query_metrics
+
+    # first call returns 60 traces
+    async def first_metrics(service=None, start=None, end=None, tenant_id="default"):
+        return {"total_traces": 60}
+
+    service.get_trace_metrics = first_metrics
+
+    start = 1_700_000_000_000_000
+    end = start + (60 * 1_000_000)  # 1 minute
+    res1 = asyncio.run(service.get_trace_volume(start=start, end=end, step=60))
+
+    # change the underlying metric provider to a different value; cached result should be returned
+    async def second_metrics(service_arg=None, start=None, end=None, tenant_id="default"):
+        return {"total_traces": 5}
+
+    service.get_trace_metrics = second_metrics
+
+    res2 = asyncio.run(service.get_trace_volume(start=start, end=end, step=60))
+    assert res1 == res2

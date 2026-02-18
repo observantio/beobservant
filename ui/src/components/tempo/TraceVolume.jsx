@@ -11,14 +11,22 @@ import { Sparkline, Card } from '../../components/ui'
 export default function TraceVolume({ volume }) {
   if (!volume || !volume.length) return null
 
-  const total = volume.reduce((a,b)=>a+b,0)
-  const avg = Math.round(total / volume.length)
-  const peak = Math.max(...volume)
+
+  const nums = volume
+    .map((v) => {
+      if (Array.isArray(v) && v.length > 1) return Number(v[1])
+      return Number(v)
+    })
+    .map((n) => (Number.isNaN(n) ? 0 : n))
+
+  const total = nums.reduce((a, b) => a + b, 0)
+  const avg = nums.length ? Math.round(total / nums.length) : 0
+  const peak = nums.length ? Math.max(...nums) : 0
 
   return (
     <Card title="Trace Volume" subtitle="Over time">
       <div className="mb-3 w-full overflow-hidden">
-        <Sparkline data={volume} width={280} height={100} stroke="#34d399" strokeWidth={2} fill="rgba(52, 211, 153, 0.12)" />
+        <Sparkline data={nums} width={280} height={100} stroke="#34d399" strokeWidth={2} fill="rgba(52, 211, 153, 0.12)" />
       </div>
       <div className="grid grid-cols-3 gap-3 text-xs">
         <div className="bg-sre-surface border border-sre-border rounded-lg p-2">

@@ -76,7 +76,7 @@ class JiraService:
             raise JiraError(f"Jira API error: {exc.response.status_code}") from exc
         except JiraError:
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc: 
             logger.exception("Unexpected Jira GET error")
             raise JiraError("Failed to contact Jira API") from exc
 
@@ -169,6 +169,4 @@ class JiraService:
             )
         return normalized
 
-
-# module-level singleton for router usage
 jira_service = JiraService()

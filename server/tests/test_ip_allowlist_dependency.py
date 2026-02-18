@@ -11,7 +11,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 import os
 import unittest
-# ensure config validation passes during unit tests
+
 os.environ.setdefault("DATABASE_URL", "postgresql://safeuser:safePass_123@db:5432/beobservant")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
 

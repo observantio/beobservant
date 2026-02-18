@@ -1,5 +1,14 @@
-from ipaddress import ip_address, ip_network
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
 
+Licensed under the Apache License, Version 2.0 (the "License");
+
+you may not use this file except in compliance with the License.
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
+from ipaddress import ip_address, ip_network
 
 def is_secure_cookie_request(request, *, trust_proxy_headers: bool, trusted_proxy_cidrs: list[str] | None = None) -> bool:
     """Return True when cookie should be marked Secure for the given request."""

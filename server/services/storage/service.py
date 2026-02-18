@@ -19,7 +19,6 @@ class DatabaseStorageService:
     def __getattr__(self, item):
         return getattr(self._backend, item)
 
-    # Incident domain
     def sync_incidents_from_alerts(self, tenant_id, alerts, resolve_missing=True):
         return self.incidents.sync_incidents_from_alerts(tenant_id, alerts, resolve_missing)
 

@@ -25,6 +25,7 @@ function findRootSpan(spans) {
 export function buildServiceGraphData(traces) {
   const services = new Map()
   const edges = new Map()
+  const traceEdges = []
 
   const addEdge = (source, target, duration = 0, hasError = false, count = 1) => {
     if (!source || !target || source === target) return
@@ -102,12 +103,17 @@ export function buildServiceGraphData(traces) {
 
     for (const [key, val] of localEdges.entries()) {
       const [src, dst] = key.split('->')
+      // Global aggregation for stats
       addEdge(src, dst, 0, false, 0)
       const edge = edges.get(key)
       edge.count += val.count
       edge.durations.push(...val.durations)
       edge.errors += val.errors
       edges.set(key, edge)
+
+      // Keep per-trace edge entries so we can render separate trace-level
+      // connections instead of collapsing all traces into a single line.
+      traceEdges.push({ key, source: src, target: dst, count: val.count, durations: val.durations.slice(), errors: val.errors, traceId: trace.traceID || trace.traceId })
     }
   })
 
@@ -123,7 +129,7 @@ export function buildServiceGraphData(traces) {
     stats.isEnd = stats.outbound === 0
   }
 
-  return { services, edges }
+  return { services, edges, traceEdges }
 }
 
 export function buildServiceGraphNodes(graphData, activeNodeId, hoverNodeId) {
@@ -219,6 +225,65 @@ export function buildServiceGraphInsights(graphData) {
 }
 
 export function buildServiceGraphEdges(graphData, activeEdgeId, activeNodeId) {
+  // If per-trace edges are present, emit one edge per trace to visually
+  // separate connections originating from different traces.
+  if (graphData.traceEdges && graphData.traceEdges.length) {
+    return graphData.traceEdges.map((te, idx) => {
+      const { source, target, count, durations, errors, traceId } = te
+      const p95 = percentile(durations, 0.95)
+      const errorRateNum = count ? (errors / Math.max(1, count)) * 100 : 0
+      const isPain = p95 > PAIN_P95_THRESHOLD_US || errorRateNum > 5
+      const id = `${te.key}:${traceId}`
+      const isActive = activeEdgeId === id
+      const isConnectedToActive = activeNodeId ? source === activeNodeId || target === activeNodeId : true
+      const fade = activeNodeId && !isConnectedToActive && !isActive
+
+      // Use a small variety of dash patterns to visually separate parallel edges.
+      const dashPatterns = ['0', '4 2', '6 3', '2 2']
+      const dash = dashPatterns[idx % dashPatterns.length]
+
+      const color = isPain
+        ? '#ef4444'
+        : p95 > WARN_P95_THRESHOLD_US || errorRateNum > 1
+          ? '#f59e0b'
+          : '#10b981'
+
+      return {
+        id,
+        source,
+        target,
+        label: `${count} calls · p95 ${formatDuration(p95)} · err ${errorRateNum.toFixed(1)}% · ${traceId?.substring?.(0,8) || ''}`,
+        animated: true,
+        type: 'smoothstep',
+        className: isActive ? 'edge-active' : '',
+        style: {
+          stroke: color,
+          strokeWidth: isActive ? 3.5 : isPain ? 2.5 : 1.8,
+          strokeDasharray: dash,
+          opacity: fade ? 0.25 : 0.95,
+        },
+        labelStyle: {
+          fontSize: 10,
+          fontWeight: '500',
+          fill: fade ? 'var(--sre-text-muted)' : 'var(--sre-text)',
+        },
+        labelBgStyle: {
+          fill: 'var(--sre-surface)',
+          fillOpacity: fade ? 0.4 : 0.9,
+          stroke: 'var(--sre-border)',
+          strokeWidth: 1,
+          rx: 4,
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color,
+          width: isActive ? 18 : isPain ? 16 : 12,
+          height: isActive ? 18 : isPain ? 16 : 12,
+        },
+      }
+    })
+  }
+
   return Array.from(graphData.edges.entries()).map(([key, val]) => {
     const [source, target] = key.split('->')
     const p95 = percentile(val.durations, 0.95)
@@ -302,11 +367,67 @@ export function layoutServiceGraph(nodes, edges) {
 
   dagre.layout(graph)
 
+  // Detect connected components so we can vertically separate disconnected
+  // subgraphs and avoid nodes collapsing into a single horizontal line.
+  const adj = new Map()
+  nodes.forEach((n) => adj.set(n.id, new Set()))
+  edges.forEach((e) => {
+    if (e.source && e.target && adj.has(e.source) && adj.has(e.target)) {
+      adj.get(e.source).add(e.target)
+      adj.get(e.target).add(e.source)
+    }
+  })
+
+  const components = []
+  const visited = new Set()
+  for (const id of adj.keys()) {
+    if (visited.has(id)) continue
+    const stack = [id]
+    const comp = []
+    while (stack.length) {
+      const cur = stack.pop()
+      if (visited.has(cur)) continue
+      visited.add(cur)
+      comp.push(cur)
+      for (const nb of adj.get(cur) || []) if (!visited.has(nb)) stack.push(nb)
+    }
+    components.push(comp)
+  }
+
+  // Compute layouted nodes from dagre and then offset each component vertically
+  // so disconnected services are shown on separate rows.
+  const nodePosMap = new Map()
+  nodes.forEach((node) => {
+    const pos = graph.node(node.id) || { x: 0, y: 0 }
+    nodePosMap.set(node.id, { x: pos.x - nodeWidth / 2, y: pos.y - nodeHeight / 2 })
+  })
+
+  const compOffsets = new Map()
+  const verticalGap = Math.max(80, graph.graph().ranksep || 140)
+  components.forEach((comp, idx) => {
+    // Compute min Y for the component
+    let minY = Infinity
+    comp.forEach((nid) => {
+      const p = nodePosMap.get(nid)
+      if (p && p.y < minY) minY = p.y
+    })
+    if (minY === Infinity) minY = 0
+    const desiredTop = idx * (nodeHeight + verticalGap)
+    const offset = desiredTop - minY
+    compOffsets.set(idx, offset)
+  })
+
+  // Map node id -> component index
+  const nodeToComp = new Map()
+  components.forEach((comp, idx) => comp.forEach((nid) => nodeToComp.set(nid, idx)))
+
   const layoutedNodes = nodes.map((node) => {
-    const pos = graph.node(node.id)
+    const base = nodePosMap.get(node.id) || { x: 0, y: 0 }
+    const compIdx = nodeToComp.get(node.id) || 0
+    const offset = compOffsets.get(compIdx) || 0
     return {
       ...node,
-      position: { x: pos.x - nodeWidth / 2, y: pos.y - nodeHeight / 2 },
+      position: { x: base.x, y: base.y + offset },
       style: { width: nodeWidth, height: nodeHeight },
     }
   })

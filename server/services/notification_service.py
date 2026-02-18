@@ -6,16 +6,12 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Notification service for sending alerts through various channels.
 """
 import httpx
 import logging
 import os
 from typing import Optional
 from datetime import datetime
-
-# email transport
 import re
 import aiosmtplib
 from email.message import EmailMessage
@@ -98,10 +94,8 @@ class NotificationService:
 
     def _is_transient_http_exception(self, exc) -> bool:
         """Return True for exceptions that should be retried for HTTP calls."""
-        # network / transport errors
         if isinstance(exc, httpx.RequestError):
             return True
-        # server errors (5xx)
         if isinstance(exc, httpx.HTTPStatusError):
             status = exc.response.status_code if exc.response is not None else 0
             return 500 <= status < 600

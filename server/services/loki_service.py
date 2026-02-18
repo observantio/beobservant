@@ -6,39 +6,39 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Loki service for log operations.
 """
-import httpx
+import asyncio
 import logging
 import re
-import asyncio
 import time
-from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
-from models.observability.loki_models import LogQuery, LogResponse, LogLabelsResponse, LogLabelValuesResponse
-from middleware.resilience import with_retry, with_timeout
+import httpx
+
 from config import config
+from middleware.resilience import with_retry, with_timeout
+from models.observability.loki_models import (
+    LogLabelsResponse,
+    LogLabelValuesResponse,
+    LogQuery,
+    LogResponse,
+)
 from services.common.http_client import create_async_client
 
 logger = logging.getLogger(__name__)
 
-SERVICE_NAME_LABEL = "service.name"
-SERVICE_NAME_ALIAS = "service_name"
-LABELSET_PAIR_RE = re.compile(r'([A-Za-z0-9_.:-]+)="([^"]*)"')
-SERVICE_LABEL_EXACT_RE = re.compile(r'(?P<label>service_name|service\.name)\s*=\s*"(?P<value>[^"]+)"')
+_SERVICE_NAME_LABEL = "service.name"
+_SERVICE_NAME_ALIAS = "service_name"
+_LABELSET_PAIR_RE = re.compile(r'([A-Za-z0-9_.:-]+)="([^"]*)"')
+_SERVICE_LABEL_EXACT_RE = re.compile(
+    r'(?P<label>service_name|service\.name)\s*=\s*"(?P<value>[^"]+)"'
+)
+
 
 class LokiService:
-    """Service for interacting with Loki logging backend."""
-    
     def __init__(self, loki_url: str = config.LOKI_URL):
-        """Initialize Loki service.
-        
-        Args:
-            loki_url: Base URL for Loki instance
-        """
-        self.loki_url = loki_url.rstrip('/')
+        self.loki_url = loki_url.rstrip("/")
         self.timeout = config.DEFAULT_TIMEOUT
         self._client = create_async_client(self.timeout)
         self._cache_ttl_seconds = max(1, int(config.SERVICE_CACHE_TTL_SECONDS))
@@ -49,151 +49,109 @@ class LokiService:
             "loki_query_fallbacks_total": 0,
             "loki_query_duration_sum_seconds": 0.0,
         }
+        logging.getLogger("httpx").setLevel(logging.WARNING)
 
     def _observe(self, metric: str, value: float = 1.0) -> None:
         self._metrics[metric] = float(self._metrics.get(metric, 0.0) + value)
 
-    async def _timed_get_json(self, url: str, *, params: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
+    async def _timed_get_json(
+        self, url: str, *, params: Dict[str, Any], headers: Dict[str, str]
+    ) -> Dict[str, Any]:
         started = time.perf_counter()
         try:
             response = await self._client.get(url, params=params, headers=headers)
             response.raise_for_status()
             return response.json()
         finally:
-            elapsed = time.perf_counter() - started
-            self._observe("loki_query_total", 1)
-            self._observe("loki_query_duration_sum_seconds", elapsed)
+            self._observe("loki_query_total")
+            self._observe("loki_query_duration_sum_seconds", time.perf_counter() - started)
 
-    async def _safe_get_json(self, url: str, *, params: Dict[str, Any], headers: Dict[str, str]) -> Optional[Dict[str, Any]]:
-        """Wrapper around `_timed_get_json` that returns None on HTTP errors and
-        logs client (4xx) responses at debug level to avoid noisy logs.
-        """
+    async def _safe_get_json(
+        self, url: str, *, params: Dict[str, Any], headers: Dict[str, str], quiet: bool = False
+    ) -> Optional[Dict[str, Any]]:
         try:
             return await self._timed_get_json(url, params=params, headers=headers)
         except httpx.HTTPStatusError as e:
             status = getattr(e.response, "status_code", None)
-            self._observe("loki_query_errors_total", 1)
-            if status and 400 <= status < 500:
-                logger.debug("Loki client error for %s: %s", url, status)
+            self._observe("loki_query_errors_total")
+            if quiet or (status and 400 <= status < 500):
+                logger.debug("Loki error %s for %s", status, url)
             else:
-                logger.warning("Loki HTTP error for %s: %s", url, e)
+                logger.warning("Loki server error %s for %s", status, url)
             return None
         except httpx.HTTPError as e:
-            self._observe("loki_query_errors_total", 1)
-            logger.warning("Loki request failed for %s: %s", url, e)
+            self._observe("loki_query_errors_total")
+            (logger.debug if quiet else logger.warning)("Loki request failed for %s: %s", url, e)
             return None
 
-    def _get_headers(self, tenant_id: str = config.DEFAULT_ORG_ID) -> dict:
-        """Get headers including tenant ID for multi-tenancy.
-        
-        Args:
-            tenant_id: Organization/tenant ID for data isolation
-            
-        Returns:
-            Dictionary of headers
-        """
+    def _get_headers(self, tenant_id: str = config.DEFAULT_ORG_ID) -> Dict[str, str]:
         return {"X-Scope-OrgID": tenant_id}
 
     def _normalize_service_label_query(self, query_str: str) -> str:
-        if SERVICE_NAME_LABEL not in query_str and SERVICE_NAME_ALIAS not in query_str:
+        if _SERVICE_NAME_LABEL not in query_str and _SERVICE_NAME_ALIAS not in query_str:
             return query_str
 
         def replace_in_selector(match: re.Match) -> str:
-            content = match.group(1)
-            updated = re.sub(
-                rf'(?<![\w.]){SERVICE_NAME_LABEL}(?=\s*(=|=~))',
-                SERVICE_NAME_ALIAS,
-                content
+            content = re.sub(
+                rf"(?<![\w.]){_SERVICE_NAME_LABEL}(?=\s*(=|=~))",
+                _SERVICE_NAME_ALIAS,
+                match.group(1),
             )
-            updated = re.sub(
-                rf'(?<![\w.]){SERVICE_NAME_ALIAS}(?=\s*(=|=~))',
-                SERVICE_NAME_ALIAS,
-                updated
-            )
-            return "{" + updated + "}"
+            return "{" + content + "}"
 
         return re.sub(r"\{([^}]*)\}", replace_in_selector, query_str)
 
     def _expand_service_label_matchers(self, query_str: str) -> str:
-        def replace_match(match: re.Match) -> str:
-            label = match.group("label")
-            value = match.group("value")
-            return f'{label}=~"{value}.*"'
-
-        return SERVICE_LABEL_EXACT_RE.sub(replace_match, query_str)
+        return _SERVICE_LABEL_EXACT_RE.sub(
+            lambda m: f'{m.group("label")}=~"{m.group("value")}.*"', query_str
+        )
 
     def _build_service_fallback_queries(self, query_str: str) -> List[str]:
         candidates: List[str] = []
-
         normalized = self._normalize_service_label_query(query_str)
         if normalized != query_str:
             candidates.append(normalized)
-
         expanded_original = self._expand_service_label_matchers(query_str)
         if expanded_original != query_str:
             candidates.append(expanded_original)
-
         expanded_normalized = self._expand_service_label_matchers(normalized)
         if expanded_normalized not in (query_str, expanded_original):
             candidates.append(expanded_normalized)
-
         return candidates
 
     def _parse_labelset_value(self, label_key: str, raw_value: str) -> Optional[Dict[str, str]]:
         if not isinstance(raw_value, str) or '="' not in raw_value:
             return None
+        candidate = raw_value if f'{label_key}="' in raw_value else f'{label_key}="{raw_value}'
+        pairs = _LABELSET_PAIR_RE.findall(candidate)
+        return dict(pairs) if pairs else None
 
-        candidate = raw_value
-        if f'{label_key}="' not in raw_value:
-            candidate = f'{label_key}="{raw_value}'
-
-        pairs = LABELSET_PAIR_RE.findall(candidate)
-        if not pairs:
-            return None
-        return dict(pairs)
-
-    def _normalize_label_value(self, label_key: str, value: Any) -> tuple[Optional[str], Optional[Dict[str, str]]]:
-        if not isinstance(value, str):
+    def _normalize_label_value(
+        self, label_key: str, value: Any
+    ) -> tuple[Optional[str], Optional[Dict[str, str]]]:
+        if not isinstance(value, str) or '="' not in value or '",' not in value:
             return None, None
-        if '="' not in value or '",' not in value:
-            return None, None
-
         parsed = self._parse_labelset_value(label_key, value)
         if parsed:
             return parsed.get(label_key, value), parsed
-
         cut_index = value.find('",')
-        if cut_index > 0:
-            return value[:cut_index], None
-
-        return None, None
+        return (value[:cut_index], None) if cut_index > 0 else (None, None)
 
     def _normalize_label_dict(self, labels: Dict[str, Any]) -> Dict[str, str]:
-        extra_labels: Dict[str, str] = {}
+        extra: Dict[str, str] = {}
         for key, value in labels.items():
             normalized_value, parsed = self._normalize_label_value(key, value)
             if normalized_value is not None:
                 labels[key] = normalized_value
             if parsed:
-                for parsed_key, parsed_value in parsed.items():
-                    if parsed_key not in labels:
-                        extra_labels[parsed_key] = parsed_value
-
-        return extra_labels
+                extra.update({k: v for k, v in parsed.items() if k not in labels})
+        return extra
 
     def _normalize_stream_labels(self, data: Dict[str, Any]) -> None:
-        result = data.get("result")
-        if not isinstance(result, list):
-            return
-
-        for stream in result:
+        for stream in data.get("result", []) if isinstance(data.get("result"), list) else []:
             labels = stream.get("stream")
-            if not isinstance(labels, dict):
-                continue
-
-            extra = self._normalize_label_dict(labels)
-            if extra:
-                labels.update(extra)
+            if isinstance(labels, dict):
+                labels.update(self._normalize_label_dict(labels))
 
     def _normalize_label_values(self, label: str, values: List[str]) -> List[str]:
         cleaned: List[str] = []
@@ -201,225 +159,254 @@ class LokiService:
             if not isinstance(value, str):
                 cleaned.append(value)
                 continue
-
             parsed = self._parse_labelset_value(label, value)
             if parsed and label in parsed:
                 cleaned.append(parsed[label])
                 continue
-
             cut_index = value.find('",')
-            if cut_index > 0:
-                cleaned.append(value[:cut_index])
-            else:
-                cleaned.append(value)
-
+            cleaned.append(value[:cut_index] if cut_index > 0 else value)
         return cleaned
-    
+
+    def _build_query_params(self, query: LogQuery) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
+            "query": query.query,
+            "limit": query.limit,
+            "direction": query.direction.value,
+        }
+        for key in ("start", "end", "step"):
+            val = getattr(query, key, None)
+            if val is not None:
+                params[key] = val
+        return params
+
+    def _escape_logql_string(self, value: str) -> str:
+        if not isinstance(value, str):
+            return value
+        return (
+            value.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+        )
+
+    def _build_label_selector(self, labels: Dict[str, str]) -> str:
+        if not labels:
+            return "{}"
+        return "{" + ", ".join(f'{k}="{self._escape_logql_string(v)}"' for k, v in labels.items()) + "}"
+
+    def _calculate_stats(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        try:
+            result = data.get("result", [])
+            if not result:
+                return None
+            total_entries = sum(len(s.get("values", [])) for s in result)
+            total_bytes = sum(
+                len(v[1]) for s in result for v in s.get("values", []) if len(v) > 1
+            )
+            return {
+                "total_entries": total_entries,
+                "total_bytes": total_bytes,
+                "streams": len(result),
+                "chunks": 0,
+            }
+        except Exception as e:
+            logger.error("Error calculating stats: %s", e)
+            return None
+
+    async def _run_fallback_queries(
+        self,
+        endpoint: str,
+        base_params: Dict[str, Any],
+        headers: Dict[str, str],
+        query_str: str,
+    ) -> Optional[Dict[str, Any]]:
+        candidates = self._build_service_fallback_queries(query_str)[
+            : max(0, config.LOKI_MAX_FALLBACK_QUERIES)
+        ]
+        if not candidates:
+            return None
+
+        self._observe("loki_query_fallbacks_total", len(candidates))
+        semaphore = asyncio.Semaphore(max(1, config.LOKI_FALLBACK_CONCURRENCY))
+
+        async def _query(candidate: str):
+            async with semaphore:
+                return candidate, await self._safe_get_json(
+                    endpoint, params={**base_params, "query": candidate}, headers=headers
+                )
+
+        for task in asyncio.as_completed([_query(c) for c in candidates]):
+            _, payload = await task
+            if isinstance(payload, dict) and payload.get("data", {}).get("result"):
+                return payload
+        return None
+
     @with_retry()
     @with_timeout()
-    async def query_logs(self, query: LogQuery, tenant_id: str = config.DEFAULT_ORG_ID) -> LogResponse:
-        """Query logs using LogQL.
-        
-        Args:
-            query: LogQuery with search parameters
-            tenant_id: Organization/tenant ID for data isolation
-            
-        Returns:
-            LogResponse with matching log streams
-        """
+    async def query_logs(
+        self, query: LogQuery, tenant_id: str = config.DEFAULT_ORG_ID
+    ) -> LogResponse:
         params = self._build_query_params(query)
         headers = self._get_headers(tenant_id)
         endpoint = f"{self.loki_url}/loki/api/v1/query_range"
-        
+
         try:
             data = await self._timed_get_json(endpoint, params=params, headers=headers)
-            
             if query.query and not data.get("data", {}).get("result"):
-                candidates = self._build_service_fallback_queries(query.query)[: max(0, config.LOKI_MAX_FALLBACK_QUERIES)]
-                if candidates:
-                    self._observe("loki_query_fallbacks_total", len(candidates))
-
-                    semaphore = asyncio.Semaphore(max(1, config.LOKI_FALLBACK_CONCURRENCY))
-
-                    async def _query_candidate(candidate: str):
-                        async with semaphore:
-                            candidate_params = dict(params)
-                            candidate_params["query"] = candidate
-                            payload = await self._safe_get_json(endpoint, params=candidate_params, headers=headers)
-                            return candidate, payload
-
-                    for task in asyncio.as_completed([_query_candidate(candidate) for candidate in candidates]):
-                        _candidate, payload = await task
-                        if isinstance(payload, dict) and payload.get("data", {}).get("result"):
-                            data = payload
-                            break
-
+                fallback = await self._run_fallback_queries(endpoint, params, headers, query.query)
+                if fallback:
+                    data = fallback
             data_payload = data.get("data", {})
             self._normalize_stream_labels(data_payload)
-
             return LogResponse(
                 status=data.get("status", "success"),
                 data=data_payload,
-                stats=self._calculate_stats(data_payload)
+                stats=self._calculate_stats(data_payload),
             )
-            
         except httpx.HTTPError as e:
-            self._observe("loki_query_errors_total", 1)
+            self._observe("loki_query_errors_total")
             logger.error("Error querying logs: %s", e)
-            return LogResponse(
-                status="error",
-                data={"result": [], "resultType": "streams"},
-                stats=None
-            )
-    
+            return LogResponse(status="error", data={"result": [], "resultType": "streams"}, stats=None)
+
     @with_retry()
     @with_timeout()
-    async def query_logs_instant(self, query_str: str, time: Optional[int] = None, tenant_id: str = config.DEFAULT_ORG_ID) -> LogResponse:
-        """Query logs at a specific point in time.
-        
-        Args:
-            query_str: LogQL query string
-            time: Time in nanoseconds (defaults to now)
-            tenant_id: Organization/tenant ID for data isolation
-            
-        Returns:
-            LogResponse with log results
-        """
-        params = {
-            "query": query_str,
-            "limit": 100
-        }
-        if time:
-            params["time"] = time
-        
+    async def query_logs_instant(
+        self,
+        query_str: str,
+        at_time: Optional[int] = None,
+        tenant_id: str = config.DEFAULT_ORG_ID,
+    ) -> LogResponse:
+        params: Dict[str, Any] = {"query": query_str, "limit": 100}
+        if at_time is not None:
+            params["time"] = at_time
+
         headers = self._get_headers(tenant_id)
+        endpoint = f"{self.loki_url}/loki/api/v1/query"
+
         try:
-            response = await self._client.get(
-                f"{self.loki_url}/loki/api/v1/query",
-                params=params,
-                headers=headers
-            )
-            response.raise_for_status()
-            data = response.json()
-            
+            data = await self._timed_get_json(endpoint, params=params, headers=headers)
             if query_str and not data.get("data", {}).get("result"):
                 for candidate in self._build_service_fallback_queries(query_str):
-                    params["query"] = candidate
-                    payload = await self._safe_get_json(f"{self.loki_url}/loki/api/v1/query", params=params, headers=headers)
+                    payload = await self._safe_get_json(
+                        endpoint, params={**params, "query": candidate}, headers=headers
+                    )
                     if isinstance(payload, dict) and payload.get("data", {}).get("result"):
                         data = payload
                         break
-
             data_payload = data.get("data", {})
             self._normalize_stream_labels(data_payload)
-
-            return LogResponse(
-                status=data.get("status", "success"),
-                data=data_payload
-            )
-            
+            return LogResponse(status=data.get("status", "success"), data=data_payload)
         except httpx.HTTPError as e:
             logger.error("Error querying logs (instant): %s", e)
-            return LogResponse(
-                status="error",
-                data={"result": []}
-            )
-    
+            return LogResponse(status="error", data={"result": []})
+
     @with_retry()
     @with_timeout()
-    async def get_labels(self, start: Optional[int] = None, end: Optional[int] = None, tenant_id: str = config.DEFAULT_ORG_ID) -> LogLabelsResponse:
-        """Get all available log labels.
-        
-        Args:
-            start: Start time in nanoseconds
-            end: End time in nanoseconds
-            tenant_id: Organization/tenant ID for data isolation
-            
-        Returns:
-            List of label names
-        """
-        params = {}
+    async def get_labels(
+        self,
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        tenant_id: str = config.DEFAULT_ORG_ID,
+    ) -> LogLabelsResponse:
         now = time.monotonic()
         cache_key = f"{tenant_id}:{start}:{end}"
         cached = self._labels_cache.get(cache_key)
         if isinstance(cached, dict) and cached.get("expires", 0) > now:
             return LogLabelsResponse(status="success", data=list(cached.get("data", [])))
 
+        params: Dict[str, Any] = {}
         if start:
             params["start"] = start
         if end:
             params["end"] = end
-        
-        headers = self._get_headers(tenant_id)
+
         try:
-            payload = await self._safe_get_json(f"{self.loki_url}/loki/api/v1/labels", params=params, headers=headers)
+            payload = await self._safe_get_json(
+                f"{self.loki_url}/loki/api/v1/labels",
+                params=params,
+                headers=self._get_headers(tenant_id),
+            )
             if not payload:
                 return LogLabelsResponse(status="error", data=[])
-
-            data = payload
             self._labels_cache[cache_key] = {
                 "expires": now + self._cache_ttl_seconds,
-                "data": list(data.get("data", [])),
+                "data": list(payload.get("data", [])),
             }
-
-            return LogLabelsResponse(
-                status=data.get("status", "success"),
-                data=data.get("data", [])
-            )
-            
+            return LogLabelsResponse(status=payload.get("status", "success"), data=payload.get("data", []))
         except httpx.HTTPError as e:
             logger.error("Error fetching labels: %s", e)
             return LogLabelsResponse(status="error", data=[])
-    
+
     @with_retry()
     @with_timeout()
     async def get_label_values(
-        self, 
+        self,
         label: str,
         start: Optional[int] = None,
         end: Optional[int] = None,
         query: Optional[str] = None,
-        tenant_id: str = config.DEFAULT_ORG_ID
+        tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> LogLabelValuesResponse:
-        """Get values for a specific label.
-        
-        Args:
-            label: Label name
-            start: Start time in nanoseconds
-            end: End time in nanoseconds
-            query: Optional LogQL query to filter results
-            tenant_id: Organization/tenant ID for data isolation
-            
-        Returns:
-            List of values for the label
-        """
-        params = {}
-        if start:
-            params["start"] = start
-        if end:
-            params["end"] = end
+        now_ns = int(datetime.now().timestamp() * 1e9)
+        end = end or now_ns
+        start = start or int((datetime.now() - timedelta(hours=1)).timestamp() * 1e9)
+
+        max_hours = 24
+        try:
+            max_hours = int(getattr(config, "LOKI_LABEL_VALUES_MAX_RANGE_HOURS", 24))
+        except (TypeError, ValueError):
+            pass
+
+        max_range_ns = int(max_hours * 3600 * 1e9)
+        if end - start > max_range_ns:
+            logger.debug("Label values range capped to last %s hours", max_hours)
+            start = int(end - max_range_ns)
+
+        params: Dict[str, Any] = {"start": start, "end": end}
         if query:
             params["query"] = query
-        
-        headers = self._get_headers(tenant_id)
+
+        cache_key = f"label_values:{tenant_id}:{label}:{start}:{end}:{query or ''}"
+        now = time.monotonic()
+        cached = self._labels_cache.get(cache_key)
+        if isinstance(cached, dict) and cached.get("expires", 0) > now:
+            return LogLabelValuesResponse(status="success", data=list(cached.get("data", [])))
+
+        def _cache_and_return(values: List[str]) -> LogLabelValuesResponse:
+            normalized = list(dict.fromkeys(self._normalize_label_values(label, values)))
+            self._labels_cache[cache_key] = {"expires": time.monotonic() + self._cache_ttl_seconds, "data": normalized}
+            return LogLabelValuesResponse(status="success", data=normalized)
+
+        payload = await self._safe_get_json(
+            f"{self.loki_url}/loki/api/v1/label/{label}/values",
+            params=params,
+            headers=self._get_headers(tenant_id),
+            quiet=True,
+        )
+        if isinstance(payload, dict) and payload.get("data") is not None:
+            return _cache_and_return(payload.get("data", []))
+
         try:
-            payload = await self._safe_get_json(f"{self.loki_url}/loki/api/v1/label/{label}/values", params=params, headers=headers)
-            if not payload:
-                return LogLabelValuesResponse(status="error", data=[])
-
-            data = payload
-            values = data.get("data", [])
-            normalized_values = self._normalize_label_values(label, values)
-
-            return LogLabelValuesResponse(
-                status=data.get("status", "success"),
-                data=normalized_values
+            self._observe("loki_query_fallbacks_total")
+            if isinstance(query, str) and query.strip().startswith("{"):
+                selector = query
+            else:
+                selector = '{' + f'{label}=~".+"' + '}'
+            log_response = await self.query_logs(
+                LogQuery(query=selector, limit=1000, start=start, end=end),
+                tenant_id=tenant_id,
             )
-            
-        except httpx.HTTPError as e:
-            logger.error("Error fetching label values: %s", e)
+            results = log_response.data.get("result") if isinstance(log_response.data, dict) else None
+            values = list(dict.fromkeys(
+                stream["stream"][label]
+                for stream in (results or [])
+                if isinstance(stream.get("stream"), dict) and stream["stream"].get(label)
+            ))
+            return _cache_and_return(values)
+        except Exception as e:
+            logger.error("Error during label-values fallback: %s", e)
             return LogLabelValuesResponse(status="error", data=[])
-    
+
     @with_retry()
     @with_timeout()
     async def aggregate_logs(
@@ -428,65 +415,29 @@ class LokiService:
         start: Optional[int] = None,
         end: Optional[int] = None,
         step: int = 60,
-        tenant_id: str = config.DEFAULT_ORG_ID
+        tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> Dict[str, Any]:
-        """Aggregate logs using LogQL aggregation queries.
-        
-        Args:
-            query_str: LogQL aggregation query (e.g., rate, count_over_time)
-            start: Start time in nanoseconds
-            end: End time in nanoseconds
-            step: Query resolution step in seconds
-            tenant_id: Organization/tenant ID for data isolation
-            
-        Returns:
-            Aggregated log data
-        """
-        params = {
+        now = datetime.now()
+        params: Dict[str, Any] = {
             "query": query_str,
-            "step": step
+            "step": step,
+            "start": start or int((now - timedelta(hours=1)).timestamp() * 1e9),
+            "end": end or int(now.timestamp() * 1e9),
         }
-        
-        if not start:
-            start = int((datetime.now() - timedelta(hours=1)).timestamp() * 1e9)
-        if not end:
-            end = int(datetime.now().timestamp() * 1e9)
-        
-        params["start"] = start
-        params["end"] = end
-        
-        headers = self._get_headers(tenant_id)
         try:
             data = await self._timed_get_json(
                 f"{self.loki_url}/loki/api/v1/query_range",
                 params=params,
-                headers=headers,
+                headers=self._get_headers(tenant_id),
             )
-            
-            return {
-                "status": data.get("status", "success"),
-                "data": data.get("data", {}),
-                "query": query_str,
-                "step": step
-            }
-            
+            return {"status": data.get("status", "success"), "data": data.get("data", {}), "query": query_str, "step": step}
         except httpx.HTTPError as e:
-            self._observe("loki_query_errors_total", 1)
-            if isinstance(e, httpx.HTTPStatusError) and getattr(e, "response", None) is not None:
-                status_code = getattr(e.response, "status_code", None)
-                if status_code and 400 <= status_code < 500:
-                    logger.debug("Client error aggregating logs (%s): %s", status_code, e)
-                else:
-                    logger.error("Error aggregating logs: %s", e)
-            else:
-                logger.error("Error aggregating logs: %s", e)
+            self._observe("loki_query_errors_total")
+            status_code = getattr(getattr(e, "response", None), "status_code", None)
+            log_fn = logger.debug if status_code and 400 <= status_code < 500 else logger.error
+            log_fn("Error aggregating logs (%s): %s", status_code, e)
+            return {"status": "error", "error": str(e), "query": query_str}
 
-            return {
-                "status": "error",
-                "error": str(e),
-                "query": query_str
-            }
-    
     @with_retry()
     @with_timeout()
     async def get_log_volume(
@@ -495,53 +446,42 @@ class LokiService:
         start: Optional[int] = None,
         end: Optional[int] = None,
         step: int = 300,
-        tenant_id: str = config.DEFAULT_ORG_ID
+        tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> Dict[str, Any]:
-        """Get log volume over time.
-        
-        Args:
-            query_str: LogQL selector query
-            start: Start time in nanoseconds
-            end: End time in nanoseconds
-            step: Time step in seconds
-            
-        Returns:
-            Log volume data over time
-        """
-        
-        candidates = [query_str]
-        candidates.extend(self._build_service_fallback_queries(query_str))
-        if "service_name" in query_str or "service.name" in query_str:
-            candidates.append(query_str.replace("service.name", "service_name"))
-            candidates.append(query_str.replace("service_name", "service"))
-            candidates.append('{service=~".+"}')
-
-        candidates = list(dict.fromkeys(candidates))
-
-        last_result: Dict[str, Any] = {
-            "status": "success",
-            "data": {"result": []},
-            "query": query_str,
-            "step": step
-        }
+        candidates = list(dict.fromkeys([
+            query_str,
+            *self._build_service_fallback_queries(query_str),
+            *(
+                [
+                    query_str.replace("service.name", "service_name"),
+                    query_str.replace("service_name", "service"),
+                    '{service=~".+"}',
+                ]
+                if "service_name" in query_str or "service.name" in query_str
+                else []
+            ),
+        ]))
 
         semaphore = asyncio.Semaphore(max(1, config.LOKI_FALLBACK_CONCURRENCY))
+        last_result: Dict[str, Any] = {"status": "success", "data": {"result": []}, "query": query_str, "step": step}
 
         async def _aggregate(candidate: str):
             async with semaphore:
-                volume_query = f'sum(count_over_time({candidate}[{step}s]))'
-                result = await self.aggregate_logs(volume_query, start, end, step, tenant_id=tenant_id)
-                return candidate, result
+                result = await self.aggregate_logs(
+                    f"sum(count_over_time({candidate}[{step}s]))", start, end, step, tenant_id=tenant_id
+                )
+                return result
 
-        for task in asyncio.as_completed([_aggregate(candidate) for candidate in candidates[: max(1, config.LOKI_MAX_FALLBACK_QUERIES + 2)]]):
-            _candidate, result = await task
+        for task in asyncio.as_completed(
+            [_aggregate(c) for c in candidates[: max(1, config.LOKI_MAX_FALLBACK_QUERIES + 2)]]
+        ):
+            result = await task
             last_result = result
-            data = result.get("data") if isinstance(result, dict) else None
-            if isinstance(data, dict) and data.get("result"):
+            if isinstance(result.get("data"), dict) and result["data"].get("result"):
                 return result
 
         return last_result
-    
+
     @with_retry()
     @with_timeout()
     async def search_logs_by_pattern(
@@ -551,34 +491,12 @@ class LokiService:
         start: Optional[int] = None,
         end: Optional[int] = None,
         limit: int = 100,
-        tenant_id: str = config.DEFAULT_ORG_ID
+        tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> LogResponse:
-        """Search logs by text pattern.
-        
-        Args:
-            pattern: Text pattern to search for
-            labels: Label filters
-            start: Start time in nanoseconds
-            end: End time in nanoseconds
-            limit: Maximum results
-            
-        Returns:
-            LogResponse with matching logs
-        """
-        
-        label_selector = self._build_label_selector(labels) if labels else '{}'
-        escaped = self._escape_logql_string(pattern)
-        query_str = f'{label_selector} |= "{escaped}"'
-        
-        query = LogQuery(
-            query=query_str,
-            limit=limit,
-            start=start,
-            end=end
-        )
-        
-        return await self.query_logs(query, tenant_id=tenant_id)
-    
+        label_selector = self._build_label_selector(labels) if labels else "{}"
+        query_str = f'{label_selector} |= "{self._escape_logql_string(pattern)}"'
+        return await self.query_logs(LogQuery(query=query_str, limit=limit, start=start, end=end), tenant_id=tenant_id)
+
     @with_retry()
     @with_timeout()
     async def filter_logs(
@@ -588,112 +506,9 @@ class LokiService:
         start: Optional[int] = None,
         end: Optional[int] = None,
         limit: int = 100,
-        tenant_id: str = config.DEFAULT_ORG_ID
+        tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> LogResponse:
-        """Filter logs by labels and optional text filters.
-        
-        Args:
-            labels: Label filters (e.g., {"app": "nginx", "level": "error"})
-            filters: Optional text filters to apply
-            start: Start time in nanoseconds
-            end: End time in nanoseconds
-            limit: Maximum results
-            
-        Returns:
-            LogResponse with filtered logs
-        """
-        label_selector = self._build_label_selector(labels)
-        query_str = label_selector
-        
-        
+        query_str = self._build_label_selector(labels)
         if filters:
-            for f in filters:
-                escaped = self._escape_logql_string(f)
-                query_str += f' |= "{escaped}"'
-        
-        query = LogQuery(
-            query=query_str,
-            limit=limit,
-            start=start,
-            end=end
-        )
-        
-        return await self.query_logs(query, tenant_id=tenant_id)
-    
-    def _build_query_params(self, query: LogQuery) -> Dict[str, Any]:
-        """Build query parameters for Loki API.
-        
-        Args:
-            query: LogQuery object
-            
-        Returns:
-            Dictionary of query parameters
-        """
-        params = {
-            "query": query.query,
-            "limit": query.limit,
-            "direction": query.direction.value
-        }
-        
-        if query.start:
-            params["start"] = query.start
-        if query.end:
-            params["end"] = query.end
-        if query.step:
-            params["step"] = query.step
-        
-        return params
-    
-    def _escape_logql_string(self, value: str) -> str:
-        """Escape special characters for embedding in LogQL double-quoted strings.
-
-        This escapes backslashes, double quotes and normalizes newlines to avoid
-        breaking the surrounding LogQL selector or text match.
-        """
-        if not isinstance(value, str):
-            return value
-        return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
-
-    def _build_label_selector(self, labels: Dict[str, str]) -> str:
-        """Build LogQL label selector from dictionary, safely escaping values."""
-        if not labels:
-            return "{}"
-
-        selectors = [f'{k}="{self._escape_logql_string(v)}"' for k, v in labels.items()]
-        return "{" + ", ".join(selectors) + "}"
-    
-    def _calculate_stats(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Calculate statistics from log query results.
-        
-        Args:
-            data: Query result data
-            
-        Returns:
-            Statistics dictionary or None
-        """
-        try:
-            result = data.get("result", [])
-            if not result:
-                return None
-            
-            total_entries = 0
-            total_bytes = 0
-            streams = len(result)
-            
-            for stream in result:
-                values = stream.get("values", [])
-                total_entries += len(values)
-                for value in values:
-                    
-                    if len(value) > 1:
-                        total_bytes += len(value[1])
-            
-            return {
-                "total_entries": total_entries,
-                "total_bytes": total_bytes,
-                "streams": streams,
-                "chunks": 0  
-            }
-        except Exception as e:
-            logger.error("Error calculating stats: %s", e)
-            return None
+            query_str += "".join(f' |= "{self._escape_logql_string(f)}"' for f in filters)
+        return await self.query_logs(LogQuery(query=query_str, limit=limit, start=start, end=end), tenant_id=tenant_id)

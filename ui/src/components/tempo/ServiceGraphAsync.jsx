@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
-import ReactFlow, { Background, Controls, MiniMap, Handle, Position } from 'reactflow'
+import ReactFlow, { Background, Controls, MiniMap, Handle, Position, useNodesState, useEdgesState } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { formatDuration } from '../../utils/formatters'
 import {
@@ -97,19 +97,31 @@ export default function ServiceGraphAsync({ traces }) {
   const hasSpanData = traces && traces.length > 0 && traces.some(t => t.spans && t.spans.length > 1)
   const graphData = useMemo(() => hasSpanData ? buildServiceGraphData(traces) : { services: new Map(), edges: new Map() }, [traces, hasSpanData])
 
-  const nodes = useMemo(
+  const initialNodes = useMemo(
     () => buildServiceGraphNodes(graphData, activeNodeId, hoverNodeId),
     [graphData, activeNodeId, hoverNodeId]
   )
 
   const insights = useMemo(() => buildServiceGraphInsights(graphData), [graphData])
 
-  const edges = useMemo(
+  const initialEdges = useMemo(
     () => buildServiceGraphEdges(graphData, activeEdgeId, activeNodeId),
     [graphData, activeEdgeId, activeNodeId]
   )
 
-  const layouted = useMemo(() => layoutServiceGraph(nodes, edges), [nodes, edges])
+  const layouted = useMemo(() => layoutServiceGraph(initialNodes, initialEdges), [initialNodes, initialEdges])
+
+  // Manage nodes/edges as React Flow state so user can drag nodes and edges
+  // will update automatically based on node positions.
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
+
+  useEffect(() => {
+    // initialize / reset when layout changes (e.g., different traces)
+    setNodes(layouted.nodes)
+    setEdges(layouted.edges)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layouted.nodes, layouted.edges])
 
   if (layouted.nodes.length === 0) {
     if (!hasSpanData) {
@@ -143,7 +155,7 @@ export default function ServiceGraphAsync({ traces }) {
         </h3>
         <div className="flex items-center gap-2">
           <div className="text-xs text-sre-text-muted bg-sre-surface px-2 py-1 rounded-lg border">
-            {layouted.nodes.length} services • {layouted.edges.length} connections
+            {nodes.length} services • {edges.length} connections
           </div>
         </div>
       </div>
@@ -231,8 +243,10 @@ export default function ServiceGraphAsync({ traces }) {
 
       <div className="h-[600px] rounded-xl overflow-hidden border-2 border-sre-border bg-gradient-to-br from-sre-bg to-sre-surface/20 shadow-inner">
         <ReactFlow
-          nodes={layouted.nodes}
-          edges={layouted.edges}
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
           nodeTypes={{ service: ServiceNode }}
           fitView
           minZoom={0.1}
@@ -254,8 +268,12 @@ export default function ServiceGraphAsync({ traces }) {
           <MiniMap
             zoomable
             pannable
-            nodeColor="#1f2937"
-            maskColor="rgba(0, 0, 0, 0.2)"
+            nodeColor={(node) => {
+              const err = node?.data?.stats?.errorRateNum ?? 0
+              return err > 5 ? '#ef4444' : err > 1 ? '#f59e0b' : '#10b981'
+            }}
+            nodeStrokeColor={(node) => (node?.data?.colorClass?.includes('red') ? '#ef4444' : '#1f2937')}
+            nodeBorderRadius={6}
             style={{ background: 'var(--sre-surface)' }}
           />
           <Controls

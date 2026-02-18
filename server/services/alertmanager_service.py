@@ -7,7 +7,6 @@ you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 
-AlertManager service for alert operations.
 """
 import httpx
 import logging
@@ -208,7 +207,6 @@ class AlertManagerService:
         if not success:
             return False
 
-        # persist purge marker so the app will hide this silence permanently
         try:
             from database import get_db_session
             from db_models import PurgedSilence
@@ -222,7 +220,6 @@ class AlertManagerService:
                 else:
                     self.logger.info("Purged silence %s already recorded", silence_id)
         except Exception as exc:
-            # non-fatal — deletion already performed at AlertManager level
             self.logger.warning("Failed to persist purged silence %s: %s", silence_id, exc)
 
         return True

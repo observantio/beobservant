@@ -1,0 +1,123 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+
+you may not use this file except in compliance with the License.
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
+from typing import Optional
+from datetime import datetime, timezone
+
+from database import get_db_session
+from db_models import Tenant, User, Permission, UserApiKey
+from config import config
+from models.access.auth_models import Role
+
+
+def ensure_permissions(service, db):
+    from services.auth.permission_defs import PERMISSION_DEFS
+
+    for name, display_name, description, resource_type, action in PERMISSION_DEFS:
+        if not db.query(Permission).filter_by(name=name).first():
+            db.add(Permission(
+                name=name,
+                display_name=display_name,
+                description=description,
+                resource_type=resource_type,
+                action=action,
+            ))
+    db.flush()
+
+
+def ensure_default_api_key(service, db, user: User):
+    if not user:
+        return
+
+    is_system_user = (
+        (getattr(user, "username", "") or "").strip().lower()
+        == (config.DEFAULT_ADMIN_USERNAME or "").strip().lower()
+    )
+
+    existing = db.query(UserApiKey).filter_by(user_id=user.id, is_default=True).first()
+    if existing:
+        if existing.name == "Default" and is_system_user:
+            desired_token = service._resolve_default_otlp_token()
+            now = datetime.now(timezone.utc)
+            if existing.key != (user.org_id or config.DEFAULT_ORG_ID):
+                existing.key = user.org_id or config.DEFAULT_ORG_ID
+                existing.updated_at = now
+            if not existing.otlp_token or (
+                config.DEFAULT_OTLP_TOKEN and existing.otlp_token != config.DEFAULT_OTLP_TOKEN
+            ):
+                existing.otlp_token = desired_token
+                existing.updated_at = now
+        elif not existing.otlp_token:
+            existing.otlp_token = service._generate_otlp_token()
+            existing.updated_at = datetime.now(timezone.utc)
+        return
+
+    db.add(UserApiKey(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        name="Default",
+        key=user.org_id or config.DEFAULT_ORG_ID,
+        otlp_token=service._resolve_default_otlp_token() if is_system_user else service._generate_otlp_token(),
+        is_default=True,
+        is_enabled=True,
+    ))
+
+
+def ensure_default_setup(service):
+    try:
+        with get_db_session() as db:
+            default_tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+            ensure_permissions(service, db)
+
+            if not config.DEFAULT_ADMIN_BOOTSTRAP_ENABLED:
+                if not default_tenant:
+                    service.logger.warning(
+                        "DEFAULT_ADMIN_BOOTSTRAP_ENABLED is false and default tenant is missing. "
+                        "Run explicit bootstrap before serving production traffic."
+                    )
+                return
+
+            if not default_tenant:
+                default_tenant = Tenant(
+                    name=config.DEFAULT_ADMIN_TENANT,
+                    display_name="Default Organization",
+                    is_active=True,
+                )
+                db.add(default_tenant)
+                db.flush()
+                service.logger.info("Created default tenant")
+
+            admin_username = (config.DEFAULT_ADMIN_USERNAME or "").strip().lower()
+            admin_user = db.query(User).filter_by(
+                tenant_id=default_tenant.id, username=admin_username
+            ).first()
+
+            if not admin_user:
+                admin_user = User(
+                    tenant_id=default_tenant.id,
+                    username=admin_username,
+                    email=config.DEFAULT_ADMIN_EMAIL,
+                    full_name="System Administrator",
+                    org_id=config.DEFAULT_ORG_ID,
+                    role=Role.ADMIN,
+                    is_active=True,
+                    is_superuser=True,
+                    hashed_password=service.hash_password(config.DEFAULT_ADMIN_PASSWORD),
+                    must_setup_mfa=True,
+                )
+                db.add(admin_user)
+                db.flush()
+                admin_user.permissions.extend(db.query(Permission).all())
+                service.logger.info("Created default admin user: %s", config.DEFAULT_ADMIN_USERNAME)
+
+            ensure_default_api_key(service, db, admin_user)
+            db.commit()
+    except Exception as exc:
+        service.logger.error("Error setting up defaults: %s", exc)

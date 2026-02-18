@@ -422,7 +422,11 @@ export default function TempoPage() {
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-sre-text-muted">Page Size</label>
-              <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setTracePage(1) }} className="text-xs px-2 py-1 border rounded bg-white">
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setTracePage(1) }}
+                className="text-xs px-2 py-1 bg-sre-surface border border-sre-border rounded text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary"
+              >
                 <option value={20}>20</option>
                 <option value={50}>50</option>
                 <option value={100}>100</option>

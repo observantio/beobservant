@@ -136,7 +136,6 @@ def _is_datasource_write_intent(path: str, method: str) -> bool:
     m = (method or "GET").upper()
     if p.startswith("/grafana/api/datasources/uid/") and m in {"PUT", "PATCH", "DELETE"}:
         return True
-    # Opening/editing datasource configuration page is a write-intent UI path.
     if p.startswith("/grafana/connections/datasources/edit/"):
         return True
     return False
@@ -169,7 +168,6 @@ def is_resource_accessible(service, resource, token_data: TokenData, *, require_
     if resource.created_by == token_data.user_id:
         return True
 
-    # Grafana default/read-only datasources are tenant-wide query/read resources.
     if not require_write and (bool(getattr(resource, "is_default", False)) or bool(getattr(resource, "read_only", False))):
         return True
 
