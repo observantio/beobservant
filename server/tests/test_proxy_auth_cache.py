@@ -1,10 +1,15 @@
 import os
+# ensure test environment variables are set before importing modules that
+# instantiate Config() at import time (prevents CORS wildcard validation errors)
+from tests._env import ensure_test_env
+ensure_test_env()
+
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 import time
 from types import SimpleNamespace
 
-from services.grafana.proxy_auth_ops import authorize_proxy_request
+
 from services.grafana_proxy_service import GrafanaProxyService
 from models.access.auth_models import TokenData
 
@@ -17,13 +22,15 @@ class FakeAuthService:
 
     def decode_token(self, token):
         self.decode_calls += 1
-        # return a dict that will be converted to TokenData by the code
+        # return a dict compatible with TokenData so the code can construct it
         return {
             "user_id": "user-1",
             "username": "u1",
             "tenant_id": "t1",
+            "org_id": "org1",
+            "role": "user",
             "permissions": ["read:dashboards"],
-            "group_ids": [1],
+            "group_ids": ["1"],
             "is_superuser": False,
         }
 
@@ -50,10 +57,22 @@ class DummyRequest:
 import asyncio
 
 def test_authorize_proxy_request_is_cached():
+    # ensure module-level cache is empty for deterministic test runs
+    import importlib, sys
+    proxy_mod_name = "services.grafana.proxy_auth_ops"
+    if proxy_mod_name in sys.modules:
+        # reload to ensure we use the real implementation (some tests monkeypatch this module)
+        importlib.reload(sys.modules[proxy_mod_name])
+    proxy_mod = importlib.import_module(proxy_mod_name)
+    proxy_mod._PROXY_AUTH_CACHE.clear()
+
     svc = GrafanaProxyService()
     auth = FakeAuthService()
     req = DummyRequest()
     db = DummyDB()
+
+    # import the live function after ensuring the module is the real one
+    authorize_proxy_request = proxy_mod.authorize_proxy_request
 
     # first call should invoke decode_token
     headers1 = asyncio.run(authorize_proxy_request(svc, req, db, auth, token="tok-123", orig="/grafana/"))

@@ -13,9 +13,7 @@ import types
 services_mod = types.ModuleType("services")
 sys.modules["services"] = services_mod
 
-# Preserve any existing `config` module so we don't pollute other tests
-_original_config_module = sys.modules.get("config")
-
+# Create a temporary `config` module used only while importing the module-under-test
 cfg_mod = types.ModuleType("config")
 from types import SimpleNamespace
 cfg_mod.config = SimpleNamespace(
@@ -27,7 +25,16 @@ cfg_mod.config = SimpleNamespace(
     GRAFANA_PASSWORD="admin",
     DEFAULT_TIMEOUT=30,
 )
+# Temporarily inject `config` while importing the server module so other tests are not affected
+_original_config_module = sys.modules.get("config")
 sys.modules["config"] = cfg_mod
+try:
+    from server.services.grafana_proxy_service import GrafanaProxyService
+finally:
+    if _original_config_module is not None:
+        sys.modules["config"] = _original_config_module
+    else:
+        sys.modules.pop("config", None)
 
 gf_mod = types.ModuleType("services.grafana_service")
 class _LocalGrafanaAPIError(Exception):
@@ -101,13 +108,6 @@ from server.db_models import Base, Group
 from fastapi import HTTPException
 GrafanaAPIError = gf_mod.GrafanaAPIError
 
-
-def teardown_module(module):
-    # Restore the original `config` module if present to avoid leaking into other tests
-    if _original_config_module is not None:
-        sys.modules["config"] = _original_config_module
-    else:
-        sys.modules.pop("config", None)
 
 def make_session():
     engine = create_engine("sqlite:///:memory:")

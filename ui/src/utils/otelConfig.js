@@ -17,7 +17,7 @@ export function buildOtelYaml(otlpToken, endpoints = {}) {
 
   return `receivers:
   hostmetrics:
-    collection_interval: 1s
+    collection_interval: 30s
     scrapers:
       cpu:
       memory:
@@ -25,8 +25,34 @@ export function buildOtelYaml(otlpToken, endpoints = {}) {
       filesystem:
       network:
       paging:
+      load:
       process:
-      system:
+        mute_process_name_error: true
+        mute_process_exe_error: true
+        mute_process_io_error: true
+
+  filelog:
+    include:
+      - /var/log/*.log
+      - /var/log/**/*.log
+    exclude:
+      - /var/log/btmp
+      - /var/log/wtmp
+    start_at: end
+    include_file_path: true
+    include_file_name: false
+    operators:
+      - type: json_parser
+        if: 'body matches "^{"'
+        parse_from: body
+        timestamp:
+          parse_from: attributes.time
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05Z07:00"
+      - type: move
+        if: 'attributes["log.file.path"] != nil'
+        from: attributes["log.file.path"]
+        to: resource["log.file.path"]
 
   otlp:
     protocols:
@@ -39,6 +65,17 @@ processors:
   memory_limiter:
     check_interval: 1s
     limit_mib: 512
+    spike_limit_mib: 128
+
+  resourcedetection:
+    detectors: [env, system, docker]
+    timeout: 5s
+    override: false
+
+  batch:
+    send_batch_size: 1000
+    send_batch_max_size: 2000
+    timeout: 10s
 
 exporters:
   otlphttp/loki:
@@ -83,28 +120,33 @@ exporters:
       max_interval: 30s
       max_elapsed_time: 5m
 
-  debug:
-    verbosity: normal
-
 service:
   pipelines:
     logs:
-      receivers: [otlp]
-      processors: [memory_limiter]
-      exporters: [otlphttp/loki, debug]
+      receivers: [otlp, filelog]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [otlphttp/loki]
 
     traces:
       receivers: [otlp]
-      processors: [memory_limiter]
-      exporters: [otlphttp/tempo, debug]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [otlphttp/tempo]
 
     metrics:
       receivers: [hostmetrics, otlp]
-      processors: [memory_limiter]
-      exporters: [prometheusremotewrite/mimir, debug]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [prometheusremotewrite/mimir]
 
   telemetry:
     logs:
-      level: info
+      level: warn
+    metrics:
+      level: basic
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
 `
 }

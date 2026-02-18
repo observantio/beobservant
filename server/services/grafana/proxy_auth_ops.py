@@ -12,6 +12,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """Proxy authorization and path extraction operations for GrafanaProxyService."""
 
 import re
+import time
 from typing import Dict, Optional, Set
 
 from fastapi import HTTPException
@@ -20,6 +21,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from db_models import GrafanaDashboard, GrafanaDatasource
 from models.access.auth_models import Permission, TokenData, Role
+
+# Simple in-memory cache for proxy authorizations. Entries store the
+# response headers and expire after _PROXY_AUTH_CACHE_TTL seconds.
+_PROXY_AUTH_CACHE: Dict[str, Dict[str, object]] = {}
+_PROXY_AUTH_CACHE_TTL = 10  # seconds
 
 
 def _has_any_permission(token_data: TokenData, required: Set[str]) -> bool:
@@ -254,6 +260,12 @@ async def authorize_proxy_request(
     if not token_to_verify:
         raise HTTPException(status_code=401, detail="You need to log in to access this resource.")
 
+    # Return cached headers when present and not expired (avoids repeated
+    # decode_token/get_user_by_id calls for the same token).
+    cached = _PROXY_AUTH_CACHE.get(token_to_verify)
+    if isinstance(cached, dict) and cached.get("expires", 0) > time.monotonic():
+        return cached.get("headers", {})
+
     token_data = await run_in_threadpool(auth_service.decode_token, token_to_verify)
     if not token_data:
         raise HTTPException(status_code=401, detail="Your session has expired or your token is invalid. Let's get you a new one.")
@@ -375,8 +387,17 @@ async def authorize_proxy_request(
     }):
         grafana_role = "Editor"
 
-    return {
+    headers = {
         "X-WEBAUTH-USER": token_data.username,
         "X-WEBAUTH-TENANT": token_data.tenant_id,
         "X-WEBAUTH-ROLE": grafana_role,
     }
+
+    # cache successful authorization result for a short period
+    try:
+        _PROXY_AUTH_CACHE[token_to_verify] = {"expires": time.monotonic() + _PROXY_AUTH_CACHE_TTL, "headers": headers}
+    except Exception:
+        # non-critical: caching failure should not prevent successful auth
+        pass
+
+    return headers
