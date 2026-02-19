@@ -94,7 +94,8 @@ class ChannelStorageService:
             db.flush()
             logger.info("Created channel %s (%s) visibility=%s", ch.name, ch.id, ch.visibility)
             # return decrypted config for owner
-            ch.config = decrypt_config(ch.config or {})
+            cfg = decrypt_config(cast(Dict[str, Any], getattr(ch, "config") or {}))
+            setattr(ch, "config", cfg)
             return _channel_to_pydantic_for_viewer(ch, user_id)
 
     def update_notification_channel(
@@ -122,7 +123,8 @@ class ChannelStorageService:
 
             db.flush()
             logger.info("Updated channel %s (%s)", ch.name, channel_id)
-            ch.config = decrypt_config(ch.config or {})
+            cfg = decrypt_config(cast(Dict[str, Any], getattr(ch, "config") or {}))
+            setattr(ch, "config", cfg)
             return _channel_to_pydantic_for_viewer(ch, user_id)
 
     def delete_notification_channel(

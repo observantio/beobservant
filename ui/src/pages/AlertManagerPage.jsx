@@ -735,7 +735,6 @@ export default function AlertManagerPage() {
 
           <div className="bg-sre-surface/30 rounded-xl p-4 border border-sre-border/50">
             <h4 className="text-sm font-semibold text-sre-text mb-1 flex items-center gap-1">
-              <span className="material-icons text-sm leading-none align-middle">template</span>
               <span className="leading-none">Quick Templates</span>
             </h4>
             <p className="text-xs text-sre-text-muted mb-2">

@@ -499,7 +499,7 @@ class DatabaseStorageService:
             )
             return [
                 _rule_to_pydantic(r) for r in rules
-                if _has_access(r.visibility or "private", r.created_by, user_id, _get_shared_group_ids(r), group_ids)
+                if _has_access(cast(str, r.visibility or "private"), cast(str, r.created_by), user_id, _get_shared_group_ids(r), group_ids)
             ]
 
     def get_alert_rules_for_org(self, tenant_id: str, org_id: str) -> List[AlertRulePydantic]:
@@ -607,7 +607,10 @@ class DatabaseStorageService:
                 .filter(AlertRuleDB.id == rule_id, AlertRuleDB.tenant_id == tenant_id)
                 .first()
             )
-            if not r or not _has_access(r.visibility or "private", r.created_by, user_id, _get_shared_group_ids(r), group_ids):
+            if not r:
+                return None
+            if not _has_access(cast(str, r.visibility or "private"), cast(str, r.created_by), user_id, _get_shared_group_ids(r), group_ids):
+                return None
                 return None
 
             r.org_id = rule_update.org_id or None
@@ -642,7 +645,10 @@ class DatabaseStorageService:
                 .filter(AlertRuleDB.id == rule_id, AlertRuleDB.tenant_id == tenant_id)
                 .first()
             )
-            if not r or not _has_access(r.visibility or "private", r.created_by, user_id, _get_shared_group_ids(r), group_ids, require_write=True):
+            if not r:
+                return False
+            if not _has_access(cast(str, r.visibility or "private"), cast(str, r.created_by), user_id, _get_shared_group_ids(r), group_ids, require_write=True):
+                return False
                 return False
             db.delete(r)
             logger.info("Deleted alert rule %s", rule_id)
@@ -668,9 +674,10 @@ class DatabaseStorageService:
             )
             result = []
             for ch in channels:
-                if not _has_access(ch.visibility or "private", ch.created_by, user_id, _get_shared_group_ids(ch), group_ids):
+                if not _has_access(cast(str, ch.visibility or "private"), cast(str, ch.created_by), user_id, _get_shared_group_ids(ch), group_ids):
                     continue
-                ch.config = decrypt_config(ch.config or {})
+                cfg = decrypt_config(cast(Dict[str, Any], getattr(ch, "config") or {}))
+                setattr(ch, "config", cfg)
                 result.append(_channel_to_pydantic_for_viewer(ch, user_id))
             return result
 
@@ -689,9 +696,10 @@ class DatabaseStorageService:
                 .filter(NotificationChannelDB.id == channel_id, NotificationChannelDB.tenant_id == tenant_id)
                 .first()
             )
-            if not ch or not _has_access(ch.visibility or "private", ch.created_by, user_id, _get_shared_group_ids(ch), group_ids):
+            if not ch or not _has_access(cast(str, ch.visibility or "private"), cast(str, ch.created_by), user_id, _get_shared_group_ids(ch), group_ids):
                 return None
-            ch.config = decrypt_config(ch.config or {})
+            cfg = decrypt_config(cast(Dict[str, Any], getattr(ch, "config") or {}))
+            setattr(ch, "config", cfg)
             return _channel_to_pydantic_for_viewer(ch, user_id)
 
     def create_notification_channel(
@@ -712,7 +720,8 @@ class DatabaseStorageService:
             db.add(ch)
             db.flush()
             logger.info("Created channel %s (%s) visibility=%s", ch.name, ch.id, ch.visibility)
-            ch.config = decrypt_config(ch.config or {})
+            cfg = decrypt_config(cast(Dict[str, Any], getattr(ch, "config") or {}))
+            setattr(ch, "config", cfg)
             return _channel_to_pydantic_for_viewer(ch, user_id)
 
     def update_notification_channel(
@@ -742,7 +751,8 @@ class DatabaseStorageService:
             _assign_shared_groups(ch, db, tenant_id, ch.visibility, channel_update.shared_group_ids, actor_user_id=user_id, actor_group_ids=group_ids)
             db.flush()
             logger.info("Updated channel %s (%s)", ch.name, channel_id)
-            ch.config = decrypt_config(ch.config or {})
+            cfg = decrypt_config(cast(Dict[str, Any], getattr(ch, "config") or {}))
+            setattr(ch, "config", cfg)
             return _channel_to_pydantic_for_viewer(ch, user_id)
 
     def delete_notification_channel(
@@ -799,6 +809,7 @@ class DatabaseStorageService:
                 if r.notification_channels:
                     q = q.filter(NotificationChannelDB.id.in_(r.notification_channels))
                 for ch in q.limit(int(app_config.MAX_QUERY_LIMIT)).all():
-                    ch.config = decrypt_config(ch.config or {})
+                    cfg = decrypt_config(cast(Dict[str, Any], getattr(ch, "config") or {}))
+                    setattr(ch, "config", cfg)
                     results.append(_channel_to_pydantic(ch))
             return results

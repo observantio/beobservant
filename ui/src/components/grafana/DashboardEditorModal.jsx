@@ -175,9 +175,8 @@ export default function DashboardEditorModal({
         {editorTab === 'json' && (
           <div className="space-y-4">
             {/* Templates picker */}
-            <div className="bg-gradient-to-r from-sre-primary/5 to-sre-primary/10 rounded-xl p-4 border border-sre-primary/20">
+            <div className="">
               <div className="mb-3 flex items-center gap-3">
-                <span className="material-icons text-2xl text-sre-primary">view_quilt</span>
                 <div>
                   <h4 className="text-base font-semibold text-sre-text">Templates</h4>
                   <p className="text-sm text-sre-text-muted">Choose a starting dashboard template — click a card to load it into the editor.</p>
