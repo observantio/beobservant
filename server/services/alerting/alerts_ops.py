@@ -6,10 +6,6 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Alert-focused operations for AlertManagerService.
-
-Includes alert fetching, posting, deletion, and metric name listing.
 """
 
 from datetime import datetime, timezone, timedelta
@@ -35,9 +31,7 @@ async def list_metric_names(service, org_id: str) -> List[str]:
             response=response,
         )
     metrics = payload.get("data") or []
-    if not isinstance(metrics, list):
-        return []
-    return metrics
+    return metrics if isinstance(metrics, list) else []
 
 
 async def get_alerts(
@@ -47,22 +41,16 @@ async def get_alerts(
     silenced: Optional[bool] = None,
     inhibited: Optional[bool] = None,
 ) -> List[Alert]:
-    params = {}
+    params: Dict = {}
 
-    filters = []
     if filter_labels:
-        for key, value in filter_labels.items():
-            filters.append(f'{key}="{value}"')
-
+        params["filter"] = [f'{k}="{v}"' for k, v in filter_labels.items()]
     if active is not None:
-        filters.append(f'active={str(active).lower()}')
+        params["active"] = str(active).lower()
     if silenced is not None:
-        filters.append(f'silenced={str(silenced).lower()}')
+        params["silenced"] = str(silenced).lower()
     if inhibited is not None:
-        filters.append(f'inhibited={str(inhibited).lower()}')
-
-    if filters:
-        params["filter"] = filters
+        params["inhibited"] = str(inhibited).lower()
 
     try:
         response = await service._client.get(
@@ -79,8 +67,7 @@ async def get_alerts(
 async def get_alert_groups(service, filter_labels: Optional[Dict[str, str]] = None) -> List[AlertGroup]:
     params = {}
     if filter_labels:
-        filters = [f'{key}="{value}"' for key, value in filter_labels.items()]
-        params["filter"] = filters
+        params["filter"] = [f'{k}="{v}"' for k, v in filter_labels.items()]
 
     try:
         response = await service._client.get(
@@ -96,10 +83,9 @@ async def get_alert_groups(service, filter_labels: Optional[Dict[str, str]] = No
 
 async def post_alerts(service, alerts: List[Alert]) -> bool:
     try:
-        alert_data = [alert.model_dump(by_alias=True) for alert in alerts]
         response = await service._client.post(
             f"{service.alertmanager_url}/api/v2/alerts",
-            json=alert_data,
+            json=[alert.model_dump(by_alias=True) for alert in alerts],
         )
         response.raise_for_status()
         return True
@@ -120,14 +106,10 @@ async def delete_alerts(service, filter_labels: Optional[Dict[str, str]] = None)
 
     now = datetime.now(timezone.utc)
     end = now + timedelta(seconds=60)
-
-    starts_at = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    ends_at = end.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
     silence = SilenceCreate(
         matchers=matchers,
-        startsAt=starts_at,
-        endsAt=ends_at,
+        startsAt=now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        endsAt=end.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         createdBy="beobservant",
         comment="Alert deletion via API",
     )

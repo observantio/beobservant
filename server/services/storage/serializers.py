@@ -12,10 +12,9 @@ from datetime import datetime, timezone
 import logging
 from typing import Any, Dict
 
+from models.alerting.incidents import AlertIncident as AlertIncidentPydantic, IncidentStatus
 from models.alerting.rules import AlertRule as AlertRulePydantic
 from models.alerting.channels import NotificationChannel as NotificationChannelPydantic
-from models.alerting.incidents import AlertIncident as AlertIncidentPydantic
-
 from services.common.meta import INCIDENT_META_KEY, _parse_meta, _safe_group_ids
 
 logger = logging.getLogger(__name__)
@@ -26,16 +25,16 @@ def _rule_to_pydantic(r) -> AlertRulePydantic:
         id=r.id, org_id=r.org_id, name=r.name, expr=r.expr, duration=r.duration,
         severity=r.severity, labels=r.labels or {}, annotations=r.annotations or {},
         enabled=r.enabled, group=r.group, notification_channels=r.notification_channels or [],
-        visibility=r.visibility or "private", shared_group_ids=[g.id for g in r.shared_groups] if r.shared_groups else [],
+        visibility=r.visibility or "private",
+        shared_group_ids=[g.id for g in r.shared_groups] if r.shared_groups else [],
     )
 
 
-def _channel_to_pydantic(ch, viewer_user_id: Any) -> NotificationChannelPydantic:
+def _channel_to_pydantic(ch) -> NotificationChannelPydantic:
     return _channel_to_pydantic_for_viewer(ch, viewer_user_id=ch.created_by)
 
 
 def _channel_to_pydantic_for_viewer(ch, viewer_user_id: Any) -> NotificationChannelPydantic:
-    # `ch.config` should already be decrypted by caller when needed
     raw_config = ch.config or {}
     return NotificationChannelPydantic(
         id=ch.id, name=ch.name, type=ch.type, enabled=ch.enabled,
@@ -50,17 +49,17 @@ def _incident_to_pydantic(incident) -> AlertIncidentPydantic:
     meta = _parse_meta(annotations)
 
     note_items = [
-        {"author": n.get("author", "system"), "text": n.get("text", ""), "createdAt": n.get("createdAt") or datetime.now(timezone.utc)}
+        {
+            "author": n.get("author", "system"),
+            "text": n.get("text", ""),
+            "createdAt": n.get("createdAt") or datetime.now(timezone.utc),
+        }
         for n in (incident.notes or []) if isinstance(n, dict)
     ]
 
     status_value = incident.status
-    try:
-        from models.alerting.incidents import IncidentStatus
-        if isinstance(status_value, IncidentStatus):
-            status_value = status_value.value
-    except ImportError:
-        logger.debug("IncidentStatus import unavailable while normalizing incident status")
+    if isinstance(status_value, IncidentStatus):
+        status_value = status_value.value
     if isinstance(status_value, str) and status_value.startswith("IncidentStatus."):
         status_value = status_value.split(".", 1)[1].lower()
 
@@ -70,7 +69,7 @@ def _incident_to_pydantic(incident) -> AlertIncidentPydantic:
 
     safe_annotations = {
         str(k): str(v) for k, v in annotations.items()
-        if isinstance(annotations, dict) and k != INCIDENT_META_KEY and v is not None
+        if k != INCIDENT_META_KEY and v is not None
     }
 
     return AlertIncidentPydantic(

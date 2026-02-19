@@ -141,7 +141,7 @@ def update_group_permissions(
         permissions = db.query(Permission).filter(Permission.name.in_(known_names)).all()
         group.permissions = permissions
 
-        service._log_audit(db, tenant_id, "system", "update_group_permissions", "groups", group_id, {
+        service._log_audit(db, tenant_id, None, "update_group_permissions", "groups", group_id, {
             "permissions": list(known_names),
         })
 
@@ -170,7 +170,7 @@ def update_group_members(service, group_id: str, user_ids: List[str], tenant_id:
 
         group.members = members
 
-        service._log_audit(db, tenant_id, "system", "update_group_members", "groups", group_id, {
+        service._log_audit(db, tenant_id, None, "update_group_members", "groups", group_id, {
             "user_ids": user_ids,
         })
 

@@ -28,7 +28,7 @@ from models.alerting.receivers import AlertManagerStatus
 from models.alerting.rules import AlertRule, AlertRuleCreate
 from models.alerting.channels import NotificationChannel, NotificationChannelCreate
 from services.alertmanager_service import AlertManagerService
-from services.storage.service import DatabaseStorageService
+from services.storage_db_service import DatabaseStorageService
 from services.notification_service import NotificationService
 from config import config, constants
 from datetime import datetime, timezone

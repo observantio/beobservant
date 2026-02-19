@@ -362,50 +362,59 @@ export default function IntegrationsPage() {
     const typeIcon = channelIconForType(channel.type)
     const colorClasses = channelColorForType(channel.type)
 
+    const hasConfig =
+      channel.config &&
+      typeof channel.config === 'object' &&
+      Object.keys(channel.config).length > 0
+
     return (
       <div className="group relative p-4 rounded-xl border border-sre-border bg-gradient-to-br from-white/3 to-white/6 shadow-sm hover:shadow-lg transition-all transform hover:-translate-y-0.5">
-        <div className="flex items-start gap-4">
-          <div className={`w-12 h-12 rounded-lg flex items-center justify-center bg-gradient-to-br ${colorClasses} font-semibold`}>
-            <span className="material-icons text-lg leading-none">{typeIcon}</span>
+      <div className="flex items-start gap-4">
+        <div className={`w-12 h-12 rounded-lg flex items-center justify-center bg-gradient-to-br ${colorClasses} font-semibold`}>
+        <span className="material-icons text-lg leading-none">{typeIcon}</span>
+        </div>
+
+        <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <div className="font-semibold text-sre-text truncate">{channel.name}</div>
+            <div className="text-xs text-sre-text-muted rounded px-2 py-1 bg-sre-surface/40 border border-sre-border/30">{channel.visibility || 'private'}</div>
+          </div>
+          <div className="text-xs text-sre-text-muted mt-2 truncate">
+            {hasConfig
+            ? (channel.config.url || channel.config.webhook_url || channel.config.to)
+            : "You have no access to view the resource config"}
+          </div>
           </div>
 
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <div className="font-semibold text-sre-text truncate">{channel.name}</div>
-                  <div className="text-xs text-sre-text-muted rounded px-2 py-1 bg-sre-surface/40 border border-sre-border/30">{channel.visibility || 'private'}</div>
-                </div>
-                <div className="text-xs text-sre-text-muted mt-2 truncate">{channel.description || '—'}</div>
-              </div>
+          <div className="flex flex-col items-end gap-2">
+          <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium ${channel.enabled ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
+            <span className={`w-2 h-2 rounded-full ${channel.enabled ? 'bg-green-600' : 'bg-gray-400'}`} />
+            {channel.enabled ? 'Enabled' : 'Disabled'}
+          </div>
 
-              <div className="flex flex-col items-end gap-2">
-                <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium ${channel.enabled ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
-                  <span className={`w-2 h-2 rounded-full ${channel.enabled ? 'bg-green-600' : 'bg-gray-400'}`} />
-                  {channel.enabled ? 'Enabled' : 'Disabled'}
-                </div>
-
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {isOwner && (
-                    <Button size="sm" variant="ghost" aria-label="Test channel" title="Test channel" onClick={() => handleTestChannel(channel.id)} className="p-1 hover:bg-sre-primary/10">
-                      <span className="material-icons text-base">play_arrow</span>
-                    </Button>
-                  )}
-                  {isOwner && (
-                    <Button size="sm" variant="ghost" aria-label="Edit channel" title="Edit channel" onClick={() => openEditChannel(channel)} className="p-1 hover:bg-sre-primary/10">
-                      <span className="material-icons text-base">edit</span>
-                    </Button>
-                  )}
-                  {isOwner && (
-                    <Button size="sm" variant="ghost" aria-label="Delete channel" title="Delete channel" onClick={() => setDeleteConfirm({ show: true, type: 'channel', id: channel.id, name: channel.name })} className="p-1 hover:bg-sre-primary/10">
-                      <span className="material-icons text-base">delete</span>
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {isOwner && (
+            <Button size="sm" variant="ghost" aria-label="Test channel" title="Test channel" onClick={() => handleTestChannel(channel.id)} className="p-1 hover:bg-sre-primary/10">
+              <span className="material-icons text-base">play_arrow</span>
+            </Button>
+            )}
+            {isOwner && (
+            <Button size="sm" variant="ghost" aria-label="Edit channel" title="Edit channel" onClick={() => openEditChannel(channel)} className="p-1 hover:bg-sre-primary/10">
+              <span className="material-icons text-base">edit</span>
+            </Button>
+            )}
+            {isOwner && (
+            <Button size="sm" variant="ghost" aria-label="Delete channel" title="Delete channel" onClick={() => setDeleteConfirm({ show: true, type: 'channel', id: channel.id, name: channel.name })} className="p-1 hover:bg-sre-primary/10">
+              <span className="material-icons text-base">delete</span>
+            </Button>
+            )}
+          </div>
           </div>
         </div>
+        </div>
+      </div>
       </div>
     )
   }

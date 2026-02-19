@@ -6,21 +6,24 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
 """
-import httpx
-import logging
 import json
-from typing import List, Optional, Dict
+import logging
+from typing import Dict, List, Optional
 
+import httpx
 from fastapi import Request
+
+from config import config
+from database import get_db_session
+from db_models import PurgedSilence
+from middleware.dependencies import enforce_public_endpoint_security, enforce_header_token
+from middleware.resilience import with_retry, with_timeout
+from models.access.auth_models import TokenData
 from models.alerting.alerts import Alert, AlertGroup, AlertStatus, AlertState
 from models.alerting.silences import Silence, SilenceCreate, Matcher, Visibility
 from models.alerting.rules import AlertRule
 from models.alerting.receivers import AlertManagerStatus
-from models.access.auth_models import TokenData
-from config import config
-from middleware.resilience import with_retry, with_timeout
 from services.common.http_client import create_async_client
 from services.alerting.silence_metadata import (
     SILENCE_META_PREFIX,
@@ -52,7 +55,6 @@ from services.alerting.silences_ops import (
 )
 from services.alerting.channels_ops import notify_for_alerts, get_status, get_receivers
 from services.alerting.rules_ops import resolve_rule_org_id, sync_mimir_rules_for_org
-from middleware.dependencies import enforce_public_endpoint_security, enforce_header_token
 
 logger = logging.getLogger(__name__)
 LABELS_JSON_ERROR = "Invalid filter_labels JSON"
@@ -61,15 +63,8 @@ MIMIR_RULER_CONFIG_BASEPATH = "/prometheus/config/v1/rules"
 
 
 class AlertManagerService:
-    """Service for interacting with AlertManager."""
-    
     def __init__(self, alertmanager_url: str = config.ALERTMANAGER_URL):
-        """Initialize AlertManager service.
-        
-        Args:
-            alertmanager_url: Base URL for AlertManager instance
-        """
-        self.alertmanager_url = alertmanager_url.rstrip('/')
+        self.alertmanager_url = alertmanager_url.rstrip("/")
         self.timeout = config.DEFAULT_TIMEOUT
         self._client = create_async_client(self.timeout)
         self._mimir_client = create_async_client(self.timeout)
@@ -88,8 +83,8 @@ class AlertManagerService:
             raise ValueError(LABELS_JSON_ERROR) from exc
         if not isinstance(parsed, dict):
             raise ValueError(LABELS_JSON_ERROR)
-        return {str(key): str(value) for key, value in parsed.items()}
-
+        return {str(k): str(v) for k, v in parsed.items()}
+    
     def parse_filter_labels_or_none(self, filter_labels: Optional[str]) -> Optional[Dict[str, str]]:
         if not filter_labels:
             return None
@@ -162,7 +157,7 @@ class AlertManagerService:
 
     async def sync_mimir_rules_for_org(self, org_id: str, rules: List[AlertRule]) -> None:
         return await sync_mimir_rules_for_org(self, org_id, rules)
-    
+
     @with_retry()
     @with_timeout()
     async def get_alerts(
@@ -170,71 +165,46 @@ class AlertManagerService:
         filter_labels: Optional[Dict[str, str]] = None,
         active: Optional[bool] = None,
         silenced: Optional[bool] = None,
-        inhibited: Optional[bool] = None
+        inhibited: Optional[bool] = None,
     ) -> List[Alert]:
         return await get_alerts(self, filter_labels, active, silenced, inhibited)
-    
-    async def get_alert_groups(
-        self,
-        filter_labels: Optional[Dict[str, str]] = None
-    ) -> List[AlertGroup]:
+
+    async def get_alert_groups(self, filter_labels: Optional[Dict[str, str]] = None) -> List[AlertGroup]:
         return await get_alert_groups(self, filter_labels)
-    
+
     async def post_alerts(self, alerts: List[Alert]) -> bool:
         return await post_alerts(self, alerts)
-    
-    async def get_silences(
-        self,
-        filter_labels: Optional[Dict[str, str]] = None
-    ) -> List[Silence]:
+
+    async def get_silences(self, filter_labels: Optional[Dict[str, str]] = None) -> List[Silence]:
         return await get_silences(self, filter_labels)
-    
+
     async def get_silence(self, silence_id: str) -> Optional[Silence]:
         return await get_silence(self, silence_id)
-    
+
     async def create_silence(self, silence: SilenceCreate) -> Optional[str]:
         return await create_silence(self, silence)
-    
+
     async def delete_silence(self, silence_id: str) -> bool:
-        """Delete (expire) a silence in AlertManager and persist a purge record.
-
-        AlertManager's DELETE will expire the silence but keep it in storage.
-        To make a deleted silence disappear from the application APIs and UI
-        we record it in `purged_silences` so subsequent `get_silences`
-        calls omit it.
-        """
-        success = await delete_silence(self, silence_id)
-        if not success:
+        if not await delete_silence(self, silence_id):
             return False
-
         try:
-            from database import get_db_session
-            from db_models import PurgedSilence
-
             with get_db_session() as db:
-                existing = db.query(PurgedSilence).filter_by(id=silence_id).first()
-                if not existing:
+                if not db.query(PurgedSilence).filter_by(id=silence_id).first():
                     db.add(PurgedSilence(id=silence_id, tenant_id=None))
                     db.commit()
-                    self.logger.info("Purged silence %s persisted to DB (hidden from app)", silence_id)
-                else:
-                    self.logger.info("Purged silence %s already recorded", silence_id)
+                    self.logger.info("Purged silence %s persisted to DB", silence_id)
         except Exception as exc:
             self.logger.warning("Failed to persist purged silence %s: %s", silence_id, exc)
-
         return True
-    
+
     async def get_status(self) -> Optional[AlertManagerStatus]:
         return await get_status(self)
-    
+
     async def get_receivers(self) -> List[str]:
         return await get_receivers(self)
-    
-    async def delete_alerts(
-        self,
-        filter_labels: Optional[Dict[str, str]] = None
-    ) -> bool:
+
+    async def delete_alerts(self, filter_labels: Optional[Dict[str, str]] = None) -> bool:
         return await delete_alerts(self, filter_labels)
-    
+
     async def update_silence(self, silence_id: str, silence: SilenceCreate) -> Optional[str]:
         return await update_silence(self, silence_id, silence)

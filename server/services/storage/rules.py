@@ -11,6 +11,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 from typing import List, Optional, Tuple
 
 from models.alerting.rules import AlertRule, AlertRuleCreate
+from db_models import AlertRule as AlertRuleDB
 
 
 class RuleStorageService:
@@ -43,7 +44,7 @@ class RuleStorageService:
     ) -> List[Tuple[AlertRule, str]]:
         return self._backend.get_alert_rules_with_owner(tenant_id, user_id, group_ids=group_ids, limit=limit, offset=offset)
 
-    def get_alert_rule_raw(self, rule_id: str, tenant_id: str):
+    def get_alert_rule_raw(self, rule_id: str, tenant_id: str) -> Optional[AlertRuleDB]:
         return self._backend.get_alert_rule_raw(rule_id, tenant_id)
 
     def get_alert_rule(

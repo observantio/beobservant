@@ -8,13 +8,11 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from services.storage.service import DatabaseStorageService
 from services.storage.incidents import IncidentStorageService
 from services.storage.rules import RuleStorageService
 from services.storage.channels import ChannelStorageService
 
 __all__ = [
-    "DatabaseStorageService",
     "IncidentStorageService",
     "RuleStorageService",
     "ChannelStorageService",

@@ -6,8 +6,6 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Alertmanager integration security and tenant-scoped helper operations.
 """
 
 from datetime import datetime, timezone
@@ -64,12 +62,11 @@ def _decrypt_tenant_secret(value: Optional[str]) -> Optional[str]:
     text = str(value)
     if not text.startswith("enc:"):
         return text
-    token = text[4:]
     if not config.DATA_ENCRYPTION_KEY:
         return None
     try:
         fernet = Fernet(config.DATA_ENCRYPTION_KEY)
-        return fernet.decrypt(token.encode()).decode()
+        return fernet.decrypt(text[4:].encode()).decode()
     except Exception:
         return None
 
@@ -77,7 +74,7 @@ def _decrypt_tenant_secret(value: Optional[str]) -> Optional[str]:
 def _load_tenant_jira_config(tenant_id: str) -> Dict[str, Optional[str]]:
     with get_db_session() as db:
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-        settings = tenant.settings or {} if tenant else {}
+        settings = (tenant.settings or {}) if tenant else {}
         raw_jira = settings.get("jira") if isinstance(settings, dict) else {}
         if not isinstance(raw_jira, dict):
             raw_jira = {}
@@ -117,9 +114,7 @@ def _save_tenant_jira_config(
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         if not tenant:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
-        settings = tenant.settings or {}
-        if not isinstance(settings, dict):
-            settings = {}
+        settings = tenant.settings if isinstance(tenant.settings, dict) else {}
 
         jira_cfg = {
             "enabled": bool(enabled),
@@ -157,7 +152,7 @@ def _jira_is_enabled_for_tenant(tenant_id: str) -> bool:
 
 
 def _allowed_channel_types() -> List[str]:
-    return [channel_type.lower() for channel_type in (config.ENABLED_NOTIFICATION_CHANNEL_TYPES or [])]
+    return [t.lower() for t in (config.ENABLED_NOTIFICATION_CHANNEL_TYPES or [])]
 
 
 def _normalize_visibility(value: Optional[str], default_value: str = "private") -> str:
@@ -170,9 +165,7 @@ def _normalize_visibility(value: Optional[str], default_value: str = "private") 
 
 
 def _is_jira_sso_available() -> bool:
-    if config.AUTH_PROVIDER != "keycloak":
-        return False
-    return bool(config.OIDC_ISSUER_URL and config.OIDC_CLIENT_ID)
+    return config.AUTH_PROVIDER == "keycloak" and bool(config.OIDC_ISSUER_URL and config.OIDC_CLIENT_ID)
 
 
 def _normalize_jira_auth_mode(value: Optional[str]) -> str:
@@ -198,36 +191,24 @@ def _validate_jira_credentials(
     api_token: Optional[str],
     bearer_token: Optional[str],
 ) -> None:
-    normalized_url = str(base_url or "").strip()
-    if not is_safe_http_url(normalized_url):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Jira base URL is missing or invalid",
-        )
+    if not is_safe_http_url(str(base_url or "").strip()):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Jira base URL is missing or invalid")
 
     if auth_mode == "api_token":
         if not str(email or "").strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Jira email is required for api_token auth mode",
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Jira email is required for api_token auth mode")
         if not str(api_token or "").strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Jira apiToken is required for api_token auth mode",
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Jira apiToken is required for api_token auth mode")
     elif auth_mode in {"bearer", "sso"}:
         if not str(bearer_token or "").strip():
-            detail = "Jira bearerToken is required for bearer auth mode"
-            if auth_mode == "sso":
-                detail = "Jira SSO mode requires a bearerToken"
+            detail = "Jira SSO mode requires a bearerToken" if auth_mode == "sso" else "Jira bearerToken is required for bearer auth mode"
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
 def _load_tenant_jira_integrations(tenant_id: str) -> List[Dict[str, object]]:
     with get_db_session() as db:
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-        settings = tenant.settings or {} if tenant else {}
+        settings = (tenant.settings or {}) if tenant else {}
         raw_items = settings.get("jira_integrations", []) if isinstance(settings, dict) else []
         if not isinstance(raw_items, list):
             return []
@@ -239,9 +220,7 @@ def _save_tenant_jira_integrations(tenant_id: str, items: List[Dict[str, object]
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         if not tenant:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
-        settings = tenant.settings or {}
-        if not isinstance(settings, dict):
-            settings = {}
+        settings = tenant.settings if isinstance(tenant.settings, dict) else {}
         settings["jira_integrations"] = items
         tenant.settings = settings
         db.flush()
@@ -252,32 +231,24 @@ def _validate_shared_group_ids_for_user(
     shared_group_ids: List[str],
     current_user: TokenData,
 ) -> List[str]:
-    normalized = [str(group_id).strip() for group_id in (shared_group_ids or []) if str(group_id).strip()]
+    normalized = [str(gid).strip() for gid in (shared_group_ids or []) if str(gid).strip()]
     if not normalized:
         return []
 
     with get_db_session() as db:
-        groups = db.query(Group).filter(Group.tenant_id == tenant_id, Group.id.in_(normalized)).all()
-        found_ids = {group.id for group in groups}
+        found_ids = {
+            g.id for g in db.query(Group).filter(Group.tenant_id == tenant_id, Group.id.in_(normalized)).all()
+        }
         missing = sorted(set(normalized) - found_ids)
         if missing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid group ids: {missing}",
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid group ids: {missing}")
 
-    is_admin = bool(
-        getattr(current_user, "is_superuser", False)
-        or getattr(current_user, "role", None) == Role.ADMIN
-    )
+    is_admin = getattr(current_user, "is_superuser", False) or getattr(current_user, "role", None) == Role.ADMIN
     if not is_admin:
         actor_groups = set(getattr(current_user, "group_ids", []) or [])
-        unauthorized = sorted({group_id for group_id in normalized if group_id not in actor_groups})
+        unauthorized = sorted(gid for gid in normalized if gid not in actor_groups)
         if unauthorized:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"User not member of groups: {unauthorized}",
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"User not member of groups: {unauthorized}")
 
     return normalized
 
@@ -293,9 +264,8 @@ def _jira_integration_has_access(item: Dict[str, object], current_user: TokenDat
         return True
     if visibility == "group":
         shared_group_ids = [
-            str(group_id)
-            for group_id in (item.get("sharedGroupIds") or [])
-            if isinstance(group_id, str) and group_id.strip()
+            str(gid) for gid in (item.get("sharedGroupIds") or [])
+            if isinstance(gid, str) and gid.strip()
         ]
         user_groups = getattr(current_user, "group_ids", []) or []
         return bool(set(shared_group_ids) & set(user_groups))
@@ -329,9 +299,7 @@ def _resolve_jira_integration(
 ) -> Dict[str, object]:
     integrations = _load_tenant_jira_integrations(tenant_id)
     match = next((item for item in integrations if str(item.get("id")) == integration_id), None)
-    if not match:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Jira integration not found")
-    if not _jira_integration_has_access(match, current_user, write=require_write):
+    if not match or not _jira_integration_has_access(match, current_user, write=require_write):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Jira integration not found")
     return match
 
@@ -347,13 +315,15 @@ def _jira_integration_credentials(item: Dict[str, object]) -> Dict[str, Optional
 
 
 def _integration_is_usable(item: Dict[str, object]) -> bool:
-    if not bool(item.get("enabled", True)):
+    if not item.get("enabled", True):
         return False
-    credentials = _jira_integration_credentials(item)
-    auth_mode = _normalize_jira_auth_mode(credentials.get("auth_mode"))
+    try:
+        credentials = _jira_integration_credentials(item)
+    except HTTPException:
+        return False
     if not is_safe_http_url(credentials.get("base_url")):
         return False
-    if auth_mode == "api_token":
+    if credentials["auth_mode"] == "api_token":
         return bool(credentials.get("email") and credentials.get("api_token"))
     return bool(credentials.get("bearer"))
 
@@ -372,7 +342,7 @@ def _sync_jira_comments_to_incident_notes(incident_id: str, tenant_id: str, comm
 
         notes = list(incident.notes or [])
         existing_comment_ids = {
-            str(note.get("jiraCommentId"))
+            str(note["jiraCommentId"])
             for note in notes
             if isinstance(note, dict) and note.get("jiraCommentId")
         }
@@ -381,14 +351,12 @@ def _sync_jira_comments_to_incident_notes(incident_id: str, tenant_id: str, comm
             comment_id = str(comment.get("id") or "").strip()
             if not comment_id or comment_id in existing_comment_ids:
                 continue
-            notes.append(
-                {
-                    "author": f"jira:{str(comment.get('author') or 'jira')}",
-                    "text": str(comment.get("body") or ""),
-                    "createdAt": str(comment.get("created") or datetime.now(timezone.utc).isoformat()),
-                    "jiraCommentId": comment_id,
-                }
-            )
+            notes.append({
+                "author": f"jira:{comment.get('author') or 'jira'}",
+                "text": str(comment.get("body") or ""),
+                "createdAt": str(comment.get("created") or datetime.now(timezone.utc).isoformat()),
+                "jiraCommentId": comment_id,
+            })
             existing_comment_ids.add(comment_id)
             appended += 1
 

@@ -6,12 +6,9 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Notification channel and status operations for AlertManagerService.
 """
 
 from datetime import datetime, timezone
-from typing import List
 
 from models.alerting.alerts import Alert, AlertState, AlertStatus
 
@@ -29,31 +26,30 @@ async def notify_for_alerts(service, alerts_list, storage_service, notification_
             continue
 
         raw_status = incoming_alert.get("status") or {}
-        state_value = None
         silenced = []
         inhibited = []
         if isinstance(raw_status, dict):
             state_value = raw_status.get("state")
-            silenced = raw_status.get("silencedBy", []) or []
-            inhibited = raw_status.get("inhibitedBy", []) or []
-        elif isinstance(raw_status, str):
-            state_value = raw_status
+            silenced = raw_status.get("silencedBy") or []
+            inhibited = raw_status.get("inhibitedBy") or []
+        else:
+            state_value = raw_status if isinstance(raw_status, str) else None
 
-        state_enum = AlertState.ACTIVE if (state_value and str(state_value).lower() in {"active", "firing"}) else AlertState.UNPROCESSED
+        is_active = state_value and str(state_value).lower() in {"active", "firing"}
+        state_enum = AlertState.ACTIVE if is_active else AlertState.UNPROCESSED
         status_obj = AlertStatus(state=state_enum, silencedBy=silenced, inhibitedBy=inhibited)
 
-        starts_at = incoming_alert.get("startsAt") or incoming_alert.get("starts_at") or datetime.now(timezone.utc).isoformat()
         alert_model = Alert(
             labels=incoming_alert.get("labels", {}),
             annotations=incoming_alert.get("annotations", {}),
-            startsAt=starts_at,
+            startsAt=incoming_alert.get("startsAt") or incoming_alert.get("starts_at") or datetime.now(timezone.utc).isoformat(),
             endsAt=incoming_alert.get("endsAt") or incoming_alert.get("ends_at"),
             generatorURL=incoming_alert.get("generatorURL"),
             status=status_obj,
             fingerprint=incoming_alert.get("fingerprint") or incoming_alert.get("fingerPrint"),
         )
 
-        action = "firing" if state_enum == AlertState.ACTIVE else "resolved"
+        action = "firing" if is_active else "resolved"
         for channel in channels:
             try:
                 sent = await notification_service.send_notification(channel, alert_model, action)
@@ -69,9 +65,7 @@ async def notify_for_alerts(service, alerts_list, storage_service, notification_
 
 async def get_status(service):
     try:
-        response = await service._client.get(
-            f"{service.alertmanager_url}/api/v2/status",
-        )
+        response = await service._client.get(f"{service.alertmanager_url}/api/v2/status")
         response.raise_for_status()
         return service.status_model(**response.json())
     except Exception as exc:
@@ -79,9 +73,8 @@ async def get_status(service):
         return None
 
 
-async def get_receivers(service) -> List[str]:
+async def get_receivers(service):
     status = await get_status(service)
     if status and status.config:
-        receivers = status.config.get("receivers", [])
-        return [receiver.get("name") for receiver in receivers if receiver.get("name")]
+        return [r.get("name") for r in status.config.get("receivers", []) if r.get("name")]
     return []

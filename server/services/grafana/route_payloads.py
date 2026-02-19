@@ -30,20 +30,20 @@ def validate_visibility(visibility: Optional[str]) -> None:
 
 
 def parse_dashboard_create_payload(payload: Dict) -> DashboardCreate:
-    if isinstance(payload, dict) and payload.get("dashboard"):
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid dashboard payload")
+    if payload.get("dashboard"):
         return DashboardCreate(**payload)
-    if isinstance(payload, dict):
-        return DashboardCreate(
-            dashboard=payload,
-            folder_id=int(payload.get("folderId", 0)) if payload.get("folderId") is not None else 0,
-            overwrite=bool(payload.get("overwrite", False)),
-        )
-    raise ValueError("Invalid dashboard payload")
+    return DashboardCreate(
+        dashboard=payload,
+        folder_id=int(payload["folderId"]) if payload.get("folderId") is not None else 0,
+        overwrite=bool(payload.get("overwrite", False)),
+    )
 
 
 def parse_dashboard_update_payload(payload: Dict) -> DashboardUpdate:
-    if isinstance(payload, dict) and payload.get("dashboard"):
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid dashboard payload")
+    if payload.get("dashboard"):
         return DashboardUpdate(**payload)
-    if isinstance(payload, dict):
-        return DashboardUpdate(dashboard=payload, overwrite=payload.get("overwrite", True))
-    raise ValueError("Invalid dashboard payload")
+    return DashboardUpdate(dashboard=payload, overwrite=payload.get("overwrite", True))

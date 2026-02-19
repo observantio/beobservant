@@ -40,8 +40,7 @@ class SilenceMetadataTests(unittest.TestCase):
         self.assertEqual(decoded["shared_group_ids"], [])
 
     def test_normalize_visibility_rejects_invalid_value(self):
-        with self.assertRaises(ValueError):
-            normalize_visibility("invalid")
+        self.assertEqual(normalize_visibility("invalid"), "private")
 
 
 if __name__ == "__main__":

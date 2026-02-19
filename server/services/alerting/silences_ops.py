@@ -6,17 +6,15 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Silence-focused operations for AlertManagerService.
-
-Includes metadata encoding/decoding and API interactions.
 """
 
+import asyncio
 from typing import Dict, List, Optional
 
 import httpx
-import asyncio
 
+from database import get_db_session
+from db_models import PurgedSilence
 from models.access.auth_models import TokenData
 from models.alerting.silences import Silence, SilenceCreate, Visibility
 
@@ -44,8 +42,7 @@ def silence_accessible(service, silence: Silence, current_user: TokenData) -> bo
 async def get_silences(service, filter_labels: Optional[Dict[str, str]] = None) -> List[Silence]:
     params = {}
     if filter_labels:
-        filters = [f'{key}="{value}"' for key, value in filter_labels.items()]
-        params["filter"] = filters
+        params["filter"] = [f'{k}="{v}"' for k, v in filter_labels.items()]
 
     try:
         response = await service._client.get(
@@ -53,26 +50,21 @@ async def get_silences(service, filter_labels: Optional[Dict[str, str]] = None) 
             params=params,
         )
         response.raise_for_status()
-        raw = [Silence(**silence) for silence in response.json()]
+        raw = [Silence(**s) for s in response.json()]
 
-        # exclude any silences that have been "purged" by the application
         try:
-            from database import get_db_session
-            from db_models import PurgedSilence
-
             with get_db_session() as db:
                 purged_ids = {p.id for p in db.query(PurgedSilence).all()}
         except Exception:
             purged_ids = set()
 
-        filtered = [s for s in raw if not (s.id and s.id in purged_ids)]
-        if purged_ids:
-            # log removal at debug level so operators can trace why a silence
-            # no longer appears in the app despite existing in AlertManager.
-            ids_removed = [s.id for s in raw if s.id and s.id in purged_ids]
-            if ids_removed:
-                service.logger.debug("Excluding purged silences from results: %s", ids_removed)
-        return filtered
+        if not purged_ids:
+            return raw
+
+        ids_removed = [s.id for s in raw if s.id and s.id in purged_ids]
+        if ids_removed:
+            service.logger.debug("Excluding purged silences from results: %s", ids_removed)
+        return [s for s in raw if not (s.id and s.id in purged_ids)]
     except httpx.HTTPError as exc:
         service.logger.error("Error fetching silences: %s", exc)
         return []
@@ -80,9 +72,7 @@ async def get_silences(service, filter_labels: Optional[Dict[str, str]] = None) 
 
 async def get_silence(service, silence_id: str) -> Optional[Silence]:
     try:
-        response = await service._client.get(
-            f"{service.alertmanager_url}/api/v2/silence/{silence_id}",
-        )
+        response = await service._client.get(f"{service.alertmanager_url}/api/v2/silence/{silence_id}")
         response.raise_for_status()
         return Silence(**response.json())
     except httpx.HTTPError as exc:
@@ -92,10 +82,9 @@ async def get_silence(service, silence_id: str) -> Optional[Silence]:
 
 async def create_silence(service, silence: SilenceCreate) -> Optional[str]:
     try:
-        silence_data = silence.model_dump(by_alias=True, exclude_none=True)
         response = await service._client.post(
             f"{service.alertmanager_url}/api/v2/silences",
-            json=silence_data,
+            json=silence.model_dump(by_alias=True, exclude_none=True),
         )
         response.raise_for_status()
         return response.json().get("silenceID")
@@ -106,19 +95,12 @@ async def create_silence(service, silence: SilenceCreate) -> Optional[str]:
 
 async def delete_silence(service, silence_id: str) -> bool:
     try:
-        response = await service._client.delete(
-            f"{service.alertmanager_url}/api/v2/silence/{silence_id}",
-        )
+        response = await service._client.delete(f"{service.alertmanager_url}/api/v2/silence/{silence_id}")
         response.raise_for_status()
 
-        # verify deletion by attempting to fetch the silence; Alertmanager
-        # may be eventually consistent so retry a few times before giving up.
         for attempt in range(3):
             await asyncio.sleep(0.3 * (attempt + 1))
             remaining = await get_silence(service, silence_id)
-            # Alertmanager may mark a silence as expired rather than removing
-            # it immediately. Consider delete successful when the silence is
-            # absent or has an expired status.
             if remaining is None:
                 return True
             try:

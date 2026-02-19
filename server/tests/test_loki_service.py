@@ -46,28 +46,28 @@ def test_escape_and_build_label_selector():
 
 
 def test_normalize_and_expand_service_labels():
-    s = LokiService(loki_url="http://example")
+    from services.loki.fallback import _normalize_service_label_query, _expand_service_label_matchers, build_service_fallback_queries
     q = '{service.name="myservice"}'
-    normalized = s._normalize_service_label_query(q)
+    normalized = _normalize_service_label_query(q)
     assert 'service_name' in normalized
-    expanded = s._expand_service_label_matchers(q)
+    expanded = _expand_service_label_matchers(q)
     assert '=~"myservice.*"' in expanded
-    fallbacks = s._build_service_fallback_queries(q)
+    fallbacks = build_service_fallback_queries(q)
     assert any('service_name' in f for f in fallbacks)
 
 
 def test_parse_and_normalize_labelset_and_values():
-    s = LokiService(loki_url="http://example")
+    from services.loki.label_utils import parse_labelset_value, normalize_label_value, normalize_label_dict, normalize_label_values
     raw = 'app="web",env="prod",extra="x"'
-    parsed = s._parse_labelset_value('app', raw)
+    parsed = parse_labelset_value('app', raw)
     assert parsed and parsed['app'] == 'web'
-    nv, parsed2 = s._normalize_label_value('app', 'app="web",other="y",')
+    nv, parsed2 = normalize_label_value('app', 'app="web",other="y",')
     assert nv == 'web'
     labels = {'app': 'app="web",other="y",', 'env': 'prod'}
-    extra = s._normalize_label_dict(labels)
+    extra = normalize_label_dict(labels)
     assert 'other' in extra
     values = ['app="web",other="y",', 'plain']
-    cleaned = s._normalize_label_values('app', values)
+    cleaned = normalize_label_values('app', values)
     assert 'web' in cleaned and 'plain' in cleaned
 
 
@@ -386,16 +386,17 @@ def test__normalize_label_values_parses_labelset_and_truncation():
         'complex\"value\",rest="x"',
     ]
 
-    normalized = service._normalize_label_values('service_name', raw_values)
+    from services.loki.label_utils import normalize_label_values
+    normalized = normalize_label_values('service_name', raw_values)
     assert 'api' in normalized
     assert 'web' in normalized or 'web\"' in normalized
     assert 'plainvalue' in normalized
 
 
 def test__normalize_service_label_query_and_expand():
-    service = LokiService(loki_url="http://loki.test")
+    from services.loki.fallback import _normalize_service_label_query
     q = '{service.name="api"}'
-    normalized = service._normalize_service_label_query(q)
+    normalized = _normalize_service_label_query(q)
     assert 'service_name' in normalized
 
     expanded = service._expand_service_label_matchers('{service_name="api"}')
