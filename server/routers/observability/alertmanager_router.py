@@ -407,7 +407,7 @@ async def import_alert_rules(
         imported_rules.append(new_rule)
         existing_index[(new_rule.name, new_rule.group, new_rule.org_id or "")] = new_rule
 
-    sync_org_ids = {rule.org_id for rule in imported_rules if rule.org_id}
+    sync_org_ids = {str(rule.org_id) for rule in imported_rules if rule.org_id}
     for org_id in sync_org_ids:
         rules_for_org = await run_in_threadpool(storage_service.get_alert_rules_for_org, tenant_id, org_id)
         await alertmanager_service.sync_mimir_rules_for_org(org_id, rules_for_org)
@@ -732,9 +732,9 @@ async def create_incident_jira(
     url = res.get('url')
 
     update_payload = AlertIncidentUpdateRequest(
-        jira_ticket_key=key or None,
-        jira_ticket_url=url or None,
-        jira_integration_id=payload.integrationId,
+        jiraTicketKey=key or None,
+        jiraTicketUrl=url or None,
+        jiraIntegrationId=payload.integrationId,
     )
     updated = await run_in_threadpool(storage_service.update_incident, incident_id, current_user.tenant_id, current_user.user_id, update_payload)
     if not updated:
@@ -979,13 +979,13 @@ async def create_silence(
     comment = alertmanager_service.encode_silence_comment(silence.comment, visibility, shared_group_ids)
     created_by = current_user.username or current_user.user_id
 
-    payload = SilenceCreate(
-        matchers=silence.matchers,
-        starts_at=silence.starts_at,
-        ends_at=silence.ends_at,
-        created_by=created_by,
-        comment=comment
-    )
+    payload = SilenceCreate.parse_obj({
+        "matchers": silence.matchers,
+        "startsAt": silence.starts_at,
+        "endsAt": silence.ends_at,
+        "createdBy": created_by,
+        "comment": comment,
+    })
 
     silence_id = await alertmanager_service.create_silence(payload)
     if not silence_id:
@@ -1018,13 +1018,13 @@ async def update_silence(
     comment = alertmanager_service.encode_silence_comment(silence.comment, visibility, shared_group_ids)
     created_by = current_user.username or current_user.user_id
 
-    payload = SilenceCreate(
-        matchers=silence.matchers,
-        starts_at=silence.starts_at,
-        ends_at=silence.ends_at,
-        created_by=created_by,
-        comment=comment
-    )
+    payload = SilenceCreate.parse_obj({
+        "matchers": silence.matchers,
+        "startsAt": silence.starts_at,
+        "endsAt": silence.ends_at,
+        "createdBy": created_by,
+        "comment": comment,
+    })
 
     new_id = await alertmanager_service.update_silence(silence_id, payload)
     if not new_id:

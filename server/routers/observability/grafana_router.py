@@ -12,7 +12,7 @@ Grafana API router with multi-tenancy, hide/show, team filtering, and UID search
 from fastapi import APIRouter, HTTPException, Query, Body, Depends, Request, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response, JSONResponse
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, cast
 import logging
 
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate, DashboardSearchResult
@@ -373,7 +373,7 @@ async def get_datasource_by_name(
     if not datasource:
         raise HTTPException(status_code=404, detail=f"Datasource {name} not found")
     accessible = await grafana_proxy_service.get_datasource(
-        db=db, uid=datasource.uid, user_id=current_user.user_id,
+        db=db, uid=cast(str, datasource.uid), user_id=current_user.user_id,
         tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
     )
     if not accessible:

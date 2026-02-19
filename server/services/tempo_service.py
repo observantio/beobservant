@@ -387,8 +387,8 @@ class TempoService:
         query_copy = TraceQuery(
             service=query.service,
             operation=query.operation,
-            min_duration=query.min_duration,
-            max_duration=query.max_duration,
+            minDuration=query.min_duration,
+            maxDuration=query.max_duration,
             start=query.start,
             end=query.end,
             tags=query.tags,

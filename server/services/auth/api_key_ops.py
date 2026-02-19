@@ -8,7 +8,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from sqlalchemy.orm import joinedload
 from fastapi import HTTPException, status
@@ -34,11 +34,11 @@ def _api_key_to_schema(
         for share in (getattr(api_key, "shares", None) or []):
             shared_user = getattr(share, "shared_user", None)
             shared_with.append(ApiKeyShareUser(
-                user_id=share.shared_user_id,
+                user_id=str(getattr(share, 'shared_user_id', '')),
                 username=getattr(shared_user, "username", None),
                 email=getattr(shared_user, "email", None),
                 can_use=bool(getattr(share, "can_use", True)),
-                created_at=share.created_at,
+                created_at=cast(datetime, getattr(share, 'created_at')),
             ))
     owner_username = getattr(getattr(api_key, "user", None), "username", None)
     payload = {
@@ -309,11 +309,11 @@ def list_api_key_shares(service, owner_user_id: str, tenant_id: str, key_id: str
         )
         return [
             ApiKeyShareUser(
-                user_id=share.shared_user_id,
+                user_id=str(getattr(share, 'shared_user_id', '')),
                 username=getattr(share.shared_user, "username", None),
                 email=getattr(share.shared_user, "email", None),
                 can_use=bool(share.can_use),
-                created_at=share.created_at,
+                created_at=cast(datetime, getattr(share, 'created_at')),
             )
             for share in shares
         ]
@@ -352,14 +352,14 @@ def replace_api_key_shares(
                 )
                 .all()
             )
-            found_group_ids = {g.id for g in groups}
+            found_group_ids = {str(g.id) for g in groups}
             missing_groups = sorted(set(normalized_group_ids) - found_group_ids)
             if missing_groups:
                 raise ValueError("Invalid share groups: " + ", ".join(missing_groups))
 
             owner_group_ids = {
-                g.id for g in groups
-                if any(m.id == owner_user_id for m in (g.members or []))
+                str(g.id) for g in groups
+                if any(str(getattr(m, 'id', '')) == owner_user_id for m in (g.members or []))
             }
             unauthorized = sorted(found_group_ids - owner_group_ids)
             if unauthorized:
@@ -367,8 +367,8 @@ def replace_api_key_shares(
 
             for group in groups:
                 for member in (group.members or []):
-                    if member.id != owner_user_id and member.is_active and member.tenant_id == tenant_id:
-                        member_user_ids_from_groups.append(member.id)
+                    if str(getattr(member, 'id', '')) != owner_user_id and getattr(member, 'is_active', False) and getattr(member, 'tenant_id', None) == tenant_id:
+                        member_user_ids_from_groups.append(str(getattr(member, 'id', '')))
 
         combined_user_ids = list(dict.fromkeys([*normalized_ids, *member_user_ids_from_groups]))
 
@@ -378,7 +378,7 @@ def replace_api_key_shares(
                 User.id.in_(combined_user_ids),
                 User.is_active.is_(True),
             ).all()
-            allowed_user_ids = {u.id for u in allowed_users}
+            allowed_user_ids = {str(u.id) for u in allowed_users}
             missing = sorted(set(combined_user_ids) - allowed_user_ids)
             if missing:
                 raise ValueError("Invalid share users: " + ", ".join(missing))

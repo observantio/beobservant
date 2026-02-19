@@ -186,26 +186,26 @@ async def search_dashboards(
         is_hidden = bool(db_dash and user_id in (db_dash.hidden_by or []))
         is_owned = bool(db_dash and db_dash.created_by == user_id)
 
-        return [DashboardSearchResult(
-            id=dash_data.get("id", 0),
-            uid=uid,
-            title=(db_dash.title if db_dash and db_dash.title else dash_data.get("title", "")),
-            uri=f"db/{meta.get('slug', '')}",
-            url=meta.get("url", f"/d/{uid}"),
-            slug=meta.get("slug", ""),
-            type="dash-db",
-            tags=dash_data.get("tags", []),
-            is_starred=meta.get("isStarred", False),
-            folder_id=meta.get("folderId"),
-            folder_uid=meta.get("folderUid"),
-            folder_title=meta.get("folderTitle"),
-            created_by=created_by,
-            is_hidden=is_hidden,
-            is_owned=is_owned,
-            visibility=db_dash.visibility if db_dash else 'private',
-            shared_group_ids=[g.id for g in db_dash.shared_groups] if db_dash else [],
-            sharedGroupIds=[g.id for g in db_dash.shared_groups] if db_dash else [],
-        )]
+        payload = {
+            "id": dash_data.get("id", 0),
+            "uid": uid,
+            "title": (db_dash.title if db_dash and db_dash.title else dash_data.get("title", "")),
+            "uri": f"db/{meta.get('slug', '')}",
+            "url": meta.get("url", f"/d/{uid}"),
+            "slug": meta.get("slug", ""),
+            "type": "dash-db",
+            "tags": dash_data.get("tags", []),
+            "isStarred": meta.get("isStarred", False),
+            "folderId": meta.get("folderId"),
+            "folderUid": meta.get("folderUid"),
+            "folderTitle": meta.get("folderTitle"),
+            "createdBy": created_by,
+            "isHidden": is_hidden,
+            "isOwned": is_owned,
+            "visibility": db_dash.visibility if db_dash else 'private',
+            "sharedGroupIds": [str(g.id) for g in db_dash.shared_groups] if db_dash else [],
+        }
+        return [DashboardSearchResult.parse_obj(payload)]
 
     all_dashboards = await service.grafana_service.search_dashboards(
         query=query, tag=tag, starred=starred

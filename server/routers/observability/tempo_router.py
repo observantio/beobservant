@@ -48,8 +48,8 @@ async def search_traces(
     query = TraceQuery(
         service=service,
         operation=operation,
-        min_duration=min_duration,
-        max_duration=max_duration,
+        minDuration=min_duration,
+        maxDuration=max_duration,
         start=start,
         end=end,
         limit=limit

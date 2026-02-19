@@ -165,7 +165,7 @@ def update_group_members(service, group_id: str, user_ids: List[str], tenant_id:
                     User.tenant_id == tenant_id,
                 )
             ).all()
-            found_ids = {u.id for u in members}
+            found_ids = {str(u.id) for u in members}
             missing = set(user_ids) - found_ids
             if missing:
                 raise ValueError(f"Users not found in tenant: {sorted(missing)}")

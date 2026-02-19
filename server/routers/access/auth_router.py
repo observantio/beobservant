@@ -648,7 +648,7 @@ async def list_users(
     )
 ):
     users = await run_in_threadpool(auth_service.list_users, current_user.tenant_id, limit=limit, offset=offset)
-    return [await run_in_threadpool(auth_service.build_user_response, user, ROLE_PERMISSIONS.get(user.role, [])) for user in users]
+    return [await run_in_threadpool(auth_service.build_user_response, user, [p.value for p in ROLE_PERMISSIONS.get(user.role, [])]) for user in users]
 
 
 @router.post("/users", response_model=UserResponse)
