@@ -23,6 +23,7 @@ from models.observability.loki_models import (
     LogLabelValuesResponse,
     LogQuery,
     LogResponse,
+    LogDirection,
 )
 from services.common.http_client import create_async_client
 from services.common.ttl_cache import TTLCache
@@ -393,7 +394,7 @@ class LokiService:
     ) -> LogResponse:
         label_selector = self._build_label_selector(labels) if labels else "{}"
         query_str = f'{label_selector} |= "{self._escape_logql_string(pattern)}"'
-        return await self.query_logs(LogQuery(query=query_str, limit=limit, start=start, end=end), tenant_id=tenant_id)
+        return await self.query_logs(LogQuery(query=query_str, limit=limit, start=start, end=end, direction=LogDirection.BACKWARD, step=None), tenant_id=tenant_id)
 
     @with_retry()
     @with_timeout()
@@ -409,4 +410,4 @@ class LokiService:
         query_str = self._build_label_selector(labels)
         if filters:
             query_str += "".join(f' |= "{self._escape_logql_string(f)}"' for f in filters)
-        return await self.query_logs(LogQuery(query=query_str, limit=limit, start=start, end=end), tenant_id=tenant_id)
+        return await self.query_logs(LogQuery(query=query_str, limit=limit, start=start, end=end, direction=LogDirection.BACKWARD, step=None), tenant_id=tenant_id)

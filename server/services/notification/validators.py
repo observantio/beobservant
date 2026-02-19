@@ -2,7 +2,6 @@
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
-
 you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -11,15 +10,6 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 import re
 from typing import Dict, List, Any
 from services.common.url_utils import is_safe_http_url
-
-def _as_bool(value) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return False
 
 
 def validate_channel_config(channel_type: str, channel_config: Dict[str, Any] | None) -> List[str]:
@@ -38,6 +28,16 @@ def validate_channel_config(channel_type: str, channel_config: Dict[str, Any] | 
             smtp_host = cfg.get('smtp_host') or cfg.get('smtpHost')
             if not str(smtp_host or "").strip():
                 errors.append("SMTP email channel requires 'smtp_host'")
+
+            # Optional: validate SMTP port
+            smtp_port = cfg.get('smtp_port') or cfg.get('smtpPort')
+            if smtp_port is not None:
+                try:
+                    port_num = int(smtp_port)
+                    if not (1 <= port_num <= 65535):
+                        errors.append("SMTP email channel 'smtp_port' must be between 1 and 65535")
+                except (ValueError, TypeError):
+                    errors.append("SMTP email channel 'smtp_port' must be a valid integer")
         elif provider == 'sendgrid':
             api_key = cfg.get('sendgrid_api_key') or cfg.get('sendgridApiKey') or cfg.get('api_key') or cfg.get('apiKey')
             if not str(api_key or "").strip():

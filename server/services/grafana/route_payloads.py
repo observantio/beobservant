@@ -35,7 +35,7 @@ def parse_dashboard_create_payload(payload: Dict) -> DashboardCreate:
     # Ensure inner `dashboard` is a `Dashboard` instance so constructors are type-safe for mypy
     if payload.get("dashboard"):
         dashboard_obj = Dashboard.parse_obj(payload["dashboard"])
-        return DashboardCreate(dashboard=dashboard_obj, folderId=int(payload.get("folderId") or 0), overwrite=bool(payload.get("overwrite", False)))
+        return DashboardCreate(dashboard=dashboard_obj, folderId=int(payload.get("folderId") or 0), overwrite=bool(payload.get("overwrite", False)), message=payload.get("message"))
 
     dashboard_obj = Dashboard.parse_obj(payload)
     return DashboardCreate(dashboard=dashboard_obj, folderId=int(payload.get("folderId") or 0), overwrite=bool(payload.get("overwrite", False)))
