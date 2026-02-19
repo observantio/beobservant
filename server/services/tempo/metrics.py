@@ -58,7 +58,6 @@ async def query_metrics_range(
                 observe("tempo_metrics_query_errors_total")
                 logger.debug("Metrics endpoint %s returned %s, disabling", url, getattr(resp, "status_code", None))
                 return None, True
-            # raise for 5xx and other client/network errors
             if hasattr(resp, "raise_for_status"):
                 resp.raise_for_status()
             observe("tempo_metrics_queries_total")
@@ -72,7 +71,6 @@ async def query_metrics_range(
     if result is not None:
         return result, True
 
-    # if the primary returned a 4xx, disable future metrics queries
     if saw_4xx:
         metrics_enabled = False
 

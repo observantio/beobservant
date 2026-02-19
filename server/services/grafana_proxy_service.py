@@ -2,11 +2,10 @@
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
-
 you may not use this file except in compliance with the License.
-
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
+
 import logging
 from typing import List, Optional, Dict, Any
 
@@ -44,25 +43,32 @@ class GrafanaProxyService:
     @staticmethod
     def _raise_http_from_grafana_error(gae: GrafanaAPIError) -> None:
         body = gae.body
-        message = (isinstance(body, dict) and (body.get("message") or body.get("error") or body.get("detail"))) \
-                  or (isinstance(body, str) and body) or "Grafana API error"
+        message = (
+            (isinstance(body, dict) and (body.get("message") or body.get("error") or body.get("detail")))
+            or (isinstance(body, str) and body)
+            or "Grafana API error"
+        )
         raise HTTPException(status_code=gae.status if 400 <= gae.status < 600 else 500, detail=message)
 
     def _validate_group_visibility(
-        self, db: Session, *, tenant_id: str, group_ids: List[str] | None,
-        shared_group_ids: List[str] | None, is_admin: bool,
+        self,
+        db: Session,
+        *,
+        tenant_id: str,
+        group_ids: Optional[List[str]],
+        shared_group_ids: Optional[List[str]],
+        is_admin: bool,
     ) -> List[Group]:
         if not shared_group_ids:
             raise HTTPException(status_code=400, detail="No groups provided for group visibility")
         groups = db.query(Group).filter(Group.id.in_(shared_group_ids), Group.tenant_id == tenant_id).all()
-        missing = set(shared_group_ids) - {g.id for g in groups}
-        if missing:
-            raise HTTPException(status_code=400, detail=f"Invalid group ids: {list(missing)}")
+        if len(groups) != len(shared_group_ids):
+            raise HTTPException(status_code=400, detail="One or more group ids are invalid")
         if not is_admin:
             user_groups = set(group_ids or [])
             not_member = [gid for gid in shared_group_ids if gid not in user_groups]
             if not_member:
-                raise HTTPException(status_code=403, detail=f"User not member of groups: {not_member}")
+                raise HTTPException(status_code=403, detail="User is not a member of one or more specified groups")
         return groups
 
     def _is_admin_user(self, token_data: TokenData) -> bool:
@@ -84,7 +90,12 @@ class GrafanaProxyService:
         return extract_proxy_token(self, request, token)
 
     async def authorize_proxy_request(
-        self, request, db: Session, auth_service, token: Optional[str] = None, orig: Optional[str] = None,
+        self,
+        request,
+        db: Session,
+        auth_service,
+        token: Optional[str] = None,
+        orig: Optional[str] = None,
     ) -> Dict[str, str]:
         return await authorize_proxy_request(self, request, db, auth_service, token, orig)
 
@@ -151,7 +162,7 @@ class GrafanaProxyService:
     async def create_dashboard(
         self, db: Session, dashboard_create: DashboardCreate, user_id: str, tenant_id: str,
         group_ids: List[str], visibility: str = "private",
-        shared_group_ids: List[str] = None, is_admin: bool = False,
+        shared_group_ids: Optional[List[str]] = None, is_admin: bool = False,
     ) -> Optional[Dict[str, Any]]:
         return await create_dashboard(self, db, dashboard_create, user_id, tenant_id, group_ids, visibility, shared_group_ids, is_admin)
 
@@ -186,7 +197,7 @@ class GrafanaProxyService:
     async def create_datasource(
         self, db: Session, datasource_create: DatasourceCreate, user_id: str, tenant_id: str,
         group_ids: List[str], visibility: str = "private",
-        shared_group_ids: List[str] = None, is_admin: bool = False,
+        shared_group_ids: Optional[List[str]] = None, is_admin: bool = False,
     ) -> Optional[Datasource]:
         return await create_datasource(self, db, datasource_create, user_id, tenant_id, group_ids, visibility, shared_group_ids, is_admin)
 

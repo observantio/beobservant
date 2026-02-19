@@ -15,11 +15,6 @@ _KEY_RE = re.compile(r"[A-Za-z0-9_.:-]+")
 
 
 def _parse_pairs(s: str) -> Dict[str, str]:
-    """Parse key="value" pairs from a labelset-like string.
-
-    This handles simple backslash-escaped characters inside quoted values (e.g. \" and \\\\).
-    It's intentionally permissive about whitespace but conservative about allowed key characters.
-    """
     pairs: Dict[str, str] = {}
     i = 0
     n = len(s)
@@ -54,19 +49,19 @@ def _parse_pairs(s: str) -> Dict[str, str]:
                     if nxt == '"':
                         val_chars.append('"')
                     elif nxt == "\\":
-                        val_chars.append('\\')
-                    elif nxt == 'n':
-                        val_chars.append('\n')
-                    elif nxt == 'r':
-                        val_chars.append('\r')
-                    elif nxt == 't':
-                        val_chars.append('\t')
+                        val_chars.append("\\")
+                    elif nxt == "n":
+                        val_chars.append("\n")
+                    elif nxt == "r":
+                        val_chars.append("\r")
+                    elif nxt == "t":
+                        val_chars.append("\t")
                     else:
                         val_chars.append(nxt)
                     i += 2
                     continue
                 else:
-                    val_chars.append('\\')
+                    val_chars.append("\\")
                     i += 1
                     continue
             if ch == '"':
@@ -84,10 +79,6 @@ def _parse_pairs(s: str) -> Dict[str, str]:
 
 
 def parse_labelset_value(label_key: str, raw_value: str) -> Optional[Dict[str, str]]:
-    """Parse a labelset-style string and return key/value pairs or None.
-
-    This function is pure and does not mutate its inputs.
-    """
     if not isinstance(raw_value, str) or '="' not in raw_value:
         return None
     candidate = raw_value if f'{label_key}="' in raw_value else f'{label_key}="{raw_value}'
@@ -96,28 +87,18 @@ def parse_labelset_value(label_key: str, raw_value: str) -> Optional[Dict[str, s
 
 
 def normalize_label_value(label_key: str, value: Any) -> Tuple[Optional[str], Optional[Dict[str, str]]]:
-    """Return (normalized_value, parsed_dict) for a label value similar to the original behavior.
-
-    - If parsing isn't applicable, returns (None, None)
-    - If a labelset is present, returns the specific label value and the parsed dict
-    - If only a truncation marker is present (\",) returns the truncated string and None
-    """
-    if not isinstance(value, str) or '="' not in value or '",'+"" not in value:
+    if not isinstance(value, str) or '="' not in value or '",' not in value:
         return None, None
 
     parsed = parse_labelset_value(label_key, value)
     if parsed:
         return parsed.get(label_key, value), parsed
 
-    cut_index = value.find('\",')
+    cut_index = value.find('",')
     return (value[:cut_index], None) if cut_index > 0 else (None, None)
 
 
 def normalize_label_dict(labels: Dict[str, Any]) -> Dict[str, str]:
-    """Given a mapping of label->raw, return an `extra` dict of parsed labelset items.
-
-    This is intentionally pure and does NOT mutate the input mapping (callers can decide how to apply results).
-    """
     extra: Dict[str, str] = {}
     for key, value in list(labels.items()):
         _, parsed = normalize_label_value(key, value)
@@ -129,7 +110,6 @@ def normalize_label_dict(labels: Dict[str, Any]) -> Dict[str, str]:
 
 
 def normalize_label_values(label: str, values: List[str]) -> List[str]:
-    """Normalize a list of label values, handling labelset strings and truncation markers."""
     cleaned: List[str] = []
     for value in values:
         if not isinstance(value, str):
@@ -139,6 +119,6 @@ def normalize_label_values(label: str, values: List[str]) -> List[str]:
         if parsed and label in parsed:
             cleaned.append(parsed[label])
             continue
-        cut_index = value.find('\",')
+        cut_index = value.find('",')
         cleaned.append(value[:cut_index] if cut_index > 0 else value)
     return cleaned

@@ -6,7 +6,7 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 `
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, memo } from 'react'
 
 import {
   getIncidents, updateIncident, getUsers, getGroups, createIncidentJira,
@@ -27,6 +27,188 @@ export function clearDroppedState(prev, droppedId) {
   return next
 }
 
+/* --- Presentational / memoized components (keeps main render lean & avoids re-creation) --- */
+const IncidentCard = memo(function IncidentCard({
+  incident,
+  canUpdateIncidents,
+  userById,
+  onOpenModal,
+  onSetModalTab,
+  onUnhide,
+  droppingState,
+}) {
+  const assigneeUser = incident.assignee ? userById[incident.assignee] : null
+  const assigneeLabel = assigneeUser ? (assigneeUser.username || assigneeUser.id) : (incident.assignee || 'Unassigned')
+
+  return (
+    <div
+      draggable={!!canUpdateIncidents}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/incident', String(incident.id))
+        e.currentTarget.classList.add('opacity-50', 'scale-95', 'rotate-2')
+      }}
+      onDragEnd={(e) => { e.currentTarget.classList.remove('opacity-50', 'scale-95', 'rotate-2') }}
+      className="group bg-gradient-to-br from-sre-bg to-sre-surface border border-sre-border/50 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 cursor-move relative overflow-hidden backdrop-blur-sm"
+    >
+      <div className={`h-2 w-full ${
+        incident.severity === 'critical' ? 'bg-gradient-to-r from-red-500 to-red-600' :
+        incident.severity === 'warning' ? 'bg-gradient-to-r from-yellow-500 to-orange-500' :
+        'bg-gradient-to-r from-blue-500 to-blue-600'
+      }`} />
+
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+              incident.severity === 'critical' ? 'bg-red-500 shadow-red-500/50 shadow-lg' :
+              incident.severity === 'warning' ? 'bg-yellow-500 shadow-yellow-500/50 shadow-lg' :
+              'bg-blue-500 shadow-blue-500/50 shadow-lg'
+            }`} />
+            <h3 className="font-semibold text-sre-text text-base leading-tight flex-1 min-w-0 truncate">{incident.alertName}</h3>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Badge variant={incident.status === 'resolved' ? 'success' : 'warning'} className="text-xs px-3 py-1.5 rounded-full font-medium shadow-sm">{incident.status}</Badge>
+          </div>
+        </div>
+
+        <div className="space-y-3 mb-4">
+          <div className="flex items-center gap-3 text-sm text-sre-text-muted">
+            <div className="flex items-center gap-2">
+              <span className="material-icons text-base text-sre-primary/70">schedule</span>
+              <span className="font-medium">{new Date(incident.lastSeenAt).toLocaleString()}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-sm text-sre-text-muted">
+            <div className="flex items-center gap-2">
+              <span className="material-icons text-base text-sre-primary/70">person</span>
+              <span className="font-medium truncate min-w-0">{assigneeLabel}</span>
+            </div>
+          </div>
+
+          {incident.jiraTicketKey && (
+            <div className="flex items-center gap-3 text-sm text-sre-text-muted">
+              <div className="flex items-center gap-2">
+                <span className="material-icons text-base text-sre-primary/70">link</span>
+                <span className="font-medium text-sre-primary hover:text-sre-primary/80 transition-colors truncate">{incident.jiraTicketKey}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant={incident.severity === 'critical' ? 'error' : incident.severity === 'warning' ? 'warning' : 'info'} className="text-xs px-3 py-1.5 rounded-full font-medium shadow-sm">
+              <span className="material-icons text-sm mr-1">{incident.severity === 'critical' ? 'error' : incident.severity === 'warning' ? 'warning' : 'info'}</span>
+              {incident.severity}
+            </Badge>
+
+            {incident.hideWhenResolved && (
+              <Badge variant="ghost" className="whitespace-nowrap text-xs px-3 py-1.5 rounded-full border border-sre-border/50 bg-sre-surface/50">
+                <span className="material-icons text-sm mr-1">visibility_off</span>
+                Hide on resolve
+              </Badge>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1">
+            {incident.status === 'resolved' && incident.hideWhenResolved && (
+              <Button size="sm" variant="ghost" onClick={() => onUnhide(incident.id)} className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50" title="Unhide incident">
+                <span className="material-icons text-sm">visibility</span>
+              </Button>
+            )}
+
+            <Button size="sm" variant="ghost" onClick={() => { onOpenModal(incident); onSetModalTab('notes') }} className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50 relative" title="View notes">
+              <span className="material-icons text-sm">notes</span>
+              {Array.isArray(incident.notes) && incident.notes.length > 0 && (
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs rounded-full bg-sre-primary text-white">{incident.notes.length}</span>
+              )}
+            </Button>
+
+            <Button size="sm" variant="ghost" onClick={() => onOpenModal(incident)} className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50">
+              <span className="material-icons text-sm">edit</span>
+            </Button>
+          </div>
+        </div>
+
+        {Array.isArray(incident.sharedGroupIds) && incident.sharedGroupIds.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {incident.sharedGroupIds.slice(0, 3).map((g) => (
+              <span key={g} className="text-xs px-3 py-1.5 bg-sre-surface/70 border border-sre-border/30 rounded-full text-sre-text-muted font-medium truncate max-w-32"> {g} </span>
+            ))}
+            {incident.sharedGroupIds.length > 3 && (
+              <span className="text-xs px-3 py-1.5 bg-sre-surface/70 border border-sre-border/30 rounded-full text-sre-text-muted font-medium">+{incident.sharedGroupIds.length - 3}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <span className="material-icons text-sre-text-muted/70 text-sm">drag_indicator</span>
+      </div>
+
+      {droppingState && (
+        <div className="absolute inset-0 bg-sre-bg-card/90 backdrop-blur-md flex items-center justify-center rounded-xl border-2 border-sre-primary/30">
+          <div className="flex items-center gap-3 text-sre-primary">
+            <Spinner size="sm" />
+            <span className="text-sm font-semibold">Updating...</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+})
+
+const Column = memo(function Column({ title, count, colorDot, icon, help, items, empty, canUpdateIncidents, onDropColumn, userById, openIncidentModal, setIncidentModalTab, handleUnhideIncident, dropping }) {
+  return (
+    <div className="flex flex-col">
+      <div className="mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-3 h-3 ${colorDot} rounded-full`} />
+            <h3 className="text-lg font-semibold text-sre-text">{title}</h3>
+            <HelpTooltip text={help} />
+            <span className="px-2 py-1 bg-sre-surface text-sre-text-muted text-xs font-medium rounded-full border border-sre-border">{count}</span>
+          </div>
+        </div>
+        <div className={`mt-2 h-1 ${colorDot.replace('bg-', 'bg-gradient-to-r from-') || 'bg-gradient-to-r from-blue-500 to-blue-400'} rounded-full`} />
+      </div>
+      <div
+        className={`flex-1 min-h-[500px] p-4 rounded-xl border-2 border-dashed border-sre-border/50 bg-sre-surface/30 transition-all duration-200 ${
+          canUpdateIncidents ? 'hover:border-sre-primary/30 hover:bg-sre-surface/50 cursor-move' : ''
+        }`}
+        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+        onDrop={(e) => { onDropColumn(icon, e) }}
+      >
+        <div className="space-y-3">
+          {items.length > 0 ? (
+            items.map((it) => (
+              <IncidentCard
+                key={it.id}
+                incident={it}
+                canUpdateIncidents={canUpdateIncidents}
+                userById={userById}
+                onOpenModal={openIncidentModal}
+                onSetModalTab={setIncidentModalTab}
+                onUnhide={handleUnhideIncident}
+                droppingState={!!dropping[it.id]}
+              />
+            ))
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <span className="material-icons text-4xl text-sre-text-muted/50 mb-3">{empty.icon}</span>
+              <p className="text-sre-text-muted text-sm">{empty.title}</p>
+              <p className="text-sre-text-muted/70 text-xs mt-1">{empty.subtitle}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+})
+
 export default function IncidentBoardPage() {
   const { user, hasPermission } = useAuth()
   const [incidentDrafts, setIncidentDrafts] = useState({})
@@ -35,7 +217,6 @@ export default function IncidentBoardPage() {
   const [incidentVisibilityTab, setIncidentVisibilityTab] = useLocalStorage('incidents-visibility', 'public')
   const [selectedGroup, setSelectedGroup] = useLocalStorage('incidents-selected-group', '')
   const [groups, setGroups] = useState([])
-  const [groupSearch, setGroupSearch] = useState('')
   const [incidentModal, setIncidentModal] = useState({ isOpen: false, incident: null })
   const [dropping, setDropping] = useState({})
   const [assigneeSearch, setAssigneeSearch] = useState('')
@@ -130,11 +311,6 @@ export default function IncidentBoardPage() {
     } catch (e) {
       console.error('Failed to load groups:', e)
     }
-  }
-
-  function handleSelectedGroupChange(evOrVal) {
-    const val = evOrVal && evOrVal.target ? evOrVal.target.value : evOrVal
-    setSelectedGroup(val)
   }
 
   // Data loading is handled by the `useIncidentsData` hook. Use `refresh()` when a reload is required.
@@ -264,133 +440,74 @@ export default function IncidentBoardPage() {
     loadJiraComments(incident.id)
   }
 
-  const IncidentCard = ({ incident }) => {
-    const assigneeUser = incident.assignee ? userById[incident.assignee] : null
-    const assigneeLabel = assigneeUser ? (assigneeUser.username || assigneeUser.id) : (incident.assignee || 'Unassigned')
+  // Duplicate JSX removed — memoized `IncidentCard`/`Column` are used instead.
 
+  const IncidentModalTabs = ({ tab, setTab }) => (
+    <div className="mt-4 inline-flex bg-sre-bg-alt rounded-lg p-1 border border-sre-border">
+      <button
+        type="button"
+        onClick={() => setTab('details')}
+        aria-pressed={tab === 'details'}
+        className={`px-4 py-2 text-sm rounded-md transition-all ${tab === 'details' ? 'bg-sre-primary/10 text-sre-primary' : 'text-sre-text-muted hover:text-sre-text'}`}>
+        <span className="material-icons text-sm mr-2">info</span>
+        Details
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setTab('assignment')}
+        aria-pressed={tab === 'assignment'}
+        className={`px-4 py-2 text-sm rounded-md transition-all ${tab === 'assignment' ? 'bg-sre-primary/10 text-sre-primary' : 'text-sre-text-muted hover:text-sre-text'}`}>
+        <span className="material-icons text-sm mr-2">person</span>
+        Assignment
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setTab('jira')}
+        aria-pressed={tab === 'jira'}
+        className={`px-4 py-2 text-sm rounded-md transition-all ${tab === 'jira' ? 'bg-sre-primary/10 text-sre-primary' : 'text-sre-text-muted hover:text-sre-text'}`}>
+        <span className="material-icons text-sm mr-2">link</span>
+        Jira
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setTab('notes')}
+        aria-pressed={tab === 'notes'}
+        className={`px-4 py-2 text-sm rounded-md transition-all ${tab === 'notes' ? 'bg-sre-primary/10 text-sre-primary' : 'text-sre-text-muted hover:text-sre-text'}`}>
+        <span className="material-icons text-sm mr-2">notes</span>
+        Notes
+      </button>
+    </div>
+  )
+
+  const IncidentBehavior = ({ incident, draft, setIncidentDrafts }) => {
+    if (!incident) return null
     return (
-      <div
-        key={incident.id}
-        draggable={canUpdateIncidents}
-        onDragStart={(e) => {
-          e.dataTransfer.effectAllowed = 'move'
-          e.dataTransfer.setData('text/incident', String(incident.id))
-          e.currentTarget.classList.add('opacity-50', 'scale-95', 'rotate-2')
-        }}
-        onDragEnd={(e) => { e.currentTarget.classList.remove('opacity-50', 'scale-95', 'rotate-2') }}
-        className="group bg-gradient-to-br from-sre-bg to-sre-surface border border-sre-border/50 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 cursor-move relative overflow-hidden backdrop-blur-sm"
-      >
-        <div className={`h-2 w-full ${
-          incident.severity === 'critical' ? 'bg-gradient-to-r from-red-500 to-red-600' :
-          incident.severity === 'warning' ? 'bg-gradient-to-r from-yellow-500 to-orange-500' :
-          'bg-gradient-to-r from-blue-500 to-blue-600'
-        }`}></div>
-
-        <div className="p-5">
-          <div className="flex items-start justify-between gap-4 mb-4">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                incident.severity === 'critical' ? 'bg-red-500 shadow-red-500/50 shadow-lg' :
-                incident.severity === 'warning' ? 'bg-yellow-500 shadow-yellow-500/50 shadow-lg' :
-                'bg-blue-500 shadow-blue-500/50 shadow-lg'
-              }`}></div>
-              <h3 className="font-semibold text-sre-text text-base leading-tight flex-1 min-w-0 truncate">{incident.alertName}</h3>
-            </div>
-
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Badge variant={incident.status === 'resolved' ? 'success' : 'warning'} className="text-xs px-3 py-1.5 rounded-full font-medium shadow-sm">{incident.status}</Badge>
-            </div>
+      <div className="mt-4">
+        <label className="block text-xs font-medium text-sre-text-muted mb-1 text-left">Behavior</label>
+        <div className="p-2 border border-sre-border rounded bg-sre-bg-alt flex items-center justify-between gap-4">
+          <div className="text-sm text-sre-text">Hide when resolved</div>
+          <div>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={draft.hideWhenResolved ?? incident.hideWhenResolved ?? false}
+                onChange={(e) => setIncidentDrafts((prev) => ({
+                  ...prev,
+                  [incident.id]: { ...(prev[incident.id] || {}), hideWhenResolved: e.target.checked }
+                }))}
+                className="form-checkbox h-4 w-4 text-sre-primary"
+              />
+            </label>
           </div>
-
-          <div className="space-y-3 mb-4">
-            <div className="flex items-center gap-3 text-sm text-sre-text-muted">
-              <div className="flex items-center gap-2">
-                <span className="material-icons text-base text-sre-primary/70">schedule</span>
-                <span className="font-medium">{new Date(incident.lastSeenAt).toLocaleString()}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 text-sm text-sre-text-muted">
-              <div className="flex items-center gap-2">
-                <span className="material-icons text-base text-sre-primary/70">person</span>
-                <span className="font-medium truncate min-w-0">{assigneeLabel}</span>
-              </div>
-            </div>
-
-            {incident.jiraTicketKey && (
-              <div className="flex items-center gap-3 text-sm text-sre-text-muted">
-                <div className="flex items-center gap-2">
-                  <span className="material-icons text-base text-sre-primary/70">link</span>
-                  <span className="font-medium text-sre-primary hover:text-sre-primary/80 transition-colors truncate">{incident.jiraTicketKey}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant={incident.severity === 'critical' ? 'error' : incident.severity === 'warning' ? 'warning' : 'info'} className="text-xs px-3 py-1.5 rounded-full font-medium shadow-sm">
-                <span className="material-icons text-sm mr-1">{incident.severity === 'critical' ? 'error' : incident.severity === 'warning' ? 'warning' : 'info'}</span>
-                {incident.severity}
-              </Badge>
-
-              {incident.hideWhenResolved && (
-                <Badge variant="ghost" className="whitespace-nowrap text-xs px-3 py-1.5 rounded-full border border-sre-border/50 bg-sre-surface/50">
-                  <span className="material-icons text-sm mr-1">visibility_off</span>
-                  Hide on resolve
-                </Badge>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1">
-              {incident.status === 'resolved' && incident.hideWhenResolved && (
-                <Button size="sm" variant="ghost" onClick={() => handleUnhideIncident(incident.id)} className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50" title="Unhide incident">
-                  <span className="material-icons text-sm">visibility</span>
-                </Button>
-              )}
-
-              <Button size="sm" variant="ghost" onClick={() => { openIncidentModal(incident); setIncidentModalTab('notes') }} className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50 relative" title="View notes">
-                <span className="material-icons text-sm">notes</span>
-                {Array.isArray(incident.notes) && incident.notes.length > 0 && (
-                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs rounded-full bg-sre-primary text-white">{incident.notes.length}</span>
-                )}
-              </Button>
-
-              <Button size="sm" variant="ghost" onClick={() => openIncidentModal(incident)} className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50">
-                <span className="material-icons text-sm">edit</span>
-              </Button>
-            </div>
-          </div>
-
-          {Array.isArray(incident.sharedGroupIds) && incident.sharedGroupIds.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {incident.sharedGroupIds.slice(0, 3).map((g) => (
-                <span key={g} className="text-xs px-3 py-1.5 bg-sre-surface/70 border border-sre-border/30 rounded-full text-sre-text-muted font-medium truncate max-w-32"> {g} </span>
-              ))}
-              {incident.sharedGroupIds.length > 3 && (
-                <span className="text-xs px-3 py-1.5 bg-sre-surface/70 border border-sre-border/30 rounded-full text-sre-text-muted font-medium">+{incident.sharedGroupIds.length - 3}</span>
-              )}
-            </div>
-          )}
         </div>
-
-        <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <span className="material-icons text-sre-text-muted/70 text-sm">drag_indicator</span>
-        </div>
-
-        {dropping[incident.id] && (
-          <div className="absolute inset-0 bg-sre-bg-card/90 backdrop-blur-md flex items-center justify-center rounded-xl border-2 border-sre-primary/30">
-            <div className="flex items-center gap-3 text-sre-primary">
-              <Spinner size="sm" />
-              <span className="text-sm font-semibold">Updating...</span>
-            </div>
-          </div>
-        )}
       </div>
     )
   }
 
-  const handleDropOnColumn = async (target, e) => {
+  const handleDropOnColumn = useCallback(async (target, e) => {
     e.preventDefault()
     let droppedId
     try {
@@ -438,9 +555,9 @@ export default function IncidentBoardPage() {
     } finally {
       setDropping((prev) => clearDroppedState(prev, droppedId))
     }
-  }
+  }, [incidents, refresh, setError, toast])
 
-  const handleSaveIncident = async (incident) => {
+  const handleSaveIncident = useCallback(async (incident) => {
     const draft = incidentDrafts[incident.id] || {}
     const payload = {
       assignee: draft.assignee || null,
@@ -480,7 +597,7 @@ export default function IncidentBoardPage() {
       setError(err?.body?.detail || err?.message || 'Unable to update incident')
       try { toast.error(err?.body?.detail || err?.message || 'Unable to update incident') } catch (_) {}
     }
-  }
+  }, [incidentDrafts, refresh, setError, toast])
 
   useEffect(() => {
     if (!incidentModal.isOpen) return
@@ -496,7 +613,7 @@ export default function IncidentBoardPage() {
   }, [incidentModal.isOpen, incidentModal.incident, canUpdateIncidents, handleSaveIncident])
 
   // Quickly add a single note (does not close modal). Clears draft and refreshes notes.
-  const handleAddNote = async (incidentId) => {
+  const handleAddNote = useCallback(async (incidentId) => {
     const draft = incidentDrafts[incidentId] || {}
     const text = (draft.note || '').trim()
     if (!text) return
@@ -521,9 +638,9 @@ export default function IncidentBoardPage() {
     } catch (e) {
       try { toast.error(e?.body?.detail || e?.message || 'Failed to add note') } catch (_) {}
     }
-  }
+  }, [incidentDrafts, setIncidentDrafts, setIncidents, loadJiraComments, toast])
 
-  const handleUnhideIncident = async (incidentId) => {
+  const handleUnhideIncident = useCallback(async (incidentId) => {
     try {
       setDropping((prev) => ({ ...prev, [incidentId]: true }))
       await updateIncident(incidentId, { hideWhenResolved: false })
@@ -539,7 +656,7 @@ export default function IncidentBoardPage() {
         return next
       })
     }
-  }
+  }, [refresh, setError, toast])
 
   if (loading) {
     return (
@@ -570,85 +687,75 @@ export default function IncidentBoardPage() {
   return (
     <div className="min-h-screen via-sre-bg-alt to-sre-bg">
       <div className="">
-        {/* Header Section */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex flex-col gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-sre-text"><span className="material-icons text-3xl text-sre-primary">assignment</span> InOps</h1>
+          <div className="mb-8">
+            <div className="flex items-center justify-between ">
+              <div className="flex flex-col gap-4">
+                <div>
+              <h1 className="text-3xl font-bold text-sre-text"><span className="material-icons text-3xl text-sre-primary">assignment</span> InOps</h1>
                 <p className="text-sre-text-muted mt-1">Manage and track incident response workflows</p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 p-1 bg-sre-surface rounded-lg border border-sre-border">
-                  <Button
-                    variant={incidentVisibilityTab === 'public' ? 'primary' : 'ghost'}
-                    size="sm"
-                    onClick={() => {
-                      setIncidentVisibilityTab('public')
-                      setSelectedGroup('')
-                    }}
-                    className="px-2 py-1 text-xs"
-                  >
-                    <span className="material-icons text-sm mr-2">public</span>
-                    Public
-                  </Button>
-                  <Button
-                    variant={incidentVisibilityTab === 'private' ? 'primary' : 'ghost'}
-                    size="sm"
-                    onClick={() => {
-                      setIncidentVisibilityTab('private')
-                      setSelectedGroup('')
-                    }}
-                    className="px-2 py-1 text-xs"
-                  >
-                    <span className="material-icons text-sm mr-2">lock</span>
-                    Private
-                  </Button>
-                  <Button
-                    variant={incidentVisibilityTab === 'group' ? 'primary' : 'ghost'}
-                    size="sm"
-                    onClick={() => setIncidentVisibilityTab('group')}
-                    className="px-2 py-1 text-xs"
-                  >
-                    <span className="material-icons text-sm mr-2">group</span>
-                    Group
-                  </Button>
-                </div>
-
-                {/* Group selector + search: shown under visibility tabs when 'group' is active */}
-                {incidentVisibilityTab === 'group' && (
-                  <div className="mt-2 flex flex-col gap-2">
-                    <Input
-                      value={groupSearch}
-                      onChange={(e) => setGroupSearch(e.target.value)}
-                      placeholder="Search groups..."
-                      className="h-8 text-xs w-48"
-                    />
-                    {groups.length > 0 ? (
-                      <Select
-                        value={selectedGroup}
-                        onChange={handleSelectedGroupChange}
-                        className="w-48 text-xs h-8"
-                      >
-                        <option value="">All groups</option>
-                        {groups
-                          .filter(g => !groupSearch || (g.name || '').toLowerCase().includes(groupSearch.toLowerCase()))
-                          .map((group) => (
-                            <option key={group.id} value={group.id}>
-                              {group.name}
-                            </option>
-                          ))}
-                      </Select>
-                    ) : (
-                      <div className="truncate text-sre-text-muted text-xs px-3 py-2 bg-sre-surface border border-sre-border rounded w-48">Could not fetch any groups you are in InOps</div>
-                    )}
-                  </div>
-                )}
-              </div>
             </div>
-            <div className="flex items-center gap-6">
-              {/* Stats */}
+
+            <div className="mb-5">
+            <div className="flex mt-0 items-center gap-2 p-1 bg-sre-surface rounded-lg border border-sre-border w-fit">
+              <Button
+                variant={incidentVisibilityTab === 'public' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => {
+                  setIncidentVisibilityTab('public')
+                  setSelectedGroup('')
+                }}
+                className="px-4 py-2"
+              >
+                <span className="material-icons text-sm mr-2">public</span>
+                Public
+              </Button>
+              <Button
+                variant={incidentVisibilityTab === 'private' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => {
+                  setIncidentVisibilityTab('private')
+                  setSelectedGroup('')
+                }}
+                className="px-4 py-2"
+              >
+                <span className="material-icons text-sm mr-2">lock</span>
+                Private
+              </Button>
+              <Button
+                variant={incidentVisibilityTab === 'group' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setIncidentVisibilityTab('group')}
+                className="px-4 py-2"
+              >
+                <span className="material-icons text-sm mr-2">group</span>
+                Group
+              </Button>
+            </div>
+            <div className="mt-2 w-fit">
+              {incidentVisibilityTab === 'group' && (
+                groups.length > 0 ? (
+                  <Select
+              value={selectedGroup}
+              onChange={setSelectedGroup}
+              placeholder="Select group..."
+                  >
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+                  </Select>
+                ) : (
+                  <div className="truncate text-sre-text-muted text-sm px-3 py-2 bg-sre-surface border border-sre-border rounded">
+              No groups available to you ...
+                  </div>
+                )
+              )}
+            </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-6">
+                {/* Stats */}
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-2 px-3 py-2 bg-sre-surface rounded-lg border border-sre-border">
                   <span className="material-icons text-base text-orange-500">warning</span>
@@ -688,76 +795,58 @@ export default function IncidentBoardPage() {
         {/* Board */}
         {incidents.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-[600px]">
-            {(() => {
-              const Column = ({ title, count, colorDot, icon, help, items, empty }) => (
-                <div className="flex flex-col">
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-3 h-3 ${colorDot} rounded-full`}></div>
-                        <h3 className="text-lg font-semibold text-sre-text">{title}</h3>
-                        <HelpTooltip text={help} />
-                        <span className="px-2 py-1 bg-sre-surface text-sre-text-muted text-xs font-medium rounded-full border border-sre-border">{count}</span>
-                      </div>
-                    </div>
-                    <div className={`mt-2 h-1 ${colorDot.replace('bg-', 'bg-gradient-to-r from-') || 'bg-gradient-to-r from-blue-500 to-blue-400'} rounded-full`} />
-                  </div>
-                  <div
-                    className={`flex-1 min-h-[500px] p-4 rounded-xl border-2 border-dashed border-sre-border/50 bg-sre-surface/30 transition-all duration-200 ${
-                      canUpdateIncidents ? 'hover:border-sre-primary/30 hover:bg-sre-surface/50 cursor-move' : ''
-                    }`}
-                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
-                    onDrop={(e) => { handleDropOnColumn(icon, e) }}
-                  >
-                    <div className="space-y-3">
-                      {items.length > 0 ? (
-                        items.map((it) => <IncidentCard key={it.id} incident={it} />)
-                      ) : (
-                        <div className="flex flex-col items-center justify-center py-12 text-center">
-                          <span className="material-icons text-4xl text-sre-text-muted/50 mb-3">{empty.icon}</span>
-                          <p className="text-sre-text-muted text-sm">{empty.title}</p>
-                          <p className="text-sre-text-muted/70 text-xs mt-1">{empty.subtitle}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
+              <>
+                <Column
+                  title="Unassigned"
+                  count={incidentsByState.unassigned.length}
+                  colorDot="bg-blue-500"
+                  icon="unassigned"
+                  help="Incidents that haven't been assigned to anyone yet. These need immediate attention."
+                  items={incidentsByState.unassigned}
+                  empty={{ icon: 'person_off', title: 'No unassigned incidents', subtitle: 'Drag incidents here to unassign' }}
+                  canUpdateIncidents={canUpdateIncidents}
+                  onDropColumn={handleDropOnColumn}
+                  userById={userById}
+                  openIncidentModal={openIncidentModal}
+                  setIncidentModalTab={setIncidentModalTab}
+                  handleUnhideIncident={handleUnhideIncident}
+                  dropping={dropping}
+                />
 
-              return (
-                <>
-                  <Column
-                    title="Unassigned"
-                    count={incidentsByState.unassigned.length}
-                    colorDot="bg-blue-500"
-                    icon="unassigned"
-                    help="Incidents that haven't been assigned to anyone yet. These need immediate attention."
-                    items={incidentsByState.unassigned}
-                    empty={{ icon: 'person_off', title: 'No unassigned incidents', subtitle: 'Drag incidents here to unassign' }}
-                  />
+                <Column
+                  title="Assigned Active"
+                  count={incidentsByState.assigned.length}
+                  colorDot="bg-green-500"
+                  icon="assigned"
+                  help="Incidents that have been assigned to someone and are currently being worked on."
+                  items={incidentsByState.assigned}
+                  empty={{ icon: 'engineering', title: 'No active incidents', subtitle: 'Assigned incidents in progress' }}
+                  canUpdateIncidents={canUpdateIncidents}
+                  onDropColumn={handleDropOnColumn}
+                  userById={userById}
+                  openIncidentModal={openIncidentModal}
+                  setIncidentModalTab={setIncidentModalTab}
+                  handleUnhideIncident={handleUnhideIncident}
+                  dropping={dropping}
+                />
 
-                  <Column
-                    title="Assigned Active"
-                    count={incidentsByState.assigned.length}
-                    colorDot="bg-green-500"
-                    icon="assigned"
-                    help="Incidents that have been assigned to someone and are currently being worked on."
-                    items={incidentsByState.assigned}
-                    empty={{ icon: 'engineering', title: 'No active incidents', subtitle: 'Assigned incidents in progress' }}
-                  />
-
-                  <Column
-                    title="Resolved"
-                    count={incidentsByState.resolved.length}
-                    colorDot="bg-purple-500"
-                    icon="resolved"
-                    help="Incidents that have been resolved and closed. These may be hidden by default."
-                    items={incidentsByState.resolved}
-                    empty={{ icon: 'check_circle', title: 'No resolved incidents', subtitle: 'Completed incident responses' }}
-                  />
-                </>
-              )
-            })()}
+                <Column
+                  title="Resolved"
+                  count={incidentsByState.resolved.length}
+                  colorDot="bg-purple-500"
+                  icon="resolved"
+                  help="Incidents that have been resolved and closed. These may be hidden by default."
+                  items={incidentsByState.resolved}
+                  empty={{ icon: 'check_circle', title: 'No resolved incidents', subtitle: 'Completed incident responses' }}
+                  canUpdateIncidents={canUpdateIncidents}
+                  onDropColumn={handleDropOnColumn}
+                  userById={userById}
+                  openIncidentModal={openIncidentModal}
+                  setIncidentModalTab={setIncidentModalTab}
+                  handleUnhideIncident={handleUnhideIncident}
+                  dropping={dropping}
+                />
+              </>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 px-6">
@@ -817,43 +906,8 @@ export default function IncidentBoardPage() {
                 </div>
               </div>
 
-              <div className="mt-4 inline-flex bg-sre-bg-alt rounded-lg p-1 border border-sre-border">
-                <button
-                  type="button"
-                  onClick={() => setIncidentModalTab('details')}
-                  aria-pressed={incidentModalTab === 'details'}
-                  className={`px-4 py-2 text-sm rounded-md transition-all ${incidentModalTab === 'details' ? 'bg-sre-primary/10 text-sre-primary' : 'text-sre-text-muted hover:text-sre-text'}`}>
-                  <span className="material-icons text-sm mr-2">info</span>
-                  Details
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIncidentModalTab('assignment')}
-                  aria-pressed={incidentModalTab === 'assignment'}
-                  className={`px-4 py-2 text-sm rounded-md transition-all ${incidentModalTab === 'assignment' ? 'bg-sre-primary/10 text-sre-primary' : 'text-sre-text-muted hover:text-sre-text'}`}>
-                  <span className="material-icons text-sm mr-2">person</span>
-                  Assignment
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIncidentModalTab('jira')}
-                  aria-pressed={incidentModalTab === 'jira'}
-                  className={`px-4 py-2 text-sm rounded-md transition-all ${incidentModalTab === 'jira' ? 'bg-sre-primary/10 text-sre-primary' : 'text-sre-text-muted hover:text-sre-text'}`}>
-                  <span className="material-icons text-sm mr-2">link</span>
-                  Jira
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIncidentModalTab('notes')}
-                  aria-pressed={incidentModalTab === 'notes'}
-                  className={`px-4 py-2 text-sm rounded-md transition-all ${incidentModalTab === 'notes' ? 'bg-sre-primary/10 text-sre-primary' : 'text-sre-text-muted hover:text-sre-text'}`}>
-                  <span className="material-icons text-sm mr-2">notes</span>
-                  Notes
-                </button>
-              </div>
+              <IncidentModalTabs tab={incidentModalTab} setTab={setIncidentModalTab} />
+              <IncidentBehavior incident={activeIncident} draft={activeIncidentDraft} setIncidentDrafts={setIncidentDrafts} />
             </div>
 
             {incidentModalTab === 'details' && (
@@ -898,25 +952,7 @@ export default function IncidentBoardPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-sre-text-muted mb-1 text-left">Behavior</label>
-                  <div className="p-2 border border-sre-border rounded bg-sre-bg-alt flex items-center justify-between gap-4">
-                    <div className="text-sm text-sre-text">Hide when resolved</div>
-                    <div>
-                      <label className="inline-flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={activeIncidentDraft.hideWhenResolved ?? activeIncident.hideWhenResolved ?? false}
-                          onChange={(e) => setIncidentDrafts((prev) => ({
-                            ...prev,
-                            [activeIncident.id]: { ...(prev[activeIncident.id] || {}), hideWhenResolved: e.target.checked }
-                          }))}
-                          className="form-checkbox h-4 w-4 text-sre-primary"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </div>
+                {/* Behavior moved under tabs */}
               </div>
             </Card>
             )}
