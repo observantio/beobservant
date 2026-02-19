@@ -35,6 +35,7 @@ export default function IncidentBoardPage() {
   const [incidentVisibilityTab, setIncidentVisibilityTab] = useLocalStorage('incidents-visibility', 'public')
   const [selectedGroup, setSelectedGroup] = useLocalStorage('incidents-selected-group', '')
   const [groups, setGroups] = useState([])
+  const [groupSearch, setGroupSearch] = useState('')
   const [incidentModal, setIncidentModal] = useState({ isOpen: false, incident: null })
   const [dropping, setDropping] = useState({})
   const [assigneeSearch, setAssigneeSearch] = useState('')
@@ -129,6 +130,11 @@ export default function IncidentBoardPage() {
     } catch (e) {
       console.error('Failed to load groups:', e)
     }
+  }
+
+  function handleSelectedGroupChange(evOrVal) {
+    const val = evOrVal && evOrVal.target ? evOrVal.target.value : evOrVal
+    setSelectedGroup(val)
   }
 
   // Data loading is handled by the `useIncidentsData` hook. Use `refresh()` when a reload is required.
@@ -582,7 +588,7 @@ export default function IncidentBoardPage() {
                       setIncidentVisibilityTab('public')
                       setSelectedGroup('')
                     }}
-                    className="px-4 py-2"
+                    className="px-2 py-1 text-xs"
                   >
                     <span className="material-icons text-sm mr-2">public</span>
                     Public
@@ -594,7 +600,7 @@ export default function IncidentBoardPage() {
                       setIncidentVisibilityTab('private')
                       setSelectedGroup('')
                     }}
-                    className="px-4 py-2"
+                    className="px-2 py-1 text-xs"
                   >
                     <span className="material-icons text-sm mr-2">lock</span>
                     Private
@@ -603,32 +609,42 @@ export default function IncidentBoardPage() {
                     variant={incidentVisibilityTab === 'group' ? 'primary' : 'ghost'}
                     size="sm"
                     onClick={() => setIncidentVisibilityTab('group')}
-                    className="px-4 py-2"
+                    className="px-2 py-1 text-xs"
                   >
                     <span className="material-icons text-sm mr-2">group</span>
                     Group
                   </Button>
-                  {incidentVisibilityTab === 'group' && (
-                    groups.length > 0 ? (
+                </div>
+
+                {/* Group selector + search: shown under visibility tabs when 'group' is active */}
+                {incidentVisibilityTab === 'group' && (
+                  <div className="mt-2 flex flex-col gap-2">
+                    <Input
+                      value={groupSearch}
+                      onChange={(e) => setGroupSearch(e.target.value)}
+                      placeholder="Search groups..."
+                      className="h-8 text-xs w-48"
+                    />
+                    {groups.length > 0 ? (
                       <Select
                         value={selectedGroup}
-                        onChange={setSelectedGroup}
-                        placeholder="Select group..."
-                        className="w-48"
+                        onChange={handleSelectedGroupChange}
+                        className="w-48 text-xs h-8"
                       >
-                        {groups.map((group) => (
-                          <option key={group.id} value={group.id}>
-                            {group.name}
-                          </option>
-                        ))}
+                        <option value="">All groups</option>
+                        {groups
+                          .filter(g => !groupSearch || (g.name || '').toLowerCase().includes(groupSearch.toLowerCase()))
+                          .map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
                       </Select>
                     ) : (
-                      <div className="truncate text-sre-text-muted text-sm px-3 py-2 bg-sre-surface border border-sre-border rounded w-48">
-                        Could not fetch any groups you are in InOps
-                      </div>
-                    )
-                  )}
-                </div>
+                      <div className="truncate text-sre-text-muted text-xs px-3 py-2 bg-sre-surface border border-sre-border rounded w-48">Could not fetch any groups you are in InOps</div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-6">
