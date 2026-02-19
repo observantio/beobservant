@@ -21,13 +21,23 @@ logger = logging.getLogger(__name__)
 
 
 def _rule_to_pydantic(r) -> AlertRulePydantic:
-    return AlertRulePydantic(
-        id=r.id, orgId=r.org_id, name=r.name, expr=r.expr, duration=r.duration,
-        severity=r.severity, labels=r.labels or {}, annotations=r.annotations or {},
-        enabled=r.enabled, group=r.group, notificationChannels=r.notification_channels or [],
-        visibility=r.visibility or "private",
-        sharedGroupIds=[g.id for g in r.shared_groups] if r.shared_groups else [],
-    )
+    # build alias-key dict and let pydantic coerce types at runtime; keeps mypy happy
+    payload = {
+        "id": r.id,
+        "orgId": r.org_id,
+        "name": r.name,
+        "expression": r.expr,
+        "for": r.duration,
+        "severity": r.severity,
+        "labels": r.labels or {},
+        "annotations": r.annotations or {},
+        "enabled": r.enabled,
+        "groupName": r.group,
+        "notificationChannels": r.notification_channels or [],
+        "visibility": r.visibility or "private",
+        "sharedGroupIds": [g.id for g in r.shared_groups] if r.shared_groups else [],
+    }
+    return AlertRulePydantic.parse_obj(payload)
 
 
 def _channel_to_pydantic(ch) -> NotificationChannelPydantic:
@@ -36,12 +46,17 @@ def _channel_to_pydantic(ch) -> NotificationChannelPydantic:
 
 def _channel_to_pydantic_for_viewer(ch, viewer_user_id: Any) -> NotificationChannelPydantic:
     raw_config = ch.config or {}
-    return NotificationChannelPydantic(
-        id=ch.id, name=ch.name, type=ch.type, enabled=ch.enabled,
-        config=raw_config if (ch.created_by and ch.created_by == viewer_user_id) else {},
-        createdBy=ch.created_by, visibility=ch.visibility or "private",
-        shared_group_ids=[g.id for g in ch.shared_groups] if ch.shared_groups else [],
-    )
+    payload = {
+        "id": ch.id,
+        "name": ch.name,
+        "type": ch.type,
+        "enabled": ch.enabled,
+        "config": raw_config if (ch.created_by and ch.created_by == viewer_user_id) else {},
+        "createdBy": ch.created_by,
+        "visibility": ch.visibility or "private",
+        "sharedGroupIds": [g.id for g in ch.shared_groups] if ch.shared_groups else [],
+    }
+    return NotificationChannelPydantic.parse_obj(payload)
 
 
 def _incident_to_pydantic(incident) -> AlertIncidentPydantic:
@@ -72,16 +87,27 @@ def _incident_to_pydantic(incident) -> AlertIncidentPydantic:
         if k != INCIDENT_META_KEY and v is not None
     }
 
-    return AlertIncidentPydantic(
-        id=incident.id, fingerprint=incident.fingerprint, alertName=incident.alert_name,
-        severity=incident.severity, status=status_value, assignee=incident.assignee,
-        notes=note_items, labels=incident.labels or {}, annotations=safe_annotations,
-        visibility=visibility_value, sharedGroupIds=_safe_group_ids(meta),
-        jiraTicketKey=meta.get("jira_ticket_key"), jiraTicketUrl=meta.get("jira_ticket_url"),
-        jiraIntegrationId=meta.get("jira_integration_id"),
-        startsAt=incident.starts_at, lastSeenAt=incident.last_seen_at,
-        resolvedAt=incident.resolved_at, createdAt=incident.created_at,
-        updatedAt=incident.updated_at,
-        userManaged=bool(meta.get("user_managed")),
-        hideWhenResolved=bool(meta.get("hide_when_resolved")),
-    )
+    payload = {
+        "id": incident.id,
+        "fingerprint": incident.fingerprint,
+        "alertName": incident.alert_name,
+        "severity": incident.severity,
+        "status": status_value,
+        "assignee": incident.assignee,
+        "notes": note_items,
+        "labels": incident.labels or {},
+        "annotations": safe_annotations,
+        "visibility": visibility_value,
+        "sharedGroupIds": _safe_group_ids(meta),
+        "jiraTicketKey": meta.get("jira_ticket_key"),
+        "jiraTicketUrl": meta.get("jira_ticket_url"),
+        "jiraIntegrationId": meta.get("jira_integration_id"),
+        "startsAt": incident.starts_at,
+        "lastSeenAt": incident.last_seen_at,
+        "resolvedAt": incident.resolved_at,
+        "createdAt": incident.created_at,
+        "updatedAt": incident.updated_at,
+        "userManaged": bool(meta.get("user_managed")),
+        "hideWhenResolved": bool(meta.get("hide_when_resolved")),
+    }
+    return AlertIncidentPydantic.parse_obj(payload)

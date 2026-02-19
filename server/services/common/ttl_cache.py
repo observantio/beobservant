@@ -77,6 +77,8 @@ class TTLCache:
     async def get(self, key: str) -> Optional[Any]:
         async with self._lock:
             if await self._ensure_redis():
+                # _ensure_redis guarantees a connected client; narrow for mypy
+                assert self._redis_client is not None
                 try:
                     raw = await self._redis_client.get(self._redis_key(key))
                     if raw is None:
@@ -98,6 +100,8 @@ class TTLCache:
     async def set(self, key: str, value: Any, ttl_seconds: int) -> None:
         async with self._lock:
             if await self._ensure_redis():
+                # _ensure_redis guarantees a connected client; narrow for mypy
+                assert self._redis_client is not None
                 try:
                     raw = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
                     await self._redis_client.set(self._redis_key(key), raw, ex=max(0, int(ttl_seconds)))
@@ -116,6 +120,8 @@ class TTLCache:
         async with self._lock:
             # Try Redis first
             if await self._ensure_redis():
+                # _ensure_redis narrows client to non-None
+                assert self._redis_client is not None
                 try:
                     raw = await self._redis_client.get(self._redis_key(key))
                     if raw is not None:
@@ -137,6 +143,8 @@ class TTLCache:
                 return None
 
             if await self._ensure_redis():
+                # _ensure_redis guarantees a connected client; narrow for mypy
+                assert self._redis_client is not None
                 try:
                     raw = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
                     await self._redis_client.set(self._redis_key(key), raw, ex=max(0, int(ttl_seconds)))
@@ -151,6 +159,8 @@ class TTLCache:
     async def clear(self) -> None:
         async with self._lock:
             if await self._ensure_redis():
+                # _ensure_redis guarantees a connected client; narrow for mypy
+                assert self._redis_client is not None
                 try:
                     pattern = f"{self._key_prefix}:*"
                     keys = await self._redis_client.keys(pattern)
