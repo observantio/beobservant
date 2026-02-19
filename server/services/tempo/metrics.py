@@ -1,13 +1,13 @@
-"""Metrics query helpers for TempoService.
-
-Exports:
-- query_metrics_range(...) -> (result_dict, metrics_enabled_flag)
-- extract_metric_values(metrics_resp) -> List[List[Any]]
-
-These functions are extracted to keep TempoService small; `query_metrics_range` is stateful
-via the returned `metrics_enabled` flag which the caller should assign back to the
-service instance when needed.
 """
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+
+you may not use this file except in compliance with the License.
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from typing import Any, Dict, List, Optional, Callable, Tuple
 import logging
 

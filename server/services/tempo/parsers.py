@@ -1,7 +1,13 @@
-"""Tempo parsing helpers extracted from TempoService.
-
-Contains: parse_attributes, parse_span, parse_tempo_trace, build_summary_trace
 """
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+
+you may not use this file except in compliance with the License.
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from typing import Any, Dict, List, Optional
 
 from models.observability.tempo_models import Span, Trace

@@ -6,10 +6,6 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Group-related operations for DatabaseAuthService.
-
-Includes group creation, listing, updating, deletion, and permission/member management.
 """
 
 from datetime import datetime, timezone

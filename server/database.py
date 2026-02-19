@@ -6,15 +6,6 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Database configuration and session management.
-
-Optimizations added:
-- idempotent initialization and env-driven pool tuning
-- per-request `sessionmaker` sessions for async-safe request isolation
-- `session.begin()` for clear transaction boundaries
-- connection_test() for health/readiness probes
-- dispose_database() for graceful shutdown
 """
 import logging
 import os

@@ -7,11 +7,7 @@ you may not use this file except in compliance with the License.
 
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 
-Be Observant - Full Stack Observability Gateway
-
-A FastAPI server that provides a unified API for managing and querying
-observability backends: Tempo (traces), Loki (logs), AlertManager (alerts),
-and Grafana (dashboards/datasources).
+Be Observant - Full Stack Observability Control Plane
 """
 import logging
 import asyncio

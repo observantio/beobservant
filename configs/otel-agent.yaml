@@ -20,6 +20,7 @@ processors:
   memory_limiter:
     check_interval: 1s
     limit_mib: 512
+  batch: {}
 
 exporters:
   otlphttp/loki:
@@ -71,17 +72,17 @@ service:
   pipelines:
     logs:
       receivers: [otlp]
-      processors: [memory_limiter]
+      processors: [memory_limiter, batch]
       exporters: [otlphttp/loki]
 
     traces:
       receivers: [otlp]
-      processors: [memory_limiter]
+      processors: [memory_limiter, batch]
       exporters: [otlphttp/tempo]
 
     metrics:
       receivers: [hostmetrics, otlp]
-      processors: [memory_limiter]
+      processors: [memory_limiter, batch]
       exporters: [prometheusremotewrite/mimir]
 
   telemetry:

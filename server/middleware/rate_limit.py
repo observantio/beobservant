@@ -109,7 +109,6 @@ class RedisFixedWindowRateLimiter:
             raise RuntimeError("redis package is not installed")
         self._key_prefix = key_prefix
 
-        # Create client and verify connectivity immediately so startup logs reflect availability.
         client = redis.from_url(
             redis_url,
             socket_timeout=socket_timeout,
