@@ -13,7 +13,7 @@ import { getMetricsConfig } from '../constants/dashboard.jsx'
 import { MetricsGrid, DashboardLayout } from './dashboard/index.js'
 import PageHeader from './ui/PageHeader'
 
-export default function Dashboard({ info }) {
+export default function Dashboard() {
   const dashboardData = useDashboardData()
   const agentData = useAgentActivity()
   const [metricOrder, setMetricOrder] = usePersistentOrder('dashboard-metric-order', 8)
@@ -44,9 +44,4 @@ export default function Dashboard({ info }) {
   )
 }
 
-Dashboard.propTypes = {
-  info: PropTypes.shape({
-    service: PropTypes.string,
-    version: PropTypes.string,
-  }),
-}
+

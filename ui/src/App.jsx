@@ -42,7 +42,7 @@ function PageLoader() {
 }
 
 function AccessDenied() {
-  return <div className="p-6 text-center text-sre-text-muted">You don't have access to this page.</div>
+  return <div className="p-6 text-center text-sre-text-muted">You don&apos;t have access to this page.</div>
 }
 
 function ProtectedRoute({ children }) {

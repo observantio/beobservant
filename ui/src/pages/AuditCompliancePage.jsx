@@ -12,6 +12,7 @@ import { Card, Input, Button, Select, Spinner, Badge } from '../components/ui'
 import { getAuditLogs, exportAuditLogs, getUsers } from '../api'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
+import { copyToClipboard } from '../utils/helpers' 
 
 const DEFAULT_LIMIT = 100
 const LIMIT_OPTIONS = [25, 50, 100, 250]
@@ -421,8 +422,8 @@ export default function AuditCompliancePage() {
               </div>
 
               <div className="flex gap-2 items-center">
-                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); copyToClipboard(prettyJson(selected.details || {})) }} aria-label="Copy JSON">Copy JSON</Button>
-                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); copyToClipboard((selected.resource_type || '') + (selected.resource_id ? `/${selected.resource_id}` : '')) }} aria-label="Copy resource">Copy Resource</Button>
+                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); copyText(prettyJson(selected.details || {})) }} aria-label="Copy JSON">Copy JSON</Button>
+                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); copyText((selected.resource_type || '') + (selected.resource_id ? `/${selected.resource_id}` : '')) }} aria-label="Copy resource">Copy Resource</Button>
                 <Button size="sm" onClick={() => setSelected(null)}>Close</Button>
               </div>
             </div>
@@ -437,7 +438,7 @@ export default function AuditCompliancePage() {
                       <div className="mt-1 text-sm font-medium break-all">{(selected.resource_type || '') + (selected.resource_id ? `/${selected.resource_id}` : '') || '-'}</div>
                     </div>
                     <div className="flex gap-2">
-                      <button className="text-xs text-sre-text-muted hover:text-sre-text" onClick={(e) => { e.stopPropagation(); copyToClipboard((selected.resource_type || '') + (selected.resource_id ? `/${selected.resource_id}` : '')) }}>Copy</button>
+                      <button className="text-xs text-sre-text-muted hover:text-sre-text" onClick={(e) => { e.stopPropagation(); copyText((selected.resource_type || '') + (selected.resource_id ? `/${selected.resource_id}` : '')) }}>Copy</button>
                       {((selected.resource_type || '').toLowerCase() || '').startsWith('http') && (
                         <a className="text-xs text-sre-primary hover:underline" href={(selected.resource_type || '') + (selected.resource_id ? `/${selected.resource_id}` : '')} target="_blank" rel="noopener noreferrer">Open</a>
                       )}
@@ -469,7 +470,7 @@ export default function AuditCompliancePage() {
                       <div className="mt-2 text-xs text-sre-text-muted">Full JSON payload (copy available)</div>
                     </div>
                     <div>
-                      <button className="text-xs text-sre-text-muted hover:text-sre-text" onClick={(e) => { e.stopPropagation(); copyToClipboard(prettyJson(selected.details || {})) }}>Copy</button>
+                      <button className="text-xs text-sre-text-muted hover:text-sre-text" onClick={(e) => { e.stopPropagation(); copyText(prettyJson(selected.details || {})) }}>Copy</button>
                     </div>
                   </div>
                   <pre className="mt-3 bg-sre-surface rounded p-3 overflow-auto text-xs max-h-80 border border-sre-border font-mono">{prettyJson(selected.details)}</pre>

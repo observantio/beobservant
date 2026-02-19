@@ -134,6 +134,10 @@ export default function ApiKeyPage() {
       await refreshUser()
       toast.success('API key deleted successfully.')
     } catch (err) {
+      if (err?.status === 403) {
+        toast.error('You are not authorized to delete this key')
+        return
+      }
       const msg = err.body?.detail || err.message || 'Failed to delete API key'
       toast.error(msg)
     }
@@ -232,6 +236,9 @@ export default function ApiKeyPage() {
   }), [yamlModalToken, derivedLoki, derivedTempo, derivedMimir])
 
   const enabledCount = apiKeys.filter((k) => k.is_enabled).length
+  const activeKeyCandidate = apiKeys.find((k) => k.is_enabled) || apiKeys.find((k) => k.is_default) || apiKeys[0] || null
+  const isYamlKeyShared = Boolean(apiKeys.find((k) => k.id === yamlModalKeyId)?.is_shared)
+
   const filteredShareUsers = useMemo(() => {
     const q = shareSearch.trim().toLowerCase()
     if (!q) return allUsers
@@ -270,7 +277,20 @@ export default function ApiKeyPage() {
               <div className="flex items-center gap-3">
                 <Button size="sm" variant="secondary" className="py-1 px-3" onClick={() => setShowDefaultModal(true)}>Update Default Key</Button>
                 <Button size="sm" className="py-1 px-3" onClick={() => setShowAddModal(true)}>Add New Key</Button>
-                <Button size="sm" variant="secondary" className="py-1 px-3" onClick={() => { const activeKeyId = (apiKeys.find(k => k.is_enabled)?.id) || (apiKeys.find(k => k.is_default)?.id) || (apiKeys[0]?.id || ''); setYamlModalKeyId(activeKeyId); setShowYamlModal(true); }}>Generate Agent YAML</Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="py-1 px-3"
+                  onClick={() => {
+                    if (!activeKeyCandidate || activeKeyCandidate.is_shared) return
+                    setYamlModalKeyId(activeKeyCandidate.id)
+                    setShowYamlModal(true)
+                  }}
+                  disabled={!!activeKeyCandidate?.is_shared}
+                  aria-disabled={!!activeKeyCandidate?.is_shared}
+                >
+                  Generate Agent YAML
+                </Button>
               </div>
             </div>
           </Card>
@@ -297,6 +317,7 @@ export default function ApiKeyPage() {
                       <td className="py-3 pl-0 pr-4">
                         <div className="font-medium text-sre-text">{key.name}</div>
                         {key.is_default && <div className="text-xs text-sre-text-muted">Default</div>}
+                        {key.is_shared && key.owner_username && <div className="text-xs text-sre-text-muted">Shared by {key.owner_username}</div>}
                       </td>
                       <td className="py-3 px-4 text-xs text-sre-text-muted break-all">
                         <div className="flex items-center gap-3">
@@ -460,15 +481,24 @@ export default function ApiKeyPage() {
 
                 <div className="mt-1 p-2 bg-sre-background border border-sre-border rounded flex items-center justify-between gap-3">
                   <div className="font-mono text-xs truncate break-words">
-                    {yamlModalToken
-                      ? (yamlShowToken ? yamlModalToken : `${yamlModalToken.slice(0, 6)}...${yamlModalToken.slice(-4)}`)
-                      : 'No token available'}
+                    {isYamlKeyShared
+                      ? 'OTLP token not available for shared keys'
+                      : (yamlModalToken
+                        ? (yamlShowToken ? yamlModalToken : `${yamlModalToken.slice(0, 6)}...${yamlModalToken.slice(-4)}`)
+                        : 'No token available')}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => setYamlShowToken(!yamlShowToken)} aria-label={yamlShowToken ? 'Hide token' : 'Show token'}>
-                      {yamlShowToken ? 'Hide' : 'Show'}
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={() => handleCopy(yamlModalToken || '', 'OTLP token copied to clipboard')} aria-label="Copy OTLP token">Copy</Button>
+                    {!isYamlKeyShared && (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => setYamlShowToken(!yamlShowToken)} aria-label={yamlShowToken ? 'Hide token' : 'Show token'}>
+                          {yamlShowToken ? 'Hide' : 'Show'}
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => handleCopy(yamlModalToken || '', 'OTLP token copied to clipboard')} aria-label="Copy OTLP token">Copy</Button>
+                      </>
+                    )}
+                    {isYamlKeyShared && (
+                      <div className="text-xs text-sre-text-muted">Token hidden — contact owner to obtain agent config.</div>
+                    )}
                   </div>
                 </div>
 
@@ -477,10 +507,10 @@ export default function ApiKeyPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Button variant="secondary" onClick={() => handleCopy(yamlModalContent, 'OTEL YAML copied to clipboard')} aria-label="Copy YAML">
+              <Button variant="secondary" onClick={() => handleCopy(yamlModalContent, 'OTEL YAML copied to clipboard')} aria-label="Copy YAML" disabled={isYamlKeyShared}>
                 <span className="material-icons mr-2">content_copy</span>Copy YAML
               </Button>
-              <Button variant="secondary" onClick={() => handleDownloadYaml(yamlModalContent)} aria-label="Download YAML">
+              <Button variant="secondary" onClick={() => handleDownloadYaml(yamlModalContent)} aria-label="Download YAML" disabled={isYamlKeyShared}>
                 <span className="material-icons mr-2">download</span>Download YAML
               </Button>
               <div className="text-sm text-sre-text-muted ml-auto">Preview below reflects overrides</div>

@@ -47,6 +47,7 @@ class ApiKey(ApiKeyBase):
     key: str
     otlp_token: Optional[str] = Field(None, description="Secure OTLP ingest token for gateway authentication")
     owner_user_id: Optional[str] = None
+    owner_username: Optional[str] = None
     is_shared: bool = False
     can_use: bool = True
     shared_with: List[ApiKeyShareUser] = Field(default_factory=list)

@@ -11,6 +11,7 @@ import { Card, Input, Select, Button, Spinner } from './ui'
 export default function IncidentJiraTab({
   activeIncident,
   activeIncidentDraft,
+  incidentDrafts,
   setIncidentDrafts,
   jiraIntegrations,
   jiraProjects,
@@ -18,6 +19,7 @@ export default function IncidentJiraTab({
   jiraIssueTypes,
   setJiraIssueTypes,
   jiraCreating,
+  setJiraCreating,
   canUpdateIncidents,
   toast,
   listJiraProjectsByIntegration,

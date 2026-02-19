@@ -47,9 +47,7 @@ function buildDepthMap(spans) {
 export default function TraceTimeline({ trace, onClose, onCopyTraceId }) {
   const [showAllTags, setShowAllTags] = useState({})
 
-  if (!trace || !trace.spans) return null
-
-  const traceId = trace.traceId || trace.traceID || trace.id || ''
+  const traceId = trace?.traceId || trace?.traceID || trace?.id || ''
 
   const handleCopyTraceId = () => {
     if (onCopyTraceId) {
@@ -60,14 +58,16 @@ export default function TraceTimeline({ trace, onClose, onCopyTraceId }) {
   }
 
   const spansWithEndTime = useMemo(() => {
+    if (!trace?.spans) return []
     const sorted = [...trace.spans].sort((a, b) => a.startTime - b.startTime)
     return sorted.map(s => ({
       ...s,
       endTime: s.startTime + (s.duration || 0),
       serviceName: getServiceName(s)
     }))
-  }, [trace.spans])
+  }, [trace?.spans])
 
+  if (!trace || !trace.spans) return null
   const { minTime, maxTime, totalDuration, depthMap } = useMemo(() => {
     const min = Math.min(...spansWithEndTime.map(s => s.startTime))
     const max = Math.max(...spansWithEndTime.map(s => s.endTime))

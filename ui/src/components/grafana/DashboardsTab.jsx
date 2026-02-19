@@ -10,7 +10,7 @@ import { useState } from 'react'
 import PropTypes from 'prop-types'
 import { Button, Input, Badge } from '../ui'
 
-function FilterBar({ filters, setFilters, onSearch, onClearFilters, hasActiveFilters, meta, groups }) {
+function FilterBar({ filters, setFilters, onSearch, onClearFilters, hasActiveFilters, groups }) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   return (
@@ -87,11 +87,7 @@ export default function DashboardsTab({
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '')
 
-  const makeDashPath = (d) => {
-    if (d?.url) return d.url
-    const slugOrTitle = d?.slug || slugify(d?.title)
-    return `/grafana/d/${d.uid}/${encodeURIComponent(slugOrTitle)}`
-  }
+
 
   return (
     <div className="space-y-6">

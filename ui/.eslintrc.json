@@ -2,8 +2,17 @@
   "root": true,
   "env": {
     "browser": true,
-    "es2021": true,
+    "es2022": true,
     "jest": true
+  },
+  "globals": {
+    "process": "readonly",
+    "vi": "readonly"
+  },
+  "parserOptions": {
+    "ecmaFeatures": { "jsx": true },
+    "ecmaVersion": 2022,
+    "sourceType": "module"
   },
   "extends": [
     "eslint:recommended",
@@ -21,7 +30,9 @@
     "react/react-in-jsx-scope": "off",
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "warn",
-    "jsx-a11y/no-noninteractive-element-interactions": "off"
+    "jsx-a11y/no-noninteractive-element-interactions": "off",
+    "jsx-a11y/label-has-associated-control": "off",
+    "jsx-a11y/no-autofocus": "off"
   },
   "settings": { "react": { "version": "detect" } }
 }

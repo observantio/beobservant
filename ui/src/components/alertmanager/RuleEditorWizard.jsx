@@ -29,10 +29,7 @@ export default function RuleEditorWizard({ currentStep, totalSteps, onNext, onPr
           {steps.map((step, index) => {
             const isActive = index === currentStep
             const isCompleted = index < currentStep
-            const isUpcoming = index > currentStep
 
-            return (
-              <div key={step.key} className="flex flex-col items-center flex-1 min-w-0">
                 <div className="flex flex-col items-center">
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${

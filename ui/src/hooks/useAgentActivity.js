@@ -14,7 +14,7 @@ export function useAgentActivity() {
   const [loadingAgents, setLoadingAgents] = useState(true)
 
   useEffect(() => {
-    ;(async () => {
+    (async () => {
       try {
         setLoadingAgents(true)
         const res = await getActiveAgents()

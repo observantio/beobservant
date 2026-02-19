@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import List
 
 from sqlalchemy.orm import joinedload
+from fastapi import HTTPException, status
 
 from database import get_db_session
 from db_models import User, UserApiKey, ApiKeyShare, Group
@@ -39,12 +40,14 @@ def _api_key_to_schema(
                 can_use=bool(getattr(share, "can_use", True)),
                 created_at=share.created_at,
             ))
+    owner_username = getattr(getattr(api_key, 'user', None), 'username', None)
     return ApiKey(
         id=api_key.id,
         name=api_key.name,
         key=api_key.key,
-        otlp_token=getattr(api_key, 'otlp_token', None),
+        otlp_token=None if is_shared else getattr(api_key, 'otlp_token', None),
         owner_user_id=api_key.user_id,
+        owner_username=owner_username,
         is_shared=is_shared,
         can_use=can_use,
         shared_with=shared_with,
@@ -253,9 +256,16 @@ def update_api_key(service, user_id: str, key_id: str, key_update: ApiKeyUpdate)
 def delete_api_key(service, user_id: str, key_id: str) -> bool:
     service._lazy_init()
     with get_db_session() as db:
-        api_key = db.query(UserApiKey).filter_by(id=key_id, user_id=user_id).first()
+        # determine whether the key exists first so we can distinguish
+        # "not found" from "forbidden (exists but owned by someone else)".
+        api_key = db.query(UserApiKey).filter_by(id=key_id).first()
         if not api_key:
             return False
+
+        # key exists but caller is not the owner -> explicit 403
+        if api_key.user_id != user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete API key")
+
         if api_key.is_default:
             raise ValueError("Default key cannot be deleted")
 

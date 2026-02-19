@@ -8,7 +8,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 import { useState, useEffect, useMemo } from 'react'
 import PropTypes from 'prop-types'
-import { Button, Card, Badge, Spinner, Modal } from './ui'
+import { Button, Card, Spinner, Modal } from './ui' 
 import { useToast } from '../contexts/ToastContext'
 import HelpTooltip from './HelpTooltip'
 import * as api from '../api'

@@ -55,6 +55,8 @@ def to_api_key_schema(service, key) -> ApiKey:
         name=key.name,
         key=key.key,
         otlp_token=getattr(key, "otlp_token", None),
+        owner_user_id=getattr(key, "user_id", None),
+        owner_username=getattr(getattr(key, 'user', None), 'username', None),
         is_default=key.is_default,
         is_enabled=key.is_enabled,
         created_at=key.created_at,

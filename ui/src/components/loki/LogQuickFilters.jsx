@@ -57,7 +57,7 @@ export default function LogQuickFilters({
                   >
                     <span className="text-sm text-sre-text flex items-center">
                       <span className={`material-icons text-base mr-2 ${t.iconClass || 'text-sre-text'}`}>{t.icon || 'search'}</span>
-                      "{t.term}"
+                      &quot;{t.term}&quot;
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-sre-text-muted">{t.count}</span>

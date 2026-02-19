@@ -18,7 +18,6 @@ import { getGroups } from '../../api'
  * @param {object} props - Component props
  */
 export default function SilenceForm({ onSave, onCancel }) {
-  const { user } = useAuth()
   const genId = () => Math.random().toString(36).slice(2, 9)
   const [matchers, setMatchers] = useState([{ id: genId(), name: '', value: '', isRegex: false, isEqual: true }])
   const [duration, setDuration] = useState('1')

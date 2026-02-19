@@ -15,6 +15,8 @@ export function buildOtelYaml(otlpToken, endpoints = {}) {
     mimirEndpoint = MIMIR_REMOTE_WRITE,
   } = endpoints || {}
 
+  const tokenHeader = otlpToken ? `x-otlp-token: "${otlpToken}"` : `# x-otlp-token: <not available>`
+
   return `receivers:
   hostmetrics:
     collection_interval: 30s
@@ -81,7 +83,7 @@ exporters:
   otlphttp/loki:
     endpoint: "${lokiEndpoint}"
     headers:
-      x-otlp-token: "${otlpToken}"
+      ${tokenHeader}
     tls:
       insecure: true
     retry_on_failure:
@@ -97,7 +99,7 @@ exporters:
   otlphttp/tempo:
     endpoint: "${tempoEndpoint}"
     headers:
-      x-otlp-token: "${otlpToken}"
+      ${tokenHeader}
     tls:
       insecure: true
     retry_on_failure:
@@ -113,7 +115,7 @@ exporters:
   prometheusremotewrite/mimir:
     endpoint: "${mimirEndpoint}"
     headers:
-      x-otlp-token: "${otlpToken}"
+      ${tokenHeader}
     retry_on_failure:
       enabled: true
       initial_interval: 5s

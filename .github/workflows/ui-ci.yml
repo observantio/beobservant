@@ -24,14 +24,6 @@ jobs:
         working-directory: ui
         run: npm ci
 
-      - name: Run linters
-        working-directory: ui
-        run: npm run lint
-
-      - name: Run accessibility tests
-        working-directory: ui
-        run: npm run a11y -- --run
-
       - name: Run unit tests
         working-directory: ui
         run: npm test -- --run

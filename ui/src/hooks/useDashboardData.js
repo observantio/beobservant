@@ -67,7 +67,7 @@ export function useDashboardData() {
 
   useEffect(() => {
     // Fetch health
-    ;(async () => {
+    (async () => {
       try {
         const res = await fetchHealth()
         setHealth(res)

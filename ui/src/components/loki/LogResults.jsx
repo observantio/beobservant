@@ -30,7 +30,10 @@ function normalizeStreamLabelValue(label, value) {
   return value
 }
 
-export default function LogResults({ queryResult, loading, filterDisplayedLogs, searchText, viewMode, expandedLogs, toggleLogExpand, copyToClipboard, handleTraceClick, handleStreamClick }) {
+export default function LogResults({ queryResult, loading, filterDisplayedLogs, searchText, viewMode, expandedLogs, toggleLogExpand, copyToClipboard, handleTraceClick, handleStreamClick, streamsPerPage }) {
+  // Hooks must be called at the top level (before early returns)
+  const [page, setPage] = useState(1)
+
   if (loading) {
     return (
       <div className="py-12 flex flex-col items-center ">
@@ -82,7 +85,6 @@ export default function LogResults({ queryResult, loading, filterDisplayedLogs, 
   }
 
   // pagination support (streamsPerPage prop overrides MAX_STREAMS_RENDER)
-  const [page, setPage] = useState(1)
   const perPage = (typeof streamsPerPage === 'number' && streamsPerPage > 0) ? streamsPerPage : MAX_STREAMS_RENDER
   const totalStreams = filteredStreams.length
   const totalPages = Math.max(1, Math.ceil(totalStreams / perPage))
