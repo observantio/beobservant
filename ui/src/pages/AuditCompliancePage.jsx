@@ -420,8 +420,10 @@ export default function AuditCompliancePage() {
               </div>
 
               <div className="flex gap-2 items-center">
-                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); copyText(prettyJson(selected.details || {})) }} aria-label="Copy JSON">Copy JSON</Button>
-                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); copyText((selected.resource_type || '') + (selected.resource_id ? `/${selected.resource_id}` : '')) }} aria-label="Copy resource">Copy Resource</Button>
+                <div className="flex items-center gap-2 whitespace-nowrap">
+                  <Button size="sm" variant="ghost" className="whitespace-nowrap" onClick={(e) => { e.stopPropagation(); copyText(prettyJson(selected.details || {})) }} aria-label="Copy JSON">Copy JSON</Button>
+                  <Button size="sm" variant="ghost" className="whitespace-nowrap" onClick={(e) => { e.stopPropagation(); copyText((selected.resource_type || '') + (selected.resource_id ? `/${selected.resource_id}` : '')) }} aria-label="Copy resource">Copy Resource</Button>
+                </div>
                 <Button size="sm" onClick={() => setSelected(null)}>Close</Button>
               </div>
             </div>

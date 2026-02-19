@@ -734,11 +734,11 @@ export default function AlertManagerPage() {
           </p>
 
           <div className="bg-sre-surface/30 rounded-xl p-4 border border-sre-border/50">
-            <h4 className="text-sm font-semibold text-sre-text mb-2 flex items-center gap-2">
-              <span className="material-icons text-sm">template</span>
-              Quick Templates
+            <h4 className="text-sm font-semibold text-sre-text mb-1 flex items-center gap-1">
+              <span className="material-icons text-sm leading-none align-middle">template</span>
+              <span className="leading-none">Quick Templates</span>
             </h4>
-            <p className="text-xs text-sre-text-muted mb-3">
+            <p className="text-xs text-sre-text-muted mb-2">
               Start from a known-good template, then tune the expression and thresholds for your environment.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
