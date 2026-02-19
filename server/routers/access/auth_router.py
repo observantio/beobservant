@@ -340,6 +340,14 @@ async def mfa_verify(payload: MfaVerifyRequest, current_user: TokenData = Depend
     try:
         codes = await run_in_threadpool(auth_service.verify_enable_totp, current_user.user_id, payload.code)
         return RecoveryCodesResponse(recovery_codes=codes)
+    except ValueError as ve:
+        # These are raised for user errors in verify_enable_totp
+        msg = str(ve)
+        if "not enrolled" in msg:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="TOTP not enrolled for user")
+        if "Invalid TOTP code" in msg:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid TOTP code")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to verify MFA code")
 

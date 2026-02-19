@@ -104,6 +104,7 @@ _MFA_REQUIRED_RESPONSE = "mfa_required"
 
 
 class DatabaseAuthService:
+    _MFA_SETUP_RESPONSE = "mfa_setup_required"
     """Enterprise authentication service backed by PostgreSQL."""
 
     def __init__(self):

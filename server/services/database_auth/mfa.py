@@ -92,7 +92,7 @@ def enroll_totp(service, user_id: str) -> Dict[str, str]:
 
 
 def verify_enable_totp(service, user_id: str, code: str) -> List[str]:
-    with service.get_db_session() as db:
+    with get_db_session() as db:
         user = db.query(service.__class__.User).filter_by(id=user_id).first()
         if not user or not user.totp_secret:
             raise ValueError("TOTP not enrolled for user")
@@ -109,7 +109,7 @@ def verify_enable_totp(service, user_id: str, code: str) -> List[str]:
 def verify_totp_code(service, user, code: str) -> bool:
     if not user or not user.totp_secret:
         return False
-    with service.get_db_session() as db:
+    with get_db_session() as db:
         db_user = db.query(service.__class__.User).filter_by(id=user.id).first()
         if not db_user or not db_user.totp_secret:
             return False
@@ -124,7 +124,7 @@ def verify_totp_code(service, user, code: str) -> bool:
 
 
 def disable_totp(service, user_id: str, current_password: Optional[str] = None, code: Optional[str] = None) -> bool:
-    with service.get_db_session() as db:
+    with get_db_session() as db:
         user = db.query(service.__class__.User).filter_by(id=user_id).first()
         if not user or not user.mfa_enabled:
             return False
@@ -141,7 +141,7 @@ def disable_totp(service, user_id: str, current_password: Optional[str] = None, 
 
 
 def reset_totp(service, user_id: str, admin_id: str) -> bool:
-    with service.get_db_session() as db:
+    with get_db_session() as db:
         user = db.query(service.__class__.User).filter_by(id=user_id).first()
         if not user:
             return False
