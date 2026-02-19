@@ -2,9 +2,7 @@
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
-
 you may not use this file except in compliance with the License.
-
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
@@ -22,9 +20,6 @@ from config import config
 from database import get_db_session
 from db_models import User, Group, UserApiKey, Tenant
 from models.access.auth_models import Role, Token, TokenData
-
-# expose a reference to the create_mfa_setup_token operation for service layer
-create_mfa_setup_token_op = create_mfa_setup_token if 'create_mfa_setup_token' in globals() else None
 
 
 def _load_private_key(pem: str):
@@ -85,7 +80,7 @@ def create_access_token(service, user: User) -> Token:
     with get_db_session() as db:
         db_user = db.query(User).options(
             joinedload(User.groups).joinedload(Group.permissions),
-            joinedload(User.permissions)
+            joinedload(User.permissions),
         ).filter_by(id=user_id).first()
 
         if not db_user:
@@ -103,24 +98,18 @@ def create_access_token(service, user: User) -> Token:
             "is_superuser": db_user.is_superuser,
             "permissions": list(permissions),
             "group_ids": group_ids,
-            "exp": expire
+            "exp": expire,
         }
 
     encoded_jwt = jwt.encode(to_encode, _jwt_signing_key(), algorithm=config.JWT_ALGORITHM)
-
     return Token(
         access_token=encoded_jwt,
         token_type="bearer",
-        expires_in=config.JWT_EXPIRATION_MINUTES * 60
+        expires_in=config.JWT_EXPIRATION_MINUTES * 60,
     )
 
 
 def create_mfa_setup_token(service, user: User, minutes: int = 10) -> Token:
-    """Create a short-lived token usable only for MFA setup endpoints.
-
-    The token includes the claim `mfa_setup: True` so the middleware can
-    allow MFA enroll/verify calls without granting full app permissions.
-    """
     expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
     to_encode = {
         "sub": user.id,
@@ -138,28 +127,26 @@ def decode_token(service, token: str) -> Optional[TokenData]:
         payload = jwt.decode(token, _jwt_verification_key(), algorithms=[config.JWT_ALGORITHM])
         user_id: str = payload.get("sub")
         username: str = payload.get("username")
-        tenant_id: str = payload.get("tenant_id")
-        org_id: str = payload.get("org_id", config.DEFAULT_ORG_ID)
-        role: str = payload.get("role")
-        is_superuser: bool = payload.get("is_superuser", False)
-        permissions: List[str] = payload.get("permissions", [])
-        group_ids: List[str] = payload.get("group_ids", [])
-        is_mfa_setup: bool = payload.get("mfa_setup", False)
-
         if user_id is None or username is None:
             return None
+
+        role_raw = payload.get("role")
+        try:
+            role = Role(role_raw) if role_raw is not None else Role.USER
+        except ValueError:
+            role = Role.USER
 
         td = TokenData(
             user_id=user_id,
             username=username,
-            tenant_id=tenant_id,
-            org_id=org_id,
-            role=Role(role) if role is not None else Role.USER,
-            is_superuser=is_superuser,
-            permissions=permissions,
-            group_ids=group_ids
+            tenant_id=payload.get("tenant_id"),
+            org_id=payload.get("org_id", config.DEFAULT_ORG_ID),
+            role=role,
+            is_superuser=payload.get("is_superuser", False),
+            permissions=payload.get("permissions", []),
+            group_ids=payload.get("group_ids", []),
         )
-        setattr(td, 'is_mfa_setup', is_mfa_setup)
+        setattr(td, "is_mfa_setup", payload.get("mfa_setup", False))
         return td
     except jwt.PyJWTError:
         service.logger.warning("JWT decode failed")
@@ -168,20 +155,17 @@ def decode_token(service, token: str) -> Optional[TokenData]:
 
 def authenticate_user(service, username: str, password: str) -> Optional[User]:
     service._lazy_init()
-    username = (username or '').strip().lower()
+    username = (username or "").strip().lower()
     with get_db_session() as db:
         user = db.query(User).filter(func.lower(User.username) == username).first()
-
         if not user:
             return None
-
         if not service.verify_password(password, user.hashed_password):
             return None
-
         if not user.is_active:
             return None
 
-        if user.username == config.DEFAULT_ADMIN_USERNAME and service.verify_password(config.DEFAULT_ADMIN_PASSWORD, user.hashed_password):
+        if user.username == config.DEFAULT_ADMIN_USERNAME and password == config.DEFAULT_ADMIN_PASSWORD:
             user.needs_password_change = True
 
         user.last_login = datetime.now(timezone.utc)
@@ -190,30 +174,26 @@ def authenticate_user(service, username: str, password: str) -> Optional[User]:
         user = db.query(User).options(
             joinedload(User.tenant),
             joinedload(User.groups).joinedload(Group.permissions),
-            joinedload(User.permissions)
+            joinedload(User.permissions),
         ).filter_by(id=user.id).first()
 
         if user:
             db.expunge(user)
-
         return user
 
 
 def update_password(service, user_id: str, password_update, tenant_id: str) -> bool:
+    if len(password_update.new_password) < 12:
+        raise ValueError("Password must be at least 12 characters long")
+
     with get_db_session() as db:
         user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
-
         if not user:
             return False
-
         if not service.verify_password(password_update.current_password, user.hashed_password):
             return False
-
         if service.verify_password(password_update.new_password, user.hashed_password):
             raise ValueError("New password must be different from current password")
-
-        if len(password_update.new_password) < 8:
-            raise ValueError("Password must be at least 8 characters long")
 
         user.hashed_password = service.hash_password(password_update.new_password)
         user.needs_password_change = False

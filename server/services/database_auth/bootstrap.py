@@ -2,18 +2,19 @@
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
-
 you may not use this file except in compliance with the License.
-
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from typing import Optional
 from datetime import datetime, timezone
+from typing import Optional
 
-from database import get_db_session
-from db_models import Tenant, User, Permission, UserApiKey
+from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
+
 from config import config
+from database import get_db_session
+from db_models import Permission, Tenant, User, UserApiKey
 from models.access.auth_models import Role
 
 
@@ -84,6 +85,11 @@ def ensure_default_setup(service):
                     )
                 return
 
+            if not config.DEFAULT_ADMIN_PASSWORD or len(config.DEFAULT_ADMIN_PASSWORD) < 16:
+                raise ValueError(
+                    "DEFAULT_ADMIN_PASSWORD must be at least 16 characters"
+                )
+
             if not default_tenant:
                 default_tenant = Tenant(
                     name=config.DEFAULT_ADMIN_TENANT,
@@ -95,8 +101,9 @@ def ensure_default_setup(service):
                 service.logger.info("Created default tenant")
 
             admin_username = (config.DEFAULT_ADMIN_USERNAME or "").strip().lower()
-            admin_user = db.query(User).filter_by(
-                tenant_id=default_tenant.id, username=admin_username
+            admin_user = db.query(User).filter(
+                User.tenant_id == default_tenant.id,
+                func.lower(User.username) == admin_username,
             ).first()
 
             if not admin_user:
@@ -119,5 +126,9 @@ def ensure_default_setup(service):
 
             ensure_default_api_key(service, db, admin_user)
             db.commit()
+    except SQLAlchemyError as exc:
+        service.logger.error("Database error during default setup: %s", exc)
+        raise
     except Exception as exc:
-        service.logger.error("Error setting up defaults: %s", exc)
+        service.logger.error("Error during default setup: %s", exc)
+        raise
