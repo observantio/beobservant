@@ -2,25 +2,19 @@
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
-
 you may not use this file except in compliance with the License.
-
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
+
 import logging
 import secrets
 import threading
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
-import httpx
-import pyotp
-from cryptography.fernet import Fernet, InvalidToken
-from fastapi import HTTPException
+from cryptography.fernet import Fernet
 from passlib.context import CryptContext
-from sqlalchemy import and_, func
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 try:
     from db_models import AuditLog, Group, Permission, Tenant, User, UserApiKey
@@ -51,7 +45,6 @@ from models.access.user_models import (
     UserResponse,
     UserUpdate,
 )
-from services.audit_context import get_request_audit_context
 from services.auth.api_key_ops import (
     backfill_otlp_tokens as backfill_otlp_tokens_op,
     create_api_key as create_api_key_op,
@@ -80,7 +73,6 @@ from services.auth.group_ops import (
     update_group_permissions as update_group_permissions_op,
 )
 from services.auth.oidc_service import OIDCService
-# mixin helpers are implemented directly in this service file; avoid importing missing modules
 from services.auth.permission_defs import PERMISSION_DEFS
 from services.auth.user_ops import (
     create_user as create_user_op,
@@ -92,9 +84,17 @@ from services.auth.user_ops import (
     update_user as update_user_op,
     update_user_permissions as update_user_permissions_op,
 )
-
-# split large DatabaseAuthService into focused modules under services/database_auth
-from services.database_auth import token as db_token, auth as db_auth, oidc as db_oidc, permissions as db_permissions, schema_converters as db_schema, audit as db_audit, password as db_password, bootstrap as db_bootstrap, mfa as db_mfa
+from services.database_auth import (
+    audit as db_audit,
+    auth as db_auth,
+    bootstrap as db_bootstrap,
+    mfa as db_mfa,
+    oidc as db_oidc,
+    password as db_password,
+    permissions as db_permissions,
+    schema_converters as db_schema,
+    token as db_token,
+)
 
 logger = logging.getLogger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -105,6 +105,7 @@ _MFA_REQUIRED_RESPONSE = "mfa_required"
 
 class DatabaseAuthService:
     _MFA_SETUP_RESPONSE = "mfa_setup_required"
+
     """Enterprise authentication service backed by PostgreSQL."""
 
     def __init__(self):
@@ -112,7 +113,6 @@ class DatabaseAuthService:
         self._initialized = False
         self.logger = logger
         self.oidc_service = OIDCService()
-        # semaphore used to serialize expensive password hashing/verifying ops
         self._password_op_semaphore = threading.Semaphore(1)
 
     def is_external_auth_enabled(self) -> bool:
@@ -308,7 +308,7 @@ class DatabaseAuthService:
         return db_schema.to_group_schema(self, group)
 
     # -------------------------------------------------------------------------
-    # User CRUD (delegation)
+    # User CRUD
     # -------------------------------------------------------------------------
 
     def get_user_by_id(self, user_id: str) -> Optional[UserSchema]:
@@ -323,7 +323,9 @@ class DatabaseAuthService:
     def list_users(self, tenant_id: str, *, limit: Optional[int] = None, offset: int = 0) -> List[UserSchema]:
         return list_users_op(self, tenant_id, limit=limit, offset=offset)
 
-    def update_user(self, user_id: str, user_update: UserUpdate, tenant_id: str, updater_id: str = None) -> Optional[UserSchema]:
+    def update_user(
+        self, user_id: str, user_update: UserUpdate, tenant_id: str, updater_id: str = None
+    ) -> Optional[UserSchema]:
         return update_user_op(self, user_id, user_update, tenant_id, updater_id)
 
     def set_grafana_user_id(self, user_id: str, grafana_user_id: int, tenant_id: str) -> bool:
@@ -341,7 +343,7 @@ class DatabaseAuthService:
         return update_password_op(self, user_id, password_update, tenant_id)
 
     # -------------------------------------------------------------------------
-    # API key CRUD (delegation)
+    # API key CRUD
     # -------------------------------------------------------------------------
 
     def list_api_keys(self, user_id: str) -> List[ApiKey]:
@@ -369,7 +371,9 @@ class DatabaseAuthService:
     ):
         return replace_api_key_shares_op(self, owner_user_id, tenant_id, key_id, user_ids, group_ids=group_ids)
 
-    def delete_api_key_share(self, owner_user_id: str, tenant_id: str, key_id: str, shared_user_id: str) -> bool:
+    def delete_api_key_share(
+        self, owner_user_id: str, tenant_id: str, key_id: str, shared_user_id: str
+    ) -> bool:
         return delete_api_key_share_op(self, owner_user_id, tenant_id, key_id, shared_user_id)
 
     def validate_otlp_token(self, token: str) -> Optional[str]:
@@ -379,7 +383,7 @@ class DatabaseAuthService:
         backfill_otlp_tokens_op(self)
 
     # -------------------------------------------------------------------------
-    # Group CRUD (delegation)
+    # Group CRUD
     # -------------------------------------------------------------------------
 
     def create_group(self, group_create: GroupCreate, tenant_id: str, creator_id: str = None) -> GroupSchema:
@@ -394,10 +398,14 @@ class DatabaseAuthService:
     def delete_group(self, group_id: str, tenant_id: str, deleter_id: str = None) -> bool:
         return delete_group_op(self, group_id, tenant_id, deleter_id)
 
-    def update_group(self, group_id: str, group_update: GroupUpdate, tenant_id: str, updater_id: str = None) -> Optional[GroupSchema]:
+    def update_group(
+        self, group_id: str, group_update: GroupUpdate, tenant_id: str, updater_id: str = None
+    ) -> Optional[GroupSchema]:
         return update_group_op(self, group_id, group_update, tenant_id, updater_id)
 
-    def update_group_permissions(self, group_id: str, permission_names: List[str], tenant_id: str) -> bool:
+    def update_group_permissions(
+        self, group_id: str, permission_names: List[str], tenant_id: str
+    ) -> bool:
         return update_group_permissions_op(self, group_id, permission_names, tenant_id)
 
     def update_group_members(self, group_id: str, user_ids: List[str], tenant_id: str) -> bool:
@@ -419,4 +427,7 @@ class DatabaseAuthService:
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
     ):
-        return db_audit.log_audit(self, db, tenant_id, user_id, action, resource_type, resource_id, details, ip_address=ip_address, user_agent=user_agent)
+        return db_audit.log_audit(
+            self, db, tenant_id, user_id, action, resource_type, resource_id, details,
+            ip_address=ip_address, user_agent=user_agent,
+        )
