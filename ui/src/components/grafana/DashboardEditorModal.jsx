@@ -90,6 +90,7 @@ export default function DashboardEditorModal({
   onSave
 }) {
   const [selectedTemplate, setSelectedTemplate] = useState(null)
+  const [showJsonConflict, setShowJsonConflict] = useState(false)
 
   const applyTemplate = (template) => {
     setSelectedTemplate(template.id)
@@ -101,7 +102,123 @@ export default function DashboardEditorModal({
     }
   }
 
+  const _jsonLooksMeaningful = (content) => {
+    if (!content || !content.trim()) return false
+    try {
+      const parsed = JSON.parse(content)
+      const db = parsed.dashboard || parsed
+      if (fileUploaded) return true
+      if (editingDashboard) return true
+      if (db && Array.isArray(db.panels) && db.panels.length > 0) return true
+      if (db && typeof db.title === 'string' && db.title.trim().length > 0) return true
+      // otherwise treat as non-meaningful (e.g. default empty object)
+      return false
+    } catch (e) {
+      // invalid JSON — consider it meaningful so user can choose what to do
+      return true
+    }
+  }
+
+  const mergeFormIntoJson = (rawJson) => {
+    let parsed
+    try {
+      parsed = JSON.parse(rawJson)
+    } catch (e) {
+      // if JSON invalid, fall back to building a fresh dashboard object
+      parsed = {}
+    }
+
+    const db = parsed.dashboard || parsed
+    const tags = (dashboardForm.tags || '')
+      .split(',')
+      .map(t => t.trim())
+      .filter(Boolean)
+
+    const selectedDatasource = datasources.find(ds => ds.uid === dashboardForm.datasourceUid)
+
+    // update the dashboard-level settings while preserving panels/layout
+    db.title = dashboardForm.title
+    db.refresh = dashboardForm.refresh
+    db.tags = tags
+    db.timezone = db.timezone || 'browser'
+
+    db.templating = (selectedDatasource && dashboardForm.useTemplating)
+      ? {
+          list: [
+            {
+              name: 'ds_default',
+              label: 'Datasource',
+              type: 'datasource',
+              query: selectedDatasource.type,
+              current: { text: selectedDatasource.name, value: selectedDatasource.uid },
+            },
+          ],
+        }
+      : (db.templating || { list: [] })
+
+    // preserve wrapper shape if original had one
+    if (parsed.dashboard) {
+      parsed.dashboard = db
+      return parsed
+    }
+    return db
+  }
+
+  const overrideJsonWithForm = () => {
+    const tags = (dashboardForm.tags || '')
+      .split(',')
+      .map(t => t.trim())
+      .filter(Boolean)
+
+    const selectedDatasource = datasources.find(ds => ds.uid === dashboardForm.datasourceUid)
+
+    const dashboardObj = {
+      title: dashboardForm.title,
+      tags,
+      refresh: dashboardForm.refresh,
+      panels: [],
+      timezone: 'browser',
+      schemaVersion: 16,
+      editable: true,
+      templating: (selectedDatasource && dashboardForm.useTemplating)
+        ? {
+            list: [
+              {
+                name: 'ds_default',
+                label: 'Datasource',
+                type: 'datasource',
+                query: selectedDatasource.type,
+                current: { text: selectedDatasource.name, value: selectedDatasource.uid },
+              },
+            ],
+          }
+        : { list: [] },
+    }
+
+    const str = JSON.stringify(dashboardObj, null, 2)
+    setJsonContent(str)
+    // request parent to save using JSON payload (pass the JSON string to avoid state race)
+    onSave(str)
+  }
+
+  const useJsonButUpdateWithForm = () => {
+    const merged = mergeFormIntoJson(jsonContent || '{}')
+    const str = JSON.stringify(merged, null, 2)
+    setJsonContent(str)
+    // request parent to save using JSON payload (pass the JSON string to avoid state race)
+    onSave(str)
+  }
+
   const handleSave = () => {
+    // If user is saving via the form but there's an existing meaningful JSON
+    // (either previously uploaded or an existing dashboard JSON), ask first.
+    if (editorTab === 'form' && _jsonLooksMeaningful(jsonContent)) {
+      setShowJsonConflict(true)
+      return
+    }
+
+    // parent save accepts optional jsonOverride when the modal needs to save
+    // using the current JSON payload immediately.
     onSave()
   }
 
@@ -129,6 +246,56 @@ export default function DashboardEditorModal({
 
         {editorTab === 'form' && (
           <div className="space-y-4">
+                {showJsonConflict && (
+                  <div className="p-5 mb-4 rounded-xl border-2 border-red-600 border-dashed">
+                    <div className="flex flex-col sm:flex-row sm:justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="text-base font-semibold text-sre-text mb-1">JSON content detected</div>
+                        <div className="text-sm text-sre-text-muted mb-3">
+                          You previously edited or uploaded dashboard JSON. Choose how to proceed:
+                        </div>
+                        <ul className="list-disc list-inside text-sm text-sre-text-muted space-y-1">
+                          <li>
+                            <strong>Fresh Start</strong> — replace the JSON with values from the form.
+                          </li>
+                          <li>
+                            <strong>Update JSON</strong> — keep panels/layout from JSON but update title, tags, datasource, and refresh from the form.
+                          </li>
+                          <li>
+                            <strong>Cancel Edit</strong> — return to editing without saving.
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div className="flex flex-col sm:items-end gap-2 mt-3 sm:mt-0">
+                        <button
+                          data-testid="json-conflict-override"
+                          type="button"
+                          className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                          onClick={() => { setShowJsonConflict(false); overrideJsonWithForm() }}
+                        >
+                          Fresh Start
+                        </button>
+                        <button
+                          data-testid="json-conflict-merge"
+                          type="button"
+                          className="px-4 py-2 rounded-lg bg-sre-primary text-white text-sm font-medium hover:bg-sre-primary/90 transition-colors"
+                          onClick={() => { setShowJsonConflict(false); useJsonButUpdateWithForm() }}
+                        >
+                          Update JSON
+                        </button>
+                        <button
+                          data-testid="json-conflict-cancel"
+                          type="button"
+                          className="px-4 py-2 rounded-lg border border-sre-border bg-transparent text-sm font-medium hover:bg-sre-bg-alt transition-colors"
+                          onClick={() => setShowJsonConflict(false)}
+                        >
+                          Cancel Edit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
             <div>
               <label className="block text-sm font-medium text-sre-text mb-2">
                 Dashboard Title <span className="text-red-500">*</span> <HelpTooltip text="Enter a descriptive title for your dashboard." />

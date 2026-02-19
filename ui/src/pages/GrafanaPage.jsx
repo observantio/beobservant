@@ -298,10 +298,29 @@ export default function GrafanaPage() {
     setShowDashboardEditor(true)
   }
 
-  async function saveDashboard() {
+  // accept optional `jsonOverride` string when the modal requests the
+  // parent to save immediately using a specific JSON payload (avoids state
+  // synchronization/race between modal setJsonContent() and save invocation).
+  async function saveDashboard(jsonOverride = null) {
     try {
       let payload = null
-      if (editorTab === 'json') {
+
+      // If caller passed a JSON override string, use it directly regardless of
+      // the current editorTab. This enables the modal to request immediate
+      // JSON-based save after merging/overriding.
+      if (jsonOverride) {
+        let parsed
+        try {
+          parsed = JSON.parse(jsonOverride)
+          setJsonError('')
+        } catch (err) {
+          setJsonError(err.message)
+          toast.error('Invalid JSON — please fix and try again')
+          return
+        }
+
+        payload = { dashboard: parsed.dashboard || parsed, folderId: parsed.folderId || Number.parseInt(dashboardForm.folderId, 10) || 0, overwrite: parsed.overwrite !== undefined ? !!parsed.overwrite : !!editingDashboard }
+      } else if (editorTab === 'json') {
         if (!jsonContent || !jsonContent.trim()) {
           toast.error('JSON content is empty')
           return
