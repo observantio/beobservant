@@ -130,6 +130,44 @@ Keep all credentials in `.env` or your secret manager — never hard-coded in co
 
 ## Security & Authentication
 
+### Secret management / Vault
+
+Be Observant supports fetching sensitive configuration from a secret store (HashiCorp Vault) in addition to environment variables. This is opt-in — enable it with `VAULT_ENABLED=true`.
+
+Recommendations:
+
+- Kubernetes: prefer Vault Agent Injector or the Vault CSI driver (Kubernetes auth is recommended).
+- Containers/VMs: use AppRole (RoleID + SecretID) or a short-lived Vault token provisioned at deploy time.
+
+Important environment variables (examples in `.env.example`):
+
+```env
+VAULT_ENABLED=false
+VAULT_ADDR=
+VAULT_TOKEN=            # optional (token auth)
+VAULT_ROLE_ID=          # optional (AppRole)
+VAULT_SECRET_ID=        # optional (AppRole)
+VAULT_SECRETS_PREFIX=secret
+VAULT_KV_VERSION=2
+VAULT_TIMEOUT=2.0
+VAULT_FAIL_ON_MISSING=false
+```
+
+Behavior:
+
+- When `VAULT_ENABLED=true` the server will attempt to read critical secrets (DATABASE_URL, JWT_PRIVATE_KEY/JWT_PUBLIC_KEY, DEFAULT_ADMIN_PASSWORD, DATA_ENCRYPTION_KEY, and other credentials).
+- In production, set `VAULT_FAIL_ON_MISSING=true` (or `APP_ENV=production`) to make startup fail if Vault is unreachable or required secrets are missing.
+- During rollout, keep `VAULT_ENABLED=false` to use environment variables; switch to Vault in staging before enabling in production.
+
+Integration notes:
+
+- The application exposes `config.get_secret("KEY_NAME")` which reads from Vault when enabled and falls back to environment variables.
+- For Kubernetes we recommend using the Vault Agent Injector (renders secrets as files/env) or the CSI driver (mounts secrets). AppRole may be used for non-k8s deployments.
+
+---
+
+## Security & Authentication
+
 ### JWT Keys
 
 Production requires explicit asymmetric key material:

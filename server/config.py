@@ -241,6 +241,34 @@ class Config:
         self.OTLP_GATEWAY_URL: str = os.getenv("OTLP_GATEWAY_URL", "http://otlp-gateway:4320")
         self.DEFAULT_OTLP_TOKEN: Optional[str] = os.getenv("DEFAULT_OTLP_TOKEN")
 
+        # Vault / secret-store integration (opt-in)
+        self.VAULT_ENABLED: bool = _to_bool(os.getenv("VAULT_ENABLED"), default=False)
+        self.VAULT_ADDR: Optional[str] = os.getenv("VAULT_ADDR")
+        self.VAULT_TOKEN: Optional[str] = os.getenv("VAULT_TOKEN")
+        self.VAULT_ROLE_ID: Optional[str] = os.getenv("VAULT_ROLE_ID")
+        self.VAULT_SECRET_ID: Optional[str] = os.getenv("VAULT_SECRET_ID")
+        self.VAULT_CACERT: Optional[str] = os.getenv("VAULT_CACERT")
+        self.VAULT_SECRETS_PREFIX: str = os.getenv("VAULT_SECRETS_PREFIX", "secret")
+        self.VAULT_KV_VERSION: int = int(os.getenv("VAULT_KV_VERSION", "2"))
+        self.VAULT_TIMEOUT: float = float(os.getenv("VAULT_TIMEOUT", "2.0"))
+        # When true (or in production) missing Vault => fail startup
+        self.VAULT_FAIL_ON_MISSING: bool = _to_bool(os.getenv("VAULT_FAIL_ON_MISSING"), default=self.IS_PRODUCTION)
+
+        # Attempt to load secrets from Vault (if enabled) before applying security defaults
+        try:
+            self._load_vault_secrets()
+        except Exception as exc:  # pragma: no cover - only raised when Vault explicitly misconfigured
+            if self.VAULT_ENABLED and (self.IS_PRODUCTION or self.VAULT_FAIL_ON_MISSING):
+                raise
+            logger.warning("Vault not available or misconfigured; continuing with environment variables: %s", exc)
+
+        # ensure a fallback secret provider is always present for runtime secret
+        # lookups (used by callers that prefer `config.get_secret(...)`).
+        if not hasattr(self, "_secret_provider") or self._secret_provider is None:
+            from services.secrets.provider import EnvSecretProvider
+
+            self._secret_provider = EnvSecretProvider()
+
         # Alerting and notifications defaults
         self.DEFAULT_RULE_GROUP: str = os.getenv("DEFAULT_RULE_GROUP", "default")
         self.DEFAULT_SLACK_CHANNEL: str = os.getenv("DEFAULT_SLACK_CHANNEL", "default")
@@ -256,11 +284,88 @@ class Config:
         self._apply_security_defaults()
         self.validate()
 
+    def _load_vault_secrets(self) -> None:
+        """Load configured secrets from Vault (when VAULT_ENABLED=true).
+
+        This is intentionally opt-in. When Vault is enabled we attempt to
+        resolve a small set of critical secrets and override the corresponding
+        `self.` attributes **before** validation runs.
+        """
+        if not self.VAULT_ENABLED:
+            return
+
+        # lazy import so hvac is not required unless VAULT is used
+        # import using the same top-level `services` package used elsewhere
+        from services.secrets.provider import EnvSecretProvider
+        from services.secrets.vault_client import VaultClientError, VaultSecretProvider
+
+        if not self.VAULT_ADDR:
+            raise ValueError("VAULT_ADDR must be set when VAULT_ENABLED=true")
+
+        provider = VaultSecretProvider(
+            address=self.VAULT_ADDR,
+            token=self.VAULT_TOKEN,
+            role_id=self.VAULT_ROLE_ID,
+            secret_id=self.VAULT_SECRET_ID,
+            prefix=self.VAULT_SECRETS_PREFIX,
+            kv_version=self.VAULT_KV_VERSION,
+            timeout=self.VAULT_TIMEOUT,
+        )
+
+        # keys we want to fetch from Vault if present
+        secret_keys = [
+            "DATABASE_URL",
+            "JWT_PRIVATE_KEY",
+            "JWT_PUBLIC_KEY",
+            "DEFAULT_ADMIN_PASSWORD",
+            "DATA_ENCRYPTION_KEY",
+            "GRAFANA_PASSWORD",
+            "GRAFANA_API_KEY",
+            "OIDC_CLIENT_SECRET",
+            "KEYCLOAK_ADMIN_CLIENT_SECRET",
+            "DEFAULT_OTLP_TOKEN",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "INBOUND_WEBHOOK_TOKEN",
+            "OTLP_INGEST_TOKEN",
+            "AGENT_HEARTBEAT_TOKEN",
+        ]
+
+        for sk in secret_keys:
+            try:
+                val = provider.get(sk)
+            except Exception:
+                val = None
+
+            if val:
+                # override only when Vault returns a value
+                setattr(self, sk, val)
+                logger.info("Loaded secret %s from Vault", sk)
+
+    def get_secret(self, key: str) -> Optional[str]:
+        """Runtime secret lookup (Vault-aware).
+
+        - Prefers attributes already present on the Config object (e.g. when
+          `_load_vault_secrets` has populated them).
+        - Falls back to the configured SecretProvider (env or Vault).
+        """
+        # prefer explicit attribute values already set on Config
+        val = getattr(self, key, None)
+        if val:
+            return val
+
+        # delegate to provider (EnvSecretProvider or VaultSecretProvider)
+        try:
+            return self._secret_provider.get(key)
+        except Exception:
+            return None
+
     def _apply_security_defaults(self) -> None:
         if _is_placeholder(
             self.DEFAULT_ADMIN_PASSWORD,
             placeholders=["admin123", "admin", "password", "changeme"],
         ):
+
             if not self.IS_PRODUCTION and self.DEFAULT_ADMIN_BOOTSTRAP_ENABLED:
                 self.DEFAULT_ADMIN_PASSWORD = secrets.token_urlsafe(18)
                 logger.warning(

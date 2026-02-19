@@ -109,26 +109,26 @@ class NotificationService:
         actor: str,
     ) -> bool:
         """Best-effort assignment email using optional INCIDENT_ASSIGNMENT_SMTP_* env vars."""
-        enabled = str(os.getenv("INCIDENT_ASSIGNMENT_EMAIL_ENABLED", "false")).strip().lower() in {"1", "true", "yes", "on"}
+        enabled = str(config.get_secret("INCIDENT_ASSIGNMENT_EMAIL_ENABLED") or "false").strip().lower() in {"1", "true", "yes", "on"}
         if not enabled:
             return False
 
-        smtp_host = os.getenv("INCIDENT_ASSIGNMENT_SMTP_HOST", "").strip()
+        smtp_host = (config.get_secret("INCIDENT_ASSIGNMENT_SMTP_HOST") or "").strip()
         if not smtp_host:
             logger.info("Incident assignment email skipped: INCIDENT_ASSIGNMENT_SMTP_HOST not set")
             return False
 
-        smtp_port_raw = os.getenv("INCIDENT_ASSIGNMENT_SMTP_PORT", "587")
+        smtp_port_raw = config.get_secret("INCIDENT_ASSIGNMENT_SMTP_PORT") or "587"
         try:
             smtp_port = int(smtp_port_raw)
         except ValueError:
             smtp_port = 587
 
-        smtp_user = os.getenv("INCIDENT_ASSIGNMENT_SMTP_USERNAME")
-        smtp_pass = os.getenv("INCIDENT_ASSIGNMENT_SMTP_PASSWORD")
-        smtp_from = os.getenv("INCIDENT_ASSIGNMENT_FROM", config.DEFAULT_ADMIN_EMAIL)
-        use_starttls = self._as_bool(os.getenv("INCIDENT_ASSIGNMENT_SMTP_STARTTLS", "true"))
-        use_ssl = self._as_bool(os.getenv("INCIDENT_ASSIGNMENT_SMTP_USE_SSL", "false"))
+        smtp_user = config.get_secret("INCIDENT_ASSIGNMENT_SMTP_USERNAME")
+        smtp_pass = config.get_secret("INCIDENT_ASSIGNMENT_SMTP_PASSWORD")
+        smtp_from = config.get_secret("INCIDENT_ASSIGNMENT_FROM") or config.DEFAULT_ADMIN_EMAIL
+        use_starttls = self._as_bool(config.get_secret("INCIDENT_ASSIGNMENT_SMTP_STARTTLS") or "true")
+        use_ssl = self._as_bool(config.get_secret("INCIDENT_ASSIGNMENT_SMTP_USE_SSL") or "false")
 
         subject = f"[Incident Assigned] {incident_title}"
         body = (
@@ -173,29 +173,29 @@ class NotificationService:
 
         Sends only when USER_WELCOME_EMAIL_ENABLED and USER_WELCOME_SMTP_HOST are configured.
         """
-        enabled = str(os.getenv("USER_WELCOME_EMAIL_ENABLED", "false")).strip().lower() in {"1", "true", "yes", "on"}
+        enabled = str(config.get_secret("USER_WELCOME_EMAIL_ENABLED") or "false").strip().lower() in {"1", "true", "yes", "on"}
         if not enabled:
             return False
 
-        smtp_host = os.getenv("USER_WELCOME_SMTP_HOST", "").strip()
+        smtp_host = (config.get_secret("USER_WELCOME_SMTP_HOST") or "").strip()
         if not smtp_host:
             logger.info("User welcome email skipped: USER_WELCOME_SMTP_HOST not set")
             return False
 
-        smtp_port_raw = os.getenv("USER_WELCOME_SMTP_PORT", "587")
+        smtp_port_raw = config.get_secret("USER_WELCOME_SMTP_PORT") or "587"
         try:
             smtp_port = int(smtp_port_raw)
         except ValueError:
             smtp_port = 587
 
-        smtp_user = os.getenv("USER_WELCOME_SMTP_USERNAME")
-        smtp_pass = os.getenv("USER_WELCOME_SMTP_PASSWORD")
-        smtp_from = os.getenv("USER_WELCOME_FROM", config.DEFAULT_ADMIN_EMAIL)
-        use_starttls = self._as_bool(os.getenv("USER_WELCOME_SMTP_STARTTLS", "true"))
-        use_ssl = self._as_bool(os.getenv("USER_WELCOME_SMTP_USE_SSL", "false"))
+        smtp_user = config.get_secret("USER_WELCOME_SMTP_USERNAME")
+        smtp_pass = config.get_secret("USER_WELCOME_SMTP_PASSWORD")
+        smtp_from = config.get_secret("USER_WELCOME_FROM") or config.DEFAULT_ADMIN_EMAIL
+        use_starttls = self._as_bool(config.get_secret("USER_WELCOME_SMTP_STARTTLS") or "true")
+        use_ssl = self._as_bool(config.get_secret("USER_WELCOME_SMTP_USE_SSL") or "false")
 
         user_label = full_name or username
-        app_login_url = (login_url or os.getenv("APP_LOGIN_URL") or "").strip()
+        app_login_url = (login_url or config.get_secret("APP_LOGIN_URL") or "").strip()
         login_line = f"Login URL: {app_login_url}\n" if app_login_url else ""
         subject = "Welcome to Be Observant"
         body = (

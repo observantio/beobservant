@@ -137,7 +137,7 @@ OIDC endpoints: `POST /api/auth/oidc/authorize-url`, `POST /api/auth/oidc/exchan
 - Request payload size limits and concurrency backpressure middleware
 - Multi-tenant isolation: tenant and org scoping on all resources and API keys
 
-> **Note:** Currently, Be Observant allows you to add these keys and secrets in the .env file or pass as environments, however we wish to include vault access
+> **Secrets:** Sensitive values (DB URL, JWT keys, SMTP passwords, API keys) can be provided via environment variables or fetched from a secrets backend. Set `VAULT_ENABLED=true` and provide `VAULT_ADDR`/AppRole or token to load secrets from HashiCorp Vault. See `USER_GUIDE.md` → "Secret management / Vault" for details.
 
 ---
 

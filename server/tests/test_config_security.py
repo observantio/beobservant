@@ -105,6 +105,53 @@ class ConfigSecurityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 _reload_config_module()
 
+    def test_vault_enabled_in_production_without_addr_raises(self):
+        with patch.dict(os.environ, {
+            "CORS_ORIGINS": "http://localhost:5173",
+            "CORS_ALLOW_CREDENTIALS": "true",
+            "JWT_ALGORITHM": "RS256",
+            "APP_ENV": "production",
+            "VAULT_ENABLED": "true",
+            # deliberately omit VAULT_ADDR
+            "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/beobservant",
+            "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
+        }, clear=False):
+            with self.assertRaises(ValueError):
+                _reload_config_module()
+
+    def test_loads_secrets_from_vault_when_enabled(self):
+        # Patch the VaultSecretProvider so tests don't require hvac or a real Vault
+        class FakeVaultProvider:
+            def __init__(self, *a, **k):
+                pass
+
+            def get(self, key):
+                mapping = {
+                    "DATABASE_URL": "postgresql://vaultuser:vaultpass@db:5432/beobservant",
+                    "JWT_PRIVATE_KEY": "-----BEGIN PRIVATE KEY-----FAKE",
+                    "JWT_PUBLIC_KEY": "-----BEGIN PUBLIC KEY-----FAKE",
+                    "DEFAULT_ADMIN_PASSWORD": "vault-default-admin-pass",
+                    "DATA_ENCRYPTION_KEY": "vault-data-key",
+                }
+                return mapping.get(key)
+
+        with patch.dict(os.environ, {
+            "CORS_ORIGINS": "http://localhost:5173",
+            "CORS_ALLOW_CREDENTIALS": "true",
+            "JWT_ALGORITHM": "RS256",
+            "VAULT_ENABLED": "true",
+            "VAULT_ADDR": "http://vault:8200",
+            "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/beobservant",
+        }, clear=False):
+            with patch("services.secrets.vault_client.VaultSecretProvider", FakeVaultProvider):
+                module = _reload_config_module()
+                # values from fake provider override env
+                self.assertEqual(module.config.DATABASE_URL, "postgresql://vaultuser:vaultpass@db:5432/beobservant")
+                self.assertEqual(module.config.DEFAULT_ADMIN_PASSWORD, "vault-default-admin-pass")
+                self.assertTrue(module.config.JWT_PRIVATE_KEY.startswith("-----BEGIN PRIVATE KEY"))
+                self.assertTrue(module.config.JWT_PUBLIC_KEY.startswith("-----BEGIN PUBLIC KEY"))
+                self.assertEqual(module.config.DATA_ENCRYPTION_KEY, "vault-data-key")
+
 
 if __name__ == "__main__":
     unittest.main()
