@@ -19,7 +19,9 @@ from models.access.group_models import GroupCreate, GroupUpdate, Group as GroupS
 _MUTABLE_GROUP_FIELDS = {"name", "description", "is_active"}
 
 
-def create_group(service, group_create: GroupCreate, tenant_id: str, creator_id: str = None) -> GroupSchema:
+from typing import Optional
+
+def create_group(service, group_create: GroupCreate, tenant_id: str, creator_id: Optional[str] = None) -> GroupSchema:
     with get_db_session() as db:
         if db.query(Group).filter(
             func.lower(Group.name) == group_create.name.strip().lower(),
@@ -70,7 +72,7 @@ def get_group(service, group_id: str, tenant_id: str) -> Optional[GroupSchema]:
         return service._to_group_schema(group)
 
 
-def delete_group(service, group_id: str, tenant_id: str, deleter_id: str = None) -> bool:
+def delete_group(service, group_id: str, tenant_id: str, deleter_id: Optional[str] = None) -> bool:
     with get_db_session() as db:
         group = db.query(Group).filter_by(id=group_id, tenant_id=tenant_id).first()
         if not group:
@@ -87,7 +89,7 @@ def delete_group(service, group_id: str, tenant_id: str, deleter_id: str = None)
 
 
 def update_group(
-    service, group_id: str, group_update: GroupUpdate, tenant_id: str, updater_id: str = None
+    service, group_id: str, group_update: GroupUpdate, tenant_id: str, updater_id: Optional[str] = None
 ) -> Optional[GroupSchema]:
     with get_db_session() as db:
         group = db.query(Group).filter_by(id=group_id, tenant_id=tenant_id).first()

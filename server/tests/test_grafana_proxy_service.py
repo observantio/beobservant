@@ -24,7 +24,7 @@ cfg_mod.config = SimpleNamespace(
     GRAFANA_USERNAME="admin",
     GRAFANA_PASSWORD="admin",
     DEFAULT_TIMEOUT=30,
-)
+)  # type: ignore[attr-defined]
 # Temporarily inject `config` while importing the server module so other tests are not affected
 _original_config_module = sys.modules.get("config")
 sys.modules["config"] = cfg_mod
@@ -41,8 +41,8 @@ class _LocalGrafanaAPIError(Exception):
     def __init__(self, status: int, body=None):
         self.status = status
         self.body = body
-gf_mod.GrafanaAPIError = _LocalGrafanaAPIError
-gf_mod.GrafanaService = lambda *a, **k: None
+gf_mod.GrafanaAPIError = _LocalGrafanaAPIError  # type: ignore[attr-defined]
+gf_mod.GrafanaService = lambda *a, **k: None  # type: ignore[attr-defined]
 sys.modules["services.grafana_service"] = gf_mod
 
 pa_mod = types.ModuleType("services.grafana.proxy_auth_ops")
@@ -60,13 +60,13 @@ def _extract_proxy_token(self, request, token=None):
     return token
 async def _authorize_proxy_request(self, request, db, auth_service, token, orig):
     return {}
-pa_mod.is_admin_user = _is_admin_user
-pa_mod.is_resource_accessible = _is_resource_accessible
-pa_mod.extract_dashboard_uid = _extract_dashboard_uid
-pa_mod.extract_datasource_uid = _extract_datasource_uid
-pa_mod.extract_datasource_id = _extract_datasource_id
-pa_mod.extract_proxy_token = _extract_proxy_token
-pa_mod.authorize_proxy_request = _authorize_proxy_request
+pa_mod.is_admin_user = _is_admin_user  # type: ignore[attr-defined]
+pa_mod.is_resource_accessible = _is_resource_accessible  # type: ignore[attr-defined]
+pa_mod.extract_dashboard_uid = _extract_dashboard_uid  # type: ignore[attr-defined]
+pa_mod.extract_datasource_uid = _extract_datasource_uid  # type: ignore[attr-defined]
+pa_mod.extract_datasource_id = _extract_datasource_id  # type: ignore[attr-defined]
+pa_mod.extract_proxy_token = _extract_proxy_token  # type: ignore[attr-defined]
+pa_mod.authorize_proxy_request = _authorize_proxy_request  # type: ignore[attr-defined]
 sys.modules["services.grafana.proxy_auth_ops"] = pa_mod
 
 do_mod = types.ModuleType("services.grafana.dashboard_ops")

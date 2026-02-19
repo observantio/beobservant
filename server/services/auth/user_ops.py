@@ -53,7 +53,9 @@ def get_user_by_username(service, username: str) -> Optional[UserSchema]:
         return service._to_user_schema(user)
 
 
-def create_user(service, user_create: UserCreate, tenant_id: str, creator_id: str = None) -> UserSchema:
+from typing import Optional
+
+def create_user(service, user_create: UserCreate, tenant_id: str, creator_id: Optional[str] = None) -> UserSchema:
     with get_db_session() as db:
         normalized_username = (user_create.username or "").strip().lower()
         if db.query(User).filter(func.lower(User.username) == normalized_username).first():
@@ -145,7 +147,7 @@ def list_users(
 
 
 def update_user(
-    service, user_id: str, user_update: UserUpdate, tenant_id: str, updater_id: str = None
+    service, user_id: str, user_update: UserUpdate, tenant_id: str, updater_id: Optional[str] = None
 ) -> Optional[UserSchema]:
     with get_db_session() as db:
         user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
@@ -216,7 +218,7 @@ def set_grafana_user_id(service, user_id: str, grafana_user_id: int, tenant_id: 
         return True
 
 
-def delete_user(service, user_id: str, tenant_id: str, deleter_id: str = None) -> bool:
+def delete_user(service, user_id: str, tenant_id: str, deleter_id: Optional[str] = None) -> bool:
     if deleter_id and user_id == deleter_id:
         raise ValueError("Users cannot delete their own account")
 

@@ -163,11 +163,11 @@ class TempoService:
             else:
                 traces = [t for t in map(self._build_summary_trace, raw_traces) if t]
 
-            return TraceResponse(data=list(traces), total=len(traces), limit=query.limit, offset=0)
+            return TraceResponse.model_validate({"data": list(traces), "total": len(traces), "limit": query.limit, "offset": 0})
         except httpx.HTTPError as e:
             self._observe("tempo_search_errors_total")
             logger.error("Error searching traces: %s", e)
-            return TraceResponse(data=[], total=0, limit=query.limit, errors=[str(e)])
+            return TraceResponse.model_validate({"data": [], "total": 0, "limit": query.limit, "errors": [str(e)], "offset": 0})
 
     @with_retry()
     @with_timeout()
@@ -236,7 +236,7 @@ class TempoService:
                 if not services:
                     logger.debug("No services from tags, inferring from recent traces")
                     try:
-                        resp = await self.search_traces(TraceQuery(limit=50), tenant_id=tenant_id)
+                        resp = await self.search_traces(TraceQuery.model_validate({"limit": 50}), tenant_id=tenant_id)
                         services = [
                             span.service_name
                             for trace in resp.data
@@ -256,7 +256,7 @@ class TempoService:
         return list(services) if services else []
 
     async def get_operations(self, service: str, tenant_id: str = config.DEFAULT_ORG_ID) -> List[str]:
-        response = await self.search_traces(TraceQuery(service=service, limit=100), tenant_id=tenant_id)
+        response = await self.search_traces(TraceQuery.model_validate({"service": service, "limit": 100}), tenant_id=tenant_id)
         return sorted({span.operation_name for trace in response.data for span in trace.spans})
 
     async def get_trace_metrics(
@@ -266,7 +266,7 @@ class TempoService:
         end: Optional[int] = None,
         tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> Dict[str, Any]:
-        query = TraceQuery(service=service, start=start, end=end, limit=min(config.MAX_QUERY_LIMIT, 1000))
+        query = TraceQuery.model_validate({"service": service, "start": start, "end": end, "limit": min(config.MAX_QUERY_LIMIT, 1000)})
         response = await self.search_traces(query, tenant_id=tenant_id, fetch_full_traces=False)
         return {
             "total_traces": response.total,

@@ -291,21 +291,21 @@ class DatabaseAuthService:
     def get_user_by_username(self, username: str) -> Optional[UserSchema]:
         return get_user_by_username_op(self, username)
 
-    def create_user(self, user_create: UserCreate, tenant_id: str, creator_id: str = None) -> UserSchema:
+    def create_user(self, user_create: UserCreate, tenant_id: str, creator_id: Optional[str] = None) -> UserSchema:
         return create_user_op(self, user_create, tenant_id, creator_id)
 
     def list_users(self, tenant_id: str, *, limit: Optional[int] = None, offset: int = 0) -> List[UserSchema]:
         return list_users_op(self, tenant_id, limit=limit, offset=offset)
 
     def update_user(
-        self, user_id: str, user_update: UserUpdate, tenant_id: str, updater_id: str = None
+        self, user_id: str, user_update: UserUpdate, tenant_id: str, updater_id: Optional[str] = None
     ) -> Optional[UserSchema]:
         return update_user_op(self, user_id, user_update, tenant_id, updater_id)
 
     def set_grafana_user_id(self, user_id: str, grafana_user_id: int, tenant_id: str) -> bool:
         return set_grafana_user_id_op(self, user_id, grafana_user_id, tenant_id)
 
-    def delete_user(self, user_id: str, tenant_id: str, deleter_id: str = None) -> bool:
+    def delete_user(self, user_id: str, tenant_id: str, deleter_id: Optional[str] = None) -> bool:
         return delete_user_op(self, user_id, tenant_id, deleter_id)
 
     def update_user_permissions(self, user_id: str, permission_names: List[str], tenant_id: str) -> bool:
@@ -353,7 +353,7 @@ class DatabaseAuthService:
         backfill_otlp_tokens_op(self)
 
 
-    def create_group(self, group_create: GroupCreate, tenant_id: str, creator_id: str = None) -> GroupSchema:
+    def create_group(self, group_create: GroupCreate, tenant_id: str, creator_id: Optional[str] = None) -> GroupSchema:
         return create_group_op(self, group_create, tenant_id, creator_id)
 
     def list_groups(self, tenant_id: str) -> List[GroupSchema]:
@@ -362,11 +362,11 @@ class DatabaseAuthService:
     def get_group(self, group_id: str, tenant_id: str) -> Optional[GroupSchema]:
         return get_group_op(self, group_id, tenant_id)
 
-    def delete_group(self, group_id: str, tenant_id: str, deleter_id: str = None) -> bool:
+    def delete_group(self, group_id: str, tenant_id: str, deleter_id: Optional[str] = None) -> bool:
         return delete_group_op(self, group_id, tenant_id, deleter_id)
 
     def update_group(
-        self, group_id: str, group_update: GroupUpdate, tenant_id: str, updater_id: str = None
+        self, group_id: str, group_update: GroupUpdate, tenant_id: str, updater_id: Optional[str] = None
     ) -> Optional[GroupSchema]:
         return update_group_op(self, group_id, group_update, tenant_id, updater_id)
 

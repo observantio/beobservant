@@ -14,7 +14,7 @@ def _make_alert(**kwargs) -> Alert:
         "fingerprint": "fp-123",
     }
     base.update(kwargs)
-    return Alert(**base)
+    return Alert(**base)  # type: ignore[arg-type]
 
 
 def test_get_label_and_annotation_and_alert_text():

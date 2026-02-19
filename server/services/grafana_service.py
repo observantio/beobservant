@@ -107,7 +107,7 @@ class GrafanaService:
         folder_ids: Optional[List[int]] = None,
         starred: Optional[bool] = None,
     ) -> List[DashboardSearchResult]:
-        params = {"type": "dash-db"}
+        params: Dict[str, Any] = {"type": "dash-db"}
         if query: params["query"] = query
         if tag: params["tag"] = tag
         if folder_ids: params["folderIds"] = folder_ids

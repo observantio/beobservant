@@ -338,7 +338,7 @@ async def authorize_proxy_request(
                 if not is_resource_accessible(service, datasource, token_data, require_write=datasource_write_intent):
                     raise HTTPException(status_code=403, detail="Datasource access denied")
                 if datasource_write_intent:
-                    await _enforce_writable_datasource(service, datasource.grafana_uid)
+                    await _enforce_writable_datasource(service, str(getattr(datasource, 'grafana_uid', '')))
             elif datasource_write_intent:
                 raise HTTPException(status_code=403, detail="Datasource write denied: unregistered datasource")
 
@@ -354,7 +354,7 @@ async def authorize_proxy_request(
                 if not is_resource_accessible(service, datasource, token_data, require_write=datasource_write_intent):
                     raise HTTPException(status_code=403, detail="Datasource access denied")
                 if datasource_write_intent:
-                    await _enforce_writable_datasource(service, datasource.grafana_uid)
+                    await _enforce_writable_datasource(service, str(getattr(datasource, 'grafana_uid', '')))
             elif datasource_write_intent:
                 raise HTTPException(status_code=403, detail="Datasource write denied: unregistered datasource")
 

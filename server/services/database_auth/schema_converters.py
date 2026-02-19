@@ -13,6 +13,7 @@ from models.access.user_models import User as UserSchema
 from models.access.api_key_models import ApiKey
 from models.access.group_models import Group as GroupSchema, PermissionInfo
 from models.access.user_models import UserResponse
+from models.access.auth_models import Permission as PermissionEnum
 
 
 def to_user_schema(service, user) -> UserSchema:
@@ -42,9 +43,11 @@ def to_user_schema(service, user) -> UserSchema:
 
 def build_user_response(service, user: UserSchema, fallback_permissions: Optional[List[str]] = None) -> UserResponse:
     permissions = service.get_user_permissions(user) or (fallback_permissions or [])
+    # coerce string permissions into Permission enum values for the UserResponse model
+    coerced_permissions = [PermissionEnum(p) if isinstance(p, str) else p for p in (permissions or [])]
     return UserResponse(
         **user.model_dump(exclude={"hashed_password"}),
-        permissions=permissions,
+        permissions=coerced_permissions,
         direct_permissions=service.get_user_direct_permissions(user),
     )
 

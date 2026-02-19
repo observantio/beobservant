@@ -101,12 +101,14 @@ class LokiService:
                 params[key] = val
         return params
 
-    def _calculate_stats(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    from models.observability.loki_models import LogStatsResponse
+
+    def _calculate_stats(self, data: Dict[str, Any]) -> Optional[LogStatsResponse]:
         try:
             result = data.get("result", [])
             if not result:
                 return None
-            return {
+            payload = {
                 "total_entries": sum(len(s.get("values", [])) for s in result),
                 "total_bytes": sum(
                     len(v[1]) for s in result for v in s.get("values", []) if len(v) > 1
@@ -114,6 +116,7 @@ class LokiService:
                 "streams": len(result),
                 "chunks": 0,
             }
+            return LogStatsResponse.parse_obj(payload)
         except Exception as e:
             logger.error("Error calculating stats: %s", e)
             return None

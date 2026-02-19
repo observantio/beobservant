@@ -15,7 +15,7 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
-from models.alerting.rules import AlertRule
+from models.alerting.rules import AlertRule, RuleSeverity
 from services.alerting.ruler_yaml import (
     build_ruler_group_yaml,
     extract_mimir_group_names,
@@ -29,12 +29,12 @@ class RulerYamlTests(unittest.TestCase):
         return AlertRule(
             name=name,
             expression='up == 0',
-            severity='warning',
+            severity=RuleSeverity.WARNING,
             groupName=group,
             enabled=enabled,
             labels={'team': 'ops'},
             annotations={'summary': 'Host down'},
-            **{'for': '5m'},
+            duration='5m',
         )
 
     def test_yaml_quote_escapes_double_quotes_and_backslashes(self):

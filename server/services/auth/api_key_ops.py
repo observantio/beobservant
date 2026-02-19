@@ -41,21 +41,22 @@ def _api_key_to_schema(
                 created_at=share.created_at,
             ))
     owner_username = getattr(getattr(api_key, "user", None), "username", None)
-    return ApiKey(
-        id=api_key.id,
-        name=api_key.name,
-        key=api_key.key,
-        otlp_token=None if is_shared else getattr(api_key, "otlp_token", None),
-        owner_user_id=api_key.user_id,
-        owner_username=owner_username,
-        is_shared=is_shared,
-        can_use=can_use,
-        shared_with=shared_with,
-        is_default=bool(api_key.is_default),
-        is_enabled=bool(viewer_enabled),
-        created_at=api_key.created_at,
-        updated_at=api_key.updated_at,
-    )
+    payload = {
+        "id": getattr(api_key, "id", None),
+        "name": getattr(api_key, "name", None),
+        "key": getattr(api_key, "key", None),
+        "otlp_token": (None if is_shared else getattr(api_key, "otlp_token", None)),
+        "owner_user_id": getattr(api_key, "user_id", None),
+        "owner_username": owner_username,
+        "is_shared": is_shared,
+        "can_use": can_use,
+        "shared_with": [s.model_dump() if hasattr(s, 'model_dump') else s for s in shared_with],
+        "is_default": bool(getattr(api_key, "is_default", False)),
+        "is_enabled": bool(viewer_enabled),
+        "created_at": getattr(api_key, "created_at", None),
+        "updated_at": getattr(api_key, "updated_at", None),
+    }
+    return ApiKey.parse_obj(payload)
 
 
 def list_api_keys(service, user_id: str) -> List[ApiKey]:

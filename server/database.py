@@ -12,18 +12,17 @@ import os
 from typing import Optional
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.engine import Engine
 from contextlib import contextmanager
+from typing import Generator, Iterator
 
 logger = logging.getLogger(__name__)
 
-try:
-    from db_models import Base
-except ImportError:
-    Base = declarative_base()
+# Use the application's declarative base from `db_models` (single authoritative source)
+from db_models import Base
 
-_engine: Optional[object] = None
+_engine: Optional[Engine] = None
 _SessionLocal: Optional[sessionmaker] = None
 
 
@@ -68,7 +67,7 @@ def init_database(database_url: str, echo: bool = False, pool_size: Optional[int
 
 
 @contextmanager
-def get_db_session() -> Session:
+def get_db_session() -> Iterator[Session]:
     """Context-managed DB session.
 
     This yields a plain Session and mirrors the original commit/rollback

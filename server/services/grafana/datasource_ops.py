@@ -422,7 +422,7 @@ async def create_datasource(
     tenant_id: str,
     group_ids: List[str],
     visibility: str = "private",
-    shared_group_ids: List[str] = None,
+    shared_group_ids: Optional[List[str]] = None,
     is_admin: bool = False,
 ) -> Optional[Datasource]:
     requested_name = str(getattr(datasource_create, "name", "") or "").strip()
