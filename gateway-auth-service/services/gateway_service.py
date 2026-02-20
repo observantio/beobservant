@@ -8,77 +8,79 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-
 from __future__ import annotations
 
-import time
 import logging
-from threading import Lock
+from ipaddress import ip_address, ip_network
 from typing import Optional
-from types import ModuleType
 
-# redis may not be installed
-redis: Optional[ModuleType] = None
-from ipaddress import ip_network, ip_address
-
-from fastapi import Request, HTTPException, status
-from sqlalchemy import select, and_, func, or_
+from fastapi import HTTPException, Request, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 import db_models
-
-try:
-    import redis  # type: ignore[import]
-    redis: ModuleType
-except ImportError:
-    redis = None
+from . import config as gw_config
+from .rate_limit import make_default_rate_limiter
+from .token_cache import TokenCache
 
 logger = logging.getLogger(__name__)
-
-from . import config as gw_config
-
 
 
 class DatabaseUnavailable(Exception):
     pass
 
 
-from .rate_limit import TokenRateLimiter, HybridTokenRateLimiter, make_default_rate_limiter
-from .token_cache import TokenCache
-
-_InMemoryRateLimiter = TokenRateLimiter
-_RedisRateLimiter = None 
-_RateLimiter = make_default_rate_limiter
-_TokenCache = TokenCache
-
-
 def _parse_networks(allowlist: str) -> list:
-    result = []
+    networks = []
     for entry in (e.strip() for e in allowlist.split(",") if e.strip()):
         if "/" not in entry:
-            ip = ip_address(entry)
-            entry = f"{entry}/{'32' if ip.version == 4 else '128'}"
-        result.append(ip_network(entry, strict=False))
-    return result
+            addr = ip_address(entry)
+            prefix = "32" if addr.version == 4 else "128"
+            entry = f"{entry}/{prefix}"
+        networks.append(ip_network(entry, strict=False))
+    return networks
+
+
+_VALID_TOKEN_STMT = (
+    select(db_models.UserApiKey.key)
+    .join(db_models.User, db_models.User.id == db_models.UserApiKey.user_id)
+    .join(db_models.Tenant, db_models.Tenant.id == db_models.User.tenant_id)
+    .where(
+        or_(
+            db_models.UserApiKey.otlp_token == None,
+            db_models.UserApiKey.key == None,
+        ),
+        db_models.UserApiKey.is_enabled.is_(True),
+        db_models.User.is_active.is_(True),
+        db_models.Tenant.is_active.is_(True),
+    )
+    .limit(1)
+)
 
 
 class GatewayAuthService:
-    def __init__(self, *, rate_limit_per_minute: Optional[int] = None, ip_allowlist: Optional[str] = None, token_cache_ttl: Optional[int] = None, rate_limit_backend: Optional[str] = None, rate_limit_redis_url: Optional[str] = None):
-        """Initialize service.
+    __slots__ = ("_rate_limiter", "_networks", "_token_cache")
 
-        Optional keyword arguments override environment defaults (useful for tests).
-        """
-        rate_limit = rate_limit_per_minute if rate_limit_per_minute is not None else gw_config.RATE_LIMIT_PER_MINUTE
-        backend = rate_limit_backend if rate_limit_backend is not None else gw_config.RATE_LIMIT_BACKEND
-        redis_url = rate_limit_redis_url if rate_limit_redis_url is not None else gw_config.RATE_LIMIT_REDIS_URL
-        self._rate_limiter = make_default_rate_limiter(rate_limit, backend, redis_url)
-
-        allowlist = ip_allowlist if ip_allowlist is not None else gw_config.IP_ALLOWLIST
-        self._networks = _parse_networks(allowlist)
-
-        # token cache (allow TTL override)
-        ttl = token_cache_ttl if token_cache_ttl is not None else gw_config.TOKEN_CACHE_TTL
-        self._token_cache = TokenCache(ttl)
+    def __init__(
+        self,
+        *,
+        rate_limit_per_minute: Optional[int] = None,
+        ip_allowlist: Optional[str] = None,
+        token_cache_ttl: Optional[int] = None,
+        rate_limit_backend: Optional[str] = None,
+        rate_limit_redis_url: Optional[str] = None,
+    ) -> None:
+        self._rate_limiter = make_default_rate_limiter(
+            rate_limit_per_minute if rate_limit_per_minute is not None else gw_config.RATE_LIMIT_PER_MINUTE,
+            rate_limit_backend if rate_limit_backend is not None else gw_config.RATE_LIMIT_BACKEND,
+            rate_limit_redis_url if rate_limit_redis_url is not None else gw_config.RATE_LIMIT_REDIS_URL,
+        )
+        self._networks = _parse_networks(
+            ip_allowlist if ip_allowlist is not None else gw_config.IP_ALLOWLIST
+        )
+        self._token_cache = TokenCache(
+            token_cache_ttl if token_cache_ttl is not None else gw_config.TOKEN_CACHE_TTL
+        )
 
     @staticmethod
     def _client_ip(request: Request) -> str:
@@ -99,8 +101,9 @@ class GatewayAuthService:
                 raise HTTPException(status.HTTP_403_FORBIDDEN, "Source IP not allowed")
             return
 
+        raw_ip = self._client_ip(request)
         try:
-            addr = ip_address(self._client_ip(request))
+            addr = ip_address(raw_ip)
         except ValueError:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid client IP")
 
@@ -123,33 +126,33 @@ class GatewayAuthService:
             .join(db_models.User, db_models.User.id == db_models.UserApiKey.user_id)
             .join(db_models.Tenant, db_models.Tenant.id == db_models.User.tenant_id)
             .where(
-                and_(
-                    or_(
-                        db_models.UserApiKey.otlp_token == token,
-                        db_models.UserApiKey.key == token,
-                    ),
-                    db_models.UserApiKey.is_enabled.is_(True),
-                    db_models.User.is_active.is_(True),
-                    db_models.Tenant.is_active.is_(True),
-                )
+                or_(
+                    db_models.UserApiKey.otlp_token == token,
+                    db_models.UserApiKey.key == token,
+                ),
+                db_models.UserApiKey.is_enabled.is_(True),
+                db_models.User.is_active.is_(True),
+                db_models.Tenant.is_active.is_(True),
             )
             .limit(1)
         )
 
         try:
             with db_models.SessionLocal() as db:
-                org_id = db.execute(stmt).scalar_one_or_none()
+                result = db.execute(stmt).scalar_one_or_none()
         except SQLAlchemyError as exc:
-            logger.warning("Database error validating OTLP token")
+            logger.warning("Database error validating OTLP token", exc_info=True)
             raise DatabaseUnavailable from exc
 
-        self._token_cache.set(token, org_id)
-        return org_id
+        self._token_cache.set(token, result)
+        return result
 
     def health(self) -> dict:
         try:
             with db_models.SessionLocal() as db:
-                db.execute(select(func.count()).select_from(db_models.UserApiKey).limit(1))
+                db.execute(
+                    select(func.count()).select_from(db_models.UserApiKey).limit(1)
+                )
             return {"status": "healthy", "service": "gateway-auth-service"}
         except Exception:
             return {"status": "unhealthy", "service": "gateway-auth-service"}

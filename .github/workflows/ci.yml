@@ -45,3 +45,28 @@ jobs:
 
       - name: Run server tests
         run: pytest -q
+
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pip-audit detect-secrets
+
+      - name: Run detect-secrets scan
+        run: |
+          if [ ! -f .secrets.baseline ]; then
+            detect-secrets scan > .secrets.baseline
+          fi
+          detect-secrets scan --baseline .secrets.baseline
+
+      - name: Run server dependency audit
+        run: pip-audit -r server/requirements.txt
