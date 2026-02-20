@@ -101,7 +101,6 @@ class TempoService:
         self._metrics_enabled = metrics_enabled
         return result
 
-    # --- Delegation helpers ---
 
     def _build_promql_selector(self, service: Optional[str]) -> List[str]:
         return tempo_promql.build_promql_selector(service)

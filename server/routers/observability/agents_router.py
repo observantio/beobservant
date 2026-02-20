@@ -10,7 +10,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 import logging
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, List
 
 import httpx
 from fastapi import APIRouter, Request, Depends
@@ -32,22 +32,24 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
-_otlp_router = APIRouter(tags=["otlp"])
-
 agent_service = AgentService()
 _mimir_client = httpx.AsyncClient(
     timeout=httpx.Timeout(config.DEFAULT_TIMEOUT),
     limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
 )
 
+
+async def close_mimir_client() -> None:
+    await _mimir_client.aclose()
+
+
 @router.get("/")
 async def list_agents(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents"))):
-    """List known OTLP agents."""
     return [agent.model_dump() for agent in agent_service.list_agents()]
+
 
 @router.get("/active")
 async def list_active_agents(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents"))):
-    """List activity per API key assigned to the user."""
     api_keys = await run_in_threadpool(auth_service.list_api_keys, current_user.user_id)
 
     tasks: List[asyncio.Task] = []
@@ -56,7 +58,6 @@ async def list_active_agents(current_user: TokenData = Depends(require_permissio
 
     results = await asyncio.gather(*tasks, return_exceptions=True) if tasks else []
 
-    activity = []
     recent_agents = agent_service.list_agents()
     host_names_by_tenant: Dict[str, set[str]] = {}
     for agent in recent_agents:
@@ -64,6 +65,7 @@ async def list_active_agents(current_user: TokenData = Depends(require_permissio
             continue
         host_names_by_tenant.setdefault(agent.tenant_id, set()).add(agent.host_name)
 
+    activity = []
     for key, result in zip(api_keys, results):
         if isinstance(result, Exception):
             activity.append({
@@ -74,20 +76,20 @@ async def list_active_agents(current_user: TokenData = Depends(require_permissio
                 "clean": False,
                 "host_names": [],
                 "metrics_active": False,
-                "metrics_count": 0
+                "metrics_count": 0,
             })
             continue
 
         active = bool(result.get("metrics_active"))
         host_names = sorted(host_names_by_tenant.get(key.key, set()))
         activity.append({
+            **result,
             "name": key.name,
             "is_enabled": key.is_enabled,
             "active": active,
-            "success": active,
+            "success": True,
             "clean": active,
             "host_names": host_names,
-            **result
         })
 
     return activity
@@ -95,7 +97,6 @@ async def list_active_agents(current_user: TokenData = Depends(require_permissio
 
 @router.post("/heartbeat")
 async def heartbeat(request: Request, payload: AgentHeartbeat):
-    """Receive explicit heartbeat payloads."""
     enforce_public_endpoint_security(
         request,
         scope="agents_heartbeat",
@@ -111,6 +112,3 @@ async def heartbeat(request: Request, payload: AgentHeartbeat):
     )
     agent_service.update_from_heartbeat(payload)
     return {"status": "ok"}
-
-
-otlp_router = _otlp_router

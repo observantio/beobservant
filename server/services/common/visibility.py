@@ -1,5 +1,5 @@
 """
-Normalization utilities for handling visibility settings on resources, including functions to normalize visibility values from user input and ensure that they conform to expected formats and allowed values. This module provides a common interface for normalizing visibility settings across different resource types, allowing for consistent handling of visibility options such as "public", "private", "tenant", and "group" while also supporting configurable defaults and aliases for certain visibility levels.
+Normalization utilities for handling visibility settings on resources...
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
@@ -8,7 +8,12 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
+from __future__ import annotations
+
 from typing import Optional
+
+_DEFAULT_ALLOWED: frozenset[str] = frozenset({"tenant", "group", "private"})
+_STORAGE_ALLOWED: frozenset[str] = frozenset({"public", "private", "group"})
 
 
 def normalize_visibility(
@@ -16,10 +21,19 @@ def normalize_visibility(
     *,
     default_value: str = "private",
     public_alias: str = "tenant",
-    allowed: set[str] | None = None,
+    allowed: Optional[frozenset[str]] = None,
 ) -> str:
-    normalized = str(value or default_value).strip().lower()
-    allowed_values = allowed or {"tenant", "group", "private"}
+    allowed_values = allowed if allowed is not None else _DEFAULT_ALLOWED
+
+    if default_value not in allowed_values:
+        raise ValueError(f"default_value {default_value!r} is not in allowed {allowed_values}")
+    if public_alias not in allowed_values:
+        raise ValueError(f"public_alias {public_alias!r} is not in allowed {allowed_values}")
+
+    normalized = (value or "").strip().lower()
+
+    if not normalized:
+        return default_value
     if normalized in allowed_values:
         return normalized
     if normalized == "public":
@@ -28,8 +42,9 @@ def normalize_visibility(
 
 
 def normalize_storage_visibility(value: Optional[str]) -> str:
-    normalized = str(value or "public").strip().lower()
-    if normalized in {"public", "private", "group"}:
+    normalized = (value or "").strip().lower()
+
+    if normalized in _STORAGE_ALLOWED:
         return normalized
     if normalized == "tenant":
         return "public"

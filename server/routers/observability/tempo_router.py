@@ -21,12 +21,7 @@ router = APIRouter(prefix="/api/tempo", tags=["tempo"])
 tempo_service = TempoService()
 
 
-@router.get(
-    "/traces/search",
-    response_model=TraceResponse,
-    summary="Search traces",
-    description="Search for traces matching the given criteria. For efficient list views, use fetchFull=false to get summaries only; fetch full details via /traces/{trace_id} when user clicks into a trace."
-)
+@router.get("/traces/search", response_model=TraceResponse)
 async def search_traces(
     request: Request,
     service: Optional[str] = Query(None, description="Service name filter"),
@@ -39,6 +34,7 @@ async def search_traces(
     fetch_full: bool = Query(False, alias="fetchFull", description="If false (recommended), returns only trace summaries; fetch full trace data on-demand via /traces/{trace_id}"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
 ) -> TraceResponse:
+    """Search for traces matching the given criteria. For efficient list views, use fetchFull=false to get summaries only; fetch full details via /traces/{trace_id} when user clicks into a trace."""
     query = TraceQuery(
         service=service,
         operation=operation,
@@ -48,65 +44,46 @@ async def search_traces(
         end=end,
         limit=limit
     )
-    
     tenant_id = resolve_tenant_id(request, current_user)
-    result = await tempo_service.search_traces(query, tenant_id=tenant_id, fetch_full_traces=fetch_full)
-    return result
+    return await tempo_service.search_traces(query, tenant_id=tenant_id, fetch_full_traces=fetch_full)
 
 
-@router.get(
-    "/traces/{trace_id}",
-    response_model=Trace,
-    summary="Get trace by ID",
-    description="Returns the complete trace with all spans and their details"
-)
+@router.get("/traces/{trace_id}", response_model=Trace)
 async def get_trace(
     trace_id: str,
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
 ) -> Trace:
+    """Returns the complete trace with all spans and their details."""
     tenant_id = resolve_tenant_id(request, current_user)
     trace = await tempo_service.get_trace(trace_id, tenant_id=tenant_id)
     if not trace:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Trace {trace_id} not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Trace {trace_id} not found")
     return trace
 
 
-@router.get(
-    "/services",
-    response_model=List[str],
-    summary="List services",
-    description="Return list of services that have traces"
-)
-async def get_services(request: Request, current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))) -> List[str]:
+@router.get("/services", response_model=List[str])
+async def get_services(
+    request: Request,
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
+) -> List[str]:
+    """Return list of services that have traces."""
     tenant_id = resolve_tenant_id(request, current_user)
-    services = await tempo_service.get_services(tenant_id=tenant_id)
-    return services
+    return await tempo_service.get_services(tenant_id=tenant_id)
 
-@router.get(
-    "/services/{service}/operations",
-    response_model=List[str],
-    summary="List operations for service",
-    description="Get all unique operation names for the given service"
-)
+
+@router.get("/services/{service}/operations", response_model=List[str])
 async def get_operations(
     service: str,
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
 ) -> List[str]:
+    """Get all unique operation names for the given service."""
     tenant_id = resolve_tenant_id(request, current_user)
-    operations = await tempo_service.get_operations(service, tenant_id=tenant_id)
-    return operations
+    return await tempo_service.get_operations(service, tenant_id=tenant_id)
 
 
-@router.get(
-    "/metrics",
-    summary="Get trace metrics",
-    description="Returns aggregated metrics like trace count, span count, durations, and error rates"
-)
+@router.get("/metrics")
 async def get_trace_metrics(
     request: Request,
     service: Optional[str] = Query(None, description="Service name filter"),
@@ -114,20 +91,12 @@ async def get_trace_metrics(
     end: Optional[int] = Query(None, description="End time in microseconds"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
 ) -> dict:
-    """Get trace metrics and statistics.
-    
-    Returns aggregated metrics like trace count, span count, durations, and error rates.
-    """
+    """Returns aggregated metrics like trace count, span count, durations, and error rates."""
     tenant_id = resolve_tenant_id(request, current_user)
-    metrics = await tempo_service.get_trace_metrics(service, start, end, tenant_id=tenant_id)
-    return metrics
+    return await tempo_service.get_trace_metrics(service, start, end, tenant_id=tenant_id)
 
 
-@router.get(
-    "/volume",
-    summary="Trace volume over time",
-    description="Return trace counts over time for the given time range and step (response shape is compatible with Loki volume)."
-)
+@router.get("/volume")
 async def get_trace_volume(
     request: Request,
     service: Optional[str] = Query(None, description="Service name filter"),
@@ -136,6 +105,6 @@ async def get_trace_volume(
     step: int = Query(300, ge=1, description="Resolution step in seconds"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
 ) -> dict:
+    """Return trace counts over time for the given time range and step. Response shape is compatible with Loki volume."""
     tenant_id = resolve_tenant_id(request, current_user)
-    result = await tempo_service.get_trace_volume(service=service, start=start, end=end, step=step, tenant_id=tenant_id)
-    return result
+    return await tempo_service.get_trace_volume(service=service, start=start, end=end, step=step, tenant_id=tenant_id)

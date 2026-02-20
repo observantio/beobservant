@@ -107,7 +107,6 @@ def build_summary_trace(trace_data: Dict[str, Any]) -> Optional[Trace]:
     except (TypeError, ValueError):
         duration_ms = None
 
-    # Construct a proper Span object for the summary so types match
     summary_span_obj = {
         "spanID": "root",
         "traceID": trace_id,
