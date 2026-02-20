@@ -10,79 +10,59 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 import logging
 import os
-from typing import Optional
+from contextlib import contextmanager
+from typing import Generator, Iterator, Optional
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.engine import Engine
-from contextlib import contextmanager
-from typing import Generator, Iterator
-
-logger = logging.getLogger(__name__)
+from sqlalchemy.orm import Session, sessionmaker
 
 from db_models import Base
+
+logger = logging.getLogger(__name__)
 
 _engine: Optional[Engine] = None
 _SessionLocal: Optional[sessionmaker] = None
 
 
-def init_database(database_url: str, echo: bool = False, pool_size: Optional[int] = None) -> None:
-    """Initialize database engine and session factory (idempotent).
-
-    Pool and other parameters may be tuned via environment variables:
-      - DB_POOL_SIZE
-      - DB_MAX_OVERFLOW
-      - DB_POOL_TIMEOUT
-      - DB_POOL_RECYCLE
-    """
+def init_database(
+    database_url: str,
+    echo: bool = False,
+    pool_size: Optional[int] = None,
+) -> None:
     global _engine, _SessionLocal
 
     if _engine is not None:
         logger.debug("Database already initialized; skipping re-init.")
         return
 
-    pool_size = pool_size or int(os.getenv("DB_POOL_SIZE", "10"))
-    max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "20"))
-    pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))
-    pool_recycle = int(os.getenv("DB_POOL_RECYCLE", "1800"))
-
     _engine = create_engine(
         database_url,
         pool_pre_ping=True,
-        pool_size=pool_size,
-        max_overflow=max_overflow,
-        pool_timeout=pool_timeout,
-        pool_recycle=pool_recycle,
+        pool_size=pool_size or int(os.getenv("DB_POOL_SIZE", "10")),
+        max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "20")),
+        pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
+        pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),
         echo=echo,
-        future=True,
     )
 
     _SessionLocal = sessionmaker(
+        bind=_engine,
         autocommit=False,
         autoflush=False,
         expire_on_commit=False,
-        bind=_engine,
-        future=True,
     )
+
+
+def _require_session_factory() -> sessionmaker:
+    if _SessionLocal is None:
+        raise RuntimeError("Database not initialized. Call init_database() first.")
+    return _SessionLocal
 
 
 @contextmanager
 def get_db_session() -> Iterator[Session]:
-    """Context-managed DB session.
-
-    This yields a plain Session and mirrors the original commit/rollback
-    semantics so existing callers that `db.commit()` manually continue to
-    work without change.
-
-    Usage:
-        with get_db_session() as db:
-            ...
-    Commits on successful exit, rolls back on exception.
-    """
-    if _SessionLocal is None:
-        raise RuntimeError("Database not initialized. Call init_database() first.")
-
-    session: Session = _SessionLocal()
+    session: Session = _require_session_factory()()
     try:
         yield session
         session.commit()
@@ -93,48 +73,33 @@ def get_db_session() -> Iterator[Session]:
         session.close()
 
 
-def get_db():
-    """FastAPI dependency that yields a transactional session.
-
-    Maintains the same commit/rollback behavior as `get_db_session` so
-    route handlers don't need to be modified.
-    """
-    if _SessionLocal is None:
-        raise RuntimeError("Database not initialized. Call init_database() first.")
-
-    db: Session = _SessionLocal()
+def get_db() -> Generator[Session, None, None]:
+    session: Session = _require_session_factory()()
     try:
-        yield db
-        db.commit()
+        yield session
+        session.commit()
     except Exception:
-        db.rollback()
+        session.rollback()
         raise
     finally:
-        db.close()
+        session.close()
 
 
-def connection_test(timeout_seconds: int = 5) -> bool:
-    """Quick DB connectivity check for health/readiness probes."""
+def connection_test() -> bool:
     if _engine is None:
         return False
     try:
         with _engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
-    except Exception as exc: 
+    except Exception as exc:
         logger.debug("DB connection test failed: %s", exc)
         return False
 
 
 def dispose_database() -> None:
-    """Dispose engine and clear session factory (call on application shutdown)."""
     global _engine, _SessionLocal
-    if _SessionLocal is not None:
-        try:
-            _SessionLocal = None
-        except Exception:
-            logger.debug("Session factory cleanup raised during dispose", exc_info=True)
-
+    _SessionLocal = None
     if _engine is not None:
         try:
             _engine.dispose()
@@ -143,19 +108,15 @@ def dispose_database() -> None:
 
 
 def init_db() -> None:
-    """Create database tables from SQLAlchemy models (idempotent)."""
     if _engine is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
 
     from config import config
-    if not config.DB_AUTO_CREATE_SCHEMA:
-        logger.info("Skipping Base.metadata.create_all because DB_AUTO_CREATE_SCHEMA=false")
-        return
 
-    from db_models import Base  
+    if not config.DB_AUTO_CREATE_SCHEMA:
+        logger.info("Skipping schema creation: DB_AUTO_CREATE_SCHEMA=false")
+        return
 
     logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=_engine)
-
-    logger.info("Database tables created successfully")
-
+    logger.info("Database tables created successfully.")

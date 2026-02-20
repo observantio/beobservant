@@ -8,15 +8,43 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
+import ipaddress
 from urllib.parse import urlparse
+
+_ALLOWED_SCHEMES = frozenset({"http", "https"})
+_MAX_URL_LENGTH = 2048
 
 
 def is_safe_http_url(value: str | None) -> bool:
     if not value or not isinstance(value, str):
         return False
-    parsed = urlparse(value.strip())
-    if parsed.scheme not in {"http", "https"}:
+
+    if len(value) > _MAX_URL_LENGTH:
         return False
-    if not parsed.netloc:
+
+    try:
+        parsed = urlparse(value.strip())
+    except ValueError:
         return False
+
+    if parsed.scheme not in _ALLOWED_SCHEMES:
+        return False
+
+    hostname = parsed.hostname
+    if not hostname:
+        return False
+
+    if hostname in ("localhost",) or hostname.endswith(".local"):
+        return False
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            return False
+    except ValueError:
+        pass
+
+    if not parsed.netloc or "." not in hostname:
+        return False
+
     return True

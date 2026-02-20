@@ -1,5 +1,4 @@
- #!/usr/bin/env bash
-# Copyright (c) 2026 Stefan Kumarasinghe
+#!/usr/bin/env bash
 set -euo pipefail
 
 otelcol-contrib --config=/etc/otel/agent.yaml &

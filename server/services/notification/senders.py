@@ -8,8 +8,9 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from typing import Dict, Any, Optional
 import logging
+from typing import Any
+
 import httpx
 
 from . import payloads, transport
@@ -41,13 +42,13 @@ def _is_allowed_host(url: str, allowed_hosts=None, allowed_suffixes=None) -> boo
         return False
 
 
-def _safe_headers(headers: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: v for k, v in headers.items() if k in ALLOWED_HEADERS}
+def _safe_headers(headers: dict[str, Any]) -> dict[str, str]:
+    return {k: str(v) for k, v in headers.items() if k in ALLOWED_HEADERS}
 
 
-def _serialize_alert(alert) -> Dict[str, Any]:
+def _serialize_alert(alert) -> dict[str, Any]:
     if hasattr(alert, "model_dump"):
-        return alert.model_dump()
+        return alert.model_dump(mode="json")
 
     return {
         "labels": getattr(alert, "labels", {}),
@@ -61,30 +62,19 @@ def _serialize_alert(alert) -> Dict[str, Any]:
 async def _send_json(
     client: httpx.AsyncClient,
     url: str,
-    payload: Dict[str, Any],
-    headers: Optional[Dict[str, Any]] = None,
+    payload: dict[str, Any],
+    headers: dict[str, str] | None = None,
 ) -> bool:
     if not is_safe_http_url(url):
         logger.warning("Blocked unsafe URL: %s", url)
         return False
 
     try:
-        await transport.post_with_retry(
-            client,
-            url,
-            json=payload,
-            headers=headers,
-        )
+        await transport.post_with_retry(client, url, json=payload, headers=headers)
         return True
-
     except httpx.HTTPStatusError as exc:
-        logger.warning(
-            "Webhook failed [%s]: %s",
-            exc.response.status_code,
-            url,
-        )
+        logger.warning("Webhook failed [%s]: %s", exc.response.status_code, url)
         return False
-
     except Exception:
         logger.exception("Unexpected webhook error: %s", url)
         return False
@@ -92,7 +82,7 @@ async def _send_json(
 
 async def send_slack(
     client: httpx.AsyncClient,
-    channel_config: Dict[str, Any],
+    channel_config: dict[str, Any],
     alert,
     action: str,
 ) -> bool:
@@ -107,7 +97,7 @@ async def send_slack(
 
 async def send_teams(
     client: httpx.AsyncClient,
-    channel_config: Dict[str, Any],
+    channel_config: dict[str, Any],
     alert,
     action: str,
 ) -> bool:
@@ -122,7 +112,7 @@ async def send_teams(
 
 async def send_webhook(
     client: httpx.AsyncClient,
-    channel_config: Dict[str, Any],
+    channel_config: dict[str, Any],
     alert,
     action: str,
 ) -> bool:
@@ -145,7 +135,7 @@ async def send_webhook(
 
 async def send_pagerduty(
     client: httpx.AsyncClient,
-    channel_config: Dict[str, Any],
+    channel_config: dict[str, Any],
     alert,
     action: str,
 ) -> bool:

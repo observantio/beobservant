@@ -39,7 +39,6 @@ class NotificationService:
 
     @staticmethod
     def _as_bool(value) -> bool:
-        # delegate to the shared validator if available; fall back if not
         try:
             return notification_validators._as_bool(value)
         except AttributeError:

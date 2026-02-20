@@ -8,8 +8,8 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from typing import Optional
 from datetime import datetime
+
 from models.alerting.alerts import Alert
 
 NO_VALUE = "(none)"
@@ -33,7 +33,7 @@ def get_label(alert: Alert, key: str, default: str = "") -> str:
     return str((alert.labels or {}).get(key, default))
 
 
-def get_annotation(alert: Alert, key: str) -> Optional[str]:
+def get_annotation(alert: Alert, key: str) -> str | None:
     value = (alert.annotations or {}).get(key)
     return str(value) if value is not None else None
 
@@ -75,11 +75,11 @@ def build_slack_payload(alert: Alert, action: str) -> dict:
     severity = get_label(alert, "severity").lower()
 
     if action == "firing":
-        color = "danger"
-    elif severity == "warning":
-        color = "warning"
-    else:
+        color = "warning" if severity == "warning" else "danger"
+    elif action == "resolved":
         color = "good"
+    else:
+        color = "warning"
 
     ts = (
         int(alert.starts_at.timestamp())
@@ -109,17 +109,12 @@ def build_slack_payload(alert: Alert, action: str) -> dict:
 def build_teams_payload(alert: Alert, action: str) -> dict:
     severity = get_label(alert, "severity").lower()
 
-    # determine the theme color; firing traces take precedence, but
-    # warnings should still be highlighted when appropriate.
     if action == "firing":
-        if severity == "warning":
-            theme_color = "FFA500"
-        else:
-            theme_color = "FF0000"
-    elif severity == "warning":
-        theme_color = "FFA500"
-    else:
+        theme_color = "FFA500" if severity == "warning" else "FF0000"
+    elif action == "resolved":
         theme_color = "00FF00"
+    else:
+        theme_color = "FFA500"
 
     return {
         "@type": "MessageCard",

@@ -7,6 +7,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 `
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import PropTypes from 'prop-types'
 import * as api from '../api'
 
@@ -58,6 +59,8 @@ export function AuthProvider({ children }) {
   })
   const [authModeLoading, setAuthModeLoading] = useState(true)
   const [loading, setLoading] = useState(true)
+
+  const navigate = useNavigate()
 
   const loadAuthMode = useCallback(async () => {
     setAuthModeLoading(true)
@@ -214,6 +217,16 @@ export function AuthProvider({ children }) {
     api.setUserOrgIds(resolveActiveOrgId(userData))
   }, [])
 
+  // helper to clear all local authentication state without calling the
+  // server. Used when a request returns 401 (expired session) so the UI can
+  // immediately hide protected content and redirect to the login page.
+  const clearSession = useCallback(() => {
+    setToken(null)
+    setUser(null)
+    api.setAuthToken(null)
+    syncGrafanaAuthCookie(null)
+  }, [])
+
   const hasPermission = useCallback((permission) => user?.permissions?.includes(permission) || false, [user?.permissions])
 
   const value = useMemo(() => ({
@@ -235,6 +248,27 @@ export function AuthProvider({ children }) {
     isAuthenticated: !!user,
     hasPermission
   }), [user, token, authMode, authModeLoading, loading, login, startOIDCLogin, finishOIDCLogin, loadAuthMode, register, logout, refreshUser, updateUser, hasPermission])
+
+  // automatically logout when any API call reports a 401 status. we
+  // listen for both the generic "api-error" event (which already fires)
+  // and our specific "session-expired" event emitted by the request helper.
+  useEffect(() => {
+    const handler = (e) => {
+      const status = e?.detail?.status
+      if (status === 401) {
+        clearSession()
+        // navigate after clearing state; login page hides header via
+        // isAuthenticated check in AppContent
+        navigate('/login')
+      }
+    }
+    globalThis.addEventListener('api-error', handler)
+    globalThis.addEventListener('session-expired', handler)
+    return () => {
+      globalThis.removeEventListener('api-error', handler)
+      globalThis.removeEventListener('session-expired', handler)
+    }
+  }, [clearSession, navigate])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

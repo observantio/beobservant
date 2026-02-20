@@ -1,5 +1,5 @@
 """
-Encryption utilities for securely hashing and verifying sensitive data such as passwords and API keys, using bcrypt for password hashing and Fernet symmetric encryption for encrypting API key values in the database. This module provides functions to hash passwords, verify passwords against hashes, encrypt API key values, and decrypt API key values, ensuring that sensitive information is stored securely and can be validated when needed.
+Encryption utilities for symmetrically encrypting and decrypting sensitive configuration data using Fernet encryption. This module provides functions to encrypt and decrypt dictionary configurations, ensuring that sensitive information such as API keys and channel credentials are stored securely in the database and can be recovered only with the correct encryption key.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
@@ -9,7 +9,8 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """
 import json
 import logging
-from typing import Any, Dict, Optional
+from functools import lru_cache
+from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -18,37 +19,37 @@ from config import config as app_config
 logger = logging.getLogger(__name__)
 
 
-def _get_fernet() -> Optional[Fernet]:
+@lru_cache(maxsize=1)
+def _get_fernet() -> Fernet:
     key = app_config.DATA_ENCRYPTION_KEY
     if not key:
-        return None
+        raise RuntimeError("DATA_ENCRYPTION_KEY is not configured")
     try:
         return Fernet(key)
-    except ValueError:
-        logger.error("Invalid DATA_ENCRYPTION_KEY – channel config will be stored unencrypted")
-        return None
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError("Invalid DATA_ENCRYPTION_KEY format") from exc
 
 
-def encrypt_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    if not _get_fernet():
+def encrypt_config(cfg: dict[str, Any]) -> dict[str, Any]:
+    try:
+        f = _get_fernet()
+        payload = json.dumps(cfg, default=str).encode()
+        return {"__encrypted__": f.encrypt(payload).decode()}
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise ValueError("Failed to encrypt channel config") from exc
+
+
+def decrypt_config(cfg: dict[str, Any]) -> dict[str, Any]:
+    if "__encrypted__" not in cfg:
         return cfg
     try:
         f = _get_fernet()
-        if not f:
-            return cfg
-        return {"__encrypted__": f.encrypt(json.dumps(cfg, default=str).encode()).decode()}
-    except Exception:
-        logger.exception("Failed to encrypt channel config")
-        return cfg
-
-
-def decrypt_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    if "__encrypted__" not in cfg:
-        return cfg
-    f = _get_fernet()
-    if not f:
-        raise ValueError("Encrypted channel config found but DATA_ENCRYPTION_KEY is not set")
-    try:
         return json.loads(f.decrypt(cfg["__encrypted__"].encode()).decode())
+    except RuntimeError:
+        raise
     except InvalidToken as exc:
-        raise ValueError("Cannot decrypt channel config – wrong key?") from exc
+        raise ValueError("Cannot decrypt channel config – wrong key or corrupted data") from exc
+    except Exception as exc:
+        raise ValueError("Failed to decrypt channel config") from exc

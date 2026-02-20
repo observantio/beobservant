@@ -80,11 +80,14 @@ async function requestWithHeaders(path, opts = {}, headers = {}) {
 
     const isAuthLoginEndpoint = path === '/api/auth/login' || path === '/api/auth/oidc/exchange'
     if (res.status === 401 && !isAuthLoginEndpoint) {
-      // Clear any in-memory token and redirect to login. Do NOT rely on
-      // client-side localStorage for session persistence — server cookies are
-      // the canonical source of session state.
+      // Clear any in-memory token. Session expiration will be handled by
+      // AuthProvider which listens for api-error events and will perform
+      // local state cleanup + navigation. We avoid forcing a full page reload
+      // here so the React router can update the UI smoothly.
       authToken = null
-      globalThis.window.location.href = '/#/login'
+      // emit a dedicated event in case consumers want to react specifically
+      // to expiration vs other api errors (e.g. to show a toast).
+      globalThis.window.dispatchEvent(new CustomEvent('session-expired', { detail: { status: 401 } }))
     }
 
     const err = new Error(body?.message || body?.detail || text || res.statusText)

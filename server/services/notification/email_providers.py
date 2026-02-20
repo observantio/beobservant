@@ -8,12 +8,11 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
+import logging
 from email.message import EmailMessage
 from email.utils import parseaddr
-from typing import List, Optional
 
 import httpx
-import logging
 
 from . import transport
 
@@ -24,14 +23,14 @@ def _is_valid_email(addr: str) -> bool:
     return "@" in parseaddr(addr)[1]
 
 
-def _sanitize_recipients(recipients: List[str]) -> List[str]:
+def _sanitize_recipients(recipients: list[str]) -> list[str]:
     valid = [r.strip() for r in recipients if _is_valid_email(r)]
     if not valid:
         raise ValueError("No valid recipient email addresses provided")
     return valid
 
 
-def build_smtp_message(subject: str, body: str, smtp_from: str, recipients: List[str]) -> EmailMessage:
+def build_smtp_message(subject: str, body: str, smtp_from: str, recipients: list[str]) -> EmailMessage:
     recipients = _sanitize_recipients(recipients)
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -46,7 +45,7 @@ async def send_via_sendgrid(
     api_key: str,
     subject: str,
     body: str,
-    recipients: List[str],
+    recipients: list[str],
     smtp_from: str,
 ) -> bool:
     recipients = _sanitize_recipients(recipients)
@@ -87,7 +86,7 @@ async def send_via_resend(
     api_key: str,
     subject: str,
     body: str,
-    recipients: List[str],
+    recipients: list[str],
     smtp_from: str,
 ) -> bool:
     recipients = _sanitize_recipients(recipients)
@@ -127,11 +126,11 @@ async def send_via_smtp(
     message: EmailMessage,
     hostname: str,
     port: int,
-    username: Optional[str],
-    password: Optional[str],
+    username: str | None,
+    password: str | None,
     start_tls: bool,
     use_tls: bool,
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
 ) -> bool:
     if (username or password) and not (start_tls or use_tls):
         raise ValueError("SMTP authentication without TLS is insecure")

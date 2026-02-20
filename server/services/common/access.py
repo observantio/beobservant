@@ -90,5 +90,7 @@ def _has_access(
         return True
     if visibility == "group":
         return bool(set(shared_group_ids) & set(user_group_ids))
+    if visibility == "private":
+        return False
     logger.warning("Unknown visibility value %r encountered in access check", visibility)
     return False

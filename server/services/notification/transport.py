@@ -8,73 +8,66 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
 
-import httpx
 import aiosmtplib
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception,
-    retry_if_exception_type,
-)
+import httpx
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from config import config
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_RETRY_ON_STATUS: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 
-def is_transient_http_exception(exc: Exception) -> bool:
+
+def _is_transient_http(exc: Exception, retry_on_status: frozenset[int]) -> bool:
     if isinstance(exc, httpx.RequestError):
         return True
-
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code if exc.response else 0
-        return 500 <= status < 600
-
+        return status in retry_on_status
     return False
 
 
-@retry(
-    retry=retry_if_exception(is_transient_http_exception),
-    stop=stop_after_attempt(config.MAX_RETRIES),
-    wait=wait_exponential(multiplier=config.RETRY_BACKOFF),
-    reraise=True,
-)
+def _is_transient_smtp(exc: Exception) -> bool:
+    if isinstance(exc, aiosmtplib.errors.SMTPException):
+        code = getattr(exc, "code", None)
+        return isinstance(code, int) and 400 <= code < 500
+    return False
+
+
 async def post_with_retry(
     client: httpx.AsyncClient,
     url: str,
-    json: Dict[str, Any] | None = None,
-    headers: Dict[str, str] | None = None,
-    params: Dict[str, Any] | None = None,
+    json: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    params: dict[str, Any] | None = None,
+    retry_on_status: frozenset[int] | set[int] = _DEFAULT_RETRY_ON_STATUS,
 ) -> httpx.Response:
-    try:
-        resp = await client.post(
-            url,
-            json=json,
-            headers=headers,
-            params=params,
-            timeout=config.DEFAULT_TIMEOUT,
-        )
-        resp.raise_for_status()
-        return resp
+    retry_set = frozenset(retry_on_status)
 
-    except Exception as exc:
-        logger.warning("HTTP POST failed, retrying: %s", url, exc_info=exc)
-        raise
+    @retry(
+        retry=retry_if_exception(lambda exc: _is_transient_http(exc, retry_set)),
+        stop=stop_after_attempt(config.MAX_RETRIES),
+        wait=wait_exponential(multiplier=config.RETRY_BACKOFF),
+        reraise=True,
+    )
+    async def _attempt() -> httpx.Response:
+        try:
+            resp = await client.post(url, json=json, headers=headers, params=params, timeout=config.DEFAULT_TIMEOUT)
+            resp.raise_for_status()
+            return resp
+        except Exception as exc:
+            logger.warning("HTTP POST failed, retrying: %s", url, exc_info=exc)
+            raise
 
-def is_transient_smtp_exception(exc: Exception) -> bool:
-    if isinstance(exc, aiosmtplib.errors.SMTPException):
-        code = getattr(exc, "code", None)
-        return code is None or 400 <= code < 500
-    return False
+    return await _attempt()
 
 
 @retry(
-    retry=retry_if_exception(is_transient_smtp_exception),
+    retry=retry_if_exception(_is_transient_smtp),
     stop=stop_after_attempt(config.MAX_RETRIES),
     wait=wait_exponential(multiplier=config.RETRY_BACKOFF),
     reraise=True,
@@ -87,7 +80,7 @@ async def send_smtp_with_retry(
     password: str | None = None,
     start_tls: bool = False,
     use_tls: bool = False,
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
 ):
     try:
         return await aiosmtplib.send(
@@ -100,12 +93,6 @@ async def send_smtp_with_retry(
             use_tls=use_tls,
             timeout=timeout or config.DEFAULT_TIMEOUT,
         )
-
     except Exception as exc:
-        logger.warning(
-            "SMTP send failed, retrying: %s:%s",
-            hostname,
-            port,
-            exc_info=exc,
-        )
+        logger.warning("SMTP send failed, retrying: %s:%s", hostname, port, exc_info=exc)
         raise
