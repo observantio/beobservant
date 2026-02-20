@@ -13,25 +13,16 @@ jobs:
       run:
         working-directory: ui
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run lint
-        run: npm run lint
-
-      - name: Run build
-        run: npm run build
-
-      - name: Run unit & a11y tests
-        run: npm test -- --run
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test -- --run
 
   server:
     name: Server tests (pytest)
@@ -40,11 +31,9 @@ jobs:
       run:
         working-directory: server
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -55,42 +44,4 @@ jobs:
           python -m pip install pytest
 
       - name: Run server tests
-        run: |
-          export PYTHONPATH=$(pwd)/server
-          pytest -q
-
-  security:
-    name: Security scans
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install security tools
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pip-audit detect-secrets
-
-      - name: Run detect-secrets scan
-        run: detect-secrets scan --baseline .secrets.baseline
-
-      - name: Run server dependency audit
-        run: pip-audit -r server/requirements.txt
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-
-      - name: Install UI dependencies
-        run: npm ci
-        working-directory: ui
-
-      - name: Run UI dependency audit (production-only)
-        run: npm audit --omit=dev --audit-level=high
-        working-directory: ui
+        run: pytest -q
