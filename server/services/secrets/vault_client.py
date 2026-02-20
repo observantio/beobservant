@@ -3,7 +3,17 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Any
+
+# hvac types are untyped, ignore imports for mypy
+try:
+    import hvac  # type: ignore
+    from hvac.exceptions import Forbidden, InvalidPath, VaultError  # type: ignore
+except ImportError:  # pragma: no cover - runtime import handled in class
+    hvac = None  # type: ignore
+    Forbidden = Exception  # type: ignore
+    InvalidPath = Exception  # type: ignore
+    VaultError = Exception  # type: ignore
 
 
 class VaultClientError(RuntimeError):
@@ -26,15 +36,14 @@ class VaultSecretProvider:
         cacert: Optional[str] = None,
         cache_ttl: float = 30.0,
     ) -> None:
-        try:
-            import hvac
-            from hvac.exceptions import Forbidden, InvalidPath, VaultError
-            self._hvac = hvac
-            self._exc_not_found = InvalidPath
-            self._exc_forbidden = Forbidden
-            self._exc_vault = VaultError
-        except ImportError as exc:
-            raise VaultClientError("hvac library is required for VaultSecretProvider") from exc
+        # imports moved to module top; hvac may be None if not installed
+        if hvac is None:
+            raise VaultClientError("hvac library is required for VaultSecretProvider")
+
+        self._hvac = hvac
+        self._exc_not_found = InvalidPath
+        self._exc_forbidden = Forbidden
+        self._exc_vault = VaultError
 
         if not address:
             raise VaultClientError("VAULT_ADDR is required")
@@ -68,6 +77,8 @@ class VaultSecretProvider:
             raise VaultClientError("Vault authentication failed")
 
     def _approle_login(self) -> None:
+        # _secret_id_fn is guaranteed to be non-None when this is called
+        assert self._secret_id_fn is not None
         secret_id = self._secret_id_fn()
         auth = self._client.auth.approle.login(role_id=self._role_id, secret_id=secret_id)
         self._client.token = auth["auth"]["client_token"]
@@ -84,7 +95,9 @@ class VaultSecretProvider:
             entry = self._cache.get(key, _SENTINEL)
             if entry is _SENTINEL:
                 return _SENTINEL
-            ts, value = entry
+            # at this point entry should be tuple[float, object]
+            assert isinstance(entry, tuple) and len(entry) == 2
+            ts, value = entry  # type: float, Any
             if time.monotonic() - ts > self._cache_ttl:
                 del self._cache[key]
                 return _SENTINEL

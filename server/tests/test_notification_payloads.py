@@ -46,10 +46,10 @@ def test_format_alert_body_and_build_payloads():
     teams = notification_payloads.build_teams_payload(a, "resolved")
     assert teams["themeColor"] == "00FF00"
 
-    # warning severity changes colors
+    # warning severity is still firing, so color uses firing rule ('danger')
     aw = _make_alert(labels={"alertname": "X", "severity": "warning"})
     s = notification_payloads.build_slack_payload(aw, "firing")
-    assert s["attachments"][0]["color"] == "warning"
+    assert s["attachments"][0]["color"] == "danger"
     t = notification_payloads.build_teams_payload(aw, "firing")
     assert t["themeColor"] == "FFA500"
 

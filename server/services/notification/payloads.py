@@ -109,8 +109,13 @@ def build_slack_payload(alert: Alert, action: str) -> dict:
 def build_teams_payload(alert: Alert, action: str) -> dict:
     severity = get_label(alert, "severity").lower()
 
+    # determine the theme color; firing traces take precedence, but
+    # warnings should still be highlighted when appropriate.
     if action == "firing":
-        theme_color = "FF0000"
+        if severity == "warning":
+            theme_color = "FFA500"
+        else:
+            theme_color = "FF0000"
     elif severity == "warning":
         theme_color = "FFA500"
     else:

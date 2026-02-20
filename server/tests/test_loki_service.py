@@ -80,8 +80,10 @@ def test_calculate_stats():
         ]
     }
     stats = s._calculate_stats(data)
-    assert stats['total_entries'] == 3
-    assert stats['total_bytes'] == len('a') + len('bb') + len('ccc')
+    assert stats is not None
+    # LogStatsResponse is now a pydantic object; access attributes instead of dict
+    assert stats.total_entries == 3
+    assert stats.total_bytes == len('a') + len('bb') + len('ccc')
 
 
 def test_query_logs_with_fallback_and_normalization():

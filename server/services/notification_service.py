@@ -38,7 +38,18 @@ class NotificationService:
 
     @staticmethod
     def _as_bool(value) -> bool:
-        return notification_validators._as_bool(value)
+        # delegate to the shared validator if available; fall back if not
+        try:
+            return notification_validators._as_bool(value)
+        except AttributeError:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return value != 0
+            if isinstance(value, str):
+                val = value.strip().lower()
+                return val in ("1", "true", "yes", "on")
+            return False
 
     def validate_channel_config(self, channel_type: str, channel_config: dict | None) -> list[str]:
         return notification_validators.validate_channel_config(channel_type, channel_config)

@@ -29,7 +29,8 @@ def test_search_traces_fetches_full_traces_with_concurrency():
             "warnings": None,
         }
 
-    service._timed_get_json = fake_search
+    # the implementation uses _get_json internally, not _timed_get_json
+    service._get_json = fake_search
     service.get_trace = fake_get_trace
 
     result = asyncio.run(service.search_traces(TraceQuery(limit=3), fetch_full_traces=True))

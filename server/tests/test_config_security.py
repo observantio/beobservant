@@ -15,6 +15,17 @@ import sys
 import unittest
 from unittest.mock import patch
 
+# pytest sometimes imports a different `services` module (e.g. an unrelated
+# installed package) which lacks __path__. ensure our local package path is
+# present so submodule imports work correctly.
+try:
+    import services
+    if not hasattr(services, "__path__"):
+        services.__path__ = [os.path.join(os.path.dirname(__file__), "..", "services")]
+except ImportError:
+    # if import fails, tests will likely fail later anyway
+    pass
+
 
 CONFIG_MODULE = "config"
 
@@ -143,8 +154,18 @@ class ConfigSecurityTests(unittest.TestCase):
             "VAULT_ADDR": "http://vault:8200",
             "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/beobservant",
         }, clear=False):
-            with patch("services.secrets.vault_client.VaultSecretProvider", FakeVaultProvider):
+            # insert a fake module into sys.modules so that when config.py
+            # tries to import services.secrets.vault_client it sees our
+            # provider class without touching the real package.  This avoids
+            # odd AttributeError issues that were occurring during import.
+            import types, sys
+            fake = types.SimpleNamespace(VaultSecretProvider=FakeVaultProvider, VaultClientError=Exception)
+            sys.modules['services.secrets.vault_client'] = fake
+            try:
                 module = _reload_config_module()
+            finally:
+                # clean up to avoid polluting other tests
+                sys.modules.pop('services.secrets.vault_client', None)
                 # values from fake provider override env
                 self.assertEqual(module.config.DATABASE_URL, "postgresql://vaultuser:vaultpass@db:5432/beobservant")
                 self.assertEqual(module.config.DEFAULT_ADMIN_PASSWORD, "vault-default-admin-pass")

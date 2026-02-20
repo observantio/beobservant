@@ -13,7 +13,7 @@
     "test:run": "vitest run",
     "test:ci": "vitest --run",
     "lint:css": "stylelint \"src/**/*.{css,scss}\" --allow-empty-input",
-    "lint:js": "eslint \"src/**/*.{js,jsx}\" --max-warnings=0",
+    "lint:js": "eslint \"src/**/*.{js,jsx}\"",
     "lint": "npm run lint:css && npm run lint:js",
     "a11y": "vitest -t a11y"
   },

@@ -16,10 +16,11 @@ def test_build_smtp_message():
 
 
 def test_send_via_sendgrid_and_resend_success_and_failure(monkeypatch):
-    async def ok_post(client, url, json=None, headers=None, params=None):
+    # allow extra kwargs (e.g. retry_on_status) to avoid signature mismatch
+    async def ok_post(client, url, json=None, headers=None, params=None, **kwargs):
         return httpx.Response(202)
 
-    async def fail_post(client, url, json=None, headers=None, params=None):
+    async def fail_post(client, url, json=None, headers=None, params=None, **kwargs):
         raise Exception("boom")
 
     monkeypatch.setattr(transport, "post_with_retry", ok_post)

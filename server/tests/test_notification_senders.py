@@ -22,10 +22,11 @@ def test_send_slack_calls_transport(monkeypatch):
 
     monkeypatch.setattr(transport, "post_with_retry", fake_post)
     client = httpx.AsyncClient()
-    channel = {"webhook_url": "https://example.com/hook"}
+    channel = {"webhook_url": "https://hooks.slack.com/services/test"}
     res = asyncio.run(senders.send_slack(client, channel, _make_alert(), "firing"))
     assert res is True
-    assert called['url'] == "https://example.com/hook"
+    # post function should have been called with the same slack URL we provided
+    assert called['url'] == channel['webhook_url']
 
 
 def test_send_slack_invalid_url_returns_false():

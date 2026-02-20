@@ -70,3 +70,19 @@ def validate_channel_config(channel_type: str, channel_config: Dict[str, Any] | 
             errors.append("PagerDuty channel requires 'routing_key'")
 
     return errors
+
+
+def _as_bool(value: Any) -> bool:
+    """Convert a variety of truthy/falsey inputs into a boolean.
+
+    Supports bools, numbers, and common string values. Returns False for
+    anything else (including None).
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        val = value.strip().lower()
+        return val in ("1", "true", "yes", "on")
+    return False

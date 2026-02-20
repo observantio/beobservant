@@ -259,9 +259,9 @@ class Config:
                 raise
             logger.warning("Vault not available or misconfigured; continuing with environment variables: %s", exc)
         if not hasattr(self, "_secret_provider") or self._secret_provider is None:
-            from services.secrets.provider import EnvSecretProvider
+            from services.secrets.provider import EnvSecretProvider, SecretProvider
 
-            self._secret_provider = EnvSecretProvider()
+            self._secret_provider: SecretProvider = EnvSecretProvider()
 
         # Alerting and notifications defaults
         self.DEFAULT_RULE_GROUP: str = os.getenv("DEFAULT_RULE_GROUP", "default")
@@ -287,17 +287,20 @@ class Config:
         """
         if not self.VAULT_ENABLED:
             return
-        from services.secrets.provider import EnvSecretProvider
+        from services.secrets.provider import EnvSecretProvider, SecretProvider
         from services.secrets.vault_client import VaultClientError, VaultSecretProvider
 
         if not self.VAULT_ADDR:
             raise ValueError("VAULT_ADDR must be set when VAULT_ENABLED=true")
 
+        # build a callable for secret id if provided
+        secret_id_fn = (lambda: self.VAULT_SECRET_ID) if self.VAULT_SECRET_ID else None
+
         provider = VaultSecretProvider(
             address=self.VAULT_ADDR,
             token=self.VAULT_TOKEN,
             role_id=self.VAULT_ROLE_ID,
-            secret_id=self.VAULT_SECRET_ID,
+            secret_id_fn=secret_id_fn,
             prefix=self.VAULT_SECRETS_PREFIX,
             kv_version=self.VAULT_KV_VERSION,
             timeout=self.VAULT_TIMEOUT,

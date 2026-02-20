@@ -201,7 +201,8 @@ export default function DashboardEditorModal({
     onSave(str)
   }
 
-  const useJsonButUpdateWithForm = () => {
+  // renamed to avoid React hook naming convention
+  const updateJsonWithForm = () => {
     const merged = mergeFormIntoJson(jsonContent || '{}')
     const str = JSON.stringify(merged, null, 2)
     setJsonContent(str)
@@ -280,7 +281,7 @@ export default function DashboardEditorModal({
                           data-testid="json-conflict-merge"
                           type="button"
                           className="px-4 py-2 rounded-lg bg-sre-primary text-white text-sm font-medium hover:bg-sre-primary/90 transition-colors"
-                          onClick={() => { setShowJsonConflict(false); useJsonButUpdateWithForm() }}
+                          onClick={() => { setShowJsonConflict(false); updateJsonWithForm() }}
                         >
                           Update JSON
                         </button>

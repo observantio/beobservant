@@ -24,6 +24,7 @@ from models.observability.loki_models import (
     LogQuery,
     LogResponse,
     LogDirection,
+    LogStatsResponse,
 )
 from services.common.http_client import create_async_client
 from services.common.ttl_cache import TTLCache
@@ -101,7 +102,6 @@ class LokiService:
                 params[key] = val
         return params
 
-    from models.observability.loki_models import LogStatsResponse
 
     def _calculate_stats(self, data: Dict[str, Any]) -> Optional[LogStatsResponse]:
         try:

@@ -6,7 +6,7 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 `
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAutoRefresh } from '../hooks'
 import PageHeader from '../components/ui/PageHeader'
 import AutoRefreshControl from '../components/ui/AutoRefreshControl'
@@ -72,6 +72,32 @@ export default function LokiPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [topTerms, setTopTerms] = useState([])
+
+  const logStats = useMemo(() => {
+    const res = queryResult?.data?.result || []
+    const totalStreams = res.length
+    const totalLogs = res.reduce((acc, s) => acc + (s.values?.length || 0), 0)
+    const avgLogs = totalStreams ? Math.round(totalLogs / totalStreams) : 0
+    // compute unique services present in streams and keep names
+    const servicesSet = new Set(
+      res.flatMap(s => {
+        if (s.stream) {
+          // common service labels
+          return [
+            s.stream.service_name,
+            s.stream.service,
+            ...(Object.values(s.stream) || [])
+          ]
+        }
+        return []
+      }).filter(v => typeof v === 'string' && v)
+    )
+    const serviceList = Array.from(servicesSet)
+    const serviceCount = serviceList.length
+    const termNames = topTerms ? topTerms.map(t => t.term || String(t)) : []
+    const termCount = termNames.length
+    return { totalStreams, totalLogs, avgLogs, serviceCount, serviceList, termCount, termNames }
+  }, [queryResult, topTerms])
 
   const toast = useToast()
 
@@ -339,6 +365,25 @@ export default function LokiPage() {
           intervalOptions={LOKI_REFRESH_INTERVALS}
         />
       </PageHeader>
+
+      {/* Stats bar similar to Tempo */}
+      {logStats && logStats.totalStreams !== undefined && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          {[
+            { label: 'Streams', value: logStats.totalStreams, color: 'text-sre-text', detail: '' },
+            { label: 'Total Logs', value: logStats.totalLogs.toLocaleString(), color: 'text-sre-text', detail: '' },
+            { label: 'Avg/stream', value: logStats.avgLogs.toLocaleString(), color: 'text-sre-text', detail: 'logs per stream' },
+            { label: 'Services', value: logStats.serviceCount, color: 'text-sre-text', detail: (logStats.serviceList || []).join(', ') },
+            { label: 'Top Terms', value: logStats.termCount, color: 'text-sre-text', detail: (logStats.termNames || []).join(', ') },
+          ].map(stat => (
+            <Card key={stat.label} className="p-4 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 border-sre-border/50 hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm">
+              <div className="text-sre-text-muted text-xs mb-1">{stat.label}</div>
+              <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+              {stat.detail && <div className="text-xs text-sre-text-muted mt-1 truncate">{stat.detail}</div>}
+            </Card>
+          ))}
+        </div>
+      )}
 
       {error && (
         <Alert variant="error" className="mb-6" onClose={() => setError(null)}>

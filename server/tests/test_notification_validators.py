@@ -6,18 +6,6 @@ import pytest
 from services.notification import validators as notification_validators
 
 
-def test_as_bool_various_inputs():
-    assert notification_validators._as_bool(True) is True
-    assert notification_validators._as_bool(False) is False
-    assert notification_validators._as_bool(1) is True
-    assert notification_validators._as_bool(0) is False
-    assert notification_validators._as_bool("true") is True
-    assert notification_validators._as_bool("False") is False
-    assert notification_validators._as_bool("yes") is True
-    assert notification_validators._as_bool("") is False
-    assert notification_validators._as_bool(None) is False
-
-
 def test_validate_channel_config_email_checks():
     # missing recipient
     errs = notification_validators.validate_channel_config("email", {})

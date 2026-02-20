@@ -4,38 +4,19 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+# ensure config validation passes
+os.environ.setdefault('DATABASE_URL', 'postgresql://test:test@localhost/testdb')
+os.environ.setdefault('CORS_ALLOW_CREDENTIALS', 'False')
+os.environ.setdefault('CORS_ORIGINS', 'http://localhost')
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 
 import types
-services_mod = types.ModuleType("services")
-sys.modules["services"] = services_mod
 
-# Create a temporary `config` module used only while importing the module-under-test
-cfg_mod = types.ModuleType("config")
-from types import SimpleNamespace
-cfg_mod.config = SimpleNamespace(
-    DEFAULT_ORG_ID="default",
-    DEFAULT_RULE_GROUP="default",
-    DB_AUTO_CREATE_SCHEMA=False,
-    GRAFANA_URL="http://localhost:3000",
-    GRAFANA_USERNAME="admin",
-    GRAFANA_PASSWORD="admin",
-    DEFAULT_TIMEOUT=30,
-)  # type: ignore[attr-defined]
-# Temporarily inject `config` while importing the server module so other tests are not affected
-_original_config_module = sys.modules.get("config")
-sys.modules["config"] = cfg_mod
-try:
-    from server.services.grafana_proxy_service import GrafanaProxyService
-finally:
-    if _original_config_module is not None:
-        sys.modules["config"] = _original_config_module
-    else:
-        sys.modules.pop("config", None)
-
+# mock the grafana service submodule before importing the code under test
 gf_mod = types.ModuleType("services.grafana_service")
 class _LocalGrafanaAPIError(Exception):
     def __init__(self, status: int, body=None):
@@ -44,6 +25,10 @@ class _LocalGrafanaAPIError(Exception):
 gf_mod.GrafanaAPIError = _LocalGrafanaAPIError  # type: ignore[attr-defined]
 gf_mod.GrafanaService = lambda *a, **k: None  # type: ignore[attr-defined]
 sys.modules["services.grafana_service"] = gf_mod
+
+# create other dependent submodules early as well
+pa_mod = types.ModuleType("services.grafana.proxy_auth_ops")
+# (definitions follow later in file unchanged)
 
 pa_mod = types.ModuleType("services.grafana.proxy_auth_ops")
 def _is_admin_user(self, token_data):
@@ -170,6 +155,7 @@ def test_validate_group_visibility_missing_ids_raises():
         svc._validate_group_visibility(db, tenant_id="t1", group_ids=["g1"], shared_group_ids=["g1", "g2"], is_admin=True)
     assert exc.value.status_code == 400
     assert "One or more group ids are invalid" in exc.value.detail
+
 
 
 def test_validate_group_visibility_non_admin_not_member_raises():

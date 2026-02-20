@@ -88,6 +88,38 @@ describe('LokiPage performance behavior', () => {
     await waitFor(() => expect(getByText(/Showing 1–20 of 45 streams/)).toBeInTheDocument())
   })
 
+  it('displays statistic cards calculated from results', async () => {
+    api.getLabels.mockResolvedValue({ data: [] })
+    const fakeStreams = [
+      { stream: { service_name: 'svc1' }, values: [[0, 'a'], [1, 'b']] },
+      { stream: { service_name: 'svc1' }, values: [[0, 'c']] },
+      { stream: { service_name: 'svc2' }, values: [[0, 'd'], [1, 'e'], [2, 'f']] },
+    ]
+    api.queryLogs.mockResolvedValue({ data: { result: fakeStreams } })
+
+    const { getByText, container } = render(<LokiPage />)
+    const runBtn = getByText(/Run Query/i)
+    fireEvent.click(runBtn)
+
+    await waitFor(() => expect(api.queryLogs).toHaveBeenCalled())
+    // stats should appear with labels
+    expect(getByText(/Streams/i)).toBeInTheDocument()
+    expect(getByText(/Total Logs/i)).toBeInTheDocument()
+    expect(getByText(/Avg\/stream/i)).toBeInTheDocument()
+    expect(getByText(/Services/i)).toBeInTheDocument()
+    expect(getByText(/Top Terms/i)).toBeInTheDocument()
+    // verify service names appear in detail text
+    expect(container.textContent).toContain('svc1')
+    expect(container.textContent).toContain('svc2')
+    // ensure top terms are rendered as strings not object placeholders
+    expect(container.textContent).not.toContain('[object Object]')
+    // confirm counts too
+    const nums = container.querySelectorAll('div.text-2xl.font-bold')
+    const values = Array.from(nums).map(n => n.textContent.trim())
+    // expect all metrics: streams,total,avg,services,terms
+    expect(values).toEqual(expect.arrayContaining(['3','6','2','2','2']))
+  })
+
   it('restores filters from localStorage and triggers a query on mount', async () => {
     const saved = { selectedFilters: [{ label: 'foo', value: 'bar' }], searchLimit: 10 }
     localStorage.setItem('lokiPageState', JSON.stringify(saved))

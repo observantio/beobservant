@@ -49,15 +49,14 @@ describe('AlertManagerPage state persistence', () => {
 
   it('respects activeTab stored in localStorage', () => {
     localStorage.setItem('alertmanager-active-tab', JSON.stringify('rules'))
-    const { getByText } = render(<AlertManagerPage />)
-    // 'Rules' button should be styled as active (border or primary)
-    const rulesBtn = getByText(/Rules/i)
+    const { getByRole } = render(<AlertManagerPage />)
+    const rulesBtn = getByRole('button', { name: /Rules/i })
     expect(rulesBtn).toHaveClass('text-sre-primary')
   })
 
   it('updates localStorage when tab changes', () => {
-    const { getByText } = render(<AlertManagerPage />)
-    const silencesBtn = getByText(/Silences/i)
+    const { getByRole } = render(<AlertManagerPage />)
+    const silencesBtn = getByRole('button', { name: /Silences/i })
     fireEvent.click(silencesBtn)
     expect(JSON.parse(localStorage.getItem('alertmanager-active-tab'))).toBe('silences')
   })
