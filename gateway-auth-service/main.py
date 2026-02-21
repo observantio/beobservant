@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     while True:
         try:
             if gw_config.AUTH_API_URL:
-                _service._fetch_org_from_api("startup-check")
+                _service._fetch_org_from_api(gw_config.GATEWAY_STATUS_OTLP_TOKEN)
             logger.info("Startup connectivity checks passed")
             break
         except Exception as exc:

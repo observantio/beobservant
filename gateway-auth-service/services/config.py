@@ -39,3 +39,4 @@ PORT: int = int(os.getenv("GATEWAY_PORT", os.getenv("PORT", "4321")))
 
 GATEWAY_STARTUP_RETRIES: int = int(os.getenv("GATEWAY_STARTUP_RETRIES", os.getenv("GATEWAY_DB_STARTUP_RETRIES", "10")))
 GATEWAY_STARTUP_BACKOFF: float = float(os.getenv("GATEWAY_STARTUP_BACKOFF", os.getenv("GATEWAY_DB_STARTUP_BACKOFF", "1.0")))
+GATEWAY_STATUS_OTLP_TOKEN   = os.getenv("GATEWAY_STATUS_OTLP_TOKEN", "").strip()

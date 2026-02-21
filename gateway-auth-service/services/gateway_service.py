@@ -148,6 +148,7 @@ class GatewayAuthService:
             return cached
 
         try:
+            logger.info("Token cache miss for token: %s", token[:4] + "..." if len(token) > 7 else token)
             org = self._fetch_org_from_api(token)
         except DatabaseUnavailable:
             raise
