@@ -113,7 +113,6 @@ async def security_headers_middleware(request: Request, call_next):
     except Exception:
         logger.debug("Skipping middleware audit write for request %s", request.url.path)
 
-    # security headers
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")

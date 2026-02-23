@@ -19,6 +19,7 @@ ensure_test_env()
 from models.access.auth_models import Permission, ROLE_PERMISSIONS, Role
 from services.auth.permission_defs import PERMISSION_DEFS
 from services.auth.auth_ops import validate_otlp_token
+from config import config
 
 
 class _BrokenContext:
@@ -44,6 +45,22 @@ class AuditComplianceFeatureTests(unittest.TestCase):
         result = validate_otlp_token(service, "token-1")
         self.assertIsNone(result)
         service.logger.warning.assert_called_once()
+
+    @patch("services.auth.auth_ops.get_db_session")
+    def test_validate_otlp_token_accepts_configured_default_token(self, mock_db):
+        service = MagicMock()
+        original_default_token = config.DEFAULT_OTLP_TOKEN
+        original_default_org = config.DEFAULT_ORG_ID
+        try:
+            config.DEFAULT_OTLP_TOKEN = "default-token"
+            config.DEFAULT_ORG_ID = "default-org"
+            result = validate_otlp_token(service, "default-token")
+        finally:
+            config.DEFAULT_OTLP_TOKEN = original_default_token
+            config.DEFAULT_ORG_ID = original_default_org
+
+        self.assertEqual(result, "default-org")
+        mock_db.assert_not_called()
 
     def test_internal_otlp_validate_endpoint(self):
         # make sure importing the app doesn't attempt to reach real postgres

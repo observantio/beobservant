@@ -51,6 +51,9 @@ def ensure_default_api_key(service, db, user: User):
             if existing.key != (user.org_id or config.DEFAULT_ORG_ID):
                 existing.key = user.org_id or config.DEFAULT_ORG_ID
                 existing.updated_at = now
+            if not existing.is_enabled:
+                existing.is_enabled = True
+                existing.updated_at = now
             if not existing.otlp_token or (
                 config.DEFAULT_OTLP_TOKEN and existing.otlp_token != config.DEFAULT_OTLP_TOKEN
             ):

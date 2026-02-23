@@ -19,20 +19,31 @@ route:
 receivers:
   - name: 'beobservant-webhook'
     webhook_configs:
-      - url: 'http://beobservant:4319/alerts/webhook'
+      - url: 'http://benotified:4323/internal/v1/alertmanager/alerts/webhook'
         send_resolved: true
         http_config:
           follow_redirects: true
+          authorization:
+            type: Bearer
+            credentials_file: /tmp/inbound_webhook_token
 
   - name: 'critical'
     webhook_configs:
-      - url: 'http://beobservant:4319/alerts/critical'
+      - url: 'http://benotified:4323/internal/v1/alertmanager/alerts/critical'
         send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /tmp/inbound_webhook_token
 
   - name: 'warning'
     webhook_configs:
-      - url: 'http://beobservant:4319/alerts/warning'
+      - url: 'http://benotified:4323/internal/v1/alertmanager/alerts/warning'
         send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /tmp/inbound_webhook_token
 
 inhibit_rules:
   - source_match:

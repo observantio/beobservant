@@ -22,7 +22,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-
+  
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -44,6 +44,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      benotified:
+        condition: service_started
     environment:
       RATE_LIMIT_BACKEND: redis
       RATE_LIMIT_REDIS_URL: redis://redis:6379/0
@@ -51,6 +53,32 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4319/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  benotified:
+    build:
+      context: ./BeNotified
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "4323:4323"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      alertmanager:
+        condition: service_started
+    environment:
+      PORT: 4323
+    networks: [obs]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4323/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -75,6 +103,24 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  becertain:
+    build:
+      context: ./BeCertain
+      dockerfile: Dockerfile
+    env_file:
+      - .env         
+    networks: [obs]
+    ports:
+      - "4322:4322"
+    depends_on:
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+      mimir:
+        condition: service_started
+    restart: unless-stopped
 
   otlp-gateway:
     image: envoyproxy/envoy:v1.32-latest
@@ -157,16 +203,26 @@ services:
     depends_on:
       - alertmanager
     networks: [obs]
+    ports:
+      - "9009:9009"
     restart: unless-stopped
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
+    env_file:
+      - .env
     volumes:
       - ./configs/alertmanager.yaml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager:/alertmanager
+    entrypoint: ["/bin/sh", "-ec"]
     command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-      - "--storage.path=/alertmanager"
+      - |
+        test -n "$${INBOUND_WEBHOOK_TOKEN:-}" &&
+        umask 077 &&
+        printf "%s" "$${INBOUND_WEBHOOK_TOKEN}" > /tmp/inbound_webhook_token &&
+        exec /bin/alertmanager \
+          --config.file=/etc/alertmanager/alertmanager.yml \
+          --storage.path=/alertmanager
     networks: [obs]
     restart: unless-stopped
 

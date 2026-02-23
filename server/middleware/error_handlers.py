@@ -64,11 +64,6 @@ def handle_route_errors(
 
     return decorator
 
-
-# ---------------------------------------------------------------------------
-# application-wide exception handlers
-# ---------------------------------------------------------------------------
-
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError

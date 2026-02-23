@@ -26,4 +26,5 @@ coverage/
 *.tar.gz
 *.log
 .mypy_cache/
-beCertain/
+BeCertain/
+BeNotified/

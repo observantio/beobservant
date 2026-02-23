@@ -23,6 +23,7 @@ With visualization of spans and multiple traces using React flow
 | Component | Role | Port |
 |---|---|---|
 | `beobservant` | Core REST API (FastAPI) | `4319` |
+| `benotified` | Internal alerting/incident service | `4323` |
 | `gateway-auth` | OTLP token validation service | internal |
 | `grafana-proxy` | Authenticated Grafana reverse proxy | `8080` |
 | `otlp-gateway` | Envoy-based OTLP ingestion gateway | `4320` |
@@ -57,6 +58,10 @@ INBOUND_WEBHOOK_TOKEN=
 DATA_ENCRYPTION_KEY=
 DEFAULT_ADMIN_BOOTSTRAP_ENABLED=false
 JWT_AUTO_GENERATE_KEYS=false
+BENOTIFIED_SERVICE_TOKEN=
+BENOTIFIED_EXPECTED_SERVICE_TOKEN=
+BENOTIFIED_CONTEXT_SIGNING_KEY=
+BENOTIFIED_CONTEXT_VERIFY_KEY=
 ```
 
 Generate a Fernet key for `DATA_ENCRYPTION_KEY`:
@@ -94,6 +99,8 @@ docker compose up --build -d
 ```
 
 Your ui should be running at localhost:5173 unless it is not freed, also ensure if you enable CORS, to add `localhost:5173` to the environment page
+
+BeNotified runs as an internal service and should not be exposed publicly. Main server proxies `/api/alertmanager/*` while preserving permission/scope checks and main audit semantics.
 
 ---
 
@@ -175,3 +182,5 @@ docker compose down -v    # stop services and remove all volumes (including user
 ## Documentation
 
 Full user and administrator guidance is in [`USER_GUIDE.md`](./USER_GUIDE.md).
+
+Service-specific notes for the internal alerting engine are in [`BeNotified/README.md`](./BeNotified/README.md).

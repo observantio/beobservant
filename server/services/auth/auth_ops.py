@@ -11,6 +11,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from functools import lru_cache
+import secrets
 
 import jwt
 from cryptography.hazmat.primitives import serialization
@@ -206,6 +207,9 @@ def update_password(service, user_id: str, password_update, tenant_id: str) -> b
 def validate_otlp_token(service, token: str) -> Optional[str]:
     if not token:
         return None
+    default_token = getattr(config, "DEFAULT_OTLP_TOKEN", None)
+    if default_token and secrets.compare_digest(str(token), str(default_token)):
+        return config.DEFAULT_ORG_ID
     try:
         with get_db_session() as db:
             api_key = (

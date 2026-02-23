@@ -138,7 +138,6 @@ app.include_router(system_router.router)
 app.include_router(tempo_router.router)
 app.include_router(loki_router.router)
 app.include_router(alertmanager_router.router)
-app.include_router(alertmanager_router.webhook_router)
 app.include_router(grafana_router.router)
 
 
@@ -188,6 +187,7 @@ async def ready(request: Request):
         "tempo": config.TEMPO_URL,
         "loki": config.LOKI_URL,
         "alertmanager": config.ALERTMANAGER_URL,
+        "benotified": config.BENOTIFIED_URL,
         "grafana": config.GRAFANA_URL,
         "mimir": config.MIMIR_URL,
     }

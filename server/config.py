@@ -95,6 +95,7 @@ class Config:
         self.TEMPO_URL: str = os.getenv("TEMPO_URL", "http://tempo:3200")
         self.LOKI_URL: str = os.getenv("LOKI_URL", "http://loki:3100")
         self.ALERTMANAGER_URL: str = os.getenv("ALERTMANAGER_URL", "http://alertmanager:9093")
+        self.BENOTIFIED_URL: str = os.getenv("BENOTIFIED_URL", "http://benotified:4323")
         self.GRAFANA_URL: str = os.getenv("GRAFANA_URL", "http://grafana:3000")
         self.MIMIR_URL: str = os.getenv("MIMIR_URL", "http://mimir:9009")
 
@@ -111,6 +112,7 @@ class Config:
 
         # Request settings
         self.DEFAULT_TIMEOUT: float = float(os.getenv("DEFAULT_TIMEOUT", "30.0"))
+        self.BENOTIFIED_TIMEOUT_SECONDS: float = float(os.getenv("BENOTIFIED_TIMEOUT_SECONDS", "15.0"))
         self.MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
         self.RETRY_BACKOFF: float = float(os.getenv("RETRY_BACKOFF", "1.0"))
         self.RETRY_MAX_BACKOFF: float = float(os.getenv("RETRY_MAX_BACKOFF", "8.0"))
@@ -166,6 +168,14 @@ class Config:
         self.OTLP_INGEST_TOKEN: Optional[str] = os.getenv("OTLP_INGEST_TOKEN")
 
         self.GATEWAY_INTERNAL_SERVICE_TOKEN: Optional[str] = os.getenv("GATEWAY_INTERNAL_SERVICE_TOKEN")
+        self.BENOTIFIED_SERVICE_TOKEN: Optional[str] = os.getenv("BENOTIFIED_SERVICE_TOKEN")
+        self.BENOTIFIED_CONTEXT_SIGNING_KEY: Optional[str] = os.getenv("BENOTIFIED_CONTEXT_SIGNING_KEY")
+        self.BENOTIFIED_CONTEXT_ISSUER: str = os.getenv("BENOTIFIED_CONTEXT_ISSUER", "beobservant-main")
+        self.BENOTIFIED_CONTEXT_AUDIENCE: str = os.getenv("BENOTIFIED_CONTEXT_AUDIENCE", "benotified")
+        self.BENOTIFIED_CONTEXT_ALGORITHM: str = os.getenv("BENOTIFIED_CONTEXT_ALGORITHM", "HS256")
+        self.BENOTIFIED_CONTEXT_TTL_SECONDS: int = int(os.getenv("BENOTIFIED_CONTEXT_TTL_SECONDS", "90"))
+        self.BENOTIFIED_TLS_ENABLED: bool = _to_bool(os.getenv("BENOTIFIED_TLS_ENABLED"), default=False)
+        self.BENOTIFIED_CA_CERT_PATH: Optional[str] = os.getenv("BENOTIFIED_CA_CERT_PATH")
 
         # Authentication
         self.JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "RS256").strip().upper()
@@ -322,6 +332,8 @@ class Config:
             "INBOUND_WEBHOOK_TOKEN",
             "OTLP_INGEST_TOKEN",
             "GATEWAY_INTERNAL_SERVICE_TOKEN",
+            "BENOTIFIED_SERVICE_TOKEN",
+            "BENOTIFIED_CONTEXT_SIGNING_KEY",
             "AGENT_HEARTBEAT_TOKEN",
         ]
 
