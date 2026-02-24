@@ -7,6 +7,24 @@ const refreshJobsMock = vi.fn()
 const setSelectedJobIdMock = vi.fn()
 const reloadReportMock = vi.fn()
 
+const jobsState = {
+  jobs: [],
+  loadingJobs: false,
+  creatingJob: false,
+  deletingReport: false,
+  selectedJobId: null,
+  selectedJob: null,
+}
+
+const reportState = {
+  loadingReport: false,
+  reportError: null,
+  report: null,
+  reportMeta: null,
+  insights: {},
+  hasReport: false,
+}
+
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 'u1' },
@@ -15,12 +33,7 @@ vi.mock('../../contexts/AuthContext', () => ({
 
 vi.mock('../../hooks/useRcaJobs', () => ({
   useRcaJobs: () => ({
-    jobs: [],
-    loadingJobs: false,
-    creatingJob: false,
-    deletingReport: false,
-    selectedJobId: null,
-    selectedJob: null,
+    ...jobsState,
     setSelectedJobId: setSelectedJobIdMock,
     createJob: createJobMock,
     deleteReportById: vi.fn(),
@@ -31,12 +44,7 @@ vi.mock('../../hooks/useRcaJobs', () => ({
 
 vi.mock('../../hooks/useRcaReport', () => ({
   useRcaReport: () => ({
-    loadingReport: false,
-    reportError: null,
-    report: null,
-    reportMeta: null,
-    insights: {},
-    hasReport: false,
+    ...reportState,
     reloadReport: reloadReportMock,
   }),
 }))
@@ -45,6 +53,18 @@ describe('RCAPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    jobsState.jobs = []
+    jobsState.loadingJobs = false
+    jobsState.creatingJob = false
+    jobsState.deletingReport = false
+    jobsState.selectedJobId = null
+    jobsState.selectedJob = null
+    reportState.loadingReport = false
+    reportState.reportError = null
+    reportState.report = null
+    reportState.reportMeta = null
+    reportState.insights = {}
+    reportState.hasReport = false
   })
 
   it('submits a create job request from composer', () => {
@@ -58,7 +78,6 @@ describe('RCAPage', () => {
   })
 
   it('shows quick-stat tiles when a report is available', () => {
-    // override report hook to provide a fake report
     const fakeReport = {
       summary: 'Test summary',
       overall_severity: 'high',
@@ -66,22 +85,12 @@ describe('RCAPage', () => {
       root_causes: [1],
       duration_seconds: 42,
     }
-    vi.mock('../../hooks/useRcaReport', () => ({
-      useRcaReport: () => ({
-        loadingReport: false,
-        reportError: null,
-        report: fakeReport,
-        reportMeta: fakeReport,
-        insights: {},
-        hasReport: true,
-        reloadReport: reloadReportMock,
-      }),
-    }))
+    reportState.report = fakeReport
+    reportState.reportMeta = fakeReport
+    reportState.hasReport = true
 
     const { queryByText, getByText } = render(<RCAPage />)
-    // summary paragraph should no longer be rendered at top
     expect(queryByText('Test summary')).not.toBeInTheDocument()
-    // metrics should render as cards
     expect(getByText('Overall Severity')).toBeInTheDocument()
     expect(getByText('HIGH')).toBeInTheDocument()
     expect(getByText('Metric Anomalies')).toBeInTheDocument()
@@ -94,22 +103,7 @@ describe('RCAPage', () => {
 
   it('restores selected job id from localStorage when jobs include it', () => {
     localStorage.setItem('rcaPage.selectedJobId', 'stored-job')
-    // provide jobs that include the stored id
-    vi.mock('../../hooks/useRcaJobs', () => ({
-      useRcaJobs: () => ({
-        jobs: [{ job_id: 'stored-job' }],
-        loadingJobs: false,
-        creatingJob: false,
-        deletingReport: false,
-        selectedJobId: null,
-        selectedJob: null,
-        setSelectedJobId: setSelectedJobIdMock,
-        createJob: createJobMock,
-        deleteReportById: vi.fn(),
-        removeJobByReportId: vi.fn(),
-        refreshJobs: refreshJobsMock,
-      }),
-    }))
+    jobsState.jobs = [{ job_id: 'stored-job' }]
 
     render(<RCAPage />)
     expect(setSelectedJobIdMock).toHaveBeenCalledWith('stored-job')

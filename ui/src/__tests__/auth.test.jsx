@@ -1,6 +1,7 @@
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from '../contexts/AuthContext'
 import * as api from '../api'
 
@@ -21,10 +22,17 @@ function Status() {
 }
 
 describe('AuthContext cookie-first behavior', () => {
+  const renderWithRouter = (node) =>
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        {node}
+      </MemoryRouter>
+    )
+
   it('loads user from cookie-based session (no access_token)', async () => {
     api.getCurrentUserNoRedirect.mockResolvedValue({ username: 'alice', org_id: 'org-a' })
 
-    render(
+    renderWithRouter(
       <AuthProvider>
         <Status />
       </AuthProvider>
@@ -49,7 +57,7 @@ describe('AuthContext cookie-first behavior', () => {
       return null
     }
 
-    render(
+    renderWithRouter(
       <AuthProvider>
         <LoginCaller />
         <Status />
@@ -76,7 +84,7 @@ describe('AuthContext cookie-first behavior', () => {
       return null
     }
 
-    render(
+    renderWithRouter(
       <AuthProvider>
         <LoginCaller />
         <Status />
@@ -102,7 +110,7 @@ describe('AuthContext cookie-first behavior', () => {
       return <Status />
     }
 
-    render(
+    renderWithRouter(
       <AuthProvider>
         <Caller />
       </AuthProvider>
@@ -127,12 +135,10 @@ describe('AuthContext cookie-first behavior', () => {
       )
     }
 
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <AuthProvider>
-          <Check />
-        </AuthProvider>
-      </MemoryRouter>
+    renderWithRouter(
+      <AuthProvider>
+        <Check />
+      </AuthProvider>
     )
 
     // wait for login/user state to be set

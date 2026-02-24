@@ -5,10 +5,14 @@ import asyncio
 import importlib.util
 import os
 import sys
+import pytest
 
 _SERVER_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _REPO_ROOT = os.path.abspath(os.path.join(_SERVER_ROOT, ".."))
 _BECERTAIN_ROOT = os.path.join(_REPO_ROOT, "BeCertain")
+if not os.path.exists(os.path.join(_BECERTAIN_ROOT, "config.py")):
+    pytest.skip("BeCertain engine not present in this checkout; skipping cross-service fetcher test", allow_module_level=True)
+
 _added = False
 _prev_config = sys.modules.get("config")
 if _BECERTAIN_ROOT not in sys.path:
