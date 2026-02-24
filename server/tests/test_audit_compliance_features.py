@@ -79,29 +79,35 @@ class AuditComplianceFeatureTests(unittest.TestCase):
         sys.modules.pop("main", None)
         from main import app
         client = TestClient(app)
+        original_internal_token = config.GATEWAY_INTERNAL_SERVICE_TOKEN
+        config.GATEWAY_INTERNAL_SERVICE_TOKEN = "internal-test-token"
+        headers = {"x-internal-token": "internal-test-token"}
 
-        with patch(
-            "services.database_auth_service.DatabaseAuthService.validate_otlp_token",
-            return_value="org1",
-        ):
-            resp = client.get("/api/internal/otlp/validate", params={"token": "tok"})
-            self.assertEqual(resp.status_code, 200)
-            self.assertEqual(resp.json(), {"org_id": "org1"})
+        try:
+            with patch(
+                "services.database_auth_service.DatabaseAuthService.validate_otlp_token",
+                return_value="org1",
+            ):
+                resp = client.get("/api/internal/otlp/validate", params={"token": "tok"}, headers=headers)
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(resp.json(), {"org_id": "org1"})
 
-        with patch(
-            "services.database_auth_service.DatabaseAuthService.validate_otlp_token",
-            return_value=None,
-        ):
-            resp = client.get("/api/internal/otlp/validate", params={"token": "tok"})
-            self.assertEqual(resp.status_code, 404)
+            with patch(
+                "services.database_auth_service.DatabaseAuthService.validate_otlp_token",
+                return_value=None,
+            ):
+                resp = client.get("/api/internal/otlp/validate", params={"token": "tok"}, headers=headers)
+                self.assertEqual(resp.status_code, 404)
 
-        from sqlalchemy.exc import SQLAlchemyError
-        with patch(
-            "services.database_auth_service.DatabaseAuthService.validate_otlp_token",
-            side_effect=SQLAlchemyError("boom"),
-        ):
-            resp = client.get("/api/internal/otlp/validate", params={"token": "tok"})
-            self.assertEqual(resp.status_code, 503)
+            from sqlalchemy.exc import SQLAlchemyError
+            with patch(
+                "services.database_auth_service.DatabaseAuthService.validate_otlp_token",
+                side_effect=SQLAlchemyError("boom"),
+            ):
+                resp = client.get("/api/internal/otlp/validate", params={"token": "tok"}, headers=headers)
+                self.assertEqual(resp.status_code, 503)
+        finally:
+            config.GATEWAY_INTERNAL_SERVICE_TOKEN = original_internal_token
 
 
 if __name__ == "__main__":

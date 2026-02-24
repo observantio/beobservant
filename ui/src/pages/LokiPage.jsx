@@ -12,7 +12,7 @@ import PageHeader from '../components/ui/PageHeader'
 import AutoRefreshControl from '../components/ui/AutoRefreshControl'
 import { queryLogs, getLabels, getLabelValues, getLogVolume } from '../api'
 import { Card, Button, Alert } from '../components/ui'
-import { DEFAULT_QUERY_LIMITS, MAX_LOG_OPTIONS } from '../utils/constants' // for search limit/page size
+import { DEFAULT_QUERY_LIMITS, MAX_LOG_OPTIONS } from '../utils/constants' 
 import LogQueryForm from '../components/loki/LogQueryForm'
 import LogResults from '../components/loki/LogResults'
 import LogVolume from '../components/loki/LogVolume'

@@ -2,7 +2,34 @@ from tests._env import ensure_test_env
 ensure_test_env()
 
 import asyncio
-from engine.fetcher import fetch_metrics
+import importlib.util
+import os
+import sys
+
+_SERVER_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_REPO_ROOT = os.path.abspath(os.path.join(_SERVER_ROOT, ".."))
+_BECERTAIN_ROOT = os.path.join(_REPO_ROOT, "BeCertain")
+_added = False
+_prev_config = sys.modules.get("config")
+if _BECERTAIN_ROOT not in sys.path:
+    sys.path.insert(0, _BECERTAIN_ROOT)
+    _added = True
+try:
+    _config_path = os.path.join(_BECERTAIN_ROOT, "config.py")
+    _config_spec = importlib.util.spec_from_file_location("config", _config_path)
+    if _config_spec is None or _config_spec.loader is None:
+        raise RuntimeError(f"Unable to load BeCertain config at {_config_path}")
+    _config_module = importlib.util.module_from_spec(_config_spec)
+    sys.modules["config"] = _config_module
+    _config_spec.loader.exec_module(_config_module)
+    from engine.fetcher import fetch_metrics
+finally:
+    if _prev_config is not None:
+        sys.modules["config"] = _prev_config
+    else:
+        sys.modules.pop("config", None)
+    if _added and sys.path and sys.path[0] == _BECERTAIN_ROOT:
+        sys.path.pop(0)
 
 
 class DummyMetrics:
@@ -45,7 +72,15 @@ def test_fetch_metrics_fallback_from_scrape():
     # should have produced at least one synthetic series for cpu
     assert results, "fetch_metrics should return a non-empty list when scrape fallback succeeds"
     # inspect the first response for the cpu metric
-    cpu_resp = next((r for r in results if r.get("data", {}).get("result") and r["data"]["result"][0]["metric"]["__name__"] == "process_cpu_seconds_total"), None)
+    cpu_resp = next(
+        (
+            response
+            for _query, response in results
+            if response.get("data", {}).get("result")
+            and response["data"]["result"][0]["metric"]["__name__"] == "process_cpu_seconds_total"
+        ),
+        None,
+    )
     assert cpu_resp is not None, "cpu metric should appear in fallback response"
     vals = cpu_resp["data"]["result"][0]["values"]
     # two points (start + end) with the same scraped value
