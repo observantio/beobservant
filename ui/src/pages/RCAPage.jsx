@@ -44,7 +44,10 @@ export default function RCAPage() {
   const [lookupError, setLookupError] = useState(null)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [viewModalOpen, setViewModalOpen] = useState(false)
-  // moved above via hook
+
+  // the job stored in localStorage is used to remember the last report the user
+  // was looking at. we also marshal lookup ids separately above. restoring the
+  // value happens in effects below after the job list has been fetched.
   const {
     jobs,
     loadingJobs,
@@ -90,6 +93,39 @@ export default function RCAPage() {
     return `${String(statusSource.status || '').toUpperCase()}${statusSource.duration_ms ? ` • ${statusSource.duration_ms}ms` : ''}`
   }, [reportMeta, selectedJob])
 
+  // prepare a simplified set of stats from the last loaded report so we can
+  // display them as cards near the top of the page (mimicking Loki/Tempo).
+  const reportStats = useMemo(() => {
+    if (!report) return null
+    return [
+      {
+        label: 'Overall Severity',
+        value: String(report.overall_severity || 'UNKNOWN').toUpperCase(),
+        color:
+          report.overall_severity === 'critical' || report.overall_severity === 'high'
+            ? 'text-sre-error'
+            : report.overall_severity === 'medium'
+            ? 'text-sre-warning'
+            : 'text-sre-success',
+      },
+      {
+        label: 'Metric Anomalies',
+        value: report.metric_anomalies?.length || 0,
+        color: 'text-sre-text',
+      },
+      {
+        label: 'Root Causes',
+        value: report.root_causes?.length || 0,
+        color: 'text-sre-text',
+      },
+      {
+        label: 'Duration (s)',
+        value: report.duration_seconds || 0,
+        color: 'text-sre-text',
+      },
+    ]
+  }, [report])
+
   const selectedReportId = reportMeta?.report_id || selectedJob?.report_id || null
   const ownerUserId = reportMeta?.requested_by || selectedJob?.requested_by
   const currentUserId = user?.id || user?.user_id || null
@@ -104,6 +140,28 @@ export default function RCAPage() {
       // ignore
     }
   }, [selectedJobId])
+
+  // when the job list updates we may have a previously-stored id; if so and the
+  // job still exists we want to restore that selection rather than the default
+  // first item pushed by the hook.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(JOB_STORAGE_KEY)
+      if (stored && jobs.some((j) => j.job_id === stored)) {
+        setSelectedJobId(stored)
+      }
+    } catch {
+      // ignore
+    }
+  }, [jobs, setSelectedJobId])
+
+  // if the user had previously looked up a report id we automatically re-open
+  // the modal when the page comes back, giving the sense of restoring state.
+  useEffect(() => {
+    if (reportLookupId) {
+      setViewModalOpen(true)
+    }
+  }, [reportLookupId])
 
   async function handleDeleteReport() {
     if (!selectedReportId) return
@@ -217,6 +275,26 @@ export default function RCAPage() {
         <Button variant="secondary" size='sm' onClick={refreshJobs}>Refresh Jobs</Button>
       </PageHeader>
 
+      {/* show stats for the last report right under the header; these mirror the
+          content that appears inside the modal summary but are always visible */}
+      {report && (
+        <div className="mb-6">
+          {reportStats && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {reportStats.map((stat) => (
+                <Card
+                  key={stat.label}
+                  className="p-4 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 border-sre-border/50 hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm"
+                >
+                  <div className="text-sre-text-muted text-xs mb-1">{stat.label}</div>
+                  <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <section className="space-y-3">
         <RcaJobComposer
           onCreate={createJob}
@@ -268,11 +346,6 @@ export default function RCAPage() {
       />
 
       {reportError && <Alert variant="error">{reportError}</Alert>}
-      {loadingPrimaryReport && (
-        <Card className="border border-sre-border p-6 flex items-center justify-center">
-          <Spinner />
-        </Card>
-      )}
       <ConfirmModal
         isOpen={confirmDeleteOpen}
         title="Delete RCA Report?"

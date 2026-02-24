@@ -120,6 +120,23 @@ describe('LokiPage performance behavior', () => {
     expect(values).toEqual(expect.arrayContaining(['3','6','2','2','2']))
   })
 
+  it('hides statistic cards when there are no results', async () => {
+    api.getLabels.mockResolvedValue({ data: [] })
+    api.queryLogs.mockResolvedValue({ data: { result: [] } })
+
+    const { queryByText, getByText } = render(<LokiPage />)
+    const runBtn = getByText(/Run Query/i)
+    fireEvent.click(runBtn)
+
+    await waitFor(() => expect(api.queryLogs).toHaveBeenCalled())
+    // stats labels should not be rendered at all
+    expect(queryByText(/Streams/i)).toBeNull()
+    expect(queryByText(/Total Logs/i)).toBeNull()
+    expect(queryByText(/Avg\/stream/i)).toBeNull()
+    expect(queryByText(/Services/i)).toBeNull()
+    expect(queryByText(/Top Terms/i)).toBeNull()
+  })
+
   it('restores filters from localStorage and triggers a query on mount', async () => {
     const saved = { selectedFilters: [{ label: 'foo', value: 'bar' }], searchLimit: 10 }
     localStorage.setItem('lokiPageState', JSON.stringify(saved))

@@ -74,7 +74,12 @@ export default function LokiPage() {
   const [topTerms, setTopTerms] = useState([])
 
   const logStats = useMemo(() => {
+    // if there is no result yet or there are no streams, hide the stats bar
     const res = queryResult?.data?.result || []
+    if (!queryResult || res.length === 0) {
+      return null
+    }
+
     const totalStreams = res.length
     const totalLogs = res.reduce((acc, s) => acc + (s.values?.length || 0), 0)
     const avgLogs = totalStreams ? Math.round(totalLogs / totalStreams) : 0

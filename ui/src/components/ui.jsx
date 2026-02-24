@@ -568,8 +568,6 @@ export function Modal({
   const previouslyFocusedElementRef = React.useRef(null)
   const onCloseRef = React.useRef(onClose)
   React.useEffect(() => { onCloseRef.current = onClose }, [onClose])
-
-  // lock body scroll while modal is open
   useBodyScrollLock(isOpen)
 
   React.useEffect(() => {
@@ -616,9 +614,7 @@ export function Modal({
     if (isOpen) {
       previouslyFocusedElementRef.current = document.activeElement
       document.addEventListener('keydown', handleEscape)
-      // document.body overflow is handled by useBodyScrollLock hook
       document.documentElement.style.overflow = 'hidden'
-      // focus modal content to avoid focus landing on backdrop
       setTimeout(() => {
         try {
           const focusable = getFocusableElements()
@@ -660,7 +656,7 @@ export function Modal({
     >
       <div 
         className={clsx(
-          'relative bg-sre-bg-card rounded-xl shadow-2xl w-full mx-auto',
+          'relative bg-sre-bg-card rounded-xl shadow-2xl py-3 w-full mx-auto',
           'border border-sre-border/50',
           'animate-slide-up',
           'flex flex-col',
