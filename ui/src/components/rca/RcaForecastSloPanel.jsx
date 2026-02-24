@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types'
-import { Card } from '../ui'
+import Section from './Section'
 
 function fmt(value, digits = 2) {
   const num = Number(value)
@@ -54,17 +54,17 @@ TableSection.propTypes = {
   emptyText: PropTypes.string.isRequired,
 }
 
-export default function RcaForecastSloPanel({ report, forecast, slo }) {
+export default function RcaForecastSloPanel({ report, forecast, slo, compact = false }) {
   const reportForecasts = report?.forecasts || []
   const degradationSignals = report?.degradation_signals || []
   const forecastResults = forecast?.results || []
   const burnAlerts = slo?.burn_alerts || []
   const budgetStatus = slo?.budget_status || null
 
-  return (
-    <Card className="border border-sre-border p-4">
+  const content = (
+    <>
       <h3 className="text-lg text-sre-text font-semibold mb-3">Forecast and SLO</h3>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+      <div className={compact ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-1 xl:grid-cols-2 gap-3'}>
         <TableSection
           title={`Forecast Signals (${reportForecasts.length})`}
           columns={['Metric', 'Severity', 'Details']}
@@ -89,8 +89,16 @@ export default function RcaForecastSloPanel({ report, forecast, slo }) {
           renderRow={(row) => (
             <>
               <td className="px-3 py-2 text-sre-text">{row.metric || '-'}</td>
-              <td className={`px-3 py-2 ${row.forecast ? 'text-amber-300' : 'text-emerald-300'}`}>{row.forecast ? 'forecasted' : 'stable'}</td>
-              <td className={`px-3 py-2 ${row.degradation ? 'text-red-300' : 'text-emerald-300'}`}>{row.degradation ? 'degrading' : 'healthy'}</td>
+              <td className={`px-3 py-2 ${row.forecast ? statusClass(row.forecast?.severity) : 'text-emerald-300'}`}>
+                {row.forecast
+                  ? `${row.forecast?.severity || 'unknown'} (conf ${fmt(row.forecast?.confidence, 3)})`
+                  : 'stable'}
+              </td>
+              <td className={`px-3 py-2 ${row.degradation ? statusClass(row.degradation?.severity) : 'text-emerald-300'}`}>
+                {row.degradation
+                  ? `${row.degradation?.trend || 'degrading'} (${row.degradation?.severity || 'unknown'})`
+                  : 'healthy'}
+              </td>
             </>
           )}
         />
@@ -100,7 +108,7 @@ export default function RcaForecastSloPanel({ report, forecast, slo }) {
           columns={['Service', 'Window', 'Burn Rate', 'Severity']}
           rows={burnAlerts}
           rowKey={(row, index) => `${row.service}-${row.window_label}-${index}`}
-          emptyText="No SLO burn alerts returned."
+          emptyText="No SLO burn alerts returned. Please update your SLO configuration to include burn alert rules for this feature to populate."
           renderRow={(row) => (
             <>
               <td className="px-3 py-2 text-sre-text">{row.service || '-'}</td>
@@ -150,8 +158,14 @@ export default function RcaForecastSloPanel({ report, forecast, slo }) {
           </div>
         </div>
       </div>
-    </Card>
+    </>
   )
+
+  if (compact) {
+    return <div>{content}</div>
+  }
+
+  return <Section>{content}</Section>
 }
 
 RcaForecastSloPanel.propTypes = {

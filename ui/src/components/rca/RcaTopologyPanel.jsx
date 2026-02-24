@@ -3,7 +3,7 @@ import dagre from '@dagrejs/dagre'
 import PropTypes from 'prop-types'
 import ReactFlow, { Background, Controls, MarkerType, MiniMap } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { Card } from '../ui'
+import Section from './Section'
 
 function buildTopologyGraph(topology) {
   const root = topology?.root_service || ''
@@ -100,26 +100,28 @@ function buildTopologyGraph(topology) {
   return { nodes: positionedNodes, edges }
 }
 
-export default function RcaTopologyPanel({ topology }) {
+export default function RcaTopologyPanel({ topology, compact = false }) {
   const graph = useMemo(() => buildTopologyGraph(topology), [topology])
 
   if (!topology || graph.nodes.length === 0) {
-    return (
-      <Card className="border border-sre-border p-4">
+    const emptyContent = (
+      <>
         <h3 className="text-lg text-sre-text font-semibold mb-3">Topology</h3>
         <p className="text-sm text-sre-text-muted">Topology data not available for this report.</p>
-      </Card>
+      </>
     )
+    if (compact) return <div>{emptyContent}</div>
+    return <Section>{emptyContent}</Section>
   }
 
-  return (
-    <Card className="border border-sre-border p-4">
+  const content = (
+    <>
       <h3 className="text-lg text-sre-text font-semibold mb-1">Topology and Blast Radius</h3>
       <p className="text-sm text-sre-text-muted mb-3">
         Root service: <span className="text-sre-text font-semibold">{topology.root_service || 'n/a'}</span>
       </p>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+      <div className={`grid ${compact ? 'grid-cols-1' : 'grid-cols-2 md:grid-cols-4'} gap-2 mb-3`}>
         <div className="rounded-lg border border-sre-border bg-sre-surface/25 p-2">
           <p className="text-[11px] uppercase tracking-wide text-sre-text-muted">Downstream</p>
           <p className="text-sm text-sre-text font-semibold">{(topology.affected_downstream || []).length}</p>
@@ -169,10 +171,17 @@ export default function RcaTopologyPanel({ topology }) {
         <span className="px-2 py-1 rounded-md border border-sre-border bg-emerald-500/10 text-emerald-300">Upstream Root</span>
         <span className="px-2 py-1 rounded-md border border-sre-border bg-slate-400/10 text-slate-300">Related Service</span>
       </div>
-    </Card>
+    </>
   )
+
+  if (compact) {
+    return <div>{content}</div>
+  }
+
+  return <Section>{content}</Section>
 }
 
 RcaTopologyPanel.propTypes = {
   topology: PropTypes.object,
+  compact: PropTypes.bool,
 }

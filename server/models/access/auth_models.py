@@ -82,6 +82,7 @@ class Permission(str, Enum):
     READ_TRACES = "read:traces"
     READ_RCA = "read:rca"
     CREATE_RCA = "create:rca"
+    DELETE_RCA = "delete:rca"
 
     READ_DASHBOARDS = "read:dashboards"
     CREATE_DASHBOARDS = "create:dashboards"
@@ -141,6 +142,7 @@ ROLE_PERMISSIONS = {
         Permission.READ_TRACES,
         Permission.READ_RCA,
         Permission.CREATE_RCA,
+        Permission.DELETE_RCA,
         Permission.READ_DASHBOARDS,
         Permission.READ_DATASOURCES,
         Permission.QUERY_DATASOURCES,

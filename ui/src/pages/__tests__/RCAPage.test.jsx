@@ -7,15 +7,24 @@ const refreshJobsMock = vi.fn()
 const setSelectedJobIdMock = vi.fn()
 const reloadReportMock = vi.fn()
 
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 'u1' },
+  }),
+}))
+
 vi.mock('../../hooks/useRcaJobs', () => ({
   useRcaJobs: () => ({
     jobs: [],
     loadingJobs: false,
     creatingJob: false,
+    deletingReport: false,
     selectedJobId: null,
     selectedJob: null,
     setSelectedJobId: setSelectedJobIdMock,
     createJob: createJobMock,
+    deleteReportById: vi.fn(),
+    removeJobByReportId: vi.fn(),
     refreshJobs: refreshJobsMock,
   }),
 }))
@@ -25,6 +34,7 @@ vi.mock('../../hooks/useRcaReport', () => ({
     loadingReport: false,
     reportError: null,
     report: null,
+    reportMeta: null,
     insights: {},
     hasReport: false,
     reloadReport: reloadReportMock,

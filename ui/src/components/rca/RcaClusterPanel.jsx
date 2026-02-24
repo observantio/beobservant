@@ -1,12 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
-import { Card } from '../ui'
+import Section from './Section'
 
 function formatNumber(value) {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return '-'
-  if (Math.abs(numeric) >= 1_000_000) return numeric.toExponential(2)
   return numeric.toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
+
+function formatTimestamp(ts) {
+  const n = Number(ts)
+  if (!Number.isFinite(n) || n === 0) return '-'
+  const date = new Date(n > 1e12 ? n : n * 1000)
+  return date.toLocaleString()
 }
 
 function buildClusterPoints(clusters) {
@@ -20,7 +26,7 @@ function buildClusterPoints(clusters) {
   }))
 }
 
-export default function RcaClusterPanel({ report }) {
+export default function RcaClusterPanel({ report, compact = false }) {
   const clusters = report?.anomaly_clusters || []
   const points = useMemo(() => buildClusterPoints(clusters), [clusters])
   const [selectedPointId, setSelectedPointId] = useState(points[0]?.id || null)
@@ -38,18 +44,18 @@ export default function RcaClusterPanel({ report }) {
 
   const selectedPoint = points.find((point) => point.id === selectedPointId) || null
 
+  const [hoveredPointId, setHoveredPointId] = useState(null)
+  const [tooltip, setTooltip] = useState(null)
+  const containerRef = useRef(null)
+
   const chart = useMemo(() => {
-    if (points.length === 0) {
-      return {
-        svgPoints: [],
-        bounds: null,
-      }
-    }
-    const xMin = Math.min(...points.map((point) => point.ts))
-    const xMax = Math.max(...points.map((point) => point.ts))
-    const yMin = Math.min(...points.map((point) => point.value))
-    const yMax = Math.max(...points.map((point) => point.value))
-    const maxSize = Math.max(...points.map((point) => point.size), 1)
+    if (points.length === 0) return { svgPoints: [], bounds: null }
+
+    const xMin = Math.min(...points.map((p) => p.ts))
+    const xMax = Math.max(...points.map((p) => p.ts))
+    const yMin = Math.min(...points.map((p) => p.value))
+    const yMax = Math.max(...points.map((p) => p.value))
+    const maxSize = Math.max(...points.map((p) => p.size), 1)
 
     const width = 780
     const height = 280
@@ -62,46 +68,46 @@ export default function RcaClusterPanel({ report }) {
     const xSpan = Math.max(1, xMax - xMin)
     const ySpan = Math.max(1, yMax - yMin)
 
-    const projectX = (value) => padLeft + ((value - xMin) / xSpan) * plotWidth
-    const projectY = (value) => padTop + (1 - (value - yMin) / ySpan) * plotHeight
+    const projectX = (v) => padLeft + ((v - xMin) / xSpan) * plotWidth
+    const projectY = (v) => padTop + (1 - (v - yMin) / ySpan) * plotHeight
     const radius = (size) => 6 + (Math.max(0, size) / maxSize) * 22
 
     return {
       bounds: { xMin, xMax, yMin, yMax },
       width,
       height,
-      svgPoints: points.map((point) => ({
-        ...point,
-        cx: projectX(point.ts),
-        cy: projectY(point.value),
-        r: radius(point.size),
+      svgPoints: points.map((p) => ({
+        ...p,
+        cx: projectX(p.ts),
+        cy: projectY(p.value),
+        r: radius(p.size),
       })),
       gridLines: [0.25, 0.5, 0.75].map((ratio) => padTop + plotHeight * ratio),
       labels: {
-        left: `${formatNumber(yMin)}`,
-        center: `${formatNumber((yMin + yMax) / 2)}`,
-        right: `${formatNumber(yMax)}`,
-        start: `${formatNumber(xMin)}`,
-        end: `${formatNumber(xMax)}`,
+        left: formatNumber(yMin),
+        center: formatNumber((yMin + yMax) / 2),
+        right: formatNumber(yMax),
+        start: formatTimestamp(xMin),
+        end: formatTimestamp(xMax),
       },
     }
   }, [points])
 
-  return (
-    <Card className="border border-sre-border p-4">
+  const content = (
+    <>
       <h3 className="text-lg text-sre-text font-semibold mb-3">Anomaly Clusters</h3>
       {clusters.length === 0 ? (
         <p className="text-sm text-sre-text-muted">No clusters were produced for this report window.</p>
       ) : (
         <div className="space-y-3">
-          <div className="border border-sre-border rounded-xl p-3 bg-sre-surface/20">
+          <div className={`${compact ? '' : 'border border-sre-border rounded-xl'} bg-sre-surface/20`}>
             <p className="text-xs text-sre-text-muted mb-2">
-              Bubble size = anomaly count, X = centroid timestamp, Y = centroid value
+              Each circle is a cluster. Size shows the number of anomalies, horizontal position is the centroid time and vertical position is centroid value.
             </p>
-            <div className="overflow-x-auto">
+            <div className="relative my-5 overflow-hidden" ref={containerRef}>
               <svg
                 viewBox={`0 0 ${chart.width} ${chart.height}`}
-                className="w-full min-w-[740px] h-[280px]"
+                className="w-full h-[280px]"
                 role="img"
                 aria-label="Anomaly cluster bubble chart"
               >
@@ -119,20 +125,48 @@ export default function RcaClusterPanel({ report }) {
                 ))}
                 {chart.svgPoints?.map((point) => {
                   const selected = point.id === selectedPointId
+                  const hovered = point.id === hoveredPointId
+                  const isActive = selected || hovered
                   return (
                     <g
                       key={point.id}
+                      style={{ transformOrigin: 'center center' }}
                       onClick={() => setSelectedPointId(point.id)}
+                      onMouseEnter={(e) => {
+                        setHoveredPointId(point.id)
+                        if (containerRef.current) {
+                          const rect = containerRef.current.getBoundingClientRect()
+                          setTooltip({ point, x: e.clientX - rect.left, y: e.clientY - rect.top - 10 })
+                        }
+                      }}
+                      onMouseMove={(e) => {
+                        if (tooltip && containerRef.current) {
+                          const rect = containerRef.current.getBoundingClientRect()
+                          const x = Math.min(Math.max(0, e.clientX - rect.left), rect.width - 100)
+                          const y = Math.min(Math.max(0, e.clientY - rect.top - 10), rect.height - 40)
+                          setTooltip((t) => ({ ...t, x, y }))
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredPointId(null)
+                        setTooltip(null)
+                      }}
                       className="cursor-pointer"
                     >
                       <circle
                         cx={point.cx}
                         cy={point.cy}
                         r={point.r}
-                        fill={selected ? 'rgba(59, 130, 246, 0.55)' : 'rgba(56, 189, 248, 0.35)'}
-                        stroke={selected ? 'rgb(125, 211, 252)' : 'rgba(56, 189, 248, 0.8)'}
-                        strokeWidth={selected ? 2 : 1}
-                      />
+                        fill={isActive ? 'rgba(59, 130, 246, 0.55)' : 'rgba(56, 189, 248, 0.35)'}
+                        stroke={isActive ? 'rgb(125, 211, 252)' : 'rgba(56, 189, 248, 0.8)'}
+                        strokeWidth={1}
+                        style={{ transformOrigin: 'center center' }}
+                        className="transition-colors"
+                      >
+                        <title>
+                          {`Cluster ${point.clusterId}\nsize=${point.size}\nts=${point.ts}\nvalue=${point.value}\nmetrics=${point.metrics.slice(0, 5).join(', ')}${point.metrics.length > 5 ? '...' : ''}`}
+                        </title>
+                      </circle>
                       <text
                         x={point.cx}
                         y={point.cy}
@@ -151,19 +185,33 @@ export default function RcaClusterPanel({ report }) {
                 <text x="40" y="275" className="fill-sre-text-muted text-[11px]">{chart.labels?.start}</text>
                 <text x={chart.width - 120} y="275" className="fill-sre-text-muted text-[11px]">{chart.labels?.end}</text>
               </svg>
+              {tooltip && (
+                <div
+                  style={{ left: tooltip.x, top: tooltip.y, maxWidth: '200px' }}
+                  className="absolute bg-sre-bg-card text-sre-text text-xs p-2 rounded shadow-lg pointer-events-none z-30"
+                >
+                  <p className="font-semibold">Cluster {tooltip.point.clusterId}</p>
+                  <p>Size: {formatNumber(tooltip.point.size)} anomalies</p>
+                  <p>Time: {formatTimestamp(tooltip.point.ts)}</p>
+                  <p>Value: {formatNumber(tooltip.point.value)}</p>
+                  <p className="mt-1 truncate">
+                    {tooltip.point.metrics.slice(0, 5).join(', ')}{tooltip.point.metrics.length > 5 ? '...' : ''}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
           {selectedPoint && (
-            <div className="border border-sre-border rounded-xl p-3 bg-sre-surface/30">
+            <div className={`${compact ? '' : 'border border-sre-border rounded-xl'} p-3 bg-sre-surface/30`}>
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <p className="text-sm font-semibold text-sre-text">Cluster {selectedPoint.clusterId}</p>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-sre-primary/15 text-sre-primary border border-sre-primary/30">
-                  {selectedPoint.size} anomalies
+                  {formatNumber(selectedPoint.size)} anomalies
                 </span>
               </div>
               <p className="text-xs text-sre-text-muted">
-                Centroid timestamp: {formatNumber(selectedPoint.ts)} | Centroid value: {formatNumber(selectedPoint.value)}
+                Centroid timestamp: {formatTimestamp(selectedPoint.ts)} | Centroid value: {formatNumber(selectedPoint.value)}
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {selectedPoint.metrics.slice(0, 24).map((metric) => (
@@ -181,10 +229,17 @@ export default function RcaClusterPanel({ report }) {
           )}
         </div>
       )}
-    </Card>
+    </>
   )
+
+  if (compact) {
+    return <div>{content}</div>
+  }
+
+  return <Section>{content}</Section>
 }
 
 RcaClusterPanel.propTypes = {
   report: PropTypes.object,
+  compact: PropTypes.bool,
 }

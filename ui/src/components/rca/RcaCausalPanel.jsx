@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types'
-import { Card } from '../ui'
+import Section from './Section'
 
 function formatNumber(value, digits = 3) {
   const numeric = Number(value)
@@ -55,7 +55,15 @@ TableCard.propTypes = {
   emptyText: PropTypes.string.isRequired,
 }
 
-export default function RcaCausalPanel({ granger, bayesian, mlWeights, deployments }) {
+RcaCausalPanel.propTypes = {
+  granger: PropTypes.object,
+  bayesian: PropTypes.object,
+  mlWeights: PropTypes.object,
+  deployments: PropTypes.oneOfType([PropTypes.object, PropTypes.array]),
+  compact: PropTypes.bool,
+}
+
+export default function RcaCausalPanel({ granger, bayesian, mlWeights, deployments, compact = false }) {
   const grangerPairs = (granger?.causal_pairs || granger?.warm_causal_pairs || [])
     .slice()
     .sort((left, right) => Number(right.strength || 0) - Number(left.strength || 0))
@@ -67,10 +75,10 @@ export default function RcaCausalPanel({ granger, bayesian, mlWeights, deploymen
     .sort((left, right) => right.value - left.value)
   const deploymentItems = toDeploymentRows(deployments)
 
-  return (
-    <Card className="border border-sre-border p-4">
+  const inner = (
+    <>
       <h3 className="text-lg text-sre-text font-semibold mb-3">Causal and ML Insights</h3>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+      <div className={compact ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-1 xl:grid-cols-2 gap-3'}>
         <TableCard
           title={`Granger Causal Pairs (${grangerPairs.length})`}
           columns={['Cause', 'Effect', 'Strength']}
@@ -140,8 +148,14 @@ export default function RcaCausalPanel({ granger, bayesian, mlWeights, deploymen
           )}
         />
       </div>
-    </Card>
+    </>
   )
+
+  if (compact) {
+    return <div>{inner}</div>
+  }
+
+  return <Section>{inner}</Section>
 }
 
 RcaCausalPanel.propTypes = {
@@ -149,4 +163,5 @@ RcaCausalPanel.propTypes = {
   bayesian: PropTypes.object,
   mlWeights: PropTypes.object,
   deployments: PropTypes.oneOfType([PropTypes.array, PropTypes.object]),
+  compact: PropTypes.bool,
 }

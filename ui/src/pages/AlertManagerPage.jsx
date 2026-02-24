@@ -213,7 +213,7 @@ export default function AlertManagerPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-sre-text mb-2 flex items-center gap-2">
           <span className="material-icons text-3xl text-sre-primary">notifications_active</span>{' '}
-          AlertManager
+          Be Notified
         </h1>
         <p className="text-sre-text-muted">Comprehensive alerting system with rules, channels, and silences</p>
       </div>

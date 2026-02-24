@@ -12,11 +12,12 @@ from models.observability.becertain_models import (
     AnalyzeJobCreateResponse,
     AnalyzeJobListResponse,
     AnalyzeJobResultResponse,
+    AnalyzeReportDeleteResponse,
+    AnalyzeReportResponse,
     AnalyzeJobStatus,
     AnalyzeJobSummary,
     AnalyzeRequestPayload,
 )
-from services.becertain_job_service import becertain_analyze_job_service
 from services.becertain_proxy_service import becertain_proxy_service
 
 router = APIRouter(prefix="/api/becertain", tags=["becertain"])
@@ -28,21 +29,6 @@ def _inject_tenant(payload: Optional[Dict[str, Any]], tenant_id: str) -> Dict[st
     return data
 
 
-def _job_summary(job) -> AnalyzeJobSummary:
-    return AnalyzeJobSummary(
-        job_id=job.job_id,
-        status=job.status,
-        created_at=job.created_at,
-        started_at=job.started_at,
-        finished_at=job.finished_at,
-        duration_ms=job.duration_ms,
-        error=job.error,
-        summary_preview=job.summary_preview,
-        tenant_id=job.tenant_id,
-        requested_by=job.requested_by,
-    )
-
-
 @router.post("/analyze/jobs", response_model=AnalyzeJobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_analyze_job(
     request: Request,
@@ -50,18 +36,15 @@ async def create_analyze_job(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_RCA, "becertain")),
 ):
     tenant_id = resolve_tenant_id(request, current_user)
-    job = await becertain_analyze_job_service.create_job(
+    upstream = await becertain_proxy_service.request_json(
+        method="POST",
+        upstream_path="/api/v1/jobs/analyze",
         current_user=current_user,
         tenant_id=tenant_id,
-        payload=payload,
+        payload=_inject_tenant(payload.model_dump(), tenant_id),
+        audit_action="becertain.analyze_job.create",
     )
-    return AnalyzeJobCreateResponse(
-        job_id=job.job_id,
-        status=job.status,
-        created_at=job.created_at,
-        tenant_id=job.tenant_id,
-        requested_by=job.requested_by,
-    )
+    return AnalyzeJobCreateResponse(**upstream)
 
 
 @router.get("/analyze/jobs", response_model=AnalyzeJobListResponse)
@@ -73,14 +56,20 @@ async def list_analyze_jobs(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "becertain")),
 ):
     tenant_id = resolve_tenant_id(request, current_user)
-    jobs, next_cursor = await becertain_analyze_job_service.list_jobs(
-        user_id=current_user.user_id,
+    params: Dict[str, Any] = {"limit": limit}
+    if status_filter:
+        params["status"] = status_filter.value
+    if cursor:
+        params["cursor"] = cursor
+    upstream = await becertain_proxy_service.request_json(
+        method="GET",
+        upstream_path="/api/v1/jobs",
+        current_user=current_user,
         tenant_id=tenant_id,
-        status_filter=status_filter,
-        limit=limit,
-        cursor=cursor,
+        params=params,
+        audit_action="becertain.analyze_job.list",
     )
-    return AnalyzeJobListResponse(items=[_job_summary(j) for j in jobs], next_cursor=next_cursor)
+    return AnalyzeJobListResponse(**upstream)
 
 
 @router.get("/analyze/jobs/{job_id}", response_model=AnalyzeJobSummary)
@@ -90,8 +79,14 @@ async def get_analyze_job(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "becertain")),
 ):
     tenant_id = resolve_tenant_id(request, current_user)
-    job = await becertain_analyze_job_service.get_job(job_id=job_id, user_id=current_user.user_id, tenant_id=tenant_id)
-    return _job_summary(job)
+    upstream = await becertain_proxy_service.request_json(
+        method="GET",
+        upstream_path=f"/api/v1/jobs/{job_id}",
+        current_user=current_user,
+        tenant_id=tenant_id,
+        audit_action="becertain.analyze_job.get",
+    )
+    return AnalyzeJobSummary(**upstream)
 
 
 @router.get("/analyze/jobs/{job_id}/result", response_model=AnalyzeJobResultResponse)
@@ -101,13 +96,48 @@ async def get_analyze_job_result(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "becertain")),
 ):
     tenant_id = resolve_tenant_id(request, current_user)
-    job = await becertain_analyze_job_service.get_job(job_id=job_id, user_id=current_user.user_id, tenant_id=tenant_id)
-    result = await becertain_analyze_job_service.get_job_result(
-        job_id=job_id,
-        user_id=current_user.user_id,
+    upstream = await becertain_proxy_service.request_json(
+        method="GET",
+        upstream_path=f"/api/v1/jobs/{job_id}/result",
+        current_user=current_user,
         tenant_id=tenant_id,
+        audit_action="becertain.analyze_job.result",
     )
-    return AnalyzeJobResultResponse(job_id=job.job_id, status=job.status, result=result)
+    return AnalyzeJobResultResponse(**upstream)
+
+
+@router.get("/reports/{report_id}", response_model=AnalyzeReportResponse)
+async def get_report_by_id(
+    report_id: str,
+    request: Request,
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "becertain")),
+):
+    tenant_id = resolve_tenant_id(request, current_user)
+    upstream = await becertain_proxy_service.request_json(
+        method="GET",
+        upstream_path=f"/api/v1/reports/{report_id}",
+        current_user=current_user,
+        tenant_id=tenant_id,
+        audit_action="becertain.report.get",
+    )
+    return AnalyzeReportResponse(**upstream)
+
+
+@router.delete("/reports/{report_id}", response_model=AnalyzeReportDeleteResponse)
+async def delete_report_by_id(
+    report_id: str,
+    request: Request,
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_RCA, "becertain")),
+):
+    tenant_id = resolve_tenant_id(request, current_user)
+    upstream = await becertain_proxy_service.request_json(
+        method="DELETE",
+        upstream_path=f"/api/v1/reports/{report_id}",
+        current_user=current_user,
+        tenant_id=tenant_id,
+        audit_action="becertain.report.delete",
+    )
+    return AnalyzeReportDeleteResponse(**upstream)
 
 
 async def _proxy_post(

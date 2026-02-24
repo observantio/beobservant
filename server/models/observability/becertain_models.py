@@ -38,10 +38,12 @@ class AnalyzeJobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    DELETED = "deleted"
 
 
 class AnalyzeJobCreateResponse(BaseModel):
     job_id: str
+    report_id: str
     status: AnalyzeJobStatus
     created_at: datetime
     tenant_id: str
@@ -50,6 +52,7 @@ class AnalyzeJobCreateResponse(BaseModel):
 
 class AnalyzeJobSummary(BaseModel):
     job_id: str
+    report_id: str
     status: AnalyzeJobStatus
     created_at: datetime
     started_at: Optional[datetime] = None
@@ -68,5 +71,23 @@ class AnalyzeJobListResponse(BaseModel):
 
 class AnalyzeJobResultResponse(BaseModel):
     job_id: str
+    report_id: str
     status: AnalyzeJobStatus
+    tenant_id: str
+    requested_by: str
     result: Optional[Dict[str, Any]] = None
+
+
+class AnalyzeReportResponse(BaseModel):
+    job_id: str
+    report_id: str
+    status: AnalyzeJobStatus
+    tenant_id: str
+    requested_by: str
+    result: Optional[Dict[str, Any]] = None
+
+
+class AnalyzeReportDeleteResponse(BaseModel):
+    report_id: str
+    status: AnalyzeJobStatus = AnalyzeJobStatus.DELETED
+    deleted: bool = True

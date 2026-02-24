@@ -45,59 +45,78 @@ export default function RcaJobComposer({ onCreate, creating }) {
   }
 
   return (
-    <Card className="border border-sre-border p-4">
-      <h3 className="text-lg text-sre-text font-semibold mb-3">Create RCA Report</h3>
+    <Card className="">
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Select
-            label="Time Window"
+            label={<span className="text-sm font-medium">Time Window</span>}
             value={timeRangeMinutes}
             onChange={(e) => setTimeRangeMinutes(Number(e.target.value))}
+            className="px-3 py-2 text-sm rounded-lg"
           >
             {TIME_RANGES.map((range) => (
               <option key={range.value} value={range.value}>{range.label}</option>
             ))}
           </Select>
-          <Input
-            label="Services (comma-separated)"
-            placeholder="api, checkout, payment"
-            value={servicesText}
-            onChange={(e) => setServicesText(e.target.value)}
-          />
-          <Input
-            label="Sensitivity"
-            type="number"
-            min="1"
-            max="6"
-            step="0.1"
-            value={sensitivity}
-            onChange={(e) => setSensitivity(e.target.value)}
-          />
+          <div>
+            <Input
+              label={<span className="text-sm font-medium">Services</span>}
+              placeholder="api, checkout, payment"
+              value={servicesText}
+              onChange={(e) => setServicesText(e.target.value)}
+              className="px-3 py-2 text-sm rounded-lg"
+            />
+            <p className="text-xs text-sre-text-muted mt-1">e.g. api, checkout, payment</p>
+          </div>
+          <div>
+            <Input
+              label={<span className="text-sm font-medium">Sensitivity</span>}
+              type="number"
+              min="1"
+              max="6"
+              step="0.1"
+              value={sensitivity}
+              onChange={(e) => setSensitivity(e.target.value)}
+              className="px-3 py-2 text-sm rounded-lg"
+            />
+            <p className="text-xs text-sre-text-muted mt-1">1 (low) – 6 (high)</p>
+          </div>
         </div>
 
-        <Input
-          label="Log Query (optional)"
-          placeholder='{service="api"} |= "error"'
-          value={logQuery}
-          onChange={(e) => setLogQuery(e.target.value)}
-        />
+        <div>
+          <Input
+            label="Log Query (optional)"
+            placeholder='{service="api"} |= "error"'
+            value={logQuery}
+            onChange={(e) => setLogQuery(e.target.value)}
+          />
+          <p className="text-xs text-sre-text-muted mt-1">{`e.g. {service="api"} |= "error"`}</p>
+        </div>
 
         <div>
-          <label className="block text-sm text-sre-text mb-2">Metric Queries (optional, one per line)</label>
+          <label className="block text-sm text-sre-text mb-2">
+            Metric Queries (optional, one per line)
+          </label>
           <textarea
             value={metricQueriesText}
             onChange={(e) => setMetricQueriesText(e.target.value)}
             className="w-full min-h-24 px-3 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:outline-none focus:ring-2 focus:ring-sre-primary"
             placeholder="sum(rate(http_requests_total[5m])) by (service)"
           />
+          <p className="text-xs text-sre-text-muted mt-1">
+            Separate queries with newlines
+          </p>
         </div>
 
         <button
           type="button"
-          className="text-xs text-sre-primary hover:underline"
+          className="text-xs text-sre-primary hover:underline flex items-center gap-1"
           onClick={() => setShowAdvanced((v) => !v)}
         >
           {showAdvanced ? 'Hide advanced fields' : 'Show advanced fields'}
+          <span className="material-icons text-xs">
+            {showAdvanced ? 'expand_less' : 'expand_more'}
+          </span>
         </button>
 
         {showAdvanced && (
@@ -111,7 +130,7 @@ export default function RcaJobComposer({ onCreate, creating }) {
         )}
 
         <div className="flex justify-end">
-          <Button type="submit" loading={creating}>Generate Report</Button>
+          <Button type="submit" size="md" className="px-4 py-2 text-sm rounded-lg" loading={creating}>Generate Report</Button>
         </div>
       </form>
     </Card>

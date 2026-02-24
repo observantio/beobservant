@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { createRcaAnalyzeJob, listRcaJobs } from '../api'
+import { createRcaAnalyzeJob, deleteRcaReport, listRcaJobs } from '../api'
 import { useToast } from '../contexts/ToastContext'
 
 const JOB_POLL_MS = 5000
@@ -13,6 +13,7 @@ export function useRcaJobs() {
   const [jobs, setJobs] = useState([])
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [creatingJob, setCreatingJob] = useState(false)
+  const [deletingReport, setDeletingReport] = useState(false)
   const [selectedJobId, setSelectedJobId] = useState(null)
 
   const refreshJobs = useCallback(async () => {
@@ -21,7 +22,7 @@ export function useRcaJobs() {
       const res = await listRcaJobs({ limit: 30 })
       const items = Array.isArray(res?.items) ? res.items : []
       setJobs(items)
-      if (!selectedJobId && items.length > 0) {
+      if (items.length > 0 && (!selectedJobId || !items.some((job) => job.job_id === selectedJobId))) {
         setSelectedJobId(items[0].job_id)
       }
     } catch (err) {
@@ -48,6 +49,7 @@ export function useRcaJobs() {
     const optimisticId = `pending-${Date.now()}`
     const optimistic = {
       job_id: optimisticId,
+      report_id: `pending-report-${Date.now()}`,
       status: 'queued',
       created_at: new Date().toISOString(),
       started_at: null,
@@ -79,6 +81,30 @@ export function useRcaJobs() {
     }
   }, [toast])
 
+  const removeJobByReportId = useCallback((reportId) => {
+    setJobs((prev) => {
+      const next = prev.filter((job) => job.report_id !== reportId)
+      if (selectedJobId && !next.some((job) => job.job_id === selectedJobId)) {
+        setSelectedJobId(next[0]?.job_id || null)
+      }
+      return next
+    })
+  }, [selectedJobId])
+
+  const deleteReportById = useCallback(async (reportId) => {
+    setDeletingReport(true)
+    try {
+      await deleteRcaReport(reportId)
+      removeJobByReportId(reportId)
+      toast?.success?.('RCA report deleted')
+    } catch (err) {
+      toast?.error?.(err?.message || 'Failed to delete RCA report')
+      throw err
+    } finally {
+      setDeletingReport(false)
+    }
+  }, [removeJobByReportId, toast])
+
   const selectedJob = useMemo(
     () => jobs.find((job) => job.job_id === selectedJobId) || null,
     [jobs, selectedJobId]
@@ -88,10 +114,13 @@ export function useRcaJobs() {
     jobs,
     loadingJobs,
     creatingJob,
+    deletingReport,
     selectedJobId,
     selectedJob,
     setSelectedJobId,
     createJob,
+    deleteReportById,
+    removeJobByReportId,
     refreshJobs,
   }
 }

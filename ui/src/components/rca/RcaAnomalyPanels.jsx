@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types'
-import { Card } from '../ui'
+import Section from './Section'
 
 function severityClass(severity) {
   if (severity === 'critical' || severity === 'high') return 'text-red-300'
@@ -56,17 +56,17 @@ DataSection.propTypes = {
   empty: PropTypes.string.isRequired,
 }
 
-export default function RcaAnomalyPanels({ report }) {
+export default function RcaAnomalyPanels({ report, compact = false }) {
   const metricAnomalies = (report?.metric_anomalies || []).slice(0, 250)
   const logBursts = (report?.log_bursts || []).slice(0, 250)
   const logPatterns = (report?.log_patterns || []).slice(0, 250)
   const serviceLatency = (report?.service_latency || []).slice(0, 250)
   const errorPropagation = (report?.error_propagation || []).slice(0, 250)
 
-  return (
-    <Card className="border border-sre-border p-4">
+  const inner = (
+    <>
       <h3 className="text-lg text-sre-text font-semibold mb-3">Anomalies and Signals</h3>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+      <div className={compact ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-1 xl:grid-cols-2 gap-3'}>
         <DataSection
           title="Metric Anomalies"
           count={metricAnomalies.length}
@@ -162,10 +162,17 @@ export default function RcaAnomalyPanels({ report }) {
           </div>
         )}
       </div>
-    </Card>
+    </>
   )
+
+  if (compact) {
+    return <div>{inner}</div>
+  }
+
+  return <Section>{inner}</Section>
 }
 
 RcaAnomalyPanels.propTypes = {
   report: PropTypes.object,
+  compact: PropTypes.bool,
 }

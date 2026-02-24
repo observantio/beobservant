@@ -7,7 +7,6 @@ volumes:
   alertmanager:
   postgres_data:
   redis_data:
-  becertain_jobs_data:
 
 services:
   postgres:
@@ -23,7 +22,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-  
+
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -53,9 +52,6 @@ services:
     environment:
       RATE_LIMIT_BACKEND: redis
       RATE_LIMIT_REDIS_URL: redis://redis:6379/0
-      BECERTAIN_ANALYZE_STORAGE_PATH: /var/lib/beobservant/becertain-jobs
-    volumes:
-      - becertain_jobs_data:/var/lib/beobservant/becertain-jobs
     networks: [obs]
     restart: unless-stopped
     healthcheck:
@@ -119,6 +115,8 @@ services:
       - .env         
     networks: [obs]
     depends_on:
+      postgres:
+        condition: service_healthy
       loki:
         condition: service_started
       tempo:

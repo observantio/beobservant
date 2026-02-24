@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocalStorage } from '../hooks'
 import PageHeader from '../components/ui/PageHeader'
-import { Alert, Button, Card, Spinner } from '../components/ui'
+import { Alert, Button, Card, Spinner, Input } from '../components/ui'
+import ConfirmModal from '../components/ConfirmModal'
 import { useRcaJobs } from '../hooks/useRcaJobs'
 import { useRcaReport } from '../hooks/useRcaReport'
+import { useAuth } from '../contexts/AuthContext'
 import RcaJobComposer from '../components/rca/RcaJobComposer'
 import RcaJobQueuePanel from '../components/rca/RcaJobQueuePanel'
 import RcaReportSummary from '../components/rca/RcaReportSummary'
@@ -13,9 +16,13 @@ import RcaTopologyPanel from '../components/rca/RcaTopologyPanel'
 import RcaCausalPanel from '../components/rca/RcaCausalPanel'
 import RcaForecastSloPanel from '../components/rca/RcaForecastSloPanel'
 import RcaWarningsPanel from '../components/rca/RcaWarningsPanel'
+import RcaReportModal from '../components/rca/RcaReportModal'
+import RcaLookup from '../components/rca/RcaLookup'
 
 const TAB_STORAGE_KEY = 'rcaPage.activeTab'
 const JOB_STORAGE_KEY = 'rcaPage.selectedJobId'
+const REPORT_STORAGE_KEY = 'rcaPage.reportLookupId'
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const TABS = [
   { key: 'summary', label: 'Summary' },
@@ -29,48 +36,66 @@ const TABS = [
 ]
 
 export default function RCAPage() {
-  const savedTab = (() => {
-    try {
-      return localStorage.getItem(TAB_STORAGE_KEY) || 'summary'
-    } catch {
-      return 'summary'
-    }
-  })()
-  const savedJobId = (() => {
-    try {
-      return localStorage.getItem(JOB_STORAGE_KEY) || null
-    } catch {
-      return null
-    }
-  })()
-
-  const [activeTab, setActiveTab] = useState(savedTab)
+  const { user } = useAuth()
+  // persist selections in localStorage via a reusable hook
+  const [activeTab, setActiveTab] = useLocalStorage(TAB_STORAGE_KEY, 'summary')
+  const [reportLookupInput, setReportLookupInput] = useLocalStorage(REPORT_STORAGE_KEY, '')
+  const [reportLookupId, setReportLookupId] = useState(reportLookupInput || null)
+  const [lookupError, setLookupError] = useState(null)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [viewModalOpen, setViewModalOpen] = useState(false)
+  // moved above via hook
   const {
     jobs,
     loadingJobs,
     creatingJob,
+    deletingReport,
     selectedJobId,
     selectedJob,
     setSelectedJobId,
     createJob,
     refreshJobs,
+    deleteReportById,
+    removeJobByReportId,
   } = useRcaJobs()
-  const { loadingReport, reportError, report, insights, hasReport, reloadReport } = useRcaReport(selectedJobId, selectedJob)
 
-  useEffect(() => {
-    if (savedJobId && !selectedJobId) {
-      setSelectedJobId(savedJobId)
-    }
-  }, [savedJobId, selectedJobId, setSelectedJobId])
+  const handleView = (job) => {
+    if (!job || !job.job_id) return
+    setReportLookupId(null)
+    setSelectedJobId(job.job_id)
+    setViewModalOpen(true)
+  }
+  const {
+    loadingPrimaryReport,
+    loadingInsights,
+    loadingReport,
+    reportError,
+    report,
+    reportMeta,
+    insights,
+    insightErrors,
+    hasReport,
+    reloadReport,
+  } = useRcaReport(
+    selectedJobId,
+    selectedJob,
+    reportLookupId
+  )
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(TAB_STORAGE_KEY, activeTab)
-    } catch {
-      // ignore
-    }
-  }, [activeTab])
+  // nothing required: useLocalStorage takes care of persistence
 
+  const selectedStatusText = useMemo(() => {
+    const statusSource = reportMeta || selectedJob
+    if (!statusSource) return 'No job selected'
+    return `${String(statusSource.status || '').toUpperCase()}${statusSource.duration_ms ? ` • ${statusSource.duration_ms}ms` : ''}`
+  }, [reportMeta, selectedJob])
+
+  const selectedReportId = reportMeta?.report_id || selectedJob?.report_id || null
+  const ownerUserId = reportMeta?.requested_by || selectedJob?.requested_by
+  const currentUserId = user?.id || user?.user_id || null
+  const canDelete = Boolean(selectedReportId && ownerUserId && currentUserId === ownerUserId)
+
+  // remember the selected job id in storage so it survives page refreshes.
   useEffect(() => {
     if (!selectedJobId) return
     try {
@@ -80,105 +105,182 @@ export default function RCAPage() {
     }
   }, [selectedJobId])
 
-  const selectedStatusText = useMemo(() => {
-    if (!selectedJob) return 'No job selected'
-    return `${selectedJob.status.toUpperCase()}${selectedJob.duration_ms ? ` • ${selectedJob.duration_ms}ms` : ''}`
-  }, [selectedJob])
+  async function handleDeleteReport() {
+    if (!selectedReportId) return
+    await deleteReportById(selectedReportId)
+    setConfirmDeleteOpen(false)
+    setReportLookupId(null)
+    setReportLookupInput('')
+    removeJobByReportId(selectedReportId)
+    await refreshJobs()
+  }
 
-  function renderActiveTab() {
+  function handleLookupReport() {
+    const value = reportLookupInput.trim()
+    if (!value) {
+      setReportLookupId(null)
+      setLookupError(null)
+      return
+    }
+    if (!UUID_RE.test(value)) {
+      setLookupError('Report ID must be a valid UUID')
+      return
+    }
+    setLookupError(null)
+    setSelectedJobId(null)
+    setReportLookupId(value)
+    // whenever a user looks up an ID explicitly, open the modal
+    setViewModalOpen(true)
+  }
+
+  function handleClearLookup() {
+    setReportLookupInput('')
+    setReportLookupId(null)
+    setLookupError(null)
+  }
+
+  function renderActiveTab(opts = {}) {
     if (!hasReport) {
       return (
-        <Card className="border border-sre-border p-6">
+        <Card className="border border-sre-border p-6 text-center">
           <p className="text-sm text-sre-text-muted">
-            Select a completed RCA job to view report details. Running jobs auto-refresh in the queue.
+            Select a completed RCA job or look up a report ID to view report details.
           </p>
         </Card>
       )
     }
-    if (activeTab === 'summary') return <RcaReportSummary report={report} />
-    if (activeTab === 'root-causes') return <RcaRootCauseTable report={report} />
-    if (activeTab === 'anomalies') return <RcaAnomalyPanels report={report} />
-    if (activeTab === 'clusters') return <RcaClusterPanel report={report} />
-    if (activeTab === 'topology') return <RcaTopologyPanel topology={insights.topology} />
-    if (activeTab === 'causal') {
-      return (
-        <RcaCausalPanel
-          granger={insights.granger}
-          bayesian={insights.bayesian}
-          mlWeights={insights.mlWeights}
-          deployments={insights.deployments}
-        />
-      )
+
+    const tabMap = {
+      summary: () => <RcaReportSummary report={report} compact={opts.compact} />,
+      'root-causes': () => <RcaRootCauseTable report={report} compact={opts.compact} />,
+      anomalies: () => <RcaAnomalyPanels report={report} compact={opts.compact} />,
+      clusters: () => <RcaClusterPanel report={report} compact={opts.compact} />,
+      topology: () => {
+        if (loadingInsights && !insights.topology) {
+          return (
+            <Card className="border border-sre-border p-6 flex items-center justify-center">
+              <Spinner />
+            </Card>
+          )
+        }
+        if (insightErrors?.topology) return <Alert variant="error">{insightErrors.topology}</Alert>
+        return <RcaTopologyPanel topology={insights.topology} compact={opts.compact} />
+      },
+      causal: () => {
+        if (loadingInsights && !insights.granger && !insights.bayesian) {
+          return (
+            <Card className="border border-sre-border p-6 flex items-center justify-center">
+              <Spinner />
+            </Card>
+          )
+        }
+        if (insightErrors?.granger || insightErrors?.bayesian)
+          return <Alert variant="error">{insightErrors.granger || insightErrors.bayesian}</Alert>
+        return (
+          <RcaCausalPanel
+            granger={insights.granger}
+            bayesian={insights.bayesian}
+            mlWeights={insights.mlWeights}
+            deployments={insights.deployments}
+            compact={opts.compact}
+          />
+        )
+      },
+      'forecast-slo': () => {
+        if (loadingInsights && !insights.forecast && !insights.slo) {
+          return (
+            <Card className="border border-sre-border p-6 flex items-center justify-center">
+              <Spinner />
+            </Card>
+          )
+        }
+        if (insightErrors?.forecast || insightErrors?.slo)
+          return <Alert variant="error">{insightErrors.forecast || insightErrors.slo}</Alert>
+        return (
+          <RcaForecastSloPanel report={report} forecast={insights.forecast} slo={insights.slo} compact={opts.compact} />
+        )
+      },
+      warnings: () => <RcaWarningsPanel report={report} compact={opts.compact} />, // no async logic
     }
-    if (activeTab === 'forecast-slo') return <RcaForecastSloPanel report={report} forecast={insights.forecast} slo={insights.slo} />
-    if (activeTab === 'warnings') return <RcaWarningsPanel report={report} />
-    return <RcaReportSummary report={report} />
+
+    const renderer = tabMap[activeTab] || tabMap.summary
+    return renderer()
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader
         icon="psychology"
-        title="RCA Console"
-        subtitle="Generate and review tenant-scoped root cause analysis reports through Be Observant."
+        title="Be Certain"
+        subtitle="Generate, find, and manage tenant-scoped RCA reports through Be Observant."
       >
-        <Button variant="secondary" onClick={refreshJobs}>Refresh Jobs</Button>
+        <Button variant="secondary" size='sm' onClick={refreshJobs}>Refresh Jobs</Button>
       </PageHeader>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2">
-          <RcaJobComposer onCreate={createJob} creating={creatingJob} />
+      <section className="space-y-3">
+        <RcaJobComposer
+          onCreate={createJob}
+          creating={creatingJob}
+        />
+      </section>
+
+      <section className="grid grid-cols-1 xl:grid-cols-12 border-t border-sre-border pt-6 mt-6 xl:flex xl:gap-8">
+        <div className="xl:w-1/3 flex flex-col">
+          <RcaLookup
+            value={reportLookupInput}
+            onChange={(e) => setReportLookupInput(e.target.value)}
+            onFind={handleLookupReport}
+            onClear={handleClearLookup}
+            error={lookupError}
+          />
         </div>
-        <div className="xl:col-span-1">
+
+        <div className="xl:w-2/3 flex flex-col mt-6 xl:mt-0">
           <RcaJobQueuePanel
             jobs={jobs}
             loading={loadingJobs}
             selectedJobId={selectedJobId}
-            onSelectJob={setSelectedJobId}
+            onSelectJob={(id) => {
+              setReportLookupId(null)
+              setSelectedJobId(id)
+            }}
             onRefresh={refreshJobs}
+            onReload={reloadReport}
+            onDelete={() => setConfirmDeleteOpen(true)}
+            onView={handleView}
+            deletingReport={deletingReport}
+            canDelete={canDelete}
           />
         </div>
-      </div>
+      </section>
 
-      <Card className="border border-sre-border p-4">
-        <div className="flex flex-wrap items-center gap-2 justify-between">
-          <div>
-            <p className="text-xs text-sre-text-muted">Selected Job</p>
-            <p className="text-sm text-sre-text font-mono">{selectedJobId || '-'}</p>
-            <p className="text-xs text-sre-text-muted mt-1">{selectedStatusText}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={reloadReport}>Reload Report</Button>
-          </div>
-        </div>
-      </Card>
+      {/* modal for viewing report details */}
+      <RcaReportModal
+        isOpen={viewModalOpen}
+        onClose={() => setViewModalOpen(false)}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        loadingPrimaryReport={loadingPrimaryReport}
+        loadingReport={loadingReport}
+        hasReport={hasReport}
+        renderActiveTab={renderActiveTab}
+        tabs={TABS}
+      />
 
       {reportError && <Alert variant="error">{reportError}</Alert>}
-
-      {loadingReport && (
+      {loadingPrimaryReport && (
         <Card className="border border-sre-border p-6 flex items-center justify-center">
           <Spinner />
         </Card>
       )}
-
-      <div className="flex flex-wrap gap-2">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs border transition ${
-              activeTab === tab.key
-                ? 'border-sre-primary bg-sre-primary/10 text-sre-primary'
-                : 'border-sre-border text-sre-text-muted hover:text-sre-text hover:bg-sre-surface/40'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {!loadingReport && renderActiveTab()}
+      <ConfirmModal
+        isOpen={confirmDeleteOpen}
+        title="Delete RCA Report?"
+        message="This removes the report payload from storage and hides it from listings."
+        confirmText="Delete"
+        onConfirm={handleDeleteReport}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
     </div>
   )
 }

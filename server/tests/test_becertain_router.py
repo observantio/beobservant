@@ -3,12 +3,10 @@ from tests._env import ensure_test_env
 ensure_test_env()
 
 import pytest
-from fastapi import HTTPException
 from starlette.requests import Request
 
 from models.access.auth_models import Role, TokenData
 from routers.observability import becertain_router
-from models.observability.becertain_models import AnalyzeJobStatus
 
 
 def _request() -> Request:
@@ -56,20 +54,61 @@ async def test_proxy_post_overrides_payload_tenant(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_job_result_requires_completed_status(monkeypatch):
-    class DummyJob:
-        job_id = "job-1"
-        status = AnalyzeJobStatus.RUNNING
-        result = None
+    captured = {}
 
-    async def fake_get_job(**_kwargs):
-        return DummyJob()
+    async def fake_request_json(**kwargs):
+        captured.update(kwargs)
+        return {
+            "job_id": "job-1",
+            "report_id": "rep-1",
+            "status": "completed",
+            "tenant_id": "tenant-a",
+            "requested_by": "u1",
+            "result": {"summary": "ok"},
+        }
 
-    monkeypatch.setattr("routers.observability.becertain_router.becertain_analyze_job_service.get_job", fake_get_job)
+    monkeypatch.setattr("routers.observability.becertain_router.becertain_proxy_service.request_json", fake_request_json)
 
-    with pytest.raises(HTTPException) as exc:
-        await becertain_router.get_analyze_job_result(
-            job_id="job-1",
-            request=_request(),
-            current_user=_user(),
-        )
-    assert exc.value.status_code == 409
+    result = await becertain_router.get_analyze_job_result(
+        job_id="job-1",
+        request=_request(),
+        current_user=_user(),
+    )
+    assert result.job_id == "job-1"
+    assert result.report_id == "rep-1"
+    assert captured["upstream_path"] == "/api/v1/jobs/job-1/result"
+
+
+@pytest.mark.asyncio
+async def test_get_report_by_id_proxies(monkeypatch):
+    captured = {}
+
+    async def fake_request_json(**kwargs):
+        captured.update(kwargs)
+        return {
+            "job_id": "job-1",
+            "report_id": "rep-1",
+            "status": "completed",
+            "tenant_id": "tenant-a",
+            "requested_by": "u1",
+            "result": {"summary": "ok"},
+        }
+
+    monkeypatch.setattr("routers.observability.becertain_router.becertain_proxy_service.request_json", fake_request_json)
+    result = await becertain_router.get_report_by_id("rep-1", _request(), _user())
+    assert result.report_id == "rep-1"
+    assert captured["upstream_path"] == "/api/v1/reports/rep-1"
+
+
+@pytest.mark.asyncio
+async def test_delete_report_by_id_proxies(monkeypatch):
+    captured = {}
+
+    async def fake_request_json(**kwargs):
+        captured.update(kwargs)
+        return {"report_id": "rep-1", "status": "deleted", "deleted": True}
+
+    monkeypatch.setattr("routers.observability.becertain_router.becertain_proxy_service.request_json", fake_request_json)
+    result = await becertain_router.delete_report_by_id("rep-1", _request(), _user())
+    assert result.deleted is True
+    assert captured["upstream_path"] == "/api/v1/reports/rep-1"

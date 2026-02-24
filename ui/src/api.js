@@ -663,6 +663,16 @@ export async function getRcaJobResult(jobId) {
   return request(`/api/becertain/analyze/jobs/${encodeURIComponent(jobId)}/result`)
 }
 
+export async function getRcaReportById(reportId) {
+  return request(`/api/becertain/reports/${encodeURIComponent(reportId)}`)
+}
+
+export async function deleteRcaReport(reportId) {
+  return request(`/api/becertain/reports/${encodeURIComponent(reportId)}`, {
+    method: 'DELETE'
+  })
+}
+
 export async function fetchRcaMetricAnomalies(payload) {
   return requestJson('/api/becertain/anomalies/metrics', { payload })
 }
@@ -691,12 +701,26 @@ export async function fetchRcaSloBurn(payload) {
   return requestJson('/api/becertain/slo/burn', { payload })
 }
 
-export async function fetchRcaForecast(payload) {
-  return requestJson('/api/becertain/forecast/trajectory', { payload })
+export async function fetchRcaForecast(payload, params = {}) {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && `${value}` !== '') {
+      search.set(key, String(value))
+    }
+  })
+  const qs = search.toString()
+  return requestJson(`/api/becertain/forecast/trajectory${qs ? `?${qs}` : ''}`, { payload })
 }
 
-export async function fetchRcaGranger(payload) {
-  return requestJson('/api/becertain/causal/granger', { payload })
+export async function fetchRcaGranger(payload, params = {}) {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && `${value}` !== '') {
+      search.set(key, String(value))
+    }
+  })
+  const qs = search.toString()
+  return requestJson(`/api/becertain/causal/granger${qs ? `?${qs}` : ''}`, { payload })
 }
 
 export async function fetchRcaBayesian(payload) {

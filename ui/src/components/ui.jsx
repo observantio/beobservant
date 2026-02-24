@@ -566,8 +566,6 @@ export function Modal({
 
   const contentRef = React.useRef(null)
   const previouslyFocusedElementRef = React.useRef(null)
-  // keep a ref to the latest onClose to avoid re-running the effect
-  // on every render when parent re-creates the onClose callback.
   const onCloseRef = React.useRef(onClose)
   React.useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
@@ -653,7 +651,7 @@ export function Modal({
 
   const content = (
     <div
-      className="fixed inset-0 flex items-center justify-center p-4 animate-fade-in bg-transparent overflow-y-auto"
+      className="fixed inset-0 flex items-center justify-center animate-fade-in bg-transparent overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "modal-title" : undefined}
@@ -676,7 +674,7 @@ export function Modal({
         {/* Header */}
         {(title || showCloseButton) && (
           <div className="flex items-center justify-between px-6 py-4 border-sre-border">
-            <h2 id="modal-title" className="text-xl font-bold text-sre-text">{title}</h2>
+            <h2 id="modal-title" className="text-xl font-bold text-sre-text mb-0">{title}</h2>
             {showCloseButton && (
               <button
                 onClick={onClose}
@@ -692,7 +690,7 @@ export function Modal({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-transparent">
+        <div className="flex-1 overflow-y-auto px-6  scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-transparent">
           {children}
         </div>
 
