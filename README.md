@@ -1,301 +1,125 @@
-# Be Observant
+=# 🔭 Be Observant
 
-Unified observability platform for metrics, logs, traces, and alerts in one control plane.
+### The Unified Control Plane for Modern Observability.
 
-Built on **Grafana**, **Loki**, **Tempo**, **Mimir**, **Alertmanager**, and internal services for auth and alerting.
+**Be Observant** is an all-in-one observability platform that eliminates "swivel-chair" monitoring. By unifying metrics, logs, traces, AiOps and intelligent alerting into a single, secure control plane, it allows SREs and Developers to focus on resolving issues rather than stitching data together. We built this to make observability free and while this relies on LGTM stack, you can easily swtich to Victoria metrics and you don't have to pay for enterprise licenses for Grafana as we try to cover as much of the features, to ensure a complete free observability tool.
 
-## Distributed Tracing
+![Be Observant](assets/beobservant.png)
 
-Tempo-backed tracing with tenant/org scoping enforced through API token context.
+Built on the industry-standard **LGTM stack** (Loki, Grafana, Tempo, Mimir), Be Observant adds a sophisticated layer of security, multi-tenancy, and AI-driven analysis.
 
-
-## Logs
-
-Loki-backed log search and analytics with scoped access controls.
-
-
-## Alerting and Incident Ops
-
-- BeNotified repo: [github.com/observantio/benotified](https://github.com/observantio/benotified)
-
-## Grafana Visualization
-
-Grafana access is proxied through an authenticated NGINX layer with RBAC and visibility scoping.
+[Explore Docs](https://www.google.com/search?q=./USER_GUIDE.md) | [Report Issue](https://www.google.com/search?q=https://github.com/observantio/beobservant/issues) | [BeNotified](https://github.com/observantio/benotified) | [BeCertain](https://github.com/observantio/becertain)
 
 ---
 
-## Architecture
+## ✨ Key Features
 
-| Component | Role | Port |
-|---|---|---|
-| `beobservant` | Core REST API (FastAPI) | `4319` |
-| `benotified` | Internal alerting/incident service | `4323` |
-| `becertain` | Internal RCA analytics engine | internal |
-| `gateway-auth` | OTLP token validation service | internal |
-| `grafana-proxy` | Authenticated Grafana reverse proxy | `8080` |
-| `otlp-gateway` | Envoy-based OTLP ingestion gateway | `4320` |
-| `otel-agent` | OpenTelemetry collector | `4317` / `4318` |
-| `loki` | Log storage/query | internal |
-| `tempo` | Trace storage/query | internal |
-| `mimir` | Metrics storage/query | internal |
-| `alertmanager` | Alert routing/silences | internal |
-| `postgres` | Primary database | internal |
-| `redis` | Rate limiting/cache | internal |
+* **🚀 Unified LGTM Stack:** Native integration with Mimir (Metrics), Loki (Logs), and Tempo (Traces).
+* **🧠 AI-Powered Insights:** Includes **BeCertain**, a custom engine for automated Root Cause Analysis (RCA) and predictive forecasting.
+* **🔔 Incident Orchestration:** Powered by **BeNotified**, managing complex alert routing and team collaboration.
+* **🔐 Enterprise-Grade Security:** RBAC-controlled Grafana access, OIDC/Keycloak support, MFA/TOTP, and asymmetric JWT signing.
+* **🔌 OTLP Native:** A high-performance Envoy-based gateway for seamless OpenTelemetry ingestion with token-based isolation.
 
 ---
 
-## Quick Start
+## 🏗 System Architecture
 
-### 1. Configure environment
+Be Observant acts as the orchestrator for several specialized internal services:
+
+| Component | Role | Logic |
+| --- | --- | --- |
+| **`beobservant`** | **The Brain** | Core FastAPI REST API handling orchestration and UI. |
+| **`benotified`** | **The Messenger** | Manages alerts, channels, and incident collaboration. |
+| **`becertain`** | **The Analyst** | AI/ML engine for RCA, anomalies, and forecasting. |
+| **`gateway-auth`** | **The Guard** | Validates OTLP tokens for secure data ingestion. |
+| **`grafana-proxy`** | **The Window** | Authenticated NGINX proxy for secure visualization. |
+
+---
+
+## 🚀 Quick Start
+
+Get your environment up and running in less than 5 minutes.
+
+### 1. Environment Setup
+
+Clone the repository and prepare your configuration:
 
 ```bash
 cp .env.example .env
 ```
 
-Generate a Fernet key for `DATA_ENCRYPTION_KEY`:
+Generate your unique encryption key and add it to `DATA_ENCRYPTION_KEY` in your `.env`:
 
 ```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-Set that value in `.env`.
+### 2. Launch the Stack
 
-### 2. Choose a run mode
+Choose the mode that fits your workflow:
 
-Option A: source-build mode (full local development)
-
-- Requires these sibling directories:
-  - `./BeCertain`
-  - `./BeNotified`
-- If missing, clone them first:
+**Option A: Developer Mode (Local Build)**
+*Best if you are contributing to BeCertain or BeNotified.*
 
 ```bash
+# Clone sibling repos first
 git clone https://github.com/observantio/becertain BeCertain
 git clone https://github.com/observantio/benotified BeNotified
-```
 
-Then start:
-
-```bash
 docker compose up -d --build
 ```
 
-Option B: image mode (no local BeCertain/BeNotified checkout)
-
-- Set image tags in `.env`:
-  - `BEOBSERVANT_IMAGE`
-  - `BENOTIFIED_IMAGE`
-  - `BECERTAIN_IMAGE`
-- Then start:
+**Option B: User Mode (Pre-built Images)**
+*Best for testing the platform features.*
 
 ```bash
 docker compose -f docker-compose.stable.yml up -d
 ```
 
-The provided defaults are placeholders until you publish stable tags.
+### 3. Access the Platform
 
-### 3. Verify health
+Once the containers are healthy, access the following interfaces:
 
-```bash
-curl -s http://localhost:4319/health
-```
-
-### 4. Access interfaces
-
-| Interface | URL |
-|---|---|
-| UI | [http://localhost:5173](http://localhost:5173) |
-| API Docs | [http://localhost:4319/docs](http://localhost:4319/docs) |
-| Grafana | [http://localhost:8080/grafana/](http://localhost:8080/grafana/) |
+* **User Interface:** [http://localhost:5173](https://www.google.com/search?q=http://localhost:5173)
+* **Secure Grafana:** [http://localhost:8080/grafana/](https://www.google.com/search?q=http://localhost:8080/grafana/)
+* **Interactive API Docs:** [http://localhost:4319/docs](https://www.google.com/search?q=http://localhost:4319/docs)
 
 ---
 
-## Local Development
+## 🛠 Developer Workflow
 
-Source-build compose (`docker-compose.yml`) expects local copies of `BeCertain` and `BeNotified`.
-
-```bash
-docker compose up -d --build
-```
-
-- UI runs on `localhost:5173` by default.
-- If CORS is enabled, include `http://localhost:5173` in allowed origins.
-- BeNotified runs as an internal service and should not be exposed publicly.
-- BeCertain runs as an internal service and should not be exposed publicly.
-- Public alert APIs remain under `/api/alertmanager/*` on Be Observant.
-- RCA APIs are exposed through Be Observant under `/api/becertain/*`.
-
-Related repos:
-
-- BeCertain: [github.com/observantio/becertain](https://github.com/observantio/becertain)
-- BeNotified: [github.com/observantio/benotified](https://github.com/observantio/benotified)
-
----
-
-## Pre-commit Checks
-
-The repository includes a required pre-commit pipeline in `.pre-commit-config.yaml` that runs on every commit:
-
-- `server`: `python -m pytest -q`
-- `BeCertain`: `python -m pytest -q`
-- `BeNotified`: `python -m pytest -q`
-- `gateway-auth-service`: `python -m pytest -q`
-- `ui`: `npm run lint`
-- `ui`: `npm run test:run`
-- `ui`: `npm run build`
-
-Install and enable:
+We maintain high code quality standards through automated pre-commit hooks. To set up your local environment:
 
 ```bash
 pip install pre-commit
 pre-commit install
 ```
 
-Run manually at any time:
+**What happens on every commit?**
 
-```bash
-pre-commit run --all-files
-```
-
----
-
-## OTLP Ingestion
-
-Send telemetry to gateway port `4320` and include:
-
-```http
-x-otlp-token: <your-token>
-```
-
-![OTLP auth token](assets/auth-otlp.png)
-
-Gateway behavior:
-
-- Validates token and resolves tenant/org scope
-- Uses Redis for cache/rate-limit behavior
-- Resolves token context via HTTP to the main server (no direct DB dependency in gateway)
-
-Key settings:
-
-- `GATEWAY_AUTH_API_URL`
-- `RATE_LIMIT_REDIS_URL`
-- `TOKEN_CACHE_REDIS_URL`
-- `GATEWAY_RATE_LIMIT_STRICT=true` for Redis-only limiter mode
+* **Backend:** Pytest suites run for `server`, `BeCertain`, and `BeNotified`.
+* **Frontend:** Linting, unit tests, and build checks via `npm`.
+* **Security:** Secret scanning and syntax validation.
 
 ---
 
-## Authentication
+## 🔒 Security & Compliance
 
-Local mode (default):
+Be Observant is built with a "Security First" mindset:
 
-- bcrypt password auth
-- JWT (RS256/ES256)
-- MFA/TOTP (admin setup required on first login)
-
-OIDC/Keycloak mode:
-
-```env
-AUTH_PROVIDER=keycloak
-OIDC_ISSUER_URL=
-OIDC_CLIENT_ID=
-OIDC_CLIENT_SECRET=
-AUTH_PASSWORD_FLOW_ENABLED=false
-```
-
-OIDC endpoints:
-
-- `POST /api/auth/oidc/authorize-url`
-- `POST /api/auth/oidc/exchange`
-- `GET /api/auth/mode`
+* **Context-Aware Ingestion:** Every OTLP trace/log is validated via `x-otlp-token` to enforce tenant isolation.
+* **Identity Management:** Flexible auth via local Bcrypt/MFA or external OIDC (Keycloak).
+* **Auditability:** Immutable DB triggers ensure every configuration change is logged.
+* **Hardened Proxy:** Grafana is never exposed directly; all traffic passes through an RBAC-enforced NGINX layer.
 
 ---
 
-## RCA Console (BeCertain via Be Observant)
+## ✅ Production Readiness Checklist
 
-- UI route: `/rca`
-- Be Observant proxy base: `/api/becertain`
-- Slow full analysis uses async jobs:
-  - `POST /api/becertain/analyze/jobs`
-  - `GET /api/becertain/analyze/jobs`
-  - `GET /api/becertain/analyze/jobs/{job_id}`
-  - `GET /api/becertain/analyze/jobs/{job_id}/result`
-- Fast read APIs are also proxied through `/api/becertain/*` (correlation, topology, causal, forecast, SLO, anomalies, ML weights, deployments).
+Before deploying to production, ensure you have:
 
-Required environment settings (shared across Be Observant + BeCertain):
-
-- `BECERTAIN_URL=http://becertain:4322`
-- `BECERTAIN_SERVICE_TOKEN`
-- `BECERTAIN_EXPECTED_SERVICE_TOKEN`
-- `BECERTAIN_CONTEXT_SIGNING_KEY`
-- `BECERTAIN_CONTEXT_VERIFY_KEY`
-- `BECERTAIN_CONTEXT_ISSUER=beobservant-main`
-- `BECERTAIN_CONTEXT_AUDIENCE=becertain`
-- `BECERTAIN_CONTEXT_ALGORITHM=HS256`
-- `BECERTAIN_CONTEXT_ALGORITHMS=HS256`
-- `BECERTAIN_TLS_ENABLED=false` (proxy outbound TLS verification)
-- `BECERTAIN_SSL_ENABLED=false` (optional inbound TLS on BeCertain server)
-- `BECERTAIN_ANALYZE_STORAGE_PATH=./data/becertain_jobs` (disk cache for job metadata + reports)
-- `BECERTAIN_ANALYZE_JOB_TTL_SECONDS=3600` (metadata retention)
-- `BECERTAIN_ANALYZE_REPORT_RETENTION_DAYS=7` (persisted report retention)
-
----
-
-## Security Highlights
-
-- Asymmetric JWT signing (RS256/ES256)
-- MFA/TOTP with encrypted secret storage
-- RBAC with scoped Grafana proxy access
-- Immutable audit logs (DB trigger enforcement)
-- Per-user/per-IP rate limiting (Redis + fallback modes)
-- IP allowlists for sensitive endpoints
-- Request size limits and concurrency backpressure
-- Tenant/org isolation across APIs and API keys
-- Internal BeCertain authentication using service token + signed context JWT
-- Vault-based secret loading support
-
-> Secrets (DB URL, keys, passwords, API keys) can be provided via env vars or Vault.  
-> Set `VAULT_ENABLED=true` and configure `VAULT_ADDR` with AppRole or token auth.  
-> See [`USER_GUIDE.md`](./USER_GUIDE.md) for details.
-
----
-
-## Testing and Load Generation
-
-The default stack includes an OTel agent and canary log/trace generators.  
-You can tune or disable generator behavior in `tests/start.sh`.
-
----
-
-## Teardown
-
-```bash
-docker compose down       # stop services, keep volumes
-docker compose down -v    # stop services and remove volumes
-# bash fresh.sh           # recreate from a fresh state
-```
-
----
-
-## Production Checklist
-
-- [ ] Set `JWT_AUTO_GENERATE_KEYS=false` and provide explicit PEM keys
-- [ ] Set `DEFAULT_ADMIN_BOOTSTRAP_ENABLED=false`
-- [ ] Configure `DATA_ENCRYPTION_KEY` for MFA/TOTP secret encryption
-- [ ] Set `REQUIRE_TOTP_ENCRYPTION_KEY=true`
-- [ ] Configure IP allowlists: `WEBHOOK_IP_ALLOWLIST`, `GATEWAY_IP_ALLOWLIST`, `AUTH_PUBLIC_IP_ALLOWLIST`, `GRAFANA_PROXY_IP_ALLOWLIST`
-- [ ] Set `REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS=true`
-- [ ] Set `TRUST_PROXY_HEADERS=false` unless behind a trusted reverse proxy
-- [ ] Configure Redis rate limiting: `RATE_LIMIT_BACKEND=redis`
-- [ ] Terminate TLS at edge/load balancer
-- [ ] Set `DB_AUTO_CREATE_SCHEMA=false` after initial migration
-- [ ] Configure BeCertain trust chain: `BECERTAIN_SERVICE_TOKEN`, `BECERTAIN_EXPECTED_SERVICE_TOKEN`, `BECERTAIN_CONTEXT_SIGNING_KEY`, `BECERTAIN_CONTEXT_VERIFY_KEY`
-- [ ] Keep BeCertain internal-only (no public host port)
-- [ ] Rotate all default credentials
-
----
-
-## Documentation
-
-- Main guide: [`USER_GUIDE.md`](./USER_GUIDE.md)
-- BeNotified service notes: [`BeNotified/README.md`](./BeNotified/README.md)
-- Notices and attribution: [`NOTICE.md`](./NOTICE.md)
+* [ ] Switched `JWT_AUTO_GENERATE_KEYS` to `false` and provided custom PEM keys.
+* [ ] Enabled `RATE_LIMIT_BACKEND=redis` for distributed throttling.
+* [ ] Configured `WEBHOOK_IP_ALLOWLIST` to restrict incoming traffic.
+* [ ] Integrated with **Hashicorp Vault** for secret management (`VAULT_ENABLED=true`).
+* [ ] Set `DB_AUTO_CREATE_SCHEMA=false` to prevent accidental migrations.

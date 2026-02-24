@@ -1,4 +1,3 @@
-Be Observant
 Copyright (c) 2026 Stefan Kumarasinghe
 
 This product includes software developed by Stefan Kumarasinghe and contributors.

@@ -152,13 +152,25 @@ export default function RCAPage() {
   // if the job referenced in storage disappears from the returned list we should
   // also clear it so we don't keep an orphaned selection around.
   useEffect(() => {
-    if (selectedJobId && jobs.length > 0 && !jobs.some((j) => j.job_id === selectedJobId)) {
+    if (!jobs.length) return
+
+    if (selectedJobId && !jobs.some((j) => j.job_id === selectedJobId)) {
       setSelectedJobId(null)
       try {
         localStorage.removeItem(JOB_STORAGE_KEY)
       } catch {
         // ignore
       }
+      return
+    }
+
+    try {
+      const stored = localStorage.getItem(JOB_STORAGE_KEY)
+      if (stored && !jobs.some((j) => j.job_id === stored)) {
+        localStorage.removeItem(JOB_STORAGE_KEY)
+      }
+    } catch {
+      // ignore
     }
   }, [jobs, selectedJobId])
 

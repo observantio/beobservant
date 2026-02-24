@@ -450,6 +450,21 @@ class TempoService:
                 logger.debug("Metrics-based volume query failed, falling back", exc_info=True)
 
         try:
+            # Last-resort fallback for environments where count APIs are unavailable.
+            metrics = await self.get_trace_metrics(service=service, start=start, end=end, tenant_id=tenant_id)
+            total = int(metrics.get("total_traces") or 0)
+            if total > 0:
+                base, rem = divmod(total, num_buckets)
+                values = [
+                    [expected_ts[i], str(base + (1 if i < rem else 0))]
+                    for i in range(num_buckets)
+                ]
+                result = {"data": {"result": [{"metric": {}, "values": values}]}}
+                return await _cache_and_return(result)
+        except Exception:
+            logger.debug("Failed to estimate trace volume from total traces", exc_info=True)
+
+        try:
             bucket_ranges: List[List[int]] = []
             for ts in expected_ts:
                 bucket_start_us = ts * 1_000_000
@@ -461,9 +476,10 @@ class TempoService:
                 "limit": _SEARCH_LIMIT_CAP,
             })
             bucket_counts = await self._count_traces_bucketed(base_query, bucket_ranges, tenant_id)
-            values = [[expected_ts[idx], str(bucket_counts[idx])] for idx in range(num_buckets)]
-            result = {"data": {"result": [{"metric": {}, "values": values}]}}
-            return await _cache_and_return(result)
+            if any(c > 0 for c in bucket_counts):
+                values = [[expected_ts[idx], str(bucket_counts[idx])] for idx in range(num_buckets)]
+                result = {"data": {"result": [{"metric": {}, "values": values}]}}
+                return await _cache_and_return(result)
         except Exception:
             logger.debug("Failed to build trace volume from bucket counts", exc_info=True)
 
