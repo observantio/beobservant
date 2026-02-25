@@ -20,11 +20,7 @@ from models.access.auth_models import TokenData
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate, DashboardSearchResult
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from services.grafana_service import GrafanaService, GrafanaAPIError
-from services.grafana.proxy_auth_ops import (
-    is_admin_user, is_resource_accessible, extract_dashboard_uid,
-    extract_datasource_uid, extract_datasource_id, extract_proxy_token, authorize_proxy_request,
-    clear_proxy_auth_cache,
-)
+from services.grafana import proxy_auth_ops as _proxy_auth_ops
 from services.grafana.dashboard_ops import (
     check_dashboard_access, get_accessible_dashboard_uids, build_dashboard_search_context,
     search_dashboards, get_dashboard, create_dashboard, update_dashboard,
@@ -38,6 +34,15 @@ from services.grafana.datasource_ops import (
 )
 
 logger = logging.getLogger(__name__)
+
+is_admin_user = _proxy_auth_ops.is_admin_user
+is_resource_accessible = _proxy_auth_ops.is_resource_accessible
+extract_dashboard_uid = _proxy_auth_ops.extract_dashboard_uid
+extract_datasource_uid = _proxy_auth_ops.extract_datasource_uid
+extract_datasource_id = _proxy_auth_ops.extract_datasource_id
+extract_proxy_token = _proxy_auth_ops.extract_proxy_token
+authorize_proxy_request = _proxy_auth_ops.authorize_proxy_request
+clear_proxy_auth_cache = getattr(_proxy_auth_ops, "clear_proxy_auth_cache", lambda: None)
 
 
 class GrafanaProxyService:
