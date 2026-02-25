@@ -90,13 +90,48 @@ class AnalyzeJobListResponse(BaseModel):
     next_cursor: Optional[str] = None
 
 
+class AnalysisQualityPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    anomaly_density: Dict[str, float] = Field(default_factory=dict)
+    suppression_counts: Dict[str, int] = Field(default_factory=dict)
+    gating_profile: Optional[str] = None
+    confidence_calibration_version: Optional[str] = None
+
+
+class ServiceLatencyPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    service: Optional[str] = None
+    operation: Optional[str] = None
+    window_start: Optional[float] = None
+    window_end: Optional[float] = None
+
+
+class RootCausePayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    hypothesis: Optional[str] = None
+    corroboration_summary: Optional[str] = None
+    suppression_diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    selection_score_components: Dict[str, float] = Field(default_factory=dict)
+
+
+class AnalyzeResultPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    quality: Optional[AnalysisQualityPayload] = None
+    service_latency: List[ServiceLatencyPayload] = Field(default_factory=list)
+    root_causes: List[RootCausePayload] = Field(default_factory=list)
+
+
 class AnalyzeJobResultResponse(BaseModel):
     job_id: str
     report_id: str
     status: AnalyzeJobStatus
     tenant_id: str
     requested_by: str
-    result: Optional[Dict[str, Any]] = None
+    result: Optional[AnalyzeResultPayload | Dict[str, Any]] = None
 
 
 class AnalyzeReportResponse(BaseModel):
@@ -105,7 +140,7 @@ class AnalyzeReportResponse(BaseModel):
     status: AnalyzeJobStatus
     tenant_id: str
     requested_by: str
-    result: Optional[Dict[str, Any]] = None
+    result: Optional[AnalyzeResultPayload | Dict[str, Any]] = None
 
 
 class AnalyzeReportDeleteResponse(BaseModel):

@@ -77,6 +77,13 @@ function CauseCard({ cause, rank, index }) {
           </div>
         )}
 
+        {cause.corroboration_summary && (
+          <div className="flex items-start gap-2">
+            <span className="text-xs text-sre-text-muted w-20 shrink-0">Corroboration</span>
+            <span className="text-xs text-sre-text leading-snug">{cause.corroboration_summary}</span>
+          </div>
+        )}
+
         {Array.isArray(cause.evidence) && cause.evidence.length > 0 && (
           <div className="flex items-start gap-2">
             <span className="text-xs text-sre-text-muted w-20 shrink-0">Evidence</span>
@@ -102,6 +109,41 @@ function CauseCard({ cause, rank, index }) {
             </div>
           </div>
         )}
+
+        {cause.selection_score_components && Object.keys(cause.selection_score_components).length > 0 && (
+          <div className="flex items-start gap-2">
+            <span className="text-xs text-sre-text-muted w-20 shrink-0">Selection</span>
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(cause.selection_score_components)
+                .sort((a, b) => {
+                  const order = ['final_score', 'ml_score', 'rule_confidence']
+                  const ia = order.indexOf(a[0])
+                  const ib = order.indexOf(b[0])
+                  if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+                  return a[0].localeCompare(b[0])
+                })
+                .slice(0, 6)
+                .map(([k, v]) => (
+                  <span key={k} className="text-xs bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md">
+                    {k}:{Number(v).toFixed(3)}
+                  </span>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {cause.suppression_diagnostics && Object.keys(cause.suppression_diagnostics).length > 0 && (
+          <div className="flex items-start gap-2">
+            <span className="text-xs text-sre-text-muted w-20 shrink-0">Diagnostics</span>
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(cause.suppression_diagnostics).slice(0, 6).map(([k, v]) => (
+                <span key={k} className="text-xs bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md">
+                  {k}:{String(v)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Card>
   )
@@ -110,6 +152,11 @@ function CauseCard({ cause, rank, index }) {
 export default function RcaRootCauseTable({ report, compact = false }) {
   const causes = report?.root_causes || []
   const ranked = report?.ranked_causes || []
+  const rankedByHypothesis = new Map(
+    ranked
+      .filter((item) => item?.root_cause?.hypothesis)
+      .map((item) => [item.root_cause.hypothesis, item]),
+  )
 
   const sorted = [...causes].sort((a, b) => severityOrder(a.severity) - severityOrder(b.severity))
 
@@ -133,7 +180,7 @@ export default function RcaRootCauseTable({ report, compact = false }) {
             <CauseCard
               key={`${cause.hypothesis}-${idx}`}
               cause={cause}
-              rank={ranked[idx]}
+              rank={rankedByHypothesis.get(cause.hypothesis) || ranked[idx]}
               index={idx}
             />
           ))}
