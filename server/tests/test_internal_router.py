@@ -13,7 +13,7 @@ from routers import internal_router
 
 
 class DummyAuthService:
-    def validate_otlp_token(self, token):
+    def validate_otlp_token(self, token, *, suppress_errors=True):
         return "org123" if token == "good" else None
 
 
@@ -46,18 +46,17 @@ def test_invalid_token(monkeypatch):
         "/api/internal/otlp/validate?token=bad",
         headers={"X-Internal-Token": "secret"},
     )
-    assert resp.status_code == 404
+    assert resp.status_code == 410
 
 
-def test_success(monkeypatch):
+def test_query_path_disabled(monkeypatch):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
     client = TestClient(app)
     resp = client.get(
         "/api/internal/otlp/validate?token=good",
         headers={"X-Internal-Token": "secret"},
     )
-    assert resp.status_code == 200
-    assert resp.json() == {"org_id": "org123"}
+    assert resp.status_code == 410
 
 
 def test_success_post_body(monkeypatch):
@@ -82,3 +81,31 @@ def test_success_post_header_token(monkeypatch):
     )
     assert resp.status_code == 200
     assert resp.json() == {"org_id": "org123"}
+
+
+def test_post_invalid_token(monkeypatch):
+    monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
+    client = TestClient(app)
+    resp = client.post(
+        "/api/internal/otlp/validate",
+        headers={"X-Internal-Token": "secret"},
+        json={"token": "bad"},
+    )
+    assert resp.status_code == 404
+
+
+def test_post_db_error_maps_to_503(monkeypatch):
+    class FailingAuthService:
+        def validate_otlp_token(self, token, *, suppress_errors=True):
+            raise RuntimeError("db down")
+
+    monkeypatch.setattr(internal_router, "_auth_service", FailingAuthService())
+    monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
+    client = TestClient(app)
+    resp = client.post(
+        "/api/internal/otlp/validate",
+        headers={"X-Internal-Token": "secret"},
+        json={"token": "good"},
+    )
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "Auth database unavailable"

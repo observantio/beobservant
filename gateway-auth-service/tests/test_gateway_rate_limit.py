@@ -191,10 +191,13 @@ class GatewayRateLimitTests(unittest.TestCase):
     def test_strict_rate_limiter_requires_redis(self):
         # strict mode should mandate a working Redis backend; errors bubble up
         import services.config as cfg
+        import services.rate_limit as rl_mod
         from services.rate_limit import make_default_rate_limiter, RedisTokenRateLimiter
 
-        prev_strict = cfg.GATEWAY_RATE_LIMIT_STRICT
+        prev_strict_cfg = cfg.GATEWAY_RATE_LIMIT_STRICT
+        prev_strict_rl = rl_mod.gw_config.GATEWAY_RATE_LIMIT_STRICT
         cfg.GATEWAY_RATE_LIMIT_STRICT = True
+        rl_mod.gw_config.GATEWAY_RATE_LIMIT_STRICT = True
 
         orig_init = RedisTokenRateLimiter.__init__
         try:
@@ -217,7 +220,8 @@ class GatewayRateLimitTests(unittest.TestCase):
             limiter = make_default_rate_limiter(2, backend="redis", redis_url="redis://localhost")
             self.assertIsInstance(limiter, RedisTokenRateLimiter)
         finally:
-            cfg.GATEWAY_RATE_LIMIT_STRICT = prev_strict
+            cfg.GATEWAY_RATE_LIMIT_STRICT = prev_strict_cfg
+            rl_mod.gw_config.GATEWAY_RATE_LIMIT_STRICT = prev_strict_rl
             RedisTokenRateLimiter.__init__ = orig_init
 
     if __name__ == "__main__":

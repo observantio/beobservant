@@ -421,8 +421,8 @@ class DatabaseAuthService:
     ) -> bool:
         return delete_api_key_share_op(self, owner_user_id, tenant_id, key_id, shared_user_id)
 
-    def validate_otlp_token(self, token: str) -> Optional[str]:
-        return validate_otlp_token_op(self, token)
+    def validate_otlp_token(self, token: str, *, suppress_errors: bool = True) -> Optional[str]:
+        return validate_otlp_token_op(self, token, suppress_errors=suppress_errors)
 
     def backfill_otlp_tokens(self):
         backfill_otlp_tokens_op(self)

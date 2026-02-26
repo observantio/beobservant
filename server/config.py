@@ -13,6 +13,7 @@ import os
 import secrets
 from typing import Optional, List
 
+from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -39,6 +40,25 @@ def _is_placeholder(value: Optional[str], placeholders: List[str]) -> bool:
         return True
     normalized = value.strip()
     return not normalized or normalized in placeholders
+
+
+def _normalized_secret(value: Optional[str]) -> str:
+    return str(value or "").strip().lower()
+
+
+def _is_weak_secret(value: Optional[str]) -> bool:
+    normalized = _normalized_secret(value)
+    if not normalized:
+        return True
+    weak_markers = (
+        "changeme",
+        "replace_with",
+        "example",
+        "default",
+        "secret",
+        "password",
+    )
+    return any(marker in normalized for marker in weak_markers)
 
 
 def _generate_rsa_keypair() -> tuple[str, str]:
@@ -80,6 +100,7 @@ class Config:
     """Application configuration from environment variables."""
 
     ALLOWED_JWT_ALGORITHMS = {"RS256", "ES256"}
+    ALLOWED_CONTEXT_ALGORITHMS = {"HS256", "HS384", "HS512"}
     EXAMPLE_DATABASE_URL = "postgresql://beobservant:changeme123@localhost:5432/beobservant"
 
     def __init__(self) -> None:
@@ -90,6 +111,8 @@ class Config:
         self.HOST: str = os.getenv("HOST", "127.0.0.1")
         self.PORT: int = int(os.getenv("PORT", "4319"))
         self.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
+        self.ENABLE_API_DOCS: bool = _to_bool(os.getenv("ENABLE_API_DOCS"), default=not self.IS_PRODUCTION)
+        self.SKIP_STARTUP_DB_INIT: bool = _to_bool(os.getenv("SKIP_STARTUP_DB_INIT"), default=False)
 
         # Service URLs
         self.TEMPO_URL: str = os.getenv("TEMPO_URL", "http://tempo:3200")
@@ -176,7 +199,7 @@ class Config:
         self.BENOTIFIED_CONTEXT_SIGNING_KEY: Optional[str] = os.getenv("BENOTIFIED_CONTEXT_SIGNING_KEY")
         self.BENOTIFIED_CONTEXT_ISSUER: str = os.getenv("BENOTIFIED_CONTEXT_ISSUER", "beobservant-main")
         self.BENOTIFIED_CONTEXT_AUDIENCE: str = os.getenv("BENOTIFIED_CONTEXT_AUDIENCE", "benotified")
-        self.BENOTIFIED_CONTEXT_ALGORITHM: str = os.getenv("BENOTIFIED_CONTEXT_ALGORITHM", "HS256")
+        self.BENOTIFIED_CONTEXT_ALGORITHM: str = os.getenv("BENOTIFIED_CONTEXT_ALGORITHM", "HS256").strip().upper()
         self.BENOTIFIED_CONTEXT_TTL_SECONDS: int = int(os.getenv("BENOTIFIED_CONTEXT_TTL_SECONDS", "90"))
         self.BENOTIFIED_TLS_ENABLED: bool = _to_bool(os.getenv("BENOTIFIED_TLS_ENABLED"), default=False)
         self.BENOTIFIED_CA_CERT_PATH: Optional[str] = os.getenv("BENOTIFIED_CA_CERT_PATH")
@@ -184,7 +207,7 @@ class Config:
         self.BECERTAIN_CONTEXT_SIGNING_KEY: Optional[str] = os.getenv("BECERTAIN_CONTEXT_SIGNING_KEY")
         self.BECERTAIN_CONTEXT_ISSUER: str = os.getenv("BECERTAIN_CONTEXT_ISSUER", "beobservant-main")
         self.BECERTAIN_CONTEXT_AUDIENCE: str = os.getenv("BECERTAIN_CONTEXT_AUDIENCE", "becertain")
-        self.BECERTAIN_CONTEXT_ALGORITHM: str = os.getenv("BECERTAIN_CONTEXT_ALGORITHM", "HS256")
+        self.BECERTAIN_CONTEXT_ALGORITHM: str = os.getenv("BECERTAIN_CONTEXT_ALGORITHM", "HS256").strip().upper()
         self.BECERTAIN_CONTEXT_TTL_SECONDS: int = int(os.getenv("BECERTAIN_CONTEXT_TTL_SECONDS", "120"))
         self.BECERTAIN_PROXY_CACHE_TTL_SECONDS: int = int(os.getenv("BECERTAIN_PROXY_CACHE_TTL_SECONDS", "15"))
         self.BECERTAIN_TLS_ENABLED: bool = _to_bool(os.getenv("BECERTAIN_TLS_ENABLED"), default=False)
@@ -246,11 +269,6 @@ class Config:
         self.FORCE_SECURE_COOKIES: bool = _to_bool(os.getenv("FORCE_SECURE_COOKIES"), default=self.IS_PRODUCTION)
         # When true, an explicit-but-empty allowlist will be treated as permissive. Default is false (fail-closed).
         self.ALLOWLIST_FAIL_OPEN: bool = _to_bool(os.getenv("ALLOWLIST_FAIL_OPEN"), default=False)
-
-        self.DB_AUTO_CREATE_SCHEMA: bool = _to_bool(
-            os.getenv("DB_AUTO_CREATE_SCHEMA"),
-            default=not self.IS_PRODUCTION,
-        )
 
         self.RATE_LIMIT_GC_EVERY: int = int(os.getenv("RATE_LIMIT_GC_EVERY", "1024"))
         self.RATE_LIMIT_STALE_AFTER_SECONDS: int = int(os.getenv("RATE_LIMIT_STALE_AFTER_SECONDS", "3600"))
@@ -446,17 +464,51 @@ class Config:
         if self.IS_PRODUCTION and self.DEFAULT_ADMIN_BOOTSTRAP_ENABLED:
             raise ValueError("DEFAULT_ADMIN_BOOTSTRAP_ENABLED must be false in production")
 
-        if self.IS_PRODUCTION and self.DB_AUTO_CREATE_SCHEMA:
-            raise ValueError("DB_AUTO_CREATE_SCHEMA must be disabled in production; use Alembic migrations")
-
         if self.REQUIRE_TOTP_ENCRYPTION_KEY and not self.DATA_ENCRYPTION_KEY:
             raise ValueError("DATA_ENCRYPTION_KEY is required when REQUIRE_TOTP_ENCRYPTION_KEY is enabled")
+        if self.IS_PRODUCTION and not self.DATA_ENCRYPTION_KEY:
+            raise ValueError("DATA_ENCRYPTION_KEY must be configured in production")
+        if self.DATA_ENCRYPTION_KEY:
+            try:
+                Fernet(self.DATA_ENCRYPTION_KEY)
+            except Exception as exc:
+                raise ValueError("DATA_ENCRYPTION_KEY must be a valid Fernet key") from exc
 
         wildcard_enabled = any(origin.strip() == "*" for origin in self.CORS_ORIGINS)
         if wildcard_enabled and self.CORS_ALLOW_CREDENTIALS:
             raise ValueError(
                 "CORS_ORIGINS cannot contain '*' when CORS_ALLOW_CREDENTIALS is enabled."
             )
+
+        if self.BENOTIFIED_CONTEXT_ALGORITHM not in self.ALLOWED_CONTEXT_ALGORITHMS:
+            raise ValueError(
+                f"Unsupported BENOTIFIED_CONTEXT_ALGORITHM '{self.BENOTIFIED_CONTEXT_ALGORITHM}'. "
+                f"Allowed values: {sorted(self.ALLOWED_CONTEXT_ALGORITHMS)}"
+            )
+        if self.BECERTAIN_CONTEXT_ALGORITHM not in self.ALLOWED_CONTEXT_ALGORITHMS:
+            raise ValueError(
+                f"Unsupported BECERTAIN_CONTEXT_ALGORITHM '{self.BECERTAIN_CONTEXT_ALGORITHM}'. "
+                f"Allowed values: {sorted(self.ALLOWED_CONTEXT_ALGORITHMS)}"
+            )
+        if self.BENOTIFIED_CONTEXT_TTL_SECONDS <= 0:
+            raise ValueError("BENOTIFIED_CONTEXT_TTL_SECONDS must be greater than 0")
+        if self.BECERTAIN_CONTEXT_TTL_SECONDS <= 0:
+            raise ValueError("BECERTAIN_CONTEXT_TTL_SECONDS must be greater than 0")
+
+        if self.IS_PRODUCTION:
+            required_production_secrets = {
+                "GATEWAY_INTERNAL_SERVICE_TOKEN": self.GATEWAY_INTERNAL_SERVICE_TOKEN,
+                "BENOTIFIED_SERVICE_TOKEN": self.BENOTIFIED_SERVICE_TOKEN,
+                "BENOTIFIED_CONTEXT_SIGNING_KEY": self.BENOTIFIED_CONTEXT_SIGNING_KEY,
+                "BECERTAIN_SERVICE_TOKEN": self.BECERTAIN_SERVICE_TOKEN,
+                "BECERTAIN_CONTEXT_SIGNING_KEY": self.BECERTAIN_CONTEXT_SIGNING_KEY,
+                "INBOUND_WEBHOOK_TOKEN": self.INBOUND_WEBHOOK_TOKEN,
+            }
+            for key, value in required_production_secrets.items():
+                if _is_weak_secret(value):
+                    raise ValueError(f"{key} must be set to a strong non-placeholder secret in production")
+            if self.ALLOWLIST_FAIL_OPEN:
+                raise ValueError("ALLOWLIST_FAIL_OPEN must be false in production")
 
         if self.MAX_QUERY_LIMIT <= 0:
             raise ValueError("MAX_QUERY_LIMIT must be greater than 0")

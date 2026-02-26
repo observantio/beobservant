@@ -1,5 +1,3 @@
-# This docker-compose file is intended for stable releases of BeObservant. For development, use docker-compose.dev.yml which includes additional services and mounts source code for live reloading.
-
 networks:
   obs:
     driver: bridge
@@ -95,6 +93,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    environment:
+      GATEWAY_HOST: 0.0.0.0
     networks: [obs]
     restart: unless-stopped
     healthcheck:
@@ -111,6 +111,8 @@ services:
     networks: [obs]
     environment:
       REDIS_URL: redis://redis:6379/0
+      BECERTAIN_HOST: 0.0.0.0
+      BECERTAIN_PORT: 4322
     depends_on:
       postgres:
         condition: service_healthy

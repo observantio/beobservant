@@ -251,19 +251,19 @@ async def _find_silence_for_mutation(
         resp = await benotified_proxy_service._client.request("GET", target, headers=headers)
     except httpx.TimeoutException as exc:
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="BeNotified request timed out") from exc
-    except Exception as exc:
+    except httpx.HTTPError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to contact BeNotified") from exc
 
     if resp.status_code >= 400:
         try:
             detail = resp.json()
-        except Exception:
+        except ValueError:
             detail = resp.text or "Unable to fetch silence"
         raise HTTPException(status_code=resp.status_code, detail=detail)
 
     try:
         data = resp.json()
-    except Exception as exc:
+    except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Invalid silence response from BeNotified") from exc
 
     silences = data if isinstance(data, list) else []
@@ -347,6 +347,13 @@ async def alert_warning(request: Request):
 
 @router.get("/public/rules")
 async def public_rules_proxy(request: Request):
+    enforce_public_endpoint_security(
+        request,
+        scope="alertmanager_public_rules",
+        limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
+        window_seconds=60,
+        allowlist=config.AUTH_PUBLIC_IP_ALLOWLIST,
+    )
     return await benotified_proxy_service.forward(
         request=request,
         upstream_path="/internal/v1/api/alertmanager/public/rules",

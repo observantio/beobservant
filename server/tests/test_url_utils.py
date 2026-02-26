@@ -29,6 +29,17 @@ class UrlUtilsTests(unittest.TestCase):
         self.assertFalse(is_safe_http_url("ftp://example.com"))
         self.assertFalse(is_safe_http_url("https:///missing-host"))
 
+    def test_rejects_local_and_private_targets(self):
+        self.assertFalse(is_safe_http_url("http://localhost:8080"))
+        self.assertFalse(is_safe_http_url("http://service.local/path"))
+        self.assertFalse(is_safe_http_url("http://127.0.0.1/admin"))
+        self.assertFalse(is_safe_http_url("http://10.0.0.10/api"))
+        self.assertFalse(is_safe_http_url("http://169.254.1.2/metadata"))
+        self.assertFalse(is_safe_http_url("http://[::1]/health"))
+
+    def test_rejects_non_fqdn_hosts(self):
+        self.assertFalse(is_safe_http_url("http://internal-service/path"))
+
 
 if __name__ == "__main__":
     unittest.main()

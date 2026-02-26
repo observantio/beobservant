@@ -35,7 +35,6 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    user: "0:0"
     env_file:
       - .env
     ports:
@@ -98,6 +97,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    environment:
+      GATEWAY_HOST: 0.0.0.0
     networks: [obs]
     restart: unless-stopped
     healthcheck:
@@ -116,6 +117,8 @@ services:
     networks: [obs]
     environment:
       REDIS_URL: redis://redis:6379/0
+      BECERTAIN_HOST: 0.0.0.0
+      BECERTAIN_PORT: 4322
     depends_on:
       postgres:
         condition: service_healthy

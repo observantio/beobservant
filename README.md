@@ -69,11 +69,23 @@ git clone https://github.com/observantio/benotified BeNotified
 docker compose up -d --build
 ```
 
+For explicit permissive development overrides:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
 **Option B: User Mode (Pre-built Images)**
 *Best for testing the platform features.*
 
 ```bash
 docker compose -f docker-compose.stable.yml up -d
+```
+
+For strict fail-closed production profile:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 ### 3. Access the Platform
@@ -112,6 +124,14 @@ Be Observant is built with a "Security First" mindset:
 * **Auditability:** Immutable DB triggers ensure every configuration change is logged.
 * **Hardened Proxy:** Grafana is never exposed directly; all traffic passes through an RBAC-enforced NGINX layer.
 
+Security operations documents:
+
+* [`deployment/security/security-assessment.md`](deployment/security/security-assessment.md)
+* [`deployment/security/production-readiness-checklist.md`](deployment/security/production-readiness-checklist.md)
+* [`deployment/security/key-rotation-matrix.md`](deployment/security/key-rotation-matrix.md)
+* [`deployment/security/db-migration-runbook.md`](deployment/security/db-migration-runbook.md)
+* [`deployment/README.md`](deployment/README.md)
+
 ---
 
 ## ✅ Production Readiness Checklist
@@ -122,4 +142,4 @@ Before deploying to production, ensure you have:
 * [ ] Enabled `RATE_LIMIT_BACKEND=redis` for distributed throttling.
 * [ ] Configured `WEBHOOK_IP_ALLOWLIST` to restrict incoming traffic.
 * [ ] Integrated with **Hashicorp Vault** for secret management (`VAULT_ENABLED=true`).
-* [ ] Set `DB_AUTO_CREATE_SCHEMA=false` to prevent accidental migrations.
+* [ ] Verify startup DB bootstrap behavior for your environment (`server`, `BeNotified`, `BeCertain` now auto-create schema).

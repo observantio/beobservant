@@ -173,7 +173,7 @@ class BeNotifiedProxyService:
                 details={"correlation_id": corr, "timeout": self.timeout},
             )
             raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="BeNotified request timed out") from exc
-        except Exception as exc:
+        except httpx.HTTPError as exc:
             self._write_audit(
                 current_user=current_user,
                 action=f"{audit_action}.error",

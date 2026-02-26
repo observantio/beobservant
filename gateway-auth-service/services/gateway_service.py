@@ -10,14 +10,12 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 from __future__ import annotations
 
-import json
 import logging
-import ssl
-import urllib.error
-import urllib.request
 from ipaddress import ip_address, ip_network
 from typing import Optional
+from urllib.parse import quote
 
+import httpx
 from fastapi import HTTPException, Request, status
 
 from . import config as gw_config
@@ -42,20 +40,16 @@ def _parse_networks(allowlist: str) -> list:
     return networks
 
 
-def _build_ssl_context() -> ssl.SSLContext | None:
+def _http_verify_setting() -> str | bool:
     if not gw_config.AUTH_API_URL.startswith("https"):
-        return None
-    ctx = ssl.create_default_context()
+        return False
     if gw_config.SSL_CA_CERTS:
-        ctx.load_verify_locations(gw_config.SSL_CA_CERTS)
-    if not gw_config.SSL_VERIFY:
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-    return ctx
+        return gw_config.SSL_CA_CERTS
+    return bool(gw_config.SSL_VERIFY)
 
 
 class GatewayAuthService:
-    __slots__ = ("_rate_limiter", "_networks", "_token_cache", "_ssl_ctx")
+    __slots__ = ("_rate_limiter", "_networks", "_token_cache", "_http_verify", "_auth_api_url")
 
     def __init__(
         self,
@@ -78,7 +72,8 @@ class GatewayAuthService:
             token_cache_ttl if token_cache_ttl is not None else gw_config.TOKEN_CACHE_TTL,
             gw_config.TOKEN_CACHE_REDIS_URL or None,
         )
-        self._ssl_ctx = _build_ssl_context()
+        self._http_verify = _http_verify_setting()
+        self._auth_api_url = gw_config.AUTH_API_URL
 
     @staticmethod
     def _trusted_proxy_peer(request: Request) -> bool:
@@ -136,68 +131,66 @@ class GatewayAuthService:
     def enforce_rate_limit(self, request: Request) -> None:
         self._rate_limiter.enforce(self._client_ip(request))
 
+    @staticmethod
+    def _auth_request_headers(token: str | None = None) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if gw_config.INTERNAL_SERVICE_TOKEN:
+            headers["X-Internal-Token"] = gw_config.INTERNAL_SERVICE_TOKEN
+        if token is not None:
+            headers["X-OTLP-Token"] = token
+            headers["Content-Type"] = "application/json"
+        return headers
+
+    @staticmethod
+    def _extract_org_id(response: httpx.Response) -> Optional[str]:
+        try:
+            payload = response.json()
+        except ValueError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        org_id = payload.get("org_id")
+        return str(org_id).strip() if org_id else None
+
     def _fetch_org_from_api(self, token: str) -> Optional[str]:
         if not token:
             return None
-        url = gw_config.AUTH_API_URL
-        headers = {}
-        if gw_config.INTERNAL_SERVICE_TOKEN:
-            headers["X-Internal-Token"] = gw_config.INTERNAL_SERVICE_TOKEN
-        headers["Content-Type"] = "application/json"
-        headers["X-OTLP-Token"] = token
-        req = urllib.request.Request(
-            url,
-            headers=headers,
-            data=json.dumps({"token": token}).encode("utf-8"),
-            method="POST",
-        )
+        url = self._auth_api_url
+        headers = self._auth_request_headers(token)
         try:
-            with urllib.request.urlopen(req, timeout=2, context=self._ssl_ctx) as resp:
-                if resp.status == 200:
-                    try:
-                        data = json.loads(resp.read())
-                    except Exception:
-                        return None
-                    return data.get("org_id")
-                if resp.status == 404:
-                    return None
-                raise DatabaseUnavailable(f"unexpected status {resp.status}")
-        except urllib.error.HTTPError as e:
-            if e.code in {404, 405}:
+            with httpx.Client(timeout=2.0, verify=self._http_verify) as client:
+                resp = client.post(url, headers=headers, json={"token": token})
+            if resp.status_code == 200:
+                return self._extract_org_id(resp)
+            if resp.status_code == 404:
+                return None
+            if resp.status_code in {405}:
                 return self._fetch_org_from_api_legacy_query(token)
-            logger.warning("Auth API HTTPError %s", e)
-            raise DatabaseUnavailable from e
-        except Exception as e:
-            logger.warning("Auth API request failed: %s", e)
-            raise DatabaseUnavailable from e
+            raise DatabaseUnavailable(f"unexpected status {resp.status_code}")
+        except httpx.HTTPError as exc:
+            logger.warning("Auth API HTTP transport failure: %s", type(exc).__name__)
+            raise DatabaseUnavailable from exc
+        except Exception as exc:
+            logger.warning("Auth API request failed: %s", exc)
+            raise DatabaseUnavailable from exc
 
     def _fetch_org_from_api_legacy_query(self, token: str) -> Optional[str]:
-        from urllib.parse import quote
-
-        legacy_url = f"{gw_config.AUTH_API_URL}?token={quote(token)}"
-        headers = {}
-        if gw_config.INTERNAL_SERVICE_TOKEN:
-            headers["X-Internal-Token"] = gw_config.INTERNAL_SERVICE_TOKEN
-        req = urllib.request.Request(legacy_url, headers=headers, method="GET")
+        legacy_url = f"{self._auth_api_url}?token={quote(token)}"
+        headers = self._auth_request_headers()
         try:
-            with urllib.request.urlopen(req, timeout=2, context=self._ssl_ctx) as resp:
-                if resp.status == 200:
-                    try:
-                        data = json.loads(resp.read())
-                    except Exception:
-                        return None
-                    return data.get("org_id")
-                if resp.status == 404:
-                    return None
-                raise DatabaseUnavailable(f"unexpected status {resp.status}")
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
+            with httpx.Client(timeout=2.0, verify=self._http_verify) as client:
+                resp = client.get(legacy_url, headers=headers)
+            if resp.status_code == 200:
+                return self._extract_org_id(resp)
+            if resp.status_code in {404, 410}:
                 return None
-            logger.warning("Auth API HTTPError %s", e)
-            raise DatabaseUnavailable from e
-        except Exception as e:
-            logger.warning("Auth API request failed: %s", e)
-            raise DatabaseUnavailable from e
+            raise DatabaseUnavailable(f"unexpected status {resp.status_code}")
+        except httpx.HTTPError as exc:
+            logger.warning("Auth API legacy HTTP failure: %s", type(exc).__name__)
+            raise DatabaseUnavailable from exc
+        except Exception as exc:
+            logger.warning("Auth API request failed: %s", exc)
+            raise DatabaseUnavailable from exc
 
     def validate_otlp_token(self, token: str) -> Optional[str]:
         if not token:

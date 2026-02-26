@@ -8,11 +8,9 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 import asyncio
-import base64
 import json
 import time
 import os
-import pickle
 import logging
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -45,8 +43,12 @@ class TTLCache:
 
         self._redis_client = None
         self._redis_connected = False
-        self._redis_url = (os.getenv("TTL_CACHE_REDIS_URL") or os.getenv("RATE_LIMIT_REDIS_URL") or "").strip()
-        self._key_prefix = (os.getenv("TTL_CACHE_KEY_PREFIX") or "beobs:ttl").strip()
+        self._redis_url = (
+            os.environ.get("TTL_CACHE_REDIS_URL")
+            or os.environ.get("RATE_LIMIT_REDIS_URL")
+            or ""
+        ).strip()
+        self._key_prefix = (os.environ.get("TTL_CACHE_KEY_PREFIX") or "beobs:ttl").strip()
 
         if _redis_asyncio is not None and self._redis_url:
             try:
@@ -78,22 +80,21 @@ class TTLCache:
     def _serialize_value(self, value: Any) -> bytes:
         try:
             return b"j:" + json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-        except Exception:
-            # Compatibility fallback for non-JSON values; keep warn-first policy.
-            logger.warning("TTL cache value is not JSON-serializable; using legacy pickle fallback")
-            return b"p:" + base64.b64encode(pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL))
+        except Exception as exc:
+            raise ValueError("TTL cache only supports JSON-serializable values") from exc
 
     def _deserialize_value(self, raw: bytes) -> Optional[Any]:
         if raw is None:
             return None
         if raw.startswith(b"j:"):
-            return json.loads(raw[2:].decode("utf-8"))
-        if raw.startswith(b"p:"):
-            logger.warning("TTL cache read encountered legacy pickled value")
-            return pickle.loads(base64.b64decode(raw[2:]))
-        # Backward compatibility for pre-prefix values.
-        logger.warning("TTL cache read encountered untagged legacy value; attempting pickle decode")
-        return pickle.loads(raw)
+            try:
+                return json.loads(raw[2:].decode("utf-8"))
+            except Exception:
+                logger.warning("TTL cache JSON payload is invalid; dropping cache value")
+                return None
+        # Strict mode: no pickle or arbitrary bytes deserialization.
+        logger.warning("TTL cache encountered non-JSON legacy payload; dropping cache value")
+        return None
 
     async def get(self, key: str) -> Optional[Any]:
         async with self._lock:

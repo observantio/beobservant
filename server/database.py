@@ -36,13 +36,18 @@ def init_database(
         logger.debug("Database already initialized; skipping re-init.")
         return
 
+    resolved_pool_size = pool_size or int(os.environ.get("DB_POOL_SIZE") or "10")
+    resolved_max_overflow = int(os.environ.get("DB_MAX_OVERFLOW") or "20")
+    resolved_pool_timeout = int(os.environ.get("DB_POOL_TIMEOUT") or "30")
+    resolved_pool_recycle = int(os.environ.get("DB_POOL_RECYCLE") or "1800")
+
     _engine = create_engine(
         database_url,
         pool_pre_ping=True,
-        pool_size=pool_size or int(os.getenv("DB_POOL_SIZE", "10")),
-        max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "20")),
-        pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
-        pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),
+        pool_size=resolved_pool_size,
+        max_overflow=resolved_max_overflow,
+        pool_timeout=resolved_pool_timeout,
+        pool_recycle=resolved_pool_recycle,
         echo=echo,
     )
 
@@ -110,12 +115,6 @@ def dispose_database() -> None:
 def init_db() -> None:
     if _engine is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
-
-    from config import config
-
-    if not config.DB_AUTO_CREATE_SCHEMA:
-        logger.info("Skipping schema creation: DB_AUTO_CREATE_SCHEMA=false")
-        return
 
     logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=_engine)

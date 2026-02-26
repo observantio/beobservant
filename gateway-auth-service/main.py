@@ -41,7 +41,17 @@ async def lifespan(app: FastAPI):
     while True:
         try:
             if gw_config.AUTH_API_URL:
-                _service._fetch_org_from_api(gw_config.GATEWAY_STATUS_OTLP_TOKEN)
+                probe_token = gw_config.GATEWAY_STATUS_OTLP_TOKEN
+                if not probe_token:
+                    if gw_config.GATEWAY_STARTUP_CHECK_MODE == "strict":
+                        raise RuntimeError(
+                            "GATEWAY_STATUS_OTLP_TOKEN is required when GATEWAY_STARTUP_CHECK_MODE=strict"
+                        )
+                    probe_token = "__gateway_startup_probe__"
+                    logger.warning(
+                        "GATEWAY_STATUS_OTLP_TOKEN is not set; using synthetic startup probe token to verify auth API connectivity"
+                    )
+                _service._fetch_org_from_api(probe_token)
             logger.info("Startup connectivity checks passed")
             break
         except Exception as exc:
@@ -62,8 +72,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="BeObservant Gateway Auth Service",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if gw_config.ENABLE_API_DOCS else None,
+    redoc_url="/redoc" if gw_config.ENABLE_API_DOCS else None,
+    openapi_url="/openapi.json" if gw_config.ENABLE_API_DOCS else None,
     lifespan=lifespan,
 )
 
@@ -78,7 +89,7 @@ async def health_root():
 if __name__ == "__main__":
     uvicorn_kwargs: dict = {
         "app": "main:app",
-        "host": "0.0.0.0",
+        "host": gw_config.HOST,
         "port": gw_config.PORT,
         "log_level": gw_config.LOG_LEVEL.lower(),
     }

@@ -44,8 +44,10 @@ def _verify_service_token(x_internal_token: str = Header(...)) -> None:
 
 def _validate_token_or_404(token: str):
     try:
-        org_id = _auth_service.validate_otlp_token(token)
+        org_id = _auth_service.validate_otlp_token(token, suppress_errors=False)
     except SQLAlchemyError:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Auth database unavailable")
+    except Exception:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Auth database unavailable")
 
     if not org_id:
@@ -56,8 +58,11 @@ def _validate_token_or_404(token: str):
 
 @router.get("/otlp/validate", dependencies=[Depends(_verify_service_token)])
 async def validate_otlp_token_query(token: str = Query(..., min_length=1)):
-    # Deprecated compatibility path: token query parameter.
-    return _validate_token_or_404(token)
+    _ = token
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Legacy query token validation is disabled; use POST /api/internal/otlp/validate",
+    )
 
 
 @router.post("/otlp/validate", dependencies=[Depends(_verify_service_token)])

@@ -51,8 +51,100 @@ jobs:
       - name: Run server tests
         run: pytest -q
 
-  security:
-    name: Security scans
+  server-security-regression:
+    name: Server security regression
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pytest-asyncio
+
+      - name: Run targeted security tests
+        run: |
+          pytest -q tests/test_internal_router.py tests/test_config_security.py tests/test_url_utils.py tests/test_alertmanager_proxy_security_matrix.py tests/test_benotified_proxy_tenant_isolation.py
+
+  benotified-security-regression:
+    name: BeNotified security regression
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BeNotified
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pytest-asyncio
+
+      - name: Run targeted security tests
+        run: |
+          pytest -q tests/test_security_dependencies.py tests/test_config_security.py tests/test_url_utils.py tests/test_secret_migration.py
+
+  gateway-security-regression:
+    name: Gateway security regression
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway-auth-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+
+      - name: Run targeted security tests
+        run: |
+          pytest -q tests/test_config_security.py tests/test_gateway_rate_limit.py
+
+  becertain-security-regression:
+    name: BeCertain security regression
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BeCertain
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pytest-asyncio
+
+      - name: Run targeted security tests
+        run: |
+          pytest -q tests/test_internal_security.py tests/test_config_security.py tests/test_route_permissions.py
+
+  security-static:
+    name: Security static scans
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +156,7 @@ jobs:
       - name: Install security tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pip-audit detect-secrets
+          python -m pip install pip-audit detect-secrets bandit
 
       - name: Run detect-secrets scan
         run: |
@@ -73,5 +165,21 @@ jobs:
           fi
           detect-secrets scan --baseline .secrets.baseline
 
+      - name: Run bandit (fail on medium/high)
+        run: |
+          bandit -q -r BeNotified -x BeNotified/tests,BeNotified/.pytest_cache -ll -ii
+          bandit -q -r server -x server/tests,server/.pytest_cache -ll -ii
+          bandit -q -r gateway-auth-service -x gateway-auth-service/tests,gateway-auth-service/.pytest_cache -ll -ii
+          bandit -q -r BeCertain -x BeCertain/tests,BeCertain/.pytest_cache -ll -ii
+
       - name: Run server dependency audit
         run: pip-audit -r server/requirements.txt
+
+      - name: Run BeNotified dependency audit
+        run: pip-audit -r BeNotified/requirements.txt
+
+      - name: Run gateway dependency audit
+        run: pip-audit -r gateway-auth-service/requirements.txt
+
+      - name: Run BeCertain dependency audit
+        run: pip-audit -r BeCertain/requirements.txt

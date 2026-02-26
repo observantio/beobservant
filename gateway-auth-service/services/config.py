@@ -10,6 +10,32 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 from __future__ import annotations
 import os
+from urllib.parse import urlparse
+
+
+def _env_name() -> str:
+    return (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "development").strip().lower()
+
+
+def _is_production_env() -> bool:
+    return _env_name() in {"prod", "production"}
+
+
+def _to_bool(value: str | None, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _is_weak_secret(value: str | None) -> bool:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return True
+    weak_markers = ("changeme", "replace_with", "example", "default", "secret", "password")
+    return any(marker in normalized for marker in weak_markers)
+
+APP_ENV: str = _env_name()
+IS_PRODUCTION: bool = _is_production_env()
 
 RATE_LIMIT_PER_MINUTE: int = int(os.getenv("GATEWAY_RATE_LIMIT_PER_MINUTE", "30000"))
 RATE_LIMIT_BACKEND: str = os.getenv("GATEWAY_RATE_LIMIT_BACKEND", "auto").strip().lower()
@@ -39,6 +65,8 @@ SSL_VERIFY: bool = os.getenv("GATEWAY_SSL_VERIFY", "true").lower() not in ("0", 
 SSL_CA_CERTS: str = os.getenv("GATEWAY_SSL_CA_CERTS", "").strip()
 SSL_KEYFILE: str = os.getenv("GATEWAY_SSL_KEYFILE", "").strip()
 SSL_CERTFILE: str = os.getenv("GATEWAY_SSL_CERTFILE", "").strip()
+HOST: str = os.getenv("GATEWAY_HOST", os.getenv("HOST", "127.0.0.1")).strip()
+ENABLE_API_DOCS: bool = _to_bool(os.getenv("ENABLE_API_DOCS"), default=not IS_PRODUCTION)
 
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info").upper()
 PORT: int = int(os.getenv("GATEWAY_PORT", os.getenv("PORT", "4321")))
@@ -46,3 +74,25 @@ PORT: int = int(os.getenv("GATEWAY_PORT", os.getenv("PORT", "4321")))
 GATEWAY_STARTUP_RETRIES: int = int(os.getenv("GATEWAY_STARTUP_RETRIES", os.getenv("GATEWAY_DB_STARTUP_RETRIES", "10")))
 GATEWAY_STARTUP_BACKOFF: float = float(os.getenv("GATEWAY_STARTUP_BACKOFF", os.getenv("GATEWAY_DB_STARTUP_BACKOFF", "1.0")))
 GATEWAY_STATUS_OTLP_TOKEN   = os.getenv("GATEWAY_STATUS_OTLP_TOKEN", "").strip()
+GATEWAY_STARTUP_CHECK_MODE: str = os.getenv(
+    "GATEWAY_STARTUP_CHECK_MODE",
+    "strict" if IS_PRODUCTION else "warn",
+).strip().lower()
+
+if GATEWAY_STARTUP_CHECK_MODE not in {"strict", "warn"}:
+    raise ValueError("GATEWAY_STARTUP_CHECK_MODE must be either 'strict' or 'warn'")
+
+_parsed_auth_url = urlparse(AUTH_API_URL)
+if _parsed_auth_url.scheme not in {"http", "https"}:
+    raise ValueError("GATEWAY_AUTH_API_URL must use http or https")
+if IS_PRODUCTION:
+    if _parsed_auth_url.scheme != "https":
+        raise ValueError("GATEWAY_AUTH_API_URL must use https in production")
+    if not SSL_VERIFY:
+        raise ValueError("GATEWAY_SSL_VERIFY must be true in production")
+    if ALLOWLIST_FAIL_OPEN:
+        raise ValueError("GATEWAY_ALLOWLIST_FAIL_OPEN must be false in production")
+    if _is_weak_secret(INTERNAL_SERVICE_TOKEN):
+        raise ValueError("GATEWAY_INTERNAL_SERVICE_TOKEN must be a strong non-placeholder secret in production")
+    if GATEWAY_STARTUP_CHECK_MODE == "strict" and not GATEWAY_STATUS_OTLP_TOKEN:
+        raise ValueError("GATEWAY_STATUS_OTLP_TOKEN is required in production when GATEWAY_STARTUP_CHECK_MODE=strict")

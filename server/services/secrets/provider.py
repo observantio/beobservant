@@ -28,7 +28,7 @@ class EnvSecretProvider:
     """
 
     def get(self, key: str) -> Optional[str]:
-        val = os.getenv(key)
+        val = os.environ.get(key)
         return val if val else None
 
     def get_many(self, keys: List[str]) -> Dict[str, Optional[str]]:

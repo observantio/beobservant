@@ -226,7 +226,7 @@ def update_password(service, user_id: str, password_update, tenant_id: str) -> b
         return True
 
 
-def validate_otlp_token(service, token: str) -> Optional[str]:
+def validate_otlp_token(service, token: str, *, suppress_errors: bool = True) -> Optional[str]:
     if not token:
         return None
     default_token = getattr(config, "DEFAULT_OTLP_TOKEN", None)
@@ -250,6 +250,8 @@ def validate_otlp_token(service, token: str) -> Optional[str]:
                 return None
             return api_key.key
     except Exception as exc:
+        if not suppress_errors:
+            raise
         service.logger.warning("OTLP token validation failed due to internal error")
         service.logger.debug("OTLP validation error detail: %s", exc)
         return None
