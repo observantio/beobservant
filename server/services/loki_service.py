@@ -253,8 +253,9 @@ class LokiService:
         query_str: str,
         at_time: Optional[int] = None,
         tenant_id: str = config.DEFAULT_ORG_ID,
+        limit: int = config.DEFAULT_QUERY_LIMIT,
     ) -> LogResponse:
-        params: Dict[str, Any] = {"query": query_str, "limit": 100}
+        params: Dict[str, Any] = {"query": query_str, "limit": limit}
         if at_time is not None:
             params["time"] = at_time
 

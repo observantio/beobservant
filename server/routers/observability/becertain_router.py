@@ -48,7 +48,7 @@ async def create_analyze_job(
     payload: AnalyzeRequestPayload,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_RCA, "becertain")),
 ):
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     upstream = await becertain_proxy_service.request_json(
         method="POST",
         upstream_path="/api/v1/jobs/analyze",
@@ -69,7 +69,7 @@ async def list_analyze_jobs(
     cursor: Optional[str] = Query(default=None),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "becertain")),
 ):
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     params: Dict[str, Any] = {"limit": limit}
     if status_filter:
         params["status"] = status_filter.value
@@ -93,7 +93,7 @@ async def get_analyze_job(
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "becertain")),
 ):
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     upstream = await becertain_proxy_service.request_json(
         method="GET",
         upstream_path=f"/api/v1/jobs/{job_id}",
@@ -111,7 +111,7 @@ async def get_analyze_job_result(
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "becertain")),
 ):
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     upstream = await becertain_proxy_service.request_json(
         method="GET",
         upstream_path=f"/api/v1/jobs/{job_id}/result",
@@ -129,7 +129,7 @@ async def get_report_by_id(
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "becertain")),
 ):
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     upstream = await becertain_proxy_service.request_json(
         method="GET",
         upstream_path=f"/api/v1/reports/{report_id}",
@@ -147,7 +147,7 @@ async def delete_report_by_id(
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_RCA, "becertain")),
 ):
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     upstream = await becertain_proxy_service.request_json(
         method="DELETE",
         upstream_path=f"/api/v1/reports/{report_id}",
@@ -167,7 +167,7 @@ async def _proxy_post(
     payload: AnalyzeProxyPayload | Dict[str, Any],
     audit_action: str,
 ):
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     payload_data = (
         payload.model_dump(exclude_none=True)
         if isinstance(payload, AnalyzeProxyPayload)
@@ -279,7 +279,7 @@ async def ml_weights(
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "becertain")),
 ):
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     return await becertain_proxy_service.request_json(
         method="GET",
         upstream_path="/api/v1/ml/weights",
@@ -297,7 +297,7 @@ async def events_deployments(
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "becertain")),
 ):
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     return await becertain_proxy_service.request_json(
         method="GET",
         upstream_path="/api/v1/events/deployments",

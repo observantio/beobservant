@@ -16,6 +16,7 @@ from ipaddress import ip_address, ip_network
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.concurrency import run_in_threadpool
 
 from config import config
 from database import get_db_session
@@ -41,8 +42,7 @@ def _extract_bearer_token(
         return cookie_token
     return None
 
-
-def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
+async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
     default_org_id = getattr(current_user, "org_id", config.DEFAULT_ORG_ID)
     header_value = request.headers.get("x-scope-orgid") or request.headers.get("X-Scope-OrgID")
     if not header_value:
@@ -56,7 +56,11 @@ def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
         return candidate_org_id
 
     try:
-        allowed_org_ids = _load_allowed_org_ids_for_user(current_user=current_user, default_org_id=default_org_id)
+        allowed_org_ids = await run_in_threadpool(
+            _load_allowed_org_ids_for_user,
+            current_user=current_user,
+            default_org_id=default_org_id,
+        )
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -69,15 +73,25 @@ def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
             detail="Tenant scope not permitted for this user",
         )
 
-    if _scope_exists_in_other_tenants(org_id=candidate_org_id, tenant_id=current_user.tenant_id):
-        # Fail closed when a scope key is reused by other tenants.
+    try:
+        conflict = await run_in_threadpool(
+            _scope_exists_in_other_tenants,
+            org_id=candidate_org_id,
+            tenant_id=current_user.tenant_id,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to resolve tenant scope",
+        )
+
+    if conflict:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant scope is ambiguous across tenants",
         )
 
     return candidate_org_id
-
 
 def _load_allowed_org_ids_for_user(*, current_user: TokenData, default_org_id: str) -> set[str]:
     allowed_org_ids: set[str] = set()

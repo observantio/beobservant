@@ -43,7 +43,7 @@ async def search_traces(
         end=end,
         limit=limit
     )
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     return await tempo_service.search_traces(query, tenant_id=tenant_id, fetch_full_traces=fetch_full)
 
 
@@ -53,7 +53,7 @@ async def get_trace(
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
 ) -> Trace:
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     trace = await tempo_service.get_trace(trace_id, tenant_id=tenant_id)
     if not trace:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Trace {trace_id} not found")
@@ -65,7 +65,7 @@ async def get_services(
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
 ) -> List[str]:
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     return await tempo_service.get_services(tenant_id=tenant_id)
 
 
@@ -75,5 +75,5 @@ async def get_operations(
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
 ) -> List[str]:
-    tenant_id = resolve_tenant_id(request, current_user)
+    tenant_id = await resolve_tenant_id(request, current_user)
     return await tempo_service.get_operations(service, tenant_id=tenant_id)
