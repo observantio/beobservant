@@ -185,3 +185,15 @@ def test_validate_group_visibility_success_for_admin_and_member():
 
     groups2 = svc._validate_group_visibility(db, tenant_id="t1", group_ids=["g1", "g2"], shared_group_ids=["g1", "g2"], is_admin=False)
     assert {g.id for g in groups2} == {"g1", "g2"}
+
+
+def test_required_permissions_for_rotate_path():
+    # ensure our permission lookup covers the token-rotate endpoint so that
+    # the proxy config can safely allow it without blocking on missing perms
+    from services.grafana import proxy_auth_ops
+
+    perms = proxy_auth_ops._required_permissions_for_path("/grafana/api/user/auth-tokens/rotate", "POST")
+    assert Permission.READ_DASHBOARDS.value in perms
+    # generic GET requests should also include read dashboards
+    perms2 = proxy_auth_ops._required_permissions_for_path("/grafana/api/user/auth-tokens/rotate", "GET")
+    assert Permission.READ_DASHBOARDS.value in perms2
