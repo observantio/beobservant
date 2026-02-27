@@ -11,20 +11,15 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, ConfigDict, Field
 
-
 class DashboardMeta(BaseModel):
-    """Dashboard metadata."""
     is_starred: bool = Field(False, alias="isStarred", description="Whether the dashboard is starred")
     slug: Optional[str] = Field(None, description="URL slug of the dashboard")
     folder: Optional[int] = Field(None, description="Folder ID containing the dashboard")
     url: Optional[str] = Field(None, description="URL of the dashboard")
     version: Optional[int] = Field(None, description="Version number of the dashboard")
-    
     model_config = ConfigDict(populate_by_name=True)
 
-
 class Dashboard(BaseModel):
-    """Dashboard representation."""
     id: Optional[int] = Field(None, description="Unique identifier for the dashboard")
     uid: Optional[str] = Field(None, description="Unique identifier string for the dashboard")
     title: str = Field(..., description="Title of the dashboard")
@@ -38,32 +33,23 @@ class Dashboard(BaseModel):
     time: Optional[Dict[str, Any]] = Field(None, description="Time range configuration")
     time_picker: Optional[Dict[str, Any]] = Field(None, alias="timePicker", description="Time picker configuration")
     editable: bool = Field(True, description="Whether the dashboard is editable")
-    
     model_config = ConfigDict(populate_by_name=True)
 
-
 class DashboardCreate(BaseModel):
-    """Create a new dashboard."""
     dashboard: Dashboard = Field(..., description="Dashboard configuration")
     folder_id: int = Field(0, alias="folderId", description="ID of the folder to create the dashboard in")
     overwrite: bool = Field(False, description="Whether to overwrite existing dashboard")
     message: Optional[str] = Field(None, description="Commit message for the dashboard creation")
-    
     model_config = ConfigDict(populate_by_name=True)
 
-
 class DashboardUpdate(BaseModel):
-    """Update dashboard."""
     dashboard: Dashboard = Field(..., description="Updated dashboard configuration")
     folder_id: Optional[int] = Field(None, alias="folderId", description="ID of the folder containing the dashboard")
     overwrite: bool = Field(True, description="Whether to overwrite existing dashboard")
     message: Optional[str] = Field(None, description="Commit message for the dashboard update")
-    
     model_config = ConfigDict(populate_by_name=True)
 
-
 class DashboardSearchResult(BaseModel):
-    """Dashboard search result."""
     id: int = Field(..., description="Unique identifier for the dashboard")
     uid: str = Field(..., description="Unique identifier string for the dashboard")
     title: str = Field(..., description="Title of the dashboard")
@@ -76,13 +62,10 @@ class DashboardSearchResult(BaseModel):
     folder_id: Optional[int] = Field(None, alias="folderId", description="ID of the containing folder")
     folder_uid: Optional[str] = Field(None, alias="folderUid", description="UID of the containing folder")
     folder_title: Optional[str] = Field(None, alias="folderTitle", description="Title of the containing folder")
-
-    # Extended fields for proxy server
     created_by: Optional[str] = Field(None, description="ID of the user who registered/created the dashboard")
     is_hidden: bool = Field(False, description="Whether the dashboard is hidden for the current user")
     is_owned: bool = Field(False, description="Whether the current user is the owner/creator")
     visibility: Optional[str] = Field(None, description="Visibility for the dashboard (private|group|tenant|public)")
     shared_group_ids: List[str] = Field(default_factory=list, alias="shared_group_ids")
     sharedGroupIds: List[str] = Field(default_factory=list, alias="sharedGroupIds")
-
     model_config = ConfigDict(populate_by_name=True)

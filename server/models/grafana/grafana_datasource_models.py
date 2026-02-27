@@ -13,9 +13,12 @@ from typing import Dict, Optional, Any, List
 from pydantic import BaseModel, ConfigDict, Field
 from enum import Enum
 
+DS_DISPLAY_NAME_DESC = "Display name of the datasource"
+DS_URL_DESC = "URL of the datasource"
+DS_IS_DEFAULT_DESC = "Whether this is the default datasource"
+DS_JSON_DATA_DESC = "Additional JSON configuration"
 
 class DatasourceType(str, Enum):
-    """Datasource types."""
     PROMETHEUS = "prometheus"
     LOKI = "loki"
     TEMPO = "tempo"
@@ -23,15 +26,7 @@ class DatasourceType(str, Enum):
     INFLUXDB = "influxdb"
     ELASTICSEARCH = "elasticsearch"
 
-
-DS_DISPLAY_NAME_DESC = "Display name of the datasource"
-DS_URL_DESC = "URL of the datasource"
-DS_IS_DEFAULT_DESC = "Whether this is the default datasource"
-DS_JSON_DATA_DESC = "Additional JSON configuration"
-
-
 class Datasource(BaseModel):
-    """Datasource representation."""
     id: Optional[int] = Field(None, description="Unique identifier for the datasource")
     uid: Optional[str] = Field(None, description="Unique identifier string for the datasource")
     org_id: Optional[int] = Field(None, alias="orgId", description="Organization ID")
@@ -53,18 +48,15 @@ class Datasource(BaseModel):
     secure_json_fields: Optional[Dict[str, bool]] = Field(None, alias="secureJsonFields", description="Secure JSON fields metadata")
     version: Optional[int] = Field(None, description="Version of the datasource")
     read_only: bool = Field(False, alias="readOnly", description="Whether the datasource is read-only")
-    # Extended fields for proxy server
     created_by: Optional[str] = Field(None, description="ID of the user who registered/created the datasource")
     is_hidden: bool = Field(False, description="Whether the datasource is hidden for the current user")
     is_owned: bool = Field(False, description="Whether the current user is the owner/creator")
     visibility: Optional[str] = Field(None, description="Visibility for the datasource (private|group|tenant|public)")
     shared_group_ids: List[str] = Field(default_factory=list, alias="shared_group_ids", description="IDs of groups shared with this datasource")
-    
     model_config = ConfigDict(populate_by_name=True)
 
 
 class DatasourceCreate(BaseModel):
-    """Create a new datasource."""
     name: str = Field(..., description=DS_DISPLAY_NAME_DESC)
     type: str = Field(..., description="Type of the datasource")
     url: str = Field(..., description=DS_URL_DESC)
@@ -73,12 +65,10 @@ class DatasourceCreate(BaseModel):
     org_id: Optional[str] = Field(None, description="Organization ID for multi-tenant datasources")
     json_data: Optional[Dict[str, Any]] = Field(None, alias="jsonData", description=DS_JSON_DATA_DESC)
     secure_json_data: Optional[Dict[str, Any]] = Field(None, alias="secureJsonData", description="Secure JSON configuration")
-    
     model_config = ConfigDict(populate_by_name=True)
 
 
 class DatasourceUpdate(BaseModel):
-    """Update datasource."""
     name: Optional[str] = Field(None, description=DS_DISPLAY_NAME_DESC)
     url: Optional[str] = Field(None, description=DS_URL_DESC)
     access: Optional[str] = Field(None, description="Access mode")
@@ -86,5 +76,4 @@ class DatasourceUpdate(BaseModel):
     org_id: Optional[str] = Field(None, description="Organization ID for multi-tenant datasources")
     json_data: Optional[Dict[str, Any]] = Field(None, alias="jsonData", description=DS_JSON_DATA_DESC)
     secure_json_data: Optional[Dict[str, Any]] = Field(None, alias="secureJsonData", description="Secure JSON configuration")
-    
     model_config = ConfigDict(populate_by_name=True)

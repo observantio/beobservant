@@ -7,8 +7,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
-from enum import Enum
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 import re
@@ -17,11 +16,7 @@ from config import config
 from .auth_models import Role, Permission
 from .api_key_models import ApiKey
 
-if TYPE_CHECKING:
-    pass
-
 _USERNAME_RE = re.compile(r'^[a-z0-9._-]{3,50}$')
-
 
 def _normalize_username(v: str, *, full_check: bool = True) -> str:
     if v is None:
@@ -38,7 +33,6 @@ def _normalize_username(v: str, *, full_check: bool = True) -> str:
         )
     return uname
 
-
 class UserBase(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
@@ -52,11 +46,9 @@ class UserBase(BaseModel):
     def normalize_username(cls, v):
         return _normalize_username(v, full_check=True)
 
-
 class UserCreate(UserBase):
     password: Optional[str] = Field(None, min_length=8)
     must_setup_mfa: Optional[bool] = False
-
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
@@ -67,11 +59,9 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     must_setup_mfa: Optional[bool] = None
 
-
 class UserPasswordUpdate(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8)
-
 
 class User(UserBase):
     id: str
@@ -86,13 +76,10 @@ class User(UserBase):
     api_keys: List[ApiKey] = Field(default_factory=list)
     mfa_enabled: bool = False
     must_setup_mfa: bool = False
-
     model_config = ConfigDict(from_attributes=True)
-
 
 class UserInDB(User):
     hashed_password: str
-
 
 class UserResponse(BaseModel):
     id: str
@@ -113,7 +100,6 @@ class UserResponse(BaseModel):
     mfa_enabled: bool = False
     must_setup_mfa: bool = False
 
-
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -123,35 +109,28 @@ class LoginRequest(BaseModel):
     def normalize_login_username(cls, v):
         return _normalize_username(v, full_check=False)
 
-
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: Optional[str] = None
-
     @field_validator('username', mode='before')
     def normalize_register_username(cls, v):
         return _normalize_username(v, full_check=True)
-
 
 class TotpEnrollResponse(BaseModel):
     otpauth_url: str
     secret: str
 
-
 class MfaVerifyRequest(BaseModel):
     code: str
-
 
 class MfaDisableRequest(BaseModel):
     current_password: Optional[str] = None
     code: Optional[str] = None
 
-
 class RecoveryCodesResponse(BaseModel):
     recovery_codes: List[str]
-
 
 class TempPasswordResetResponse(BaseModel):
     temporary_password: str

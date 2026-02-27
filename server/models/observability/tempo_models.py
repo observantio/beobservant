@@ -10,15 +10,12 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, ConfigDict, Field
-from datetime import datetime
 
 class SpanAttribute(BaseModel):
-    """Span attribute key-value pair."""
     key: str = Field(..., description="Attribute key")
     value: Any = Field(..., description="Attribute value")
 
 class Span(BaseModel):
-    """Trace span representation."""
     span_id: str = Field(..., alias="spanID", description="Unique identifier for the span")
     trace_id: str = Field(..., alias="traceID", description="Identifier of the trace this span belongs to")
     parent_span_id: Optional[str] = Field(None, alias="parentSpanID", description="Parent span ID if this is a child span")
@@ -30,20 +27,16 @@ class Span(BaseModel):
     attributes: Optional[Dict[str, Any]] = Field(None, description="Span attributes as a key-value map")
     process_id: Optional[str] = Field(None, alias="processID", description="Identifier of the process that created this span")
     warnings: Optional[List[str]] = Field(None, description="Warnings related to this span")
-    
     model_config = ConfigDict(populate_by_name=True)
 
 class Trace(BaseModel):
-    """Full trace with all spans."""
     trace_id: str = Field(..., alias="traceID", description="Unique identifier for the trace")
     spans: List[Span] = Field(..., description="List of spans in this trace")
     processes: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Process information for spans in this trace")
     warnings: Optional[List[str]] = Field(None, description="Warnings related to this trace")
-    
     model_config = ConfigDict(populate_by_name=True)
 
 class TraceQuery(BaseModel):
-    """Query parameters for trace search."""
     service: Optional[str] = Field(None, description="Service name to filter traces")
     operation: Optional[str] = Field(None, description="Operation name to filter spans")
     tags: Optional[Dict[str, str]] = Field(None, description="Tags to filter traces")
@@ -52,11 +45,9 @@ class TraceQuery(BaseModel):
     min_duration: Optional[str] = Field(None, alias="minDuration", description="Minimum duration filter (e.g., '0ms')")
     max_duration: Optional[str] = Field(None, alias="maxDuration", description="Maximum duration filter (e.g., '1s')")
     limit: int = Field(100, ge=1, le=1000, description="Maximum number of traces to return")
-    
     model_config = ConfigDict(populate_by_name=True)
 
 class TraceResponse(BaseModel):
-    """Response containing multiple traces."""
     data: List[Trace] = Field(..., description="List of traces matching the query")
     total: int = Field(..., description="Total number of traces available")
     limit: int = Field(..., description="Maximum number of traces requested")

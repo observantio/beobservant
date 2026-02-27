@@ -8,15 +8,11 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
-
 class Folder(BaseModel):
-    """Grafana folder."""
     id: Optional[int] = Field(None, description="Unique identifier for the folder")
     uid: Optional[str] = Field(None, description="Unique identifier string for the folder")
     title: str = Field(..., description="Title of the folder")
-    
     model_config = ConfigDict(populate_by_name=True)
