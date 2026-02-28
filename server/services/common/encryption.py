@@ -8,16 +8,12 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 import json
-import logging
 from functools import lru_cache
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from config import config as app_config
-
-logger = logging.getLogger(__name__)
-
 
 @lru_cache(maxsize=1)
 def _get_fernet() -> Fernet:

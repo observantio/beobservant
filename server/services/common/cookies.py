@@ -34,12 +34,7 @@ def is_secure_cookie_request(
     if not trust_proxy_headers:
         return False
 
-    # historically some builds allowed trust_proxy_headers without specifying
-    # any CIDRs (tests in this repo rely on that behaviour).  For backwards
-    # compatibility we fall through to header checking in that case, but a
-    # warning would be appropriate in production.
     if not trusted_proxy_cidrs:
-        # no networks to validate, accept based solely on header
         proto = request.headers.get("x-forwarded-proto", "")
         return proto.split(",")[0].strip().lower() == "https"
 
