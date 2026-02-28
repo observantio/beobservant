@@ -31,7 +31,7 @@ from services.grafana.route_payloads import (
     user_group_ids,
 )
 from services.grafana_proxy_service import GrafanaProxyService
-from services.grafana_service import GrafanaService
+from server.services.grafana_service import GrafanaService
 from models.access.auth_models import Permission, TokenData
 from config import config
 from database import get_db
@@ -84,7 +84,6 @@ async def grafana_auth(
     request: Request,
     token: Optional[str] = Query(None),
     orig: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
 ):
     enforce_public_endpoint_security(
         request,
@@ -97,7 +96,6 @@ async def grafana_auth(
 
     headers = await grafana_proxy_service.authorize_proxy_request(
         request=request,
-        db=db,
         auth_service=auth_service,
         token=token,
         orig=orig,
@@ -165,9 +163,6 @@ async def datasource_query(
     return await grafana_service.query_datasource(payload.model_dump(exclude_none=True))
 
 
-# NOTE: Static sub-paths (/meta/filters) must be declared before parameterised
-# routes (/{uid}) so FastAPI does not treat "meta" as a uid value.
-
 @router.get("/dashboards/meta/filters")
 async def get_dashboard_filter_metadata(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DASHBOARDS, "grafana")),
@@ -196,7 +191,6 @@ async def search_dashboards(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DASHBOARDS, "grafana")),
     db: Session = Depends(get_db),
 ) -> List[DashboardSearchResult]:
-    is_admin = is_admin_user(current_user)
     search_context = await run_in_threadpool(
         grafana_proxy_service.build_dashboard_search_context,
         db,
@@ -214,7 +208,6 @@ async def search_dashboards(
         uid=uid,
         team_id=team_id,
         show_hidden=show_hidden,
-        is_admin=is_admin,
         limit=limit,
         offset=offset,
         search_context=search_context,
@@ -322,8 +315,6 @@ async def hide_dashboard(
     return {"status": "success", "hidden": payload.hidden}
 
 
-# Static datasource sub-paths before /{uid}
-
 @router.get("/datasources/meta/filters")
 async def get_datasource_filter_metadata(
     current_user: TokenData = Depends(
@@ -370,7 +361,6 @@ async def get_datasources(
     ),
     db: Session = Depends(get_db),
 ):
-    is_admin = is_admin_user(current_user)
     datasource_context = await run_in_threadpool(
         grafana_proxy_service.build_datasource_list_context,
         db,
@@ -380,7 +370,7 @@ async def get_datasources(
     return await grafana_proxy_service.get_datasources(
         db=db, user_id=current_user.user_id,
         tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
-        uid=uid, team_id=team_id, show_hidden=show_hidden, is_admin=is_admin,
+        uid=uid, team_id=team_id, show_hidden=show_hidden,
         limit=limit, offset=offset,
         datasource_context=datasource_context,
     )

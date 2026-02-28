@@ -131,3 +131,31 @@ def test_cache_is_scoped_by_method_and_path():
             )
         )
     assert exc.value.status_code == 403
+
+
+def test_cache_ttl_is_configurable():
+    import importlib, os, sys
+
+    os.environ["GRAFANA_PROXY_CACHE_TTL"] = "1"
+    proxy_mod_name = "services.grafana.proxy_auth_ops"
+    if proxy_mod_name in sys.modules:
+        importlib.reload(sys.modules[proxy_mod_name])
+    proxy_mod = importlib.import_module(proxy_mod_name)
+    proxy_mod._PROXY_AUTH_CACHE.clear()
+
+    svc = GrafanaProxyService()
+    auth = FakeAuthService()
+    req = DummyRequest()
+    db = DummyDB()
+
+    # populate cache
+    _ = asyncio.run(
+        proxy_mod.authorize_proxy_request(svc, req, db, auth, token="tok-123", orig="/grafana/")
+    )
+    assert auth.decode_calls == 1
+    time.sleep(1.1)
+    # after TTL expires decode should be invoked again
+    _ = asyncio.run(
+        proxy_mod.authorize_proxy_request(svc, req, db, auth, token="tok-123", orig="/grafana/")
+    )
+    assert auth.decode_calls == 2

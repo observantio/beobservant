@@ -21,13 +21,11 @@ from services.common.http_client import create_async_client
 
 logger = logging.getLogger(__name__)
 
-
 class GrafanaAPIError(Exception):
     def __init__(self, status: int, body: Any = None):
         self.status = status
         self.body = body
         super().__init__(f"Grafana API error {status}: {body}")
-
 
 class GrafanaService:
     def __init__(

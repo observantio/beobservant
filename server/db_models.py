@@ -271,26 +271,6 @@ class AuditLog(Base):
     )
 
 
-@event.listens_for(AuditLog.__table__, "after_create")
-def _make_audit_logs_immutable(target, connection, **kw) -> None:
-    if connection.dialect.name != "postgresql":
-        return
-    connection.execute(text("""
-        CREATE OR REPLACE FUNCTION prevent_audit_log_mutation()
-        RETURNS trigger AS $$
-        BEGIN
-            RAISE EXCEPTION 'audit_logs are immutable';
-        END;
-        $$ LANGUAGE plpgsql;
-    """))
-    connection.execute(text("""
-        DROP TRIGGER IF EXISTS trg_audit_logs_immutable ON audit_logs;
-        CREATE TRIGGER trg_audit_logs_immutable
-        BEFORE UPDATE OR DELETE ON audit_logs
-        FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_mutation();
-    """))
-
-
 class GrafanaDashboard(Base):
     __tablename__ = "grafana_dashboards"
 

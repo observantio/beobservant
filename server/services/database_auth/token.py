@@ -15,7 +15,6 @@ from typing import Optional, Set
 from models.access.auth_models import Role, TokenData
 from services.auth.auth_ops import decode_token as decode_token_op
 
-
 def build_token_data_for_user(service, user) -> TokenData:
     role = _safe_role(getattr(user, "role", None))
 
@@ -29,7 +28,6 @@ def build_token_data_for_user(service, user) -> TokenData:
         permissions=service.get_user_permissions(user) or [],
         group_ids=[g.id for g in (getattr(user, "groups", None) or [])],
     )
-
 
 def decode_token(service, token: str) -> Optional[TokenData]:
     local_token = decode_token_op(service, token)
@@ -57,13 +55,11 @@ def decode_token(service, token: str) -> Optional[TokenData]:
 
     return token_data
 
-
 def _safe_role(raw_role: Optional[str]) -> Role:
     try:
         return Role(raw_role) 
     except Exception:
         return Role.USER
-
 
 def _known_permission_names(service) -> Set[str]:
     perms = service.list_all_permissions() or []

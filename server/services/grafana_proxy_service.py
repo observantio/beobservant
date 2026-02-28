@@ -19,7 +19,6 @@ from db_models import Group
 from models.access.auth_models import TokenData
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate, DashboardSearchResult
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
-from services.grafana_service import GrafanaService, GrafanaAPIError
 from services.grafana import proxy_auth_ops as _proxy_auth_ops
 from services.grafana.dashboard_ops import (
     check_dashboard_access, get_accessible_dashboard_uids, build_dashboard_search_context,
@@ -30,7 +29,7 @@ from services.grafana.datasource_ops import (
     check_datasource_access, check_datasource_access_by_id, get_accessible_datasource_uids,
     build_datasource_list_context, enforce_datasource_query_access,
     get_datasources, get_datasource, create_datasource, update_datasource,
-    delete_datasource, toggle_datasource_hidden, get_datasource_metadata,
+    delete_datasource, toggle_datasource_hidden, get_datasource_metadata, query_datasource
 )
 
 logger = logging.getLogger(__name__)
@@ -45,9 +44,15 @@ authorize_proxy_request = _proxy_auth_ops.authorize_proxy_request
 clear_proxy_auth_cache = getattr(_proxy_auth_ops, "clear_proxy_auth_cache", lambda: None)
 
 
+class GrafanaAPIError(Exception):
+    def __init__(self, status: int, body: Any = None):
+        self.status = status
+        self.body = body
+        super().__init__(f"Grafana API error {status}: {body}")
+
 class GrafanaProxyService:
     def __init__(self):
-        self.grafana_service = GrafanaService()
+        self.logger = logger
 
     @staticmethod
     def _raise_http_from_grafana_error(gae: GrafanaAPIError) -> None:
@@ -101,12 +106,11 @@ class GrafanaProxyService:
     async def authorize_proxy_request(
         self,
         request,
-        db: Session,
         auth_service,
         token: Optional[str] = None,
         orig: Optional[str] = None,
     ) -> Dict[str, str]:
-        return await authorize_proxy_request(self, request, db, auth_service, token, orig)
+        return await authorize_proxy_request(self, request, auth_service, token, orig)
 
     def clear_proxy_auth_cache(self) -> None:
         clear_proxy_auth_cache()
@@ -115,7 +119,7 @@ class GrafanaProxyService:
         self, db: Session, dashboard_uid: str, user_id: str, tenant_id: str,
         group_ids: List[str], require_write: bool = False,
     ):
-        return check_dashboard_access(self, db, dashboard_uid, user_id, tenant_id, group_ids, require_write)
+        return check_dashboard_access(db, dashboard_uid, user_id, tenant_id, group_ids, require_write)
 
     def _check_datasource_access(
         self, db: Session, datasource_uid: str, user_id: str, tenant_id: str,
@@ -127,7 +131,7 @@ class GrafanaProxyService:
         self, db: Session, datasource_id: int, user_id: str, tenant_id: str,
         group_ids: List[str], require_write: bool = False,
     ):
-        return check_datasource_access_by_id(self, db, datasource_id, user_id, tenant_id, group_ids, require_write)
+        return check_datasource_access_by_id(db, datasource_id, user_id, tenant_id, group_ids, require_write)
 
     async def enforce_datasource_query_access(
         self, db: Session, payload: Dict[str, Any], user_id: str,
@@ -138,7 +142,7 @@ class GrafanaProxyService:
     def _get_accessible_dashboard_uids(
         self, db: Session, user_id: str, tenant_id: str, group_ids: List[str],
     ) -> tuple[List[str], bool]:
-        return get_accessible_dashboard_uids(self, db, user_id, tenant_id, group_ids)
+        return get_accessible_dashboard_uids(db, user_id, tenant_id, group_ids)
 
     def _get_accessible_datasource_uids(
         self, db: Session, user_id: str, tenant_id: str, group_ids: List[str],
@@ -146,7 +150,7 @@ class GrafanaProxyService:
         return get_accessible_datasource_uids(self, db, user_id, tenant_id, group_ids)
 
     def build_dashboard_search_context(self, db: Session, *, tenant_id: str, uid: Optional[str] = None) -> Dict[str, Any]:
-        return build_dashboard_search_context(self, db, tenant_id=tenant_id, uid=uid)
+        return build_dashboard_search_context(db, tenant_id=tenant_id, uid=uid)
 
     def build_datasource_list_context(self, db: Session, *, tenant_id: str, uid: Optional[str] = None) -> Dict[str, Any]:
         return build_datasource_list_context(self, db, tenant_id=tenant_id, uid=uid)
@@ -155,13 +159,13 @@ class GrafanaProxyService:
         self, db: Session, user_id: str, tenant_id: str, group_ids: List[str],
         query: Optional[str] = None, tag: Optional[str] = None, starred: Optional[bool] = None,
         uid: Optional[str] = None, team_id: Optional[str] = None, show_hidden: bool = False,
-        is_admin: bool = False, limit: Optional[int] = None, offset: int = 0,
+        limit: Optional[int] = None, offset: int = 0,
         search_context: Optional[Dict[str, Any]] = None,
     ) -> List[DashboardSearchResult]:
         return await search_dashboards(
             self, db, user_id, tenant_id, group_ids,
             query=query, tag=tag, starred=starred, uid=uid, team_id=team_id,
-            show_hidden=show_hidden, is_admin=is_admin, limit=limit, offset=offset,
+            show_hidden=show_hidden, limit=limit, offset=offset,
             search_context=search_context,
         )
 
@@ -190,15 +194,15 @@ class GrafanaProxyService:
         return await delete_dashboard(self, db, uid, user_id, tenant_id, group_ids)
 
     def toggle_dashboard_hidden(self, db: Session, uid: str, user_id: str, tenant_id: str, hidden: bool) -> bool:
-        return toggle_dashboard_hidden(self, db, uid, user_id, tenant_id, hidden)
+        return toggle_dashboard_hidden(db, uid, user_id, tenant_id, hidden)
 
     async def get_datasources(
         self, db: Session, user_id: str, tenant_id: str, group_ids: List[str],
         uid: Optional[str] = None, team_id: Optional[str] = None, show_hidden: bool = False,
-        is_admin: bool = False, limit: Optional[int] = None, offset: int = 0,
+        limit: Optional[int] = None, offset: int = 0,
         datasource_context: Optional[Dict[str, Any]] = None,
     ) -> List[Datasource]:
-        return await get_datasources(self, db, user_id, tenant_id, group_ids, uid, team_id, show_hidden, is_admin, limit, offset, datasource_context)
+        return await get_datasources(self, db, user_id, tenant_id, group_ids, uid, team_id, show_hidden, limit, offset, datasource_context)
 
     async def get_datasource(
         self, db: Session, uid: str, user_id: str, tenant_id: str, group_ids: List[str],
@@ -225,10 +229,15 @@ class GrafanaProxyService:
         return await delete_datasource(self, db, uid, user_id, tenant_id, group_ids)
 
     def toggle_datasource_hidden(self, db: Session, uid: str, user_id: str, tenant_id: str, hidden: bool) -> bool:
-        return toggle_datasource_hidden(self, db, uid, user_id, tenant_id, hidden)
+        return toggle_datasource_hidden(db, uid, user_id, tenant_id, hidden)
 
     def get_dashboard_metadata(self, db: Session, tenant_id: str) -> Dict[str, Any]:
-        return get_dashboard_metadata(self, db, tenant_id)
+        return get_dashboard_metadata(db, tenant_id)
 
     def get_datasource_metadata(self, db: Session, tenant_id: str) -> Dict[str, Any]:
-        return get_datasource_metadata(self, db, tenant_id)
+        return get_datasource_metadata( db, tenant_id)
+    
+    async def query_datasource(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return await query_datasource(payload)
+    
+    asyn

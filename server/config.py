@@ -180,6 +180,9 @@ class Config:
         self.RATE_LIMIT_LOGIN_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_LOGIN_PER_MINUTE", "10"))
         self.RATE_LIMIT_REGISTER_PER_HOUR: int = int(os.getenv("RATE_LIMIT_REGISTER_PER_HOUR", "5"))
         self.RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE", "3000"))
+        # how long (seconds) we cache authorization results for Grafana proxy
+        # requests; useful to tune when static asset load is high.
+        self.GRAFANA_PROXY_CACHE_TTL: int = int(os.getenv("GRAFANA_PROXY_CACHE_TTL", "10"))
 
         # redis URL that may be used for rate limiting or other subsystems
         self.RATE_LIMIT_REDIS_URL: str = os.getenv("RATE_LIMIT_REDIS_URL", "").strip()

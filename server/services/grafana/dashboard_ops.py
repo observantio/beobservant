@@ -9,24 +9,77 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """
 
 import uuid
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from db_models import GrafanaDashboard, Group
-from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate, DashboardSearchResult
 from config import config
-from services.grafana_service import GrafanaAPIError
+from db_models import GrafanaDashboard, Group
+from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardSearchResult, DashboardUpdate
+from services.grafana.grafana_service import GrafanaAPIError
 
+def _cap(limit: Optional[int], offset: int) -> tuple[int, int]:
+    mx = int(config.MAX_QUERY_LIMIT)
+    req = int(limit) if limit is not None else int(config.DEFAULT_QUERY_LIMIT)
+    return max(1, min(req, mx)), max(0, int(offset))
 
 def _normalize_title(title: Optional[str]) -> str:
     return str(title or "").strip().lower()
 
+def _group_id_strs(group_ids: List[str]) -> List[str]:
+    return [str(g) for g in (group_ids or [])]
+
+def _visible_scope_filter(user_id: str, group_ids: List[str]):
+    gids = _group_id_strs(group_ids)
+    conds = [GrafanaDashboard.created_by == user_id, GrafanaDashboard.visibility == "tenant"]
+    if gids:
+        conds.append(
+            and_(
+                GrafanaDashboard.visibility == "group",
+                GrafanaDashboard.shared_groups.any(Group.id.in_(gids)),
+            )
+        )
+    return or_(*conds)
+
+def _is_hidden_for(db_dash: Optional[GrafanaDashboard], user_id: str) -> bool:
+    return bool(db_dash and user_id in (db_dash.hidden_by or []))
+
+def _shared_group_ids(db_dash: Optional[GrafanaDashboard]) -> List[str]:
+    return [str(g.id) for g in (db_dash.shared_groups or [])] if db_dash else []
+
+def _db_dashboard_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[GrafanaDashboard]:
+    return (
+        db.query(GrafanaDashboard)
+        .filter(GrafanaDashboard.grafana_uid == uid, GrafanaDashboard.tenant_id == tenant_id)
+        .first()
+    )
+
+def _db_dashboards_map(db: Session, tenant_id: str) -> Dict[str, GrafanaDashboard]:
+    rows = (
+        db.query(GrafanaDashboard)
+        .filter(GrafanaDashboard.tenant_id == tenant_id)
+        .limit(int(config.MAX_QUERY_LIMIT))
+        .all()
+    )
+    return {d.grafana_uid: d for d in rows}
+
+def _to_search_result(grafana_obj: Any, *, db_dash: Optional[GrafanaDashboard], user_id: str) -> DashboardSearchResult:
+    payload = grafana_obj.model_dump() if hasattr(grafana_obj, "model_dump") else dict(grafana_obj)
+    if db_dash and db_dash.title:
+        payload["title"] = db_dash.title
+    payload["created_by"] = db_dash.created_by if db_dash else None
+    payload["is_hidden"] = _is_hidden_for(db_dash, user_id)
+    payload["is_owned"] = bool(db_dash and db_dash.created_by == user_id)
+    payload["visibility"] = (db_dash.visibility if db_dash else "private") or "private"
+
+    sgids = _shared_group_ids(db_dash)
+    payload["shared_group_ids"] = sgids
+    payload["sharedGroupIds"] = sgids
+    return DashboardSearchResult.model_validate(payload)
 
 async def _has_accessible_title_conflict(
-    service,
     db: Session,
     *,
     tenant_id: str,
@@ -39,27 +92,19 @@ async def _has_accessible_title_conflict(
     if not target:
         return False
 
-    dashboards = await search_dashboards(
-        service,
-        db,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
-        show_hidden=False,
-        is_admin=False,
-        limit=int(config.MAX_QUERY_LIMIT),
-        offset=0,
+    q = (
+        db.query(GrafanaDashboard.grafana_uid)
+        .filter(GrafanaDashboard.tenant_id == tenant_id)
+        .filter(_visible_scope_filter(user_id, group_ids))
+        .filter(func.lower(func.trim(GrafanaDashboard.title)) == target)
     )
-    for dashboard in dashboards:
-        if exclude_uid and str(dashboard.uid) == str(exclude_uid):
-            continue
-        if _normalize_title(getattr(dashboard, "title", "")) == target:
-            return True
-    return False
+    if exclude_uid:
+        q = q.filter(GrafanaDashboard.grafana_uid != str(exclude_uid))
+
+    return db.query(q.exists()).scalar() is True
 
 
 def check_dashboard_access(
-    service,
     db: Session,
     dashboard_uid: str,
     user_id: str,
@@ -67,11 +112,7 @@ def check_dashboard_access(
     group_ids: List[str],
     require_write: bool = False,
 ) -> Optional[GrafanaDashboard]:
-    dashboard = db.query(GrafanaDashboard).filter(
-        GrafanaDashboard.grafana_uid == dashboard_uid,
-        GrafanaDashboard.tenant_id == tenant_id
-    ).first()
-
+    dashboard = _db_dashboard_by_uid(db, tenant_id, dashboard_uid)
     if not dashboard:
         return None
 
@@ -83,70 +124,50 @@ def check_dashboard_access(
 
     if dashboard.visibility == "tenant":
         return dashboard
+
     if dashboard.visibility == "group":
-        shared_group_ids = [g.id for g in dashboard.shared_groups]
-        if any(gid in shared_group_ids for gid in group_ids):
-            return dashboard
+        allowed = set(_group_id_strs(group_ids))
+        shared = {str(g.id) for g in (dashboard.shared_groups or [])}
+        return dashboard if allowed.intersection(shared) else None
 
     return None
 
 
-def get_accessible_dashboard_uids(service, db: Session, user_id: str, tenant_id: str, group_ids: List[str]) -> tuple[List[str], bool]:
-    query = db.query(GrafanaDashboard).filter(
-        GrafanaDashboard.tenant_id == tenant_id
+def get_accessible_dashboard_uids(
+    db: Session,
+    user_id: str,
+    tenant_id: str,
+    group_ids: List[str],
+) -> tuple[List[str], bool]:
+    rows = (
+        db.query(GrafanaDashboard.grafana_uid)
+        .filter(GrafanaDashboard.tenant_id == tenant_id)
+        .filter(_visible_scope_filter(user_id, group_ids))
+        .limit(int(config.MAX_QUERY_LIMIT))
+        .all()
     )
-
-    conditions = [
-        GrafanaDashboard.created_by == user_id,
-        GrafanaDashboard.visibility == "tenant"
-    ]
-
-    if group_ids:
-        conditions.append(
-            and_(
-                GrafanaDashboard.visibility == "group",
-                GrafanaDashboard.shared_groups.any(Group.id.in_(group_ids))
-            )
-        )
-
-    query = query.filter(or_(*conditions))
-    capped = query.with_entities(GrafanaDashboard.grafana_uid).limit(int(config.MAX_QUERY_LIMIT)).all()
-
-    # Do not allow implicit access to unregistered/system dashboards.
-    # Visibility enforcement is based on local metadata ownership + visibility.
-    return [uid for (uid,) in capped], False
+    return [uid for (uid,) in rows], False
 
 
 def build_dashboard_search_context(
-    service,
     db: Session,
     *,
     tenant_id: str,
     uid: Optional[str] = None,
 ) -> Dict[str, Any]:
-    context: Dict[str, Any] = {}
     if uid:
-        context["uid_db_dashboard"] = db.query(GrafanaDashboard).filter(
-            GrafanaDashboard.grafana_uid == uid,
-            GrafanaDashboard.tenant_id == tenant_id,
-        ).first()
-        return context
+        return {"uid_db_dashboard": _db_dashboard_by_uid(db, tenant_id, uid)}
 
-    context["all_registered_uids"] = {
-        registered_uid
-        for (registered_uid,) in db.query(GrafanaDashboard.grafana_uid)
+    uids = (
+        db.query(GrafanaDashboard.grafana_uid)
         .filter(GrafanaDashboard.tenant_id == tenant_id)
         .limit(int(config.MAX_QUERY_LIMIT))
         .all()
+    )
+    return {
+        "all_registered_uids": {u for (u,) in uids},
+        "db_dashboards": _db_dashboards_map(db, tenant_id),
     }
-    context["db_dashboards"] = {
-        dashboard.grafana_uid: dashboard
-        for dashboard in db.query(GrafanaDashboard)
-        .filter(GrafanaDashboard.tenant_id == tenant_id)
-        .limit(int(config.MAX_QUERY_LIMIT))
-        .all()
-    }
-    return context
 
 
 async def search_dashboards(
@@ -161,38 +182,35 @@ async def search_dashboards(
     uid: Optional[str] = None,
     team_id: Optional[str] = None,
     show_hidden: bool = False,
-    is_admin: bool = False,
     limit: Optional[int] = None,
     offset: int = 0,
     search_context: Optional[Dict[str, Any]] = None,
 ) -> List[DashboardSearchResult]:
-    requested_limit = int(limit) if limit is not None else int(config.DEFAULT_QUERY_LIMIT)
-    max_limit = int(config.MAX_QUERY_LIMIT)
-    capped_limit = max(1, min(requested_limit, max_limit))
-    capped_offset = max(0, int(offset))
+    capped_limit, capped_offset = _cap(limit, offset)
+    gids = _group_id_strs(group_ids)
+    team_id_s = str(team_id) if team_id is not None else None
 
     if uid:
-        dashboard = await service.grafana_service.get_dashboard(uid)
-        if not dashboard:
+        result = await service.grafana_service.get_dashboard(uid)
+        if not result:
             return []
-        effective_context = search_context or build_dashboard_search_context(service, db, tenant_id=tenant_id, uid=uid)
+
+        effective_context = search_context or build_dashboard_search_context(db, tenant_id=tenant_id, uid=uid)
         db_dash = effective_context.get("uid_db_dashboard")
+
         if db_dash:
-            if check_dashboard_access(service, db, uid, user_id, tenant_id, group_ids) is None:
+            if check_dashboard_access(db, uid, user_id, tenant_id, gids) is None:
                 return []
-            if not show_hidden and user_id in (db_dash.hidden_by or []):
+            if not show_hidden and _is_hidden_for(db_dash, user_id):
                 return []
-        dash_data = dashboard.get("dashboard", {})
-        meta = dashboard.get("meta", {})
 
-        created_by = db_dash.created_by if db_dash else None
-        is_hidden = bool(db_dash and user_id in (db_dash.hidden_by or []))
-        is_owned = bool(db_dash and db_dash.created_by == user_id)
+        dash_data = result.get("dashboard", {})
+        meta = result.get("meta", {})
 
-        payload = {
+        grafana_like = {
             "id": dash_data.get("id", 0),
             "uid": uid,
-            "title": (db_dash.title if db_dash and db_dash.title else dash_data.get("title", "")),
+            "title": dash_data.get("title", ""),
             "uri": f"db/{meta.get('slug', '')}",
             "url": meta.get("url", f"/d/{uid}"),
             "slug": meta.get("slug", ""),
@@ -202,79 +220,66 @@ async def search_dashboards(
             "folderId": meta.get("folderId"),
             "folderUid": meta.get("folderUid"),
             "folderTitle": meta.get("folderTitle"),
-            "createdBy": created_by,
-            "isHidden": is_hidden,
-            "isOwned": is_owned,
-            "visibility": db_dash.visibility if db_dash else 'private',
-            "sharedGroupIds": [str(g.id) for g in db_dash.shared_groups] if db_dash else [],
         }
-        return [DashboardSearchResult.model_validate(payload)]
+        return [_to_search_result(grafana_like, db_dash=db_dash, user_id=user_id)]
 
-    all_dashboards = await service.grafana_service.search_dashboards(
-        query=query, tag=tag, starred=starred
-    )
+    all_dashboards = await service.grafana_service.search_dashboards(query=query, tag=tag, starred=starred)
 
-    accessible_uids, allow_system = get_accessible_dashboard_uids(
-        service, db, user_id, tenant_id, group_ids
-    )
-    accessible_uids = set(accessible_uids)
+    accessible_uids, allow_system = get_accessible_dashboard_uids(db, user_id, tenant_id, gids)
+    accessible = set(accessible_uids)
 
-    effective_context = search_context or build_dashboard_search_context(service, db, tenant_id=tenant_id)
-    all_registered_uids = effective_context.get("all_registered_uids", set())
-    db_dashboards = effective_context.get("db_dashboards", {})
+    effective_context = search_context or build_dashboard_search_context(db, tenant_id=tenant_id)
+    all_registered_uids = set(effective_context.get("all_registered_uids") or [])
+    db_dashboards = effective_context.get("db_dashboards") or {}
 
-    filtered = []
+    out: List[DashboardSearchResult] = []
     for d in all_dashboards:
-        if d.uid not in accessible_uids and not (allow_system and d.uid not in all_registered_uids):
+        if d.uid not in accessible and not (allow_system and d.uid not in all_registered_uids):
             continue
 
         db_dash = db_dashboards.get(d.uid)
 
-        if db_dash and not show_hidden and user_id in (db_dash.hidden_by or []):
+        if db_dash and not show_hidden and _is_hidden_for(db_dash, user_id):
             continue
 
-        if team_id:
+        if team_id_s:
             if not db_dash:
                 continue
-            shared_ids = [g.id for g in db_dash.shared_groups]
-            if team_id not in shared_ids:
+            if team_id_s not in {str(g.id) for g in (db_dash.shared_groups or [])}:
                 continue
 
-        payload = d.model_dump()
-        if db_dash and db_dash.title:
-            payload["title"] = db_dash.title
-        payload["created_by"] = db_dash.created_by if db_dash else None
-        payload["is_hidden"] = bool(db_dash and user_id in (db_dash.hidden_by or []))
-        payload["is_owned"] = bool(db_dash and db_dash.created_by == user_id)
-        payload["visibility"] = db_dash.visibility if db_dash else 'private'
-        payload["shared_group_ids"] = [g.id for g in db_dash.shared_groups] if db_dash else []
-        payload["sharedGroupIds"] = payload["shared_group_ids"]
+        out.append(_to_search_result(d, db_dash=db_dash, user_id=user_id))
 
-        filtered.append(DashboardSearchResult(**payload))
-
-    return filtered[capped_offset:capped_offset + capped_limit]
+    return out[capped_offset : capped_offset + capped_limit]
 
 
-async def get_dashboard(service, db: Session, uid: str, user_id: str, tenant_id: str, group_ids: List[str]) -> Optional[Dict[str, Any]]:
-    db_dashboard = db.query(GrafanaDashboard).filter(
-        GrafanaDashboard.grafana_uid == uid,
-        GrafanaDashboard.tenant_id == tenant_id,
-    ).first()
+async def get_dashboard(
+    service,
+    db: Session,
+    uid: str,
+    user_id: str,
+    tenant_id: str,
+    group_ids: List[str],
+) -> Optional[Dict[str, Any]]:
+    gids = _group_id_strs(group_ids)
+    db_dashboard = _db_dashboard_by_uid(db, tenant_id, uid)
     if not db_dashboard:
         return None
-    if db_dashboard and check_dashboard_access(service, db, uid, user_id, tenant_id, group_ids) is None:
+    if check_dashboard_access(db, uid, user_id, tenant_id, gids) is None:
         return None
+
     result = await service.grafana_service.get_dashboard(uid)
     if not result:
         return None
+
     payload = dict(result)
-    shared_group_ids = [group.id for group in (getattr(db_dashboard, "shared_groups", None) or [])]
-    payload["visibility"] = db_dashboard.visibility or "private"
-    payload["shared_group_ids"] = shared_group_ids
-    payload["sharedGroupIds"] = shared_group_ids
+    sgids = _shared_group_ids(db_dashboard)
+    payload["visibility"] = (db_dashboard.visibility or "private") or "private"
+    payload["shared_group_ids"] = sgids
+    payload["sharedGroupIds"] = sgids
     payload["created_by"] = db_dashboard.created_by
     payload["is_owned"] = bool(db_dashboard.created_by == user_id)
-    payload["is_hidden"] = bool(user_id in (getattr(db_dashboard, "hidden_by", None) or []))
+    payload["is_hidden"] = _is_hidden_for(db_dashboard, user_id)
     return payload
 
 
@@ -282,57 +287,47 @@ def _dashboard_has_datasource(dashboard_obj: Any) -> bool:
     if not dashboard_obj:
         return False
 
-    # normalize to plain dict
     dash = dashboard_obj.model_dump() if hasattr(dashboard_obj, "model_dump") else dict(dashboard_obj)
 
-    # templating var satisfied?
     templ = (dash.get("templating") or {}).get("list") or []
     for item in templ:
-        try:
-            if item and item.get("type") == "datasource":
-                current = item.get("current") or {}
-                if current.get("value"):
-                    return True
-        except AttributeError:
+        if isinstance(item, dict) and item.get("type") == "datasource":
+            cur = item.get("current") or {}
+            if cur.get("value"):
+                return True
+
+    saw_query = False
+    panels = dash.get("panels") or []
+    for panel in panels:
+        if not isinstance(panel, dict):
             continue
 
-    panels = dash.get("panels") or []
+        pds = panel.get("datasource")
+        panel_has_ds = bool(
+            (isinstance(pds, str) and pds.strip())
+            or (isinstance(pds, dict) and pds.get("uid"))
+            or panel.get("datasourceUid")
+        )
 
-    if not panels:
-        return True
-
-    for panel in panels:
-        panel_has_ds = False
-        try:
-            pds = panel.get("datasource")
-            if pds:
-                if isinstance(pds, str) and pds.strip():
-                    panel_has_ds = True
-                elif isinstance(pds, dict) and pds.get("uid"):
-                    panel_has_ds = True
-            if panel.get("datasourceUid"):
-                panel_has_ds = True
-        except AttributeError:
-            panel_has_ds = False
-
-        targets = panel.get("targets") or []
-        for t in targets:
-            try:
-                target_has_ds = bool(t.get("datasource") or t.get("datasourceUid") or (isinstance(t.get("datasource"), dict) and t.get("datasource").get("uid")))
-                requires_ds = bool(t.get("expr") or t.get("query") or t.get("rawQuery") or t.get("metric"))
-                if target_has_ds:
-                    return True
-                if requires_ds and not panel_has_ds:
-                    # missing datasource for a target that requires one
-                    return False
-            except AttributeError:
+        for t in panel.get("targets") or []:
+            if not isinstance(t, dict):
                 continue
 
-        if panel_has_ds:
-            return True
+            requires_ds = bool(t.get("expr") or t.get("query") or t.get("rawQuery") or t.get("metric"))
+            if not requires_ds:
+                continue
 
-    # No templating var, no panel/target datasource found
-    return False
+            saw_query = True
+            tds = t.get("datasource")
+            target_has_ds = bool(
+                t.get("datasourceUid")
+                or (isinstance(tds, dict) and tds.get("uid"))
+                or (isinstance(tds, str) and tds.strip())
+            )
+            if target_has_ds or panel_has_ds:
+                return True
+
+    return not saw_query
 
 
 async def create_dashboard(
@@ -346,102 +341,99 @@ async def create_dashboard(
     shared_group_ids: Optional[List[str]] = None,
     is_admin: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    try:
-        requested_title = ""
-        if getattr(dashboard_create, "dashboard", None) is not None:
-            requested_title = str(getattr(dashboard_create.dashboard, "title", "") or "").strip()
-        if requested_title and await _has_accessible_title_conflict(
-            service,
-            db,
-            tenant_id=tenant_id,
-            user_id=user_id,
-            group_ids=group_ids,
-            title=requested_title,
-        ):
-            raise HTTPException(status_code=409, detail="Dashboard title already exists in your visible scope")
+    requested_title = str(getattr(getattr(dashboard_create, "dashboard", None), "title", "") or "").strip()
+    if requested_title and await _has_accessible_title_conflict(
+        db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        group_ids=group_ids,
+        title=requested_title,
+    ):
+        raise HTTPException(status_code=409, detail="Dashboard title already exists in your visible scope")
 
-        try:
-            dash_obj = dashboard_create.dashboard if hasattr(dashboard_create, 'dashboard') else None
-            if dash_obj and not _dashboard_has_datasource(dash_obj):
-                raise HTTPException(status_code=400, detail="Dashboard JSON missing datasource references; include a templating datasource (ds_default) or explicit panel/target datasources")
-        except HTTPException:
-            raise
-        except (TypeError, AttributeError):
-            service.logger.debug("Skipping local dashboard datasource pre-validation due to malformed payload")
-
-        groups: List[Group] = []
-        if visibility == "group":
-            groups = service._validate_group_visibility(
-                db,
-                tenant_id=tenant_id,
-                group_ids=group_ids,
-                shared_group_ids=shared_group_ids,
-                is_admin=is_admin,
-            )
-
-        try:
-            result = await service.grafana_service.create_dashboard(dashboard_create)
-        except Exception as gae:
-            if isinstance(gae, GrafanaAPIError) and gae.status in {409, 412} and getattr(dashboard_create.dashboard, "uid", None):
-                next_uid = f"{str(dashboard_create.dashboard.uid)}-{uuid.uuid4().hex[:6]}"
-                retry_dashboard = dashboard_create.dashboard.model_copy(update={"uid": next_uid})
-                retry_payload = dashboard_create.model_copy(update={"dashboard": retry_dashboard})
-                try:
-                    result = await service.grafana_service.create_dashboard(retry_payload)
-                except Exception as retry_exc:
-                    service._raise_http_from_grafana_error(retry_exc)
-            else:
-                service._raise_http_from_grafana_error(gae)
-        if not result:
-            return None
-
-        dashboard_data = result.get("dashboard", {})
-        uid = result.get("uid") or dashboard_data.get("uid")
-        if not uid:
-            return result
-
-        folder_uid = result.get("folderUid") or dashboard_data.get("folderUid")
-        if not folder_uid:
-            folder_id = getattr(dashboard_create, "folder_id", None)
-            try:
-                if folder_id:
-                    folders = await service.grafana_service.get_folders()
-                    for f in folders:
-                        if f.id == folder_id:
-                            folder_uid = f.uid
-                            break
-            except Exception as exc:
-                service.logger.debug("Unable to resolve folder uid for created dashboard: %s", exc)
-
-        db_dashboard = GrafanaDashboard(
-            tenant_id=tenant_id, created_by=user_id, grafana_uid=uid,
-            grafana_id=result.get("id"),
-            title=requested_title or dashboard_data.get("title", "Untitled"),
-            folder_uid=folder_uid, visibility=visibility,
-            tags=dashboard_data.get("tags", []),
-            hidden_by=[],
+    dash_obj = getattr(dashboard_create, "dashboard", None)
+    if dash_obj and not _dashboard_has_datasource(dash_obj):
+        raise HTTPException(
+            status_code=400,
+            detail="Dashboard JSON missing datasource references; include a templating datasource (ds_default) or explicit panel/target datasources",
         )
 
-        if visibility == "group" and shared_group_ids:
-            db_dashboard.shared_groups.extend(groups)
+    groups: List[Group] = []
+    if visibility == "group":
+        groups = service._validate_group_visibility(
+            db,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
+            shared_group_ids=shared_group_ids,
+            is_admin=is_admin,
+        )
 
+    try:
+        result = await service.grafana_service.create_dashboard(dashboard_create)
+    except Exception as exc:
+        if isinstance(exc, GrafanaAPIError) and exc.status in {409, 412} and getattr(dash_obj, "uid", None):
+            next_uid = f"{str(dash_obj.uid)}-{uuid.uuid4().hex[:6]}"
+            retry_dashboard = dash_obj.model_copy(update={"uid": next_uid})
+            retry_payload = dashboard_create.model_copy(update={"dashboard": retry_dashboard})
+            try:
+                result = await service.grafana_service.create_dashboard(retry_payload)
+            except Exception as retry_exc:
+                service._raise_http_from_grafana_error(retry_exc)
+        else:
+            service._raise_http_from_grafana_error(exc)
+        return None
+
+    if not result:
+        return None
+
+    dashboard_data = result.get("dashboard", {})
+    uid = result.get("uid") or dashboard_data.get("uid")
+    if not uid:
+        return dict(result)
+
+    folder_uid = result.get("folderUid") or dashboard_data.get("folderUid")
+    if not folder_uid:
+        folder_id = getattr(dashboard_create, "folder_id", None)
+        if folder_id:
+            try:
+                for f in await service.grafana_service.get_folders():
+                    if f.id == folder_id:
+                        folder_uid = f.uid
+                        break
+            except Exception as e:
+                service.logger.debug("Unable to resolve folder uid for created dashboard: %s", e)
+
+    db_dashboard = GrafanaDashboard(
+        tenant_id=tenant_id,
+        created_by=user_id,
+        grafana_uid=uid,
+        grafana_id=result.get("id"),
+        title=requested_title or dashboard_data.get("title", "Untitled"),
+        folder_uid=folder_uid,
+        visibility=visibility,
+        tags=dashboard_data.get("tags", []),
+        hidden_by=[],
+    )
+
+    if visibility == "group" and shared_group_ids:
+        db_dashboard.shared_groups.extend(groups)
+
+    try:
         db.add(db_dashboard)
         db.commit()
-        shared_group_ids = [group.id for group in (getattr(db_dashboard, "shared_groups", None) or [])]
-        payload = dict(result)
-        payload["visibility"] = db_dashboard.visibility or "private"
-        payload["shared_group_ids"] = shared_group_ids
-        payload["sharedGroupIds"] = shared_group_ids
-        payload["created_by"] = db_dashboard.created_by
-        payload["is_owned"] = True
-        payload["is_hidden"] = False
-        return payload
-    except HTTPException:
-        raise
-    except Exception as exc:
-        service.logger.error("Error creating dashboard: %s", exc, exc_info=True)
+    except Exception:
         db.rollback()
-        return None
+        raise
+
+    sgids = _shared_group_ids(db_dashboard)
+    payload = dict(result)
+    payload["visibility"] = (db_dashboard.visibility or "private") or "private"
+    payload["shared_group_ids"] = sgids
+    payload["sharedGroupIds"] = sgids
+    payload["created_by"] = db_dashboard.created_by
+    payload["is_owned"] = True
+    payload["is_hidden"] = False
+    return payload
 
 
 async def update_dashboard(
@@ -456,15 +448,12 @@ async def update_dashboard(
     shared_group_ids: Optional[List[str]] = None,
     is_admin: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    db_dashboard = check_dashboard_access(service, db, uid, user_id, tenant_id, group_ids, require_write=True)
+    db_dashboard = check_dashboard_access(db, uid, user_id, tenant_id, group_ids, require_write=True)
     if not db_dashboard:
         return None
 
-    requested_title = ""
-    if getattr(dashboard_update, "dashboard", None) is not None:
-        requested_title = str(getattr(dashboard_update.dashboard, "title", "") or "").strip()
+    requested_title = str(getattr(getattr(dashboard_update, "dashboard", None), "title", "") or "").strip()
     if requested_title and await _has_accessible_title_conflict(
-        service,
         db,
         tenant_id=tenant_id,
         user_id=user_id,
@@ -474,20 +463,19 @@ async def update_dashboard(
     ):
         raise HTTPException(status_code=409, detail="Dashboard title already exists in your visible scope")
 
-    # Validate incoming dashboard JSON contains datasource references
-    try:
-        dash_obj = dashboard_update.dashboard if hasattr(dashboard_update, 'dashboard') else None
-        if dash_obj and not _dashboard_has_datasource(dash_obj):
-            raise HTTPException(status_code=400, detail="Dashboard JSON missing datasource references; include a templating datasource (ds_default) or explicit panel/target datasources")
-    except HTTPException:
-        raise
-    except (TypeError, AttributeError):
-        service.logger.debug("Skipping local dashboard datasource validation for malformed update payload")
+    dash_obj = getattr(dashboard_update, "dashboard", None)
+    if dash_obj and not _dashboard_has_datasource(dash_obj):
+        raise HTTPException(
+            status_code=400,
+            detail="Dashboard JSON missing datasource references; include a templating datasource (ds_default) or explicit panel/target datasources",
+        )
 
     try:
         result = await service.grafana_service.update_dashboard(uid, dashboard_update)
-    except Exception as gae:
-        service._raise_http_from_grafana_error(gae)
+    except Exception as exc:
+        service._raise_http_from_grafana_error(exc)
+        return None
+
     if not result:
         return None
 
@@ -510,49 +498,72 @@ async def update_dashboard(
         elif visibility != "group":
             db_dashboard.shared_groups.clear()
 
-    db.commit()
-    shared_group_ids = [group.id for group in (getattr(db_dashboard, "shared_groups", None) or [])]
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    sgids = _shared_group_ids(db_dashboard)
     payload = dict(result)
-    payload["visibility"] = db_dashboard.visibility or "private"
-    payload["shared_group_ids"] = shared_group_ids
-    payload["sharedGroupIds"] = shared_group_ids
+    payload["visibility"] = (db_dashboard.visibility or "private") or "private"
+    payload["shared_group_ids"] = sgids
+    payload["sharedGroupIds"] = sgids
     payload["created_by"] = db_dashboard.created_by
     payload["is_owned"] = bool(db_dashboard.created_by == user_id)
-    payload["is_hidden"] = bool(user_id in (getattr(db_dashboard, "hidden_by", None) or []))
+    payload["is_hidden"] = _is_hidden_for(db_dashboard, user_id)
     return payload
 
 
 async def delete_dashboard(service, db: Session, uid: str, user_id: str, tenant_id: str, group_ids: List[str]) -> bool:
-    db_dashboard = check_dashboard_access(service, db, uid, user_id, tenant_id, group_ids, require_write=True)
+    db_dashboard = check_dashboard_access(db, uid, user_id, tenant_id, group_ids, require_write=True)
     if not db_dashboard:
         return False
-    success = await service.grafana_service.delete_dashboard(uid)
-    if success:
+
+    ok = await service.grafana_service.delete_dashboard(uid)
+    if not ok:
+        return False
+
+    try:
         db.delete(db_dashboard)
         db.commit()
-    return success
+    except Exception:
+        db.rollback()
+        raise
 
-
-def toggle_dashboard_hidden(service, db: Session, uid: str, user_id: str, tenant_id: str, hidden: bool) -> bool:
-    db_dash = db.query(GrafanaDashboard).filter(
-        GrafanaDashboard.grafana_uid == uid, GrafanaDashboard.tenant_id == tenant_id
-    ).first()
-    if not db_dash:
-        return False
-    hidden_list = list(db_dash.hidden_by or [])
-    if hidden and user_id not in hidden_list:
-        hidden_list.append(user_id)
-    elif not hidden and user_id in hidden_list:
-        hidden_list.remove(user_id)
-    db_dash.hidden_by = hidden_list
-    db.commit()
     return True
 
 
-def get_dashboard_metadata(service, db: Session, tenant_id: str) -> Dict[str, Any]:
-    dashboards = db.query(GrafanaDashboard).filter(GrafanaDashboard.tenant_id == tenant_id).all()
-    all_teams = set()
-    for dash in dashboards:
-        for group in dash.shared_groups:
-            all_teams.add(group.id)
-    return {"team_ids": sorted(all_teams)}
+def toggle_dashboard_hidden(db: Session, uid: str, user_id: str, tenant_id: str, hidden: bool) -> bool:
+    db_dash = _db_dashboard_by_uid(db, tenant_id, uid)
+    if not db_dash:
+        return False
+
+    hidden_list = list(db_dash.hidden_by or [])
+    if hidden:
+        if user_id not in hidden_list:
+            hidden_list.append(user_id)
+    else:
+        if user_id in hidden_list:
+            hidden_list.remove(user_id)
+
+    db_dash.hidden_by = hidden_list
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return True
+
+
+def get_dashboard_metadata(db: Session, tenant_id: str) -> Dict[str, Any]:
+    rows = (
+        db.query(GrafanaDashboard)
+        .filter(GrafanaDashboard.tenant_id == tenant_id)
+        .limit(int(config.MAX_QUERY_LIMIT))
+        .all()
+    )
+    team_ids = sorted({str(g.id) for d in rows for g in (d.shared_groups or [])})
+    return {"team_ids": team_ids}

@@ -20,9 +20,7 @@ from database import get_db_session
 from db_models import Permission, Tenant, User, UserApiKey
 from models.access.auth_models import Role
 
-
 _BOOTSTRAP_PG_LOCK_KEY = 947201
-
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)

@@ -128,4 +128,17 @@ describe('IncidentBoardPage — UI refresh & persistence', () => {
     expect(localStorage.getItem('incidents-visibility')).toEqual(JSON.stringify('group'))
     expect(localStorage.getItem('incidents-selected-group')).toEqual(JSON.stringify('g1'))
   })
+
+  it('renders create jira integration link with proper href', async () => {
+    api.getIncidents.mockResolvedValue([])
+    api.getUsers.mockResolvedValue([])
+    api.getGroups.mockResolvedValue([])
+
+    const { findByText } = render(<IncidentBoardPage />)
+    await findByText('Public')
+
+    // the link text should be present and use the absolute path rather than hash
+    const link = screen.getByText('Create Jira integration').closest('a')
+    expect(link).toHaveAttribute('href', '/integrations')
+  })
 })

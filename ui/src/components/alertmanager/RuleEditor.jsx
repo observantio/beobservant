@@ -3,10 +3,14 @@ import PropTypes from 'prop-types'
 import { Button, Input, Select } from '../ui'
 import RuleEditorWizard from './RuleEditorWizard'
 import HelpTooltip from '../HelpTooltip'
+import { useAuth } from '../../contexts/AuthContext'
 import { getGroups, listMetricNames, testAlertRule } from '../../api'
 import { DEFAULT_FORM, RULE_TEMPLATES, validateRuleForm, createLabelPairsFromRule } from './ruleEditorUtils'
 
 export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCancel }) {
+  const { hasPermission } = useAuth()
+  const canReadChannels = hasPermission('read:channels')
+
   const [formData, setFormData] = useState(rule || DEFAULT_FORM)
   const [groups, setGroups] = useState([])
   const [selectedGroups, setSelectedGroups] = useState(new Set(rule?.sharedGroupIds || rule?.shared_group_ids || []))
@@ -762,12 +766,18 @@ export default function RuleEditor({ rule, channels, apiKeys = [], onSave, onCan
                       <div className="text-center py-8 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
                         <span className="material-icons text-4xl text-sre-text-muted mb-4 block">notifications_off</span>
                         <h4 className="text-base font-semibold text-sre-text mb-2">No Channels Configured</h4>
-                        <p className="text-sre-text-muted mb-4">Configure notification channels before assigning them to alerts.</p>
-                        <div className="flex items-center justify-center gap-3">
-                          <a href="#/integrations" target="_blank" rel="noopener noreferrer" className="text-sre-primary hover:underline">Manage Integrations</a>
-                          <Button variant="ghost" onClick={() => setFormData({ ...formData, notificationChannels: [] })}>Skip for now</Button>
-                        </div>
-                        <p className="text-sm text-sre-text-muted mt-3">You can assign channels later after creating the rule.</p>
+                        {canReadChannels ? (
+                          <>
+                            <p className="text-sre-text-muted mb-4">Configure notification channels before assigning them to alerts.</p>
+                            <div className="flex items-center justify-center gap-3">
+                              <a href="/integrations" target="_blank" rel="noopener noreferrer" className="text-sre-primary hover:underline">Manage Integrations</a>
+                              <Button variant="ghost" onClick={() => setFormData({ ...formData, notificationChannels: [] })}>Skip for now</Button>
+                            </div>
+                            <p className="text-sm text-sre-text-muted mt-3">You can assign channels later after creating the rule.</p>
+                          </>
+                        ) : (
+                          <p className="text-sre-text-muted mb-4">You don&apos;t have permission to view or configure notification channels. Contact your administrator.</p>
+                        )}
                       </div>
                     )}
                   </div>

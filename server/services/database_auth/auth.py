@@ -7,10 +7,8 @@ import httpx
 
 from models.access.auth_models import Token
 
-
 MFARequired = Dict[str, bool]
 AuthResult = Optional[Union[Token, MFARequired]]
-
 
 @dataclass(frozen=True)
 class _OidcTokens:
