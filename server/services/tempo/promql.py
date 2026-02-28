@@ -1,5 +1,5 @@
 """
-PromQL query construction logic for Tempo trace metrics to get volume
+PromQL query construction logic for Tempo trace metrics.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
@@ -15,18 +15,19 @@ def _escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def build_promql_selector(service: Optional[str]) -> List[str]:
+def build_promql_selectors(service: Optional[str]) -> List[str]:
     if not service:
         return ["{}"]
     svc = _escape(service)
-    return list(dict.fromkeys([
+    return [
         f'{{resource.service.name="{svc}"}}',
         f'{{service_name="{svc}"}}',
         f'{{service="{svc}"}}',
         f'{{service.name="{svc}"}}',
-    ]))
+    ]
 
 
-def build_count_promql(service: Optional[str], range_s: int) -> str:
-    primary = build_promql_selector(service)[0]
-    return f"sum(count_over_time({primary}[{range_s}s]))"
+def build_count_promql(service: Optional[str], range_s: int, label_variant: int = 0) -> str:
+    selectors = build_promql_selectors(service)
+    selector = selectors[min(label_variant, len(selectors) - 1)]
+    return f"sum(count_over_time({selector}[{range_s}s]))"

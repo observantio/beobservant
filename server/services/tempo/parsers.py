@@ -1,5 +1,6 @@
 """
-Tempo Parsers for processing responses from Tempo metrics queries, providing functions to extract and aggregate metric values from the responses received from Tempo when querying for trace metrics. This module includes logic to handle the structure of the responses from Tempo, to iterate through the returned metric data, and to aggregate the metric values based on their timestamps. The parsers ensure that the extracted metric data is in a format suitable for use in alert evaluation and other processing related to trace metrics in
+Tempo parsers for processing trace responses from Tempo, providing functions to extract
+and normalize trace and span data into application models.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
@@ -8,23 +9,25 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-
 from typing import Any, Dict, List, Optional
 
 from models.observability.tempo_models import Span, SpanAttribute, Trace
 
-_SERVICE_NAME_KEY = "service.name"
-_SERVICE_ALIAS_KEY = "service"
-_OTLP_VALUE_TYPES = ("stringValue", "intValue", "boolValue", "doubleValue")
+SERVICE_NAME_KEY = "service.name"
+SERVICE_ALIAS_KEY = "service"
+OTLP_VALUE_TYPES = ("stringValue", "intValue", "boolValue", "doubleValue")
 
 
 def parse_attributes(attrs: List[Dict[str, Any]]) -> Dict[str, Any]:
     parsed: Dict[str, Any] = {}
     for attr in attrs or []:
+        key = attr.get("key", "")
+        if not key:
+            continue
         value = attr.get("value", {})
-        for val_type in _OTLP_VALUE_TYPES:
+        for val_type in OTLP_VALUE_TYPES:
             if val_type in value:
-                parsed[attr.get("key", "")] = value[val_type]
+                parsed[key] = value[val_type]
                 break
     return parsed
 
@@ -39,20 +42,19 @@ def parse_span(
     attr_map = parse_attributes(span_data.get("attributes", []))
     tags = [SpanAttribute(key=k, value=v) for k, v in attr_map.items()]
 
-    if service_name and _SERVICE_NAME_KEY not in attr_map:
-        attr_map[_SERVICE_NAME_KEY] = service_name
-        tags.append(SpanAttribute(key=_SERVICE_NAME_KEY, value=service_name))
+    if service_name and SERVICE_NAME_KEY not in attr_map:
+        attr_map[SERVICE_NAME_KEY] = service_name
+        tags.append(SpanAttribute(key=SERVICE_NAME_KEY, value=service_name))
 
     if resource_attrs:
         for k, v in resource_attrs.items():
             attr_map.setdefault(k, v)
 
-    start_time = int(span_data.get("startTimeUnixNano", 0)) // 1000
-    end_time = int(span_data.get("endTimeUnixNano", 0)) // 1000
+    start_time = int(span_data.get("startTimeUnixNano") or 0) // 1000
+    end_time = int(span_data.get("endTimeUnixNano") or 0) // 1000
     parent_span_id = span_data.get("parentSpanId") or None
 
-    # Use model_validate with alias keys so mypy accepts the construction via runtime aliases
-    span_obj = {
+    return Span.model_validate({
         "spanID": span_data.get("spanId", ""),
         "traceID": trace_id,
         "parentSpanID": parent_span_id,
@@ -64,18 +66,18 @@ def parse_span(
         "attributes": attr_map,
         "processID": process_id,
         "warnings": None,
-    }
-    return Span.model_validate(span_obj)
+    })
 
 
 def parse_tempo_trace(trace_id: str, data: Dict[str, Any]) -> Trace:
-    spans: list[Span] = []
-    processes: dict[str, Any] = {}
-    for batch in data.get("batches", []):
+    spans: List[Span] = []
+    processes: Dict[str, Any] = {}
+
+    for batch in data.get("batches") or []:
         resource_attrs = parse_attributes(batch.get("resource", {}).get("attributes", []))
         service_name = (
-            resource_attrs.get(_SERVICE_NAME_KEY)
-            or resource_attrs.get(_SERVICE_ALIAS_KEY)
+            resource_attrs.get(SERVICE_NAME_KEY)
+            or resource_attrs.get(SERVICE_ALIAS_KEY)
             or resource_attrs.get("serviceName")
             or "unknown"
         )
@@ -85,29 +87,33 @@ def parse_tempo_trace(trace_id: str, data: Dict[str, Any]) -> Trace:
             "resource": batch.get("resource", {}),
             "attributes": resource_attrs,
         }
-        for scope in batch.get("scopeSpans", []):
+        for scope in batch.get("scopeSpans") or []:
             spans.extend(
-                [parse_span(s, trace_id, process_id, service_name, resource_attrs) for s in scope.get("spans", [])]
+                parse_span(s, trace_id, process_id, service_name, resource_attrs)
+                for s in scope.get("spans") or []
             )
-    # Build Trace using runtime alias names via model_validate to satisfy mypy
-    trace_obj = {"traceID": trace_id, "spans": [s.model_dump(by_alias=True) if hasattr(s, 'model_dump') else s for s in spans], "processes": processes}
-    return Trace.model_validate(trace_obj)
+
+    return Trace.model_validate({"traceID": trace_id, "spans": spans, "processes": processes})
 
 
 def build_summary_trace(trace_data: Dict[str, Any]) -> Optional[Trace]:
     trace_id = trace_data.get("traceID")
     if not trace_id:
         return None
+
     try:
         start_ns = int(trace_data["startTimeUnixNano"]) if trace_data.get("startTimeUnixNano") else None
     except (TypeError, ValueError):
         start_ns = None
+
     try:
         duration_ms = int(trace_data["durationMs"]) if trace_data.get("durationMs") is not None else None
     except (TypeError, ValueError):
         duration_ms = None
 
-    summary_span_obj = {
+    service_name = trace_data.get("rootServiceName") or trace_data.get("rootService") or "unknown"
+
+    summary_span = {
         "spanID": "root",
         "traceID": trace_id,
         "parentSpanID": None,
@@ -115,10 +121,15 @@ def build_summary_trace(trace_data: Dict[str, Any]) -> Optional[Trace]:
         "startTime": int(start_ns // 1000) if start_ns else 0,
         "duration": int(duration_ms * 1000) if duration_ms is not None else 0,
         "tags": [],
-        "serviceName": trace_data.get("rootServiceName") or trace_data.get("rootService") or "unknown",
+        "serviceName": service_name,
         "attributes": {},
-        "processID": trace_data.get("rootServiceName") or "unknown",
+        "processID": service_name,
         "warnings": ["Trace summary only"],
     }
 
-    return Trace.model_validate({"traceID": trace_id, "spans": [summary_span_obj], "processes": {}, "warnings": ["Trace summary only"]})
+    return Trace.model_validate({
+        "traceID": trace_id,
+        "spans": [summary_span],
+        "processes": {},
+        "warnings": ["Trace summary only"],
+    })

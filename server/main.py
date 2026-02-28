@@ -31,16 +31,13 @@ from routers import (
     internal_router,
 )
 from database import init_database, init_db, connection_test
-from db_models import AuditLog
 from middleware.limits import RequestSizeLimitMiddleware, ConcurrencyLimitMiddleware
-from middleware.rate_limit import client_ip
 
 from middleware.audit import security_headers_middleware
 from middleware.error_handlers import (
     validation_exception_handler,
     general_exception_handler,
 )
-from services.becertain_proxy_service import becertain_proxy_service
 
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
@@ -74,7 +71,6 @@ async def lifespan(app: FastAPI):
             getattr(alertmanager_router, "alertmanager_service", None),
             getattr(alertmanager_router, "notification_service", None),
             getattr(grafana_router, "grafana_service", None),
-            becertain_proxy_service,
         ):
             client = getattr(svc, "_client", None)
             if client is not None:

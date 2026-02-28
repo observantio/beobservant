@@ -6,7 +6,7 @@ import { formatNsToIso, formatRelativeTime, parseLogLine } from '../../utils/for
 import { getLogLevel } from '../../utils/helpers'
 
 const MAX_STREAMS_RENDER = 30
-const STREAM_CONTAINER_MIN_HEIGHT = 448
+const STREAM_CONTAINER_MIN_HEIGHT = 200
 const STREAM_CONTAINER_MAX_HEIGHT = 800
 
 function hashString(value = '') {
@@ -273,7 +273,7 @@ export default function LogResults({
 
                 // render virtualized list
                 return (
-                  <div style={{ minHeight: STREAM_CONTAINER_MIN_HEIGHT, maxHeight: STREAM_CONTAINER_MAX_HEIGHT, overflow: 'hidden' }}>
+                  <div>
                     <List
                       height={listHeight}
                       itemCount={displayValues.length}

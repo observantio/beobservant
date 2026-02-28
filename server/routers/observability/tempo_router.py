@@ -1,5 +1,7 @@
 """
-Router for Tempo trace querying, trace retrieval by ID, and service/operation listing with multi-tenant access control and query validation.
+Router for Tempo trace querying, trace retrieval by ID, and service/operation listing
+with multi-tenant access control and query validation.
+
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -7,32 +9,41 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from fastapi import APIRouter, HTTPException, Query, status, Depends, Request
-from typing import Optional, List
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, List, Optional
 
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
+
+from config import config
+from middleware.dependencies import require_permission_with_scope, resolve_tenant_id
+from models.access.auth_models import Permission, TokenData
 from models.observability.tempo_models import Trace, TraceQuery, TraceResponse
 from services.tempo_service import TempoService
-from config import config
-from models.access.auth_models import Permission, TokenData
 
-from middleware.dependencies import resolve_tenant_id, require_permission_with_scope
+tempo_service = TempoService()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    yield
+    await tempo_service.aclose()
+
 
 router = APIRouter(prefix="/api/tempo", tags=["tempo"])
-tempo_service = TempoService()
 
 
 @router.get("/traces/search", response_model=TraceResponse)
 async def search_traces(
     request: Request,
-    service: Optional[str] = Query(None, description="Service name filter"),
-    operation: Optional[str] = Query(None, description="Operation name filter"),
-    min_duration: Optional[str] = Query(None, alias="minDuration", description="Min duration (e.g., 100ms)"),
-    max_duration: Optional[str] = Query(None, alias="maxDuration", description="Max duration (e.g., 1s)"),
+    service: Optional[str] = Query(None),
+    operation: Optional[str] = Query(None),
+    min_duration: Optional[str] = Query(None, alias="minDuration"),
+    max_duration: Optional[str] = Query(None, alias="maxDuration"),
     start: Optional[int] = Query(None, description="Start time in microseconds"),
     end: Optional[int] = Query(None, description="End time in microseconds"),
-    limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT, description="Maximum traces to return"),
-    fetch_full: bool = Query(False, alias="fetchFull", description="If false (recommended), returns only trace summaries; fetch full trace data on-demand via /traces/{trace_id}"),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
+    limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
+    fetch_full: bool = Query(False, alias="fetchFull"),
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo")),
 ) -> TraceResponse:
     query = TraceQuery(
         service=service,
@@ -41,7 +52,7 @@ async def search_traces(
         maxDuration=max_duration,
         start=start,
         end=end,
-        limit=limit
+        limit=limit,
     )
     tenant_id = await resolve_tenant_id(request, current_user)
     return await tempo_service.search_traces(query, tenant_id=tenant_id, fetch_full_traces=fetch_full)
@@ -51,7 +62,7 @@ async def search_traces(
 async def get_trace(
     trace_id: str,
     request: Request,
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo")),
 ) -> Trace:
     tenant_id = await resolve_tenant_id(request, current_user)
     trace = await tempo_service.get_trace(trace_id, tenant_id=tenant_id)
@@ -63,7 +74,7 @@ async def get_trace(
 @router.get("/services", response_model=List[str])
 async def get_services(
     request: Request,
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo")),
 ) -> List[str]:
     tenant_id = await resolve_tenant_id(request, current_user)
     return await tempo_service.get_services(tenant_id=tenant_id)
@@ -73,7 +84,7 @@ async def get_services(
 async def get_operations(
     service: str,
     request: Request,
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo")),
 ) -> List[str]:
     tenant_id = await resolve_tenant_id(request, current_user)
     return await tempo_service.get_operations(service, tenant_id=tenant_id)

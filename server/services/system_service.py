@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 class SystemService:
-    """Service to collect system metrics using psutil for the BeObservant process."""
-
     def __init__(self):
         self.process = psutil.Process(os.getpid())
         try:

@@ -17,13 +17,7 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
-
 class NotificationService:
-    """Minimal notification service for account lifecycle emails.
-
-    Alert/incident/channel notification delivery is owned by BeNotified.
-    """
-
     def __init__(self) -> None:
         self.timeout = float(config.DEFAULT_TIMEOUT)
         self._client = create_async_client(self.timeout)

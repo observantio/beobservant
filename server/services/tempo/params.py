@@ -1,5 +1,6 @@
 """
-Tempo query parameter construction logic, providing functions to build query parameters for Tempo based on trace query conditions specified in alert rules. This module includes logic to translate the conditions defined in alert rules into the appropriate query parameters that can be used to query Tempo for trace data. The parameter construction functions ensure that the queries sent to Tempo are correctly formatted and include all necessary information to retrieve the relevant trace data for alert evaluation.
+Tempo query parameter construction logic, providing functions to build query parameters
+for Tempo search based on TraceQuery conditions.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
@@ -13,8 +14,9 @@ from typing import Any, Dict
 from models.observability.tempo_models import TraceQuery
 
 
-def _escape_tag_value(value: str) -> str:
-    return str(value).replace("\\", "\\\\").replace('"', '\\"')
+def _format_tag(key: str, value: Any) -> str:
+    s = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    return f'{key}="{s}"' if " " in s else f"{key}={s}"
 
 
 def build_search_params(query: TraceQuery) -> Dict[str, Any]:
@@ -28,7 +30,7 @@ def build_search_params(query: TraceQuery) -> Dict[str, Any]:
     if query.tags:
         tags.update(query.tags)
     if tags:
-        params["tags"] = " && ".join(f'{k}="{_escape_tag_value(v)}"' for k, v in tags.items())
+        params["tags"] = " ".join(_format_tag(k, v) for k, v in tags.items())
 
     if query.start:
         params["start"] = int(query.start) // 1_000_000
