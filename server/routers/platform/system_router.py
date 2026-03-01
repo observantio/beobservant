@@ -11,7 +11,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 from fastapi import APIRouter, Depends
 from typing import Dict, Any
 
-from services.system import SystemService
+from services.system_service import SystemService
 from models.access.auth_models import Permission, TokenData
 from middleware.dependencies import require_permission_with_scope
 from middleware.error_handlers import handle_route_errors

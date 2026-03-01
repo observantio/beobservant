@@ -14,7 +14,6 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, Any
 
 import httpx
-
 from config import config
 from models.observability.agent_models import AgentHeartbeat, AgentInfo
 
@@ -24,7 +23,6 @@ ATTR_HOST_HOSTNAME = "host.hostname"
 
 def make_agent_id(name: str, tenant_id: str) -> str:
     return f"{tenant_id}:{name}" if tenant_id else name
-
 
 def update_agent_registry(registry: Dict[str, AgentInfo], heartbeat: AgentHeartbeat) -> None:
     ts = heartbeat.timestamp or datetime.now(timezone.utc)

@@ -6,7 +6,7 @@ Copyright (c) 2026 Stefan Kumarasinghe
 Licensed under the Apache License, Version 2.0 (the "License");
 """
 
-from services.alerts.helper import (
+from services.alerts.helpers import (
     assert_silence_owner,
     extract_silence_id,
     find_silence_for_mutation,

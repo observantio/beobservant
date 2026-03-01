@@ -10,8 +10,7 @@ from fastapi import Depends, HTTPException, status, Response
     
 from config import config
 from models.access.auth_models import TokenData, Permission, Role, ROLE_PERMISSIONS
-from server.services.common.cookies import is_secure_cookie_request
-
+from services.common.cookies import cookie_secure
 from middleware.dependencies import enforce_public_endpoint_security, require_permission_with_scope
 logger = logging.getLogger(__name__)
 

@@ -94,8 +94,8 @@ class BeCertainProxyService(BaseProxyService):
             future.set_exception(exc)
             _ = future.exception()
 
-    @with_retry(retries=2, backoff_factor=0.5, retry_on=(httpx.RequestError,))
-    @with_timeout(timeout_seconds=30)
+    @with_retry()
+    @with_timeout()
     async def request_json(
         self,
         *,

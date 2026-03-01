@@ -29,7 +29,7 @@ from models.observability.becertain_models import (
     AnalyzeProxyPayload,
 )
 from services.becertain_proxy_service import BeCertainProxyService
-from services.aiops.helper import inject_tenant, correlation_id
+from services.aiops.helpers import inject_tenant, correlation_id
 
 router = APIRouter(prefix="/api/becertain", tags=["becertain"])
 

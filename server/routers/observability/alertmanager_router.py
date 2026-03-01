@@ -23,7 +23,7 @@ from middleware.dependencies import (
 )
 from models.access.auth_models import TokenData
 from services.benotified_proxy_service import BeNotifiedProxyService
-from services.alerts.helper import (
+from services.alerts.helpers import (
     assert_silence_owner,
     check_permissions,
     extract_silence_id,

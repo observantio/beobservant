@@ -16,7 +16,7 @@ from fastapi import APIRouter, Request, Depends
 from fastapi.concurrency import run_in_threadpool
 
 from models.observability.agent_models import AgentHeartbeat
-from services.agent import AgentService
+from services.agent_service import AgentService
 from models.access.auth_models import Permission, TokenData
 from config import config
 
