@@ -18,9 +18,11 @@ from models.access.group_models import Group as GroupSchema, PermissionInfo
 from models.access.user_models import User as UserSchema
 from models.access.user_models import UserResponse
 
-
 def to_user_schema(service, user) -> UserSchema:
     groups = user.groups or []
+    raw_api_keys = getattr(user, "api_keys", None) or []
+    api_keys = [service._to_api_key_schema(k) for k in raw_api_keys]
+
     kwargs = {
         "id": user.id,
         "tenant_id": user.tenant_id,
@@ -37,7 +39,7 @@ def to_user_schema(service, user) -> UserSchema:
         "needs_password_change": getattr(user, "needs_password_change", False),
         "password_changed_at": getattr(user, "password_changed_at", None),
         "session_invalid_before": getattr(user, "session_invalid_before", None),
-        "api_keys": service.list_api_keys(user.id),
+        "api_keys": api_keys,
         "mfa_enabled": getattr(user, "mfa_enabled", False),
         "must_setup_mfa": getattr(user, "must_setup_mfa", False),
     }
@@ -47,7 +49,6 @@ def to_user_schema(service, user) -> UserSchema:
         kwargs["grafana_user_id"] = grafana_uid
 
     return UserSchema(**kwargs)
-
 
 def build_user_response(
     service,

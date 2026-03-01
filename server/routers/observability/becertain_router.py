@@ -1,5 +1,5 @@
 """
-BeCertain proxy router and RCA analysis job endpoints.
+BeCertain proxy router and RCA analysis job endpoints for secure multi-tenant access to BeCertain features with comprehensive permission checks.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 

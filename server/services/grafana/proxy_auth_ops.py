@@ -20,17 +20,17 @@ from sqlalchemy.orm import joinedload
 
 from config import config
 from database import get_db_session
-from db_models import GrafanaDashboard, GrafanaDatasource
+from db_models import GrafanaDashboard, GrafanaDatasource, Group, User
 from models.access.auth_models import Permission, Role, TokenData
 
-_PROXY_AUTH_CACHE: Dict[str, Dict[str, Any]] = {}
-_PROXY_AUTH_CACHE_TTL = int(getattr(config, "GRAFANA_PROXY_CACHE_TTL", 10))
-_PROXY_AUTH_CACHE_LOCK = threading.Lock()
-_PROXY_AUTH_CACHE_GC_EVERY = 500
-_proxy_auth_cache_ops = 0
+PROXY_AUTH_CACHE: Dict[str, Dict[str, Any]] = {}
+PROXY_AUTH_CACHE_TTL = int(getattr(config, "GRAFANA_PROXY_CACHE_TTL", 60))
+PROXY_AUTH_CACHE_LOCK = threading.Lock()
+PROXY_AUTH_CACHE_GC_EVERY = 500
+proxy_auth_cache_ops = 0
 
-_HEADER_SAFE_RE = re.compile(r"[\r\n\x00]")
-_STATIC_PREFIXES = ("/grafana/public/", "/grafana/public/build/")
+HEADER_SAFE_RE = re.compile(r"[\r\n\x00]")
+STATIC_PREFIXES = ("/grafana/public/", "/grafana/public/build/")
 
 
 def _normalize_cache_path(path: str) -> str:
@@ -55,42 +55,42 @@ def _cache_key(token: str, method: str, path: str, tenant_id: str) -> str:
 
 
 def _sanitize_header_value(value: str) -> str:
-    return _HEADER_SAFE_RE.sub("", value or "")
+    return HEADER_SAFE_RE.sub("", value or "")
 
 
 def _is_static_path(path: str) -> bool:
     p = (path or "").lower()
-    return any(p.startswith(pref) for pref in _STATIC_PREFIXES)
+    return any(p.startswith(pref) for pref in STATIC_PREFIXES)
 
 
 def _cache_get(token: str, method: str, path: str, tenant_id: str) -> Optional[Dict[str, str]]:
     key = _cache_key(token, method, path, tenant_id)
     now = time.monotonic()
-    with _PROXY_AUTH_CACHE_LOCK:
-        entry = _PROXY_AUTH_CACHE.get(key)
+    with PROXY_AUTH_CACHE_LOCK:
+        entry = PROXY_AUTH_CACHE.get(key)
         if entry and entry.get("expires", 0) > now:
             return entry.get("headers")
         if entry:
-            _PROXY_AUTH_CACHE.pop(key, None)
+            PROXY_AUTH_CACHE.pop(key, None)
     return None
 
 
 def _cache_set(token: str, method: str, path: str, tenant_id: str, headers: Dict[str, str]) -> None:
-    global _proxy_auth_cache_ops
+    global proxy_auth_cache_ops
     key = _cache_key(token, method, path, tenant_id)
     now = time.monotonic()
-    with _PROXY_AUTH_CACHE_LOCK:
-        _proxy_auth_cache_ops += 1
-        if _proxy_auth_cache_ops % _PROXY_AUTH_CACHE_GC_EVERY == 0:
-            expired = [k for k, v in _PROXY_AUTH_CACHE.items() if v.get("expires", 0) <= now]
+    with PROXY_AUTH_CACHE_LOCK:
+        proxy_auth_cache_ops += 1
+        if proxy_auth_cache_ops % PROXY_AUTH_CACHE_GC_EVERY == 0:
+            expired = [k for k, v in PROXY_AUTH_CACHE.items() if v.get("expires", 0) <= now]
             for k in expired:
-                _PROXY_AUTH_CACHE.pop(k, None)
-        _PROXY_AUTH_CACHE[key] = {"expires": now + _PROXY_AUTH_CACHE_TTL, "headers": headers}
+                PROXY_AUTH_CACHE.pop(k, None)
+        PROXY_AUTH_CACHE[key] = {"expires": now + PROXY_AUTH_CACHE_TTL, "headers": headers}
 
 
 def clear_proxy_auth_cache() -> None:
-    with _PROXY_AUTH_CACHE_LOCK:
-        _PROXY_AUTH_CACHE.clear()
+    with PROXY_AUTH_CACHE_LOCK:
+        PROXY_AUTH_CACHE.clear()
 
 
 def _has_any_permission(token_data: TokenData, required: Set[str]) -> bool:
@@ -181,7 +181,11 @@ def _is_dashboard_write_intent(path: str, method: str) -> bool:
 def _is_datasource_write_intent(path: str, method: str) -> bool:
     p = (path or "").lower()
     m = (method or "GET").upper()
-    return p.startswith("/grafana/api/datasources/uid/") and m in {"PUT", "PATCH", "DELETE"}
+    if p.startswith("/grafana/api/datasources/uid/") and m in {"PUT", "PATCH", "DELETE"}:
+        return True
+    if p.startswith("/grafana/connections/datasources/edit/"):
+        return True
+    return False
 
 
 async def _enforce_writable_datasource(service, datasource_uid: str) -> None:
@@ -192,12 +196,14 @@ async def _enforce_writable_datasource(service, datasource_uid: str) -> None:
         raise HTTPException(status_code=403, detail="Default/read-only datasources are view/query only")
 
 
-def is_admin_user(service, token_data: TokenData) -> bool:
+def is_admin_user(token_data: TokenData) -> bool:
     return token_data.role == Role.ADMIN or bool(getattr(token_data, "is_superuser", False))
 
 
-def is_resource_accessible(service, resource, token_data: TokenData, *, require_write: bool = False) -> bool:
-    if not resource or resource.tenant_id != token_data.tenant_id:
+def is_resource_accessible(resource, token_data: TokenData, *, require_write: bool = False) -> bool:
+    if not resource:
+        return False
+    if resource.tenant_id != token_data.tenant_id:
         return False
     hidden_by = getattr(resource, "hidden_by", None) or []
     if token_data.user_id in hidden_by:
@@ -220,7 +226,7 @@ def is_resource_accessible(service, resource, token_data: TokenData, *, require_
     return False
 
 
-def extract_dashboard_uid(service, path: str) -> Optional[str]:
+def extract_dashboard_uid(path: str) -> Optional[str]:
     for pattern in (
         r"^/grafana/d/([^/]+)",
         r"^/grafana/d-solo/([^/]+)",
@@ -232,7 +238,7 @@ def extract_dashboard_uid(service, path: str) -> Optional[str]:
     return None
 
 
-def extract_datasource_uid(service, path: str) -> Optional[str]:
+def extract_datasource_uid(path: str) -> Optional[str]:
     for pattern in (
         r"^/grafana/api/datasources/uid/([^/?]+)",
         r"^/grafana/api/datasources/proxy/uid/([^/?]+)",
@@ -244,7 +250,7 @@ def extract_datasource_uid(service, path: str) -> Optional[str]:
     return None
 
 
-def extract_datasource_id(service, path: str) -> Optional[int]:
+def extract_datasource_id(path: str) -> Optional[int]:
     m = re.match(r"^/grafana/api/datasources/proxy/(\d+)(?:/|$)", path or "")
     if not m:
         return None
@@ -254,21 +260,19 @@ def extract_datasource_id(service, path: str) -> Optional[int]:
         return None
 
 
-def extract_proxy_token(service, request, token: Optional[str] = None) -> Optional[str]:
+def extract_proxy_token(request, token: Optional[str] = None) -> Optional[str]:
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         return auth_header.split(" ", 1)[1].strip()
-    cookie_token = request.cookies.get("beobservant_token")
-    if cookie_token:
-        return cookie_token
-    access_token = request.cookies.get("access_token")
-    if access_token:
-        return access_token
+    for cookie_name in ("beobservant_token", "access_token"):
+        cookie_token = request.cookies.get(cookie_name)
+        if cookie_token:
+            return cookie_token
     return request.headers.get("X-Auth-Token") or token
 
 
 def _grafana_role(token_data: TokenData) -> str:
-    if is_admin_user(None, token_data):
+    if is_admin_user(token_data):
         return "Admin"
     perms = set(token_data.permissions or [])
     editor_perms = {
@@ -300,22 +304,32 @@ def _db_load_context(
     datasource_uid: Optional[str],
     datasource_id: Optional[int],
 ) -> Tuple[Any, Optional[GrafanaDashboard], Optional[GrafanaDatasource], Optional[GrafanaDatasource]]:
-    user = auth_service.get_user_by_id(token_data.user_id)
-    if not user or not getattr(user, "is_active", False):
-        raise HTTPException(status_code=401, detail="User not found or inactive")
-
-    token_data.org_id = getattr(user, "org_id", token_data.org_id)
-    token_data.permissions = auth_service.get_user_permissions(user) or []
-
-    live_groups = getattr(user, "groups", None)
-    if isinstance(live_groups, list):
-        token_data.group_ids = [str(g.id) for g in live_groups if getattr(g, "id", None)]
-
-    needs_db = dashboard_uid or datasource_uid or datasource_id is not None
-    if not needs_db:
-        return user, None, None, None
-
     with get_db_session() as s:
+        orm_user = (
+            s.query(User)
+            .options(
+                joinedload(User.groups).joinedload(Group.permissions),
+                joinedload(User.permissions),
+            )
+            .filter(
+                User.id == token_data.user_id,
+                User.tenant_id == token_data.tenant_id,
+            )
+            .first()
+        )
+        if not orm_user or not orm_user.is_active:
+            raise HTTPException(status_code=401, detail="User not found or inactive")
+
+        token_data.org_id = getattr(orm_user, "org_id", token_data.org_id)
+
+        # Use the same collect_permissions logic as the original working code
+        # but on the already-loaded ORM object — no extra session opened
+        token_data.permissions = list(auth_service._collect_permissions(orm_user))
+        token_data.group_ids = [g.id for g in (orm_user.groups or [])]
+
+        if not (dashboard_uid or datasource_uid or datasource_id is not None):
+            return orm_user, None, None, None
+
         dash = (
             s.query(GrafanaDashboard)
             .options(joinedload(GrafanaDashboard.shared_groups))
@@ -337,7 +351,7 @@ def _db_load_context(
             .first()
         ) if datasource_id is not None else None
 
-        return user, dash, ds_uid, ds_id
+        return orm_user, dash, ds_uid, ds_id
 
 
 async def authorize_proxy_request(
@@ -347,7 +361,7 @@ async def authorize_proxy_request(
     token: Optional[str] = None,
     orig: Optional[str] = None,
 ) -> Dict[str, str]:
-    token_to_verify = extract_proxy_token(service, request, token)
+    token_to_verify = extract_proxy_token(request, token)
     if not token_to_verify:
         raise HTTPException(status_code=401, detail="You need to log in to access this resource.")
 
@@ -375,12 +389,11 @@ async def authorize_proxy_request(
         _cache_set(token_to_verify, original_method, original_path, str(token_data.tenant_id), headers)
         return headers
 
-    dashboard_uid = extract_dashboard_uid(service, original_path)
-    datasource_uid = extract_datasource_uid(service, original_path)
-    datasource_id = extract_datasource_id(service, original_path)
+    dashboard_uid = extract_dashboard_uid(original_path)
+    datasource_uid = extract_datasource_uid(original_path)
+    datasource_id = extract_datasource_id(original_path)
 
-    # Single DB session: enrich token_data AND load all resources at once.
-    _user, dash, ds_uid_obj, ds_id_obj = await run_in_threadpool(
+    _, dash, ds_uid_obj, ds_id_obj = await run_in_threadpool(
         _db_load_context,
         auth_service, token_data, dashboard_uid, datasource_uid, datasource_id,
     )
@@ -401,10 +414,10 @@ async def authorize_proxy_request(
         Permission.DELETE_FOLDERS.value,
         Permission.WRITE_DASHBOARDS.value,
     }
-    if not user_permissions & allowed_grafana_perms and not token_data.is_superuser:
+    if not user_permissions & allowed_grafana_perms and not getattr(token_data, "is_superuser", False):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
-    is_admin = is_admin_user(service, token_data)
+    is_admin = is_admin_user(token_data)
     required_permissions = _required_permissions_for_path(original_path, original_method)
 
     if not is_admin and _is_dashboard_save_request(original_path, original_method):
@@ -421,17 +434,17 @@ async def authorize_proxy_request(
     datasource_write_intent = _is_datasource_write_intent(original_path, original_method)
 
     if dashboard_uid:
-        if not dash or not is_resource_accessible(service, dash, token_data, require_write=dashboard_write_intent):
+        if not dash or not is_resource_accessible(dash, token_data, require_write=dashboard_write_intent):
             raise HTTPException(status_code=403, detail="Dashboard access denied")
 
     if datasource_uid:
-        if not ds_uid_obj or not is_resource_accessible(service, ds_uid_obj, token_data, require_write=datasource_write_intent):
+        if not ds_uid_obj or not is_resource_accessible(ds_uid_obj, token_data, require_write=datasource_write_intent):
             raise HTTPException(status_code=403, detail="Datasource access denied")
         if datasource_write_intent:
             await _enforce_writable_datasource(service, str(getattr(ds_uid_obj, "grafana_uid", "")))
 
     if datasource_id is not None:
-        if not ds_id_obj or not is_resource_accessible(service, ds_id_obj, token_data, require_write=datasource_write_intent):
+        if not ds_id_obj or not is_resource_accessible(ds_id_obj, token_data, require_write=datasource_write_intent):
             raise HTTPException(status_code=403, detail="Datasource access denied")
         if datasource_write_intent:
             await _enforce_writable_datasource(service, str(getattr(ds_id_obj, "grafana_uid", "")))

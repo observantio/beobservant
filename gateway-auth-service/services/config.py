@@ -12,8 +12,7 @@ from __future__ import annotations
 import os
 from urllib.parse import urlparse
 
-from secrets import build_secret_provider
-
+from services.secrets.provider import  build_secret_provider
 
 def _env_name() -> str:
     return (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "development").strip().lower()

@@ -34,7 +34,7 @@ def get_user_permissions(service, user: User) -> List[str]:
             .filter(User.id == user_id)
             .first()
         )
-        return collect_permissions(db_user, service=service) if db_user else []
+        return collect_permissions(db_user) if db_user else []
 
 
 def get_user_direct_permissions(user: User) -> List[str]:
@@ -54,7 +54,7 @@ def get_user_direct_permissions(user: User) -> List[str]:
         return sorted({p.name for p in (db_user.permissions or []) if getattr(p, "name", None)})
 
 
-def collect_permissions(user: User, service=None) -> List[str]:
+def collect_permissions(user: User) -> List[str]:
     perms: Set[str] = set()
 
     role = _safe_role(getattr(user, "role", None))

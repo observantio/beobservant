@@ -102,22 +102,22 @@ class GrafanaProxyService:
         return groups
 
     def _is_admin_user(self, token_data: TokenData) -> bool:
-        return is_admin_user(self, token_data)
+        return is_admin_user(token_data)
 
     def _is_resource_accessible(self, resource, token_data: TokenData) -> bool:
-        return is_resource_accessible(self, resource, token_data)
+        return is_resource_accessible(resource, token_data)
 
     def _extract_dashboard_uid(self, path: str) -> Optional[str]:
-        return extract_dashboard_uid(self, path)
+        return extract_dashboard_uid(path)
 
     def _extract_datasource_uid(self, path: str) -> Optional[str]:
-        return extract_datasource_uid(self, path)
+        return extract_datasource_uid(path)
 
     def _extract_datasource_id(self, path: str) -> Optional[int]:
-        return extract_datasource_id(self, path)
+        return extract_datasource_id(path)
 
     def _extract_proxy_token(self, request, token: Optional[str] = None) -> Optional[str]:
-        return extract_proxy_token(self, request, token)
+        return extract_proxy_token(request, token)
 
     async def authorize_proxy_request(
         self,

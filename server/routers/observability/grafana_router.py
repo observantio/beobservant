@@ -1,10 +1,4 @@
-"""
-Copyright (c) 2026 Stefan Kumarasinghe
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-"""
+# routes/grafana.py  (or wherever your router lives)
 
 import logging
 from typing import List, Optional
@@ -47,12 +41,11 @@ from services.grafana.route_payloads import (
 from services.grafana.normalize import normalize_grafana_next_path
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/api/grafana", tags=["grafana"])
 rtp = run_in_threadpool
+
 proxy = GrafanaProxyService()
 auth_service = DatabaseAuthService()
-
 
 @router.get("/auth")
 async def grafana_auth(
@@ -68,9 +61,7 @@ async def grafana_auth(
         allowlist=config.GRAFANA_PROXY_IP_ALLOWLIST,
         fallback_mode="deny",
     )
-    headers = await proxy.authorize_proxy_request(
-        request=request, auth_service=auth_service, token=token, orig=orig,
-    )
+    headers = await proxy.authorize_proxy_request(request=request, auth_service=auth_service, token=token, orig=orig)
     return Response(status_code=204, headers=headers)
 
 
@@ -95,6 +86,7 @@ async def bootstrap_grafana_session(
         token = request.cookies.get("beobservant_token")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication token unavailable")
+
     response = JSONResponse({"launch_url": f"/grafana{next_path}"})
     response.set_cookie(
         key="beobservant_token",
@@ -146,17 +138,21 @@ async def search_dashboards(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DASHBOARDS, "grafana")),
     db: Session = Depends(get_db),
 ) -> List[DashboardSearchResult]:
-    search_context = await rtp(
-        proxy.build_dashboard_search_context, db, tenant_id=current_user.tenant_id, uid=uid,
-    )
+    search_context = await rtp(proxy.build_dashboard_search_context, db, tenant_id=current_user.tenant_id, uid=uid)
     return await proxy.search_dashboards(
         db=db,
         user_id=current_user.user_id,
         tenant_id=current_user.tenant_id,
         group_ids=user_group_ids(current_user),
-        query=query, tag=tag, starred=starred, uid=uid,
-        team_id=team_id, show_hidden=show_hidden,
-        limit=limit, offset=offset, search_context=search_context,
+        query=query,
+        tag=tag,
+        starred=starred,
+        uid=uid,
+        team_id=team_id,
+        show_hidden=show_hidden,
+        limit=limit,
+        offset=offset,
+        search_context=search_context,
     )
 
 
@@ -167,8 +163,11 @@ async def get_dashboard(
     db: Session = Depends(get_db),
 ):
     dashboard = await proxy.get_dashboard(
-        db=db, uid=uid, user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
+        db=db,
+        uid=uid,
+        user_id=current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        group_ids=user_group_ids(current_user),
     )
     if not dashboard:
         raise HTTPException(status_code=404, detail=f"Dashboard {uid} not found or access denied")
@@ -216,7 +215,8 @@ async def update_dashboard(
 ):
     validate_visibility(visibility)
     result = await proxy.update_dashboard(
-        db=db, uid=uid,
+        db=db,
+        uid=uid,
         dashboard_update=parse_dashboard_update_payload(payload.model_dump(exclude_none=True)),
         user_id=current_user.user_id,
         tenant_id=current_user.tenant_id,
@@ -237,10 +237,14 @@ async def delete_dashboard(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_DASHBOARDS, "grafana")),
     db: Session = Depends(get_db),
 ):
-    if not await proxy.delete_dashboard(
-        db=db, uid=uid, user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
-    ):
+    ok = await proxy.delete_dashboard(
+        db=db,
+        uid=uid,
+        user_id=current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        group_ids=user_group_ids(current_user),
+    )
+    if not ok:
         raise HTTPException(status_code=404, detail=f"Dashboard {uid} not found or access denied")
     return {"status": "success", "message": f"Dashboard {uid} deleted"}
 
@@ -255,11 +259,15 @@ async def hide_dashboard(
     ),
     db: Session = Depends(get_db),
 ):
-    if not await rtp(
+    ok = await rtp(
         proxy.toggle_dashboard_hidden,
-        db=db, uid=uid, user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id, hidden=payload.hidden,
-    ):
+        db=db,
+        uid=uid,
+        user_id=current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        hidden=payload.hidden,
+    )
+    if not ok:
         raise HTTPException(status_code=404, detail=f"Dashboard {uid} not found")
     return {"status": "success", "hidden": payload.hidden}
 
@@ -279,8 +287,11 @@ async def get_datasource_by_name(
     db: Session = Depends(get_db),
 ):
     datasource = await proxy.get_datasource_by_name(
-        db=db, name=name, user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
+        db=db,
+        name=name,
+        user_id=current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        group_ids=user_group_ids(current_user),
     )
     if not datasource:
         raise HTTPException(status_code=404, detail=f"Datasource {name} not found or access denied")
@@ -297,14 +308,18 @@ async def get_datasources(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),
 ):
-    datasource_context = await rtp(
-        proxy.build_datasource_list_context, db, tenant_id=current_user.tenant_id, uid=uid,
-    )
+    datasource_context = await rtp(proxy.build_datasource_list_context, db, tenant_id=current_user.tenant_id, uid=uid)
     return await proxy.get_datasources(
-        db=db, user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
-        uid=uid, team_id=team_id, show_hidden=show_hidden,
-        limit=limit, offset=offset, datasource_context=datasource_context,
+        db=db,
+        user_id=current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        group_ids=user_group_ids(current_user),
+        uid=uid,
+        team_id=team_id,
+        show_hidden=show_hidden,
+        limit=limit,
+        offset=offset,
+        datasource_context=datasource_context,
     )
 
 
@@ -315,8 +330,11 @@ async def get_datasource_by_uid(
     db: Session = Depends(get_db),
 ):
     datasource = await proxy.get_datasource(
-        db=db, uid=uid, user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
+        db=db,
+        uid=uid,
+        user_id=current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        group_ids=user_group_ids(current_user),
     )
     if not datasource:
         raise HTTPException(status_code=404, detail=f"Datasource {uid} not found or access denied")
@@ -334,9 +352,13 @@ async def create_datasource(
 ):
     validate_visibility(visibility)
     result = await proxy.create_datasource(
-        db=db, datasource_create=datasource, user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
-        visibility=visibility, shared_group_ids=shared_group_ids or [],
+        db=db,
+        datasource_create=datasource,
+        user_id=current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        group_ids=user_group_ids(current_user),
+        visibility=visibility,
+        shared_group_ids=shared_group_ids or [],
         is_admin=is_admin_user(current_user),
     )
     if not result:
@@ -356,9 +378,14 @@ async def update_datasource(
 ):
     validate_visibility(visibility)
     result = await proxy.update_datasource(
-        db=db, uid=uid, datasource_update=datasource, user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
-        visibility=visibility, shared_group_ids=shared_group_ids,
+        db=db,
+        uid=uid,
+        datasource_update=datasource,
+        user_id=current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        group_ids=user_group_ids(current_user),
+        visibility=visibility,
+        shared_group_ids=shared_group_ids,
         is_admin=is_admin_user(current_user),
     )
     if not result:
@@ -373,10 +400,14 @@ async def delete_datasource(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),
 ):
-    if not await proxy.delete_datasource(
-        db=db, uid=uid, user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id, group_ids=user_group_ids(current_user),
-    ):
+    ok = await proxy.delete_datasource(
+        db=db,
+        uid=uid,
+        user_id=current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        group_ids=user_group_ids(current_user),
+    )
+    if not ok:
         raise HTTPException(status_code=404, detail=f"Datasource {uid} not found or access denied")
     return {"status": "success", "message": f"Datasource {uid} deleted"}
 
@@ -391,11 +422,15 @@ async def hide_datasource(
     ),
     db: Session = Depends(get_db),
 ):
-    if not await rtp(
+    ok = await rtp(
         proxy.toggle_datasource_hidden,
-        db=db, uid=uid, user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id, hidden=payload.hidden,
-    ):
+        db=db,
+        uid=uid,
+        user_id=current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        hidden=payload.hidden,
+    )
+    if not ok:
         raise HTTPException(status_code=404, detail=f"Datasource {uid} not found")
     return {"status": "success", "hidden": payload.hidden}
 
@@ -404,7 +439,7 @@ async def hide_datasource(
 async def get_folders(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_FOLDERS, "grafana")),
 ):
-    return await rtp(proxy.get_folders)
+    return await proxy.get_folders()
 
 
 @router.post("/folders", response_model=Folder)
@@ -413,7 +448,7 @@ async def create_folder(
     payload: GrafanaCreateFolderRequest,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_FOLDERS, "grafana")),
 ):
-    result = await rtp(proxy.create_folder, payload.title)
+    result = await proxy.create_folder(title=payload.title, user_id=current_user.user_id, tenant_id=current_user.tenant_id)
     if not result:
         raise HTTPException(status_code=500, detail="Failed to create folder")
     return result
@@ -425,6 +460,7 @@ async def delete_folder(
     uid: str,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_FOLDERS, "grafana")),
 ):
-    if not await rtp(proxy.delete_folder, uid):
+    ok = await proxy.delete_folder(uid=uid, user_id=current_user.user_id, tenant_id=current_user.tenant_id)
+    if not ok:
         raise HTTPException(status_code=404, detail=f"Folder {uid} not found or delete failed")
     return {"status": "success", "message": f"Folder {uid} deleted"}

@@ -100,13 +100,16 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseAuthService:
+    _MFA_SETUP_RESPONSE = "mfa_setup_required"
+    _MFA_REQUIRED_RESPONSE = "mfa_required"
     def __init__(self):
         super().__init__()
         self._initialized = False
+        self._init_lock = threading.Lock()
         self.logger = logger
         self.oidc_service = OIDCService()
         self._password_op_semaphore = threading.Semaphore(1)
-        self._secret_provider: Optional[Any] = None 
+        self._secret_provider: Optional["SecretProvider"] = None
 
     def is_external_auth_enabled(self) -> bool:
         return config.AUTH_PROVIDER in {"oidc", "keycloak"} and self.oidc_service.is_enabled()
@@ -115,7 +118,11 @@ class DatabaseAuthService:
         return bool(config.AUTH_PASSWORD_FLOW_ENABLED)
 
     def _lazy_init(self):
-        if not self._initialized:
+        if self._initialized:
+            return
+        with self._init_lock:
+            if self._initialized:
+                return
             try:
                 self._ensure_default_setup()
                 self._initialized = True
@@ -308,8 +315,8 @@ class DatabaseAuthService:
     def _to_group_schema(self, group: Group) -> GroupSchema:
         return db_schema.to_group_schema(group)
 
-    def get_user_by_id(self, user_id: str, tenant_id: Optional[str] = None) -> Optional[UserSchema]:
-        return get_user_by_id_op(self, user_id, tenant_id)
+    def get_user_by_id(self,user_id: str,tenant_id: Optional[str] = None,db: Optional[Session] = None,) -> Optional[UserSchema]:
+        return get_user_by_id_op(self, user_id, tenant_id=tenant_id, db=db)
 
     def get_user_by_id_in_tenant(self, user_id: str, tenant_id: str) -> Optional[UserSchema]:
         return get_user_by_id_op(self, user_id, tenant_id)

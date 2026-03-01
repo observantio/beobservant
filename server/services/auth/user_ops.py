@@ -14,13 +14,14 @@ from typing import Optional, List, Set, Iterable
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, Session
 
 from config import config
 from database import get_db_session
 from db_models import User, Group, Permission
 from models.access.user_models import UserCreate, UserUpdate, User as UserSchema
 from models.access.auth_models import Role
+
 
 MUTABLE_USER_FIELDS = {
     "full_name",
@@ -165,25 +166,34 @@ def _enforce_permission_delegation(
             detail=f"Only administrators can grant privileged permissions: {privileged}",
         )
 
+def get_user_by_id(service, user_id: str,tenant_id: Optional[str] = None, db: Optional[Session] = None) -> Optional[UserSchema]:
+    if not user_id:
+        return None
 
-def get_user_by_id(service, user_id: str, tenant_id: Optional[str] = None) -> Optional[UserSchema]:
-    service._lazy_init()
-    with get_db_session() as db:
-        query = (
-            db.query(User)
+    if db is None:
+        service._lazy_init()
+
+    def _query(session: Session) -> Optional[UserSchema]:
+        q = (
+            session.query(User)
             .options(
                 joinedload(User.groups),
                 joinedload(User.permissions),
                 joinedload(User.api_keys),
             )
-            .filter_by(id=user_id)
+            .filter(User.id == user_id)
         )
         if tenant_id is not None:
-            query = query.filter_by(tenant_id=tenant_id)
-        user = query.first()
-        if not user:
-            return None
-        return service._to_user_schema(user)
+            q = q.filter(User.tenant_id == tenant_id)
+
+        user = q.first()
+        return service._to_user_schema(user) if user else None
+
+    if db is not None:
+        return _query(db)
+    
+    with get_db_session() as s:
+        return _query(s)
 
 
 def get_user_by_username(service, username: str) -> Optional[UserSchema]:

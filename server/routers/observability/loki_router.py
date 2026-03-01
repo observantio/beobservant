@@ -1,5 +1,6 @@
 """
 Router for Loki log querying, label exploration, and log searching/filtering with multi-tenant access control and query validation.
+
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
