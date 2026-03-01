@@ -1,15 +1,15 @@
 """
-Redis-backed token cache for the gateway auth service.
+Redis-based token cache implementation for the gateway auth service.
 
-Extracted from the previous ``TokenCache`` module; this implementation assumes
-that the ``redis`` library is available and that a connection can be
-established during initialization. Errors will propagate so that callers can
-fall back or fail as appropriate.
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.
 """
 
 from __future__ import annotations
 
-import logging
 import hashlib
 from typing import Optional
 
@@ -19,8 +19,6 @@ try:
 except Exception:
     redis = None  
     _redis_available = False
-
-logger = logging.getLogger(__name__)
 
 
 class RedisTokenCache:

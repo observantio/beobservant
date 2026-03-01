@@ -39,8 +39,6 @@ from middleware.error_handlers import (
     general_exception_handler,
 )
 
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL.upper()),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -187,7 +185,7 @@ async def ready(request: Request):
     }
 
     results = await asyncio.gather(*(_upstream_reachable(url) for url in upstream_targets.values()))
-    checks.update({name: ok for name, ok in zip(upstream_targets.keys(), results)})
+    checks.update(dict(zip(upstream_targets.keys(), results)))
 
     is_ready = all(checks.values())
     payload = {

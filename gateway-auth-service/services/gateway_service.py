@@ -15,19 +15,16 @@ from ipaddress import ip_address, ip_network
 from typing import Optional
 from urllib.parse import quote
 
+
 import httpx
 from fastapi import HTTPException, Request, status
 
 from . import config as gw_config
 from .rate_limit import make_default_rate_limiter
 from .token_cache import make_token_cache
+from models.exception import DatabaseUnavailable
 
 logger = logging.getLogger(__name__)
-
-
-class DatabaseUnavailable(Exception):
-    pass
-
 
 def _parse_networks(allowlist: str) -> list:
     networks = []

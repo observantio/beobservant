@@ -1,3 +1,13 @@
+"""
+Redis Token Rate Limiter for Gateway Authentication Service
+
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 
 from __future__ import annotations
 
@@ -11,9 +21,6 @@ try:
 except ImportError:
     redis = None
     
-
-# helper previously centralised, replicate here for self-containment
-
 def _sanitize_redis_url(url: str) -> str:
     try:
         p = urlparse(url)

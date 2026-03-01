@@ -20,7 +20,6 @@ from .rate_limits.hybrid_token_rate_limiter import HybridTokenRateLimiter
 from services import config as gw_config
 
 try:
-    import redis
     redis: object
 except ImportError:
     redis = None

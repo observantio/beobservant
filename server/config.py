@@ -21,7 +21,6 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 logger = logging.getLogger(__name__)
 
-
 def _to_bool(value: Optional[str], default: bool = False) -> bool:
     if value is None:
         return default
@@ -557,7 +556,6 @@ class Config:
 
 
 class Constants:
-    """Application constants."""
     APP_NAME: str = "Be Observant with Your Infrastructure"
     APP_VERSION: str = "1.0.0"
     APP_DESCRIPTION: str = (

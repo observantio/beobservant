@@ -1,20 +1,12 @@
-"""
-Database initialization and session management using SQLAlchemy, providing functions to create the database engine, manage sessions, and perform connectivity checks. This module includes logic to handle database connection pooling, to provide context-managed sessions for use in route handlers and services, and to ensure proper cleanup of database resources on application shutdown. It also includes a function to initialize the database schema based on defined SQLAlchemy models.
-
-Copyright (c) 2026 Stefan Kumarasinghe
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-"""
-
 import logging
 import os
+import threading
 from contextlib import contextmanager
 from typing import Generator, Iterator, Optional
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from db_models import Base
@@ -23,6 +15,18 @@ logger = logging.getLogger(__name__)
 
 _engine: Optional[Engine] = None
 _SessionLocal: Optional[sessionmaker] = None
+_init_lock = threading.Lock()
+
+
+def _env_int(name: str, default: int) -> int:
+    v = os.getenv(name)
+    if not v:
+        return default
+    try:
+        return int(v)
+    except ValueError:
+        logger.warning("Invalid %s=%r; using default %d", name, v, default)
+        return default
 
 
 def init_database(
@@ -32,31 +36,36 @@ def init_database(
 ) -> None:
     global _engine, _SessionLocal
 
-    if _engine is not None:
-        logger.debug("Database already initialized; skipping re-init.")
+    if _engine is not None and _SessionLocal is not None:
         return
 
-    resolved_pool_size = pool_size or int(os.environ.get("DB_POOL_SIZE") or "10")
-    resolved_max_overflow = int(os.environ.get("DB_MAX_OVERFLOW") or "20")
-    resolved_pool_timeout = int(os.environ.get("DB_POOL_TIMEOUT") or "30")
-    resolved_pool_recycle = int(os.environ.get("DB_POOL_RECYCLE") or "1800")
+    with _init_lock:
+        if _engine is not None and _SessionLocal is not None:
+            return
 
-    _engine = create_engine(
-        database_url,
-        pool_pre_ping=True,
-        pool_size=resolved_pool_size,
-        max_overflow=resolved_max_overflow,
-        pool_timeout=resolved_pool_timeout,
-        pool_recycle=resolved_pool_recycle,
-        echo=echo,
-    )
+        resolved_pool_size = pool_size or _env_int("DB_POOL_SIZE", 10)
+        resolved_max_overflow = _env_int("DB_MAX_OVERFLOW", 20)
+        resolved_pool_timeout = _env_int("DB_POOL_TIMEOUT", 30)
+        resolved_pool_recycle = _env_int("DB_POOL_RECYCLE", 1800)
 
-    _SessionLocal = sessionmaker(
-        bind=_engine,
-        autocommit=False,
-        autoflush=False,
-        expire_on_commit=False,
-    )
+        _engine = create_engine(
+            database_url,
+            pool_pre_ping=True,
+            pool_size=resolved_pool_size,
+            max_overflow=resolved_max_overflow,
+            pool_timeout=resolved_pool_timeout,
+            pool_recycle=resolved_pool_recycle,
+            echo=echo,
+            future=True,
+        )
+
+        _SessionLocal = sessionmaker(
+            bind=_engine,
+            autocommit=False,
+            autoflush=False,
+            expire_on_commit=False,
+            future=True,
+        )
 
 
 def _require_session_factory() -> sessionmaker:
@@ -65,9 +74,8 @@ def _require_session_factory() -> sessionmaker:
     return _SessionLocal
 
 
-@contextmanager
-def get_db_session() -> Iterator[Session]:
-    session: Session = _require_session_factory()()
+def _session_scope() -> Iterator[Session]:
+    session = _require_session_factory()()
     try:
         yield session
         session.commit()
@@ -76,18 +84,15 @@ def get_db_session() -> Iterator[Session]:
         raise
     finally:
         session.close()
+
+
+@contextmanager
+def get_db_session() -> Iterator[Session]:
+    yield from _session_scope()
 
 
 def get_db() -> Generator[Session, None, None]:
-    session: Session = _require_session_factory()()
-    try:
-        yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+    yield from _session_scope()
 
 
 def connection_test() -> bool:
@@ -97,25 +102,23 @@ def connection_test() -> bool:
         with _engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
-    except Exception as exc:
-        logger.debug("DB connection test failed: %s", exc)
+    except SQLAlchemyError as exc:
+        logger.debug("DB connection test failed: %s", exc, exc_info=True)
         return False
 
 
 def dispose_database() -> None:
     global _engine, _SessionLocal
-    _SessionLocal = None
-    if _engine is not None:
-        try:
-            _engine.dispose()
-        finally:
-            _engine = None
+    with _init_lock:
+        _SessionLocal = None
+        if _engine is not None:
+            try:
+                _engine.dispose()
+            finally:
+                _engine = None
 
 
 def init_db() -> None:
     if _engine is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
-
-    logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=_engine)
-    logger.info("Database tables created successfully.")

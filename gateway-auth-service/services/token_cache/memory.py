@@ -1,28 +1,26 @@
 """
 In-memory token cache for the gateway auth service.
 
-This mirrors the original ``TokenCache`` class that previously lived in
-``services/token_cache.py``. It is intentionally lightweight and designed for
-unit tests and small deployments. In-memory caches are used as a fallback when
-no Redis backend is configured or when Redis is unavailable.
+
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.
 """
 
 from __future__ import annotations
 
-import logging
 import time
 import hashlib
 from threading import Lock
 from typing import Optional
 
-logger = logging.getLogger(__name__)
-
-_DEFAULT_MAX_SIZE = 50_000
-_GC_INTERVAL = 512
-
+DEFAULT_MAX_SIZE = 50_000
+GC_INTERVAL = 512
 
 class TokenCache:
-    def __init__(self, ttl: int, max_size: int = _DEFAULT_MAX_SIZE) -> None:
+    def __init__(self, ttl: int, max_size: int = DEFAULT_MAX_SIZE) -> None:
         self._ttl = int(ttl)
         self._max_size = max(256, int(max_size))
         self._cache: dict[str, tuple[Optional[str], float]] = {}
@@ -52,7 +50,7 @@ class TokenCache:
         with self._lock:
             self._cache[key] = (org_id, now)
             self._ops += 1
-            if self._ops % _GC_INTERVAL == 0:
+            if self._ops % GC_INTERVAL == 0:
                 self._gc(now)
             elif len(self._cache) > self._max_size:
                 self._evict_oldest()

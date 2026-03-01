@@ -12,20 +12,19 @@ from __future__ import annotations
 import os
 from urllib.parse import urlparse
 
+from secrets import build_secret_provider
+
 
 def _env_name() -> str:
     return (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "development").strip().lower()
 
-
 def _is_production_env() -> bool:
     return _env_name() in {"prod", "production"}
-
 
 def _to_bool(value: str | None, *, default: bool = False) -> bool:
     if value is None:
         return default
     return str(value).strip().lower() in ("1", "true", "yes", "on")
-
 
 def _is_weak_secret(value: str | None) -> bool:
     normalized = str(value or "").strip().lower()
@@ -34,12 +33,15 @@ def _is_weak_secret(value: str | None) -> bool:
     weak_markers = ("changeme", "replace_with", "example", "default", "secret", "password")
     return any(marker in normalized for marker in weak_markers)
 
+
+secrets = build_secret_provider()
+
 APP_ENV: str = _env_name()
 IS_PRODUCTION: bool = _is_production_env()
 
 RATE_LIMIT_PER_MINUTE: int = int(os.getenv("GATEWAY_RATE_LIMIT_PER_MINUTE", "30000"))
 RATE_LIMIT_BACKEND: str = os.getenv("GATEWAY_RATE_LIMIT_BACKEND", "auto").strip().lower()
-RATE_LIMIT_REDIS_URL: str = os.getenv("GATEWAY_RATE_LIMIT_REDIS_URL", "").strip()
+RATE_LIMIT_REDIS_URL: str = secrets.get("GATEWAY_RATE_LIMIT_REDIS_URL") or ""
 GATEWAY_RATE_LIMIT_STRICT: bool = os.getenv("GATEWAY_RATE_LIMIT_STRICT", "false").lower() in ("1", "true", "yes")
 
 IP_ALLOWLIST: str = os.getenv("GATEWAY_IP_ALLOWLIST", "").strip()
@@ -52,14 +54,14 @@ TRUSTED_PROXY_CIDRS: list[str] = [
 ]
 
 TOKEN_CACHE_TTL: int = int(os.getenv("GATEWAY_TOKEN_CACHE_TTL", "60"))
-TOKEN_CACHE_REDIS_URL: str = os.getenv("GATEWAY_TOKEN_CACHE_REDIS_URL", "").strip()
+TOKEN_CACHE_REDIS_URL: str = secrets.get("GATEWAY_TOKEN_CACHE_REDIS_URL") or ""
 
 AUTH_API_URL: str = os.getenv(
     "GATEWAY_AUTH_API_URL",
     "https://beobservant:4319/api/internal/otlp/validate",
 ).strip()
 
-INTERNAL_SERVICE_TOKEN: str = os.getenv("GATEWAY_INTERNAL_SERVICE_TOKEN", "").strip()
+INTERNAL_SERVICE_TOKEN: str =   secrets.get("GATEWAY_INTERNAL_SERVICE_TOKEN") or ""
 
 SSL_VERIFY: bool = os.getenv("GATEWAY_SSL_VERIFY", "true").lower() not in ("0", "false", "no")
 SSL_CA_CERTS: str = os.getenv("GATEWAY_SSL_CA_CERTS", "").strip()
@@ -73,7 +75,7 @@ PORT: int = int(os.getenv("GATEWAY_PORT", os.getenv("PORT", "4321")))
 
 GATEWAY_STARTUP_RETRIES: int = int(os.getenv("GATEWAY_STARTUP_RETRIES", os.getenv("GATEWAY_DB_STARTUP_RETRIES", "10")))
 GATEWAY_STARTUP_BACKOFF: float = float(os.getenv("GATEWAY_STARTUP_BACKOFF", os.getenv("GATEWAY_DB_STARTUP_BACKOFF", "1.0")))
-GATEWAY_STATUS_OTLP_TOKEN   = os.getenv("GATEWAY_STATUS_OTLP_TOKEN", "").strip()
+GATEWAY_STATUS_OTLP_TOKEN: str = secrets.get("GATEWAY_STATUS_OTLP_TOKEN") or ""
 GATEWAY_STARTUP_CHECK_MODE: str = os.getenv(
     "GATEWAY_STARTUP_CHECK_MODE",
     "strict" if IS_PRODUCTION else "warn",

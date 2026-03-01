@@ -25,10 +25,10 @@ logging.basicConfig(
     level=getattr(logging, gw_config.LOG_LEVEL, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+
 logger = logging.getLogger("gateway_auth")
 
-_service = GatewayAuthService()
-
+service = GatewayAuthService()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
                     logger.warning(
                         "GATEWAY_STATUS_OTLP_TOKEN is not set; using synthetic startup probe token to verify auth API connectivity"
                     )
-                _service._fetch_org_from_api(probe_token)
+                service._fetch_org_from_api(probe_token)
             logger.info("Startup connectivity checks passed")
             break
         except Exception as exc:
@@ -83,8 +83,7 @@ app.include_router(gateway_router)
 
 @app.get("/health")
 async def health_root():
-    return _service.health()
-
+    return service.health()
 
 if __name__ == "__main__":
     uvicorn_kwargs: dict = {

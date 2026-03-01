@@ -12,18 +12,17 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-# expose redis module variable for tests that patch it
 try:
-    import redis  # type: ignore
+    import redis 
     _redis_available = True
 except Exception:
-    redis = None  # type: ignore
+    redis = None  
     _redis_available = False
 
 logger = logging.getLogger(__name__)
 
-from .memory import TokenCache  # noqa: E402
-from .redis import RedisTokenCache  # noqa: E402
+from .memory import TokenCache 
+from .redis import RedisTokenCache  
 
 __all__ = ["TokenCache", "RedisTokenCache", "make_token_cache", "redis"]
 

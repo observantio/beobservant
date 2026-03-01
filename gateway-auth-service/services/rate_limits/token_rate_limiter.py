@@ -1,3 +1,12 @@
+"""
+Token Rate Limiter for Gateway Authentication Service
+
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
 
 from __future__ import annotations
 
@@ -5,8 +14,7 @@ import time
 from threading import Lock
 from fastapi import HTTPException, status
 
-# replicate the constant used previously in a single-file implementation
-_MAX_IN_MEMORY_KEYS = 50_000
+MAX_IN_MEMORY_KEYS = 50_000
 
 
 class TokenRateLimiter:
@@ -24,7 +32,7 @@ class TokenRateLimiter:
                 cutoff = now - 120
                 self._hits = {k: v for k, v in self._hits.items() if v[0] >= cutoff}
 
-            if key not in self._hits and len(self._hits) >= _MAX_IN_MEMORY_KEYS:
+            if key not in self._hits and len(self._hits) >= MAX_IN_MEMORY_KEYS:
                 oldest = min(self._hits, key=lambda k: self._hits[k][0])
                 self._hits.pop(oldest, None)
 
