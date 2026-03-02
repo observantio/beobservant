@@ -15,12 +15,10 @@ import { TIME_RANGES, DEFAULT_DURATION_RANGE, TRACE_STATUS_OPTIONS, REFRESH_INTE
 import HelpTooltip from '../components/HelpTooltip'
 import { discoverServices, computeTraceStats } from '../utils/tempoTraceUtils'
 
-// default number of traces shown per page in list view
 const TRACE_PAGE_SIZE = 20
 
 export default function TempoPage() {
   const STORAGE_KEY = 'tempoPageState'
-  // restore saved values from localStorage (if present)
   const loadSaved = () => {
     try {
       if (typeof localStorage === 'undefined') return {}
@@ -52,7 +50,6 @@ export default function TempoPage() {
   const [viewMode, setViewMode] = useState(saved.viewMode || 'list')
   const [tracePage, setTracePage] = useState(saved.tracePage || 1)
   const [pageSize, setPageSize] = useState(saved.pageSize || TRACE_PAGE_SIZE)
-  // maximum number of traces to request from the backend (search limit)
   const [searchLimit, setSearchLimit] =
     useState(saved.searchLimit || DEFAULT_QUERY_LIMITS.traces || TRACE_PAGE_SIZE)
   const [autoRefresh, setAutoRefresh] = useState(false)
@@ -141,17 +138,16 @@ export default function TempoPage() {
     }
   }, [service, operation, traceIdSearch, durationRange, statusFilter, timeRange, searchLimit, pageSize, tracePage, viewMode, selectedTraceIds, selectedTrace])
 
-  // if we restored a selected trace id at startup, refetch it into detail modal
+  // run on mount only; dependencies are intentionally omitted because they represent
+  // initial state loaded from localStorage and we don't want this to re-run later.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (saved.selectedTrace && !selectedTrace) {
-      // load quietly; if the ID is stale we'll remove it without alarming the user
       void handleTraceClick(saved.selectedTrace, { silent: true })
     }
-    // if we were on the graph view and had selected ids, reload them
     if (viewMode === 'graph' && selectedTraceIds.size > 0 && graphTraces.length === 0) {
       showSelectedOnMap()
     }
-    // if any filter was saved we should automatically perform a search
     if (
       saved.traceIdSearch ||
       saved.service ||
@@ -162,7 +158,6 @@ export default function TempoPage() {
     ) {
       onSearch()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -173,6 +168,11 @@ export default function TempoPage() {
   }, [traces, services.length])
 
   const handleTraceClick = useCallback(async (traceId, { silent = false } = {}) => {
+    // ensure we show the list view when a trace is loaded
+    if (viewMode !== 'list') {
+      setViewMode('list')
+    }
+
     try {
       const trace = await getTrace(traceId)
       if (trace?.spans) {
@@ -188,7 +188,6 @@ export default function TempoPage() {
       }
       return true
     } catch (e) {
-      // clear saved state if the trace has disappeared
       if (e.status === 404) {
         removePersistedSelectedTrace(traceId)
         prunePersistedSelectedTraceIds(new Set([traceId]))
@@ -201,7 +200,7 @@ export default function TempoPage() {
       }
       return false
     }
-  }, [prunePersistedSelectedTraceIds, removePersistedSelectedTrace])
+  }, [prunePersistedSelectedTraceIds, removePersistedSelectedTrace, viewMode])
 
   function toggleSelectTrace(traceId, checked) {
     setSelectedTraceIds(prev => {
@@ -218,7 +217,6 @@ export default function TempoPage() {
       return
     }
 
-    // Immediately switch to dependency map and show a loading state
     setViewMode('graph')
     setGraphLoading(true)
     setGraphTraces([])
@@ -286,7 +284,10 @@ export default function TempoPage() {
     if (e) e.preventDefault()
     setError(null)
 
-    // Direct trace ID lookup
+    if (viewMode !== 'list') {
+      setViewMode('list')
+    }
+
     if (traceIdSearch.trim()) {
       setLoading(true)
       try {

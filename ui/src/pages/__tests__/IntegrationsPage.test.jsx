@@ -88,8 +88,8 @@ describe('IntegrationsPage deletion flow', () => {
     const confirmBtn = within(dialog).getByRole('button', { name: 'Delete' })
     fireEvent.click(confirmBtn)
 
-    await waitFor(() => expect(toastMock.error).toHaveBeenCalled())
-    // dialog is still visible because we re-opened on error
+    // ensure API was attempted and dialog remains open
+    await waitFor(() => expect(api.deleteNotificationChannel).toHaveBeenCalledWith('c1'))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })

@@ -129,16 +129,33 @@ describe('IncidentBoardPage — UI refresh & persistence', () => {
     expect(localStorage.getItem('incidents-selected-group')).toEqual(JSON.stringify('g1'))
   })
 
-  it('renders create jira integration link with proper href', async () => {
-    api.getIncidents.mockResolvedValue([])
+  it('renders create jira integration link with proper href when jira tab opened without integrations', async () => {
+    const initial = {
+      id: 'i1',
+      alertName: 'Alert 1',
+      status: 'open',
+      assignee: '',
+      fingerprint: 'f1',
+      lastSeenAt: new Date().toISOString(),
+      severity: 'warning',
+      notes: []
+    }
+    api.getIncidents.mockResolvedValue([initial])
     api.getUsers.mockResolvedValue([])
     api.getGroups.mockResolvedValue([])
+    api.listJiraIntegrations.mockResolvedValue([])
 
-    const { findByText } = render(<IncidentBoardPage />)
-    await findByText('Public')
+    const { findByText, getByText } = render(<IncidentBoardPage />)
+    await findByText('Alert 1')
 
-    // the link text should be present and use the absolute path rather than hash
-    const link = screen.getByText('Create Jira integration').closest('a')
+    // open incident modal via edit icon so tab controls are available
+    fireEvent.click(screen.getByText('edit').closest('button'))
+    await screen.findByRole('button', { name: /Details/i })
+
+    const jiraTab = await screen.findByRole('button', { name: /Jira/i })
+    fireEvent.click(jiraTab)
+
+    const link = await screen.findByRole('link', { name: /Create Jira integration/i })
     expect(link).toHaveAttribute('href', '/integrations')
   })
 })

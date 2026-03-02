@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest'
 import PermissionEditor from '../PermissionEditor'
 import * as api from '../../api'
 import { USER_ROLES } from '../../utils/constants'
+import { ToastProvider } from '../../contexts/ToastContext'
 
 // mock the API module methods used by PermissionEditor
 vi.mock('../../api', () => ({
@@ -20,7 +21,12 @@ describe('PermissionEditor', () => {
 
   it('renders without crashing and shows role options from constants', async () => {
     const user = { id: 'u1', username: 'bob', role: 'user', group_ids: [], direct_permissions: [] }
-    render(<PermissionEditor user={user} groups={[]} onClose={vi.fn()} onSave={vi.fn()} />)
+    // wrap component with toast provider because it uses useToast internally
+    render(
+      <ToastProvider>
+        <PermissionEditor user={user} groups={[]} onClose={vi.fn()} onSave={vi.fn()} />
+      </ToastProvider>
+    )
 
     // the component fetches permissions on mount, ensure that happens
     await waitFor(() => expect(api.getPermissions).toHaveBeenCalled())

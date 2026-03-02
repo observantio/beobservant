@@ -87,7 +87,7 @@ export default function HelpTooltip({ text, autoShow = false }) {
       window.removeEventListener('scroll', update, true)
       window.removeEventListener('keydown', onKey)
     }
-  }, [show])
+  }, [show, autoShow])
 
   return (
     <div ref={wrapperRef} className="relative inline-block">
