@@ -371,7 +371,7 @@ class Config:
             if not self.IS_PRODUCTION and self.DEFAULT_ADMIN_BOOTSTRAP_ENABLED:
                 self.DEFAULT_ADMIN_PASSWORD = secrets.token_urlsafe(18)
                 logger.warning(
-                    "Generated runtime DEFAULT_ADMIN_PASSWORD for non-production startup. Persist via secret manager before deployment.",
+                    "Generated runtime DEFAULT_ADMIN_PASSWORD for non-production startup.",
                 )
 
         if _is_placeholder(self.JWT_SECRET_KEY, placeholders=["change-this-secret-key-in-production", "changeme", "secret", ""]):

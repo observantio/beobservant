@@ -205,8 +205,6 @@ services:
     depends_on:
       - alertmanager
     networks: [obs]
-    ports:
-      - "9009:9009"
     restart: unless-stopped
 
   alertmanager:
