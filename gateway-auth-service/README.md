@@ -1,4 +1,4 @@
-# gateway-auth-service
+# Gateway-auth-service
 
 Internal OTLP token validation and gateway auth service used by BeObservant.
 

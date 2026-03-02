@@ -10,6 +10,6 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from  services.secrets.provider import build_secret_provider
+from  services.secrets.provider import SecretProvider, EnvSecretProvider
 
-__all__ = ["build_secret_provider"]
+__all__ = ["SecretProvider", "EnvSecretProvider"]

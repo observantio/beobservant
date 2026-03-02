@@ -186,3 +186,5 @@ class BeNotifiedProxyService(BaseProxyService):
             status_code=upstream.status_code,
             headers=self._forwardable_response_headers(upstream.headers),
         )
+    
+benotified_proxy_service = BeNotifiedProxyService()

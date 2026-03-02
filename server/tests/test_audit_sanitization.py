@@ -1,44 +1,74 @@
 """
-Tests for audit redaction/sanitization behavior.
+Copyright (c) 2026 Stefan Kumarasinghe
 
-Ensure `status_code` is not treated as sensitive (it must be visible in audit logs),
-while genuinely sensitive keys (token, code, mfa_code, etc.) remain redacted.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-import unittest
-
 from tests._env import ensure_test_env
-
 ensure_test_env()
+import pytest
+from fastapi import HTTPException
 
-from middleware.dependencies import auth_service
-from models.access.auth_models import Permission, Role, TokenData
-
-
-class AuditSanitizationTests(unittest.TestCase):
-    def test_redact_query_string_keeps_status_code(self):
-        qs = "status_code=200&token=secrettoken&code=12345&mfa_code=0000"
-        out = auth_service.redact_query_string(qs)
-        # status_code must remain intact
-        self.assertIn("status_code=200", out)
-        # sensitive params must be redacted
-        self.assertIn("token=%5BREDACTED%5D", out)
-        self.assertIn("code=%5BREDACTED%5D", out)
-        self.assertIn("mfa_code=%5BREDACTED%5D", out)
-
-    def test_sanitize_audit_details    def test_sanitize_audit_details    def test_sanit: "GET    def test_sanitize_audit_details    def test"xy    def test_sanitize_audit_details    def test_sanitize_audit_details    def testass    def test_sanitize_audit_details    def test_sanitize_audit_details    deed.get(    def testREDAC    def test_sanitize_audit_detailsitize    def tde"), "[RE    def test_sanitize_audit_details    def testri    def test_sanitize_audit_details    def test_sanitize_audit_dm/pa    def test_sanitize_audit_details    def testh_service.sanitize_resource_id(rid)
-        self.assertIn("status_code=200", out)
-        self.assertNotIn("token=abc", out)
-
-    def test_role_permission_strings_basic(self):
-        p        p        p        p        p trings(Role.USER)
-        self.assertIn(Permission        self.assertIn(Permission        sequ        self.assertIn(Permission        self.asseat        self.assertIn(Permission        self. perm        self.assertIn(Permission        self.asse.assertRaises(PermissionError):
-            auth_service.require_admin_with_audit_permission(user)
-        admin = TokenData(user_id="u", tenant_id="t", role=Role.ADMIN, permissions=[], is_superuser=False)
-        self.assertEqual(auth_service.require_admin_with_audit_permission(admin), admin)
-        superuser = TokenData(user_id="u", tenant_id="t", role=Role.USER, permissions=[], is_superuser=True)
-        self.assertEqual(auth_service.require_admin_with_audit_permission(superuser), superuser)
+from services.auth.helper import (
+    audit_key_is_sensitive,
+    redact_query_string,
+    sanitize_resource_id,
+    sanitize_audit_details,
+    require_admin_with_audit_permission,
+)
+from models.access.auth_models import Role
+from types import SimpleNamespace
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_audit_key_sensitive():
+    assert audit_key_is_sensitive("token")
+    assert audit_key_is_sensitive("Token")
+    assert not audit_key_is_sensitive("status_code")
+    assert not audit_key_is_sensitive("STATUS_Code")
+
+
+def test_redact_query_string_empty():
+    assert redact_query_string("") == ""
+    assert redact_query_string(None) == ""
+
+
+def test_redact_query_string_sanitizes():
+    qs = "status_code=200&token=secret&code=123"
+    out = redact_query_string(qs)
+    assert "status_code=200" in out
+    assert "token=%5BREDACTED%5D" in out
+    assert "code=%5BREDACTED%5D" in out
+
+
+def test_sanitize_resource_id():
+    assert sanitize_resource_id("abc") == "abc"
+    assert sanitize_resource_id("http://example.com?a=1&token=foo") == \
+        "http://example.com?a=1&token=%5BREDACTED%5D"
+
+
+def test_sanitize_audit_details():
+    details = {"status_code":200, "token":"x", "query":"a=1&secret=2"}
+    out = sanitize_audit_details(details)
+    assert out["status_code"] == 200
+    assert out["token"] == "[REDACTED]"
+    assert "secret=%5BREDACTED%5D" in out["query"]
+
+
+def make_user(role: str | Role = Role.USER.value, superuser=False):
+    if isinstance(role, Role):
+        role = role.value
+    return SimpleNamespace(role=str(role), is_superuser=superuser)
+
+
+
+def test_require_admin_permission():
+    user = make_user()
+    with pytest.raises(HTTPException):
+        require_admin_with_audit_permission(user)
+    admin = make_user(role=Role.ADMIN)
+    assert require_admin_with_audit_permission(admin) is admin
+    superu = make_user(superuser=True)
+    assert require_admin_with_audit_permission(superu) is superu
+

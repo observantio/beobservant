@@ -1,11 +1,21 @@
-"""Tests for internal token validation route and config integration."""
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
 
 from fastapi.testclient import TestClient
+from fastapi import HTTPException, status
 import pytest
 
 from tests._env import ensure_test_env
-
+from services.internal_service import InternalService
 ensure_test_env()
+
+from config import config
+config.SKIP_STARTUP_DB_INIT = True
 
 from main import app
 from config import config
@@ -16,13 +26,24 @@ class DummyAuthService:
     def validate_otlp_token(self, token, *, suppress_errors=True):
         return "org123" if token == "good" else None
 
+class DummyInternalService:
+    def __init__(self):
+        self._auth_service = DummyAuthService()
+
+    def verify_service_token(self, x_internal_token: str = None):
+        return None
+
+    def validate_token_or_404(self, token: str):
+        org = self._auth_service.validate_otlp_token(token, suppress_errors=False)
+        if not org:
+            raise HTTPException(status.HTTP_404_NOT_FOUND)
+        return {"org_id": org}
+
+
 
 @pytest.fixture(autouse=True)
 def patch_auth_service(monkeypatch):
-    # the router now delegates to an InternalService instance, so make sure
-    # its auth service is replaced with our dummy implementation.
-    monkeypatch.setattr(internal_router, "_auth_service", DummyAuthService())
-    internal_router._internal_service._auth_service = internal_router._auth_service
+    monkeypatch.setattr(internal_router, "internal_service", DummyInternalService())
 
 
 def test_missing_header(monkeypatch):
@@ -33,7 +54,6 @@ def test_missing_header(monkeypatch):
 
 
 def test_service_token_not_configured(monkeypatch):
-    # if the gateway internal token is not set we surface a 500 error
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", None)
     client = TestClient(app)
     resp = client.post(
@@ -114,9 +134,7 @@ def test_post_db_error_maps_to_503(monkeypatch):
         def validate_otlp_token(self, token, *, suppress_errors=True):
             raise RuntimeError("db down")
 
-    monkeypatch.setattr(internal_router, "_auth_service", FailingAuthService())
-    # update internal_service reference as well
-    internal_router._internal_service._auth_service = internal_router._auth_service
+    monkeypatch.setattr(internal_router, "internal_service", InternalService(auth_service=FailingAuthService()))
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
     client = TestClient(app)
     resp = client.post(

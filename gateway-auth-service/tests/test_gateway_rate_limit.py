@@ -2,11 +2,10 @@
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
-
 you may not use this file except in compliance with the License.
-
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
+
 import unittest
 
 from fastapi import HTTPException
@@ -67,12 +66,10 @@ class GatewayRateLimitTests(unittest.TestCase):
         prev = os.environ.get("GATEWAY_ALLOWLIST_FAIL_OPEN")
         try:
             os.environ["GATEWAY_ALLOWLIST_FAIL_OPEN"] = "true"
-            # reload both config and service so the new flag is picked up
             importlib.reload(__import__("services.config", fromlist=["*"]))
             importlib.reload(__import__("services.gateway_service", fromlist=["*"]))
             from services.gateway_service import GatewayAuthService
             service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
-            # should not raise
             service.enforce_ip_allowlist(_request("198.51.100.1"))
         finally:
             if prev is None:
@@ -84,8 +81,6 @@ class GatewayRateLimitTests(unittest.TestCase):
 
     def test_validate_otlp_token_raises_database_unavailable_on_api_error(self):
         service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
-
-        # simulate network/backend failure by patching the helper on the class
         from services import gateway_service as gw_mod
 
         def boom(self, token):
@@ -100,16 +95,10 @@ class GatewayRateLimitTests(unittest.TestCase):
             GatewayAuthService._fetch_org_from_api = prev
 
     def test_validate_endpoint_returns_503_on_database_unavailable(self):
-        # Ensure allowlist permits our test IP
         import ipaddress
         from routers import gateway_router
 
-        gateway_router._service._networks = [ipaddress.ip_network("127.0.0.1/32")]
-
-        # stub the validate_otlp_token to simulate DB outage (now backed by
-        # HTTP request). we stress that the router still handles a
-        # DatabaseUnavailable exception. patch on the class rather than the
-        # instance because __slots__ forbids new attributes.
+        gateway_router.service._networks = [ipaddress.ip_network("127.0.0.1/32")]
         def _boom(self, token):
             raise gateway_router.DatabaseUnavailable("db down")
 
@@ -131,7 +120,6 @@ class GatewayRateLimitTests(unittest.TestCase):
             with self.assertLogs("routers.gateway_router", level="WARNING") as log_ctx:
                 with self.assertRaises(HTTPException) as cm:
                     asyncio.run(gateway_router.validate_otlp_token(req))
-            # router returns sanitized 503 and logs a friendly warning
             self.assertEqual(cm.exception.status_code, 503)
             self.assertEqual(cm.exception.detail, "Auth backend unavailable")
             log_output = "\n".join(log_ctx.output)
@@ -152,10 +140,8 @@ class GatewayRateLimitTests(unittest.TestCase):
         prev = GatewayAuthService._fetch_org_from_api
         try:
             GatewayAuthService._fetch_org_from_api = fetch
-            # first invocation should call the backend
             self.assertEqual(service.validate_otlp_token("tok"), "org42")
             self.assertEqual(calls, ["tok"])
-            # second invocation should hit the cache
             self.assertEqual(service.validate_otlp_token("tok"), "org42")
             self.assertEqual(calls, ["tok"])
         finally:
@@ -189,7 +175,6 @@ class GatewayRateLimitTests(unittest.TestCase):
             tc_mod.redis = prev_redis
 
     def test_strict_rate_limiter_requires_redis(self):
-        # strict mode should mandate a working Redis backend; errors bubble up
         import services.config as cfg
         import services.rate_limit as rl_mod
         from services.rate_limit import make_default_rate_limiter, RedisTokenRateLimiter
@@ -201,7 +186,6 @@ class GatewayRateLimitTests(unittest.TestCase):
 
         orig_init = RedisTokenRateLimiter.__init__
         try:
-            # cause Redis initializer to always fail regardless of URL
             def fail(self, *args, **kwargs):
                 raise RuntimeError("no redis")
 
@@ -210,8 +194,6 @@ class GatewayRateLimitTests(unittest.TestCase):
                 make_default_rate_limiter(1, backend="redis", redis_url=None)
             with self.assertRaises(RuntimeError):
                 make_default_rate_limiter(1, backend="redis", redis_url="redis://localhost")
-
-            # succeed case: initializer replaced with noop
             def ok_init(self, limit, url, *args, **kwargs):
                 self._limit = limit
                 self.enforce = lambda key: None

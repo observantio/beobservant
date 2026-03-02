@@ -1,19 +1,30 @@
-"""Unit tests for agent service helpers and wrapper class."""
 
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
+import os
+
+os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost/testdb")
+os.environ.setdefault("CORS_ALLOW_CREDENTIALS", "False")
+os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 import asyncio
 from datetime import datetime, timezone, timedelta
 
 import pytest
 
 from models.observability.agent_models import AgentHeartbeat, AgentInfo
-from services.agent import AgentService
+from services.agent_service import AgentService
 from services.agent import helpers
 
 
 def test_make_agent_id():
     assert helpers.make_agent_id("agent", "") == "agent"
     assert helpers.make_agent_id("agent", "tenant") == "tenant:agent"
-
 
 def test_update_registry_new_and_existing():
     registry: dict[str, AgentInfo] = {}
@@ -25,7 +36,6 @@ def test_update_registry_new_and_existing():
     assert info.name == "a"
     assert info.host_name == "h"
     assert info.signals == ["s"]
-    # update again with new signal
     later = now + timedelta(seconds=5)
     hb2 = AgentHeartbeat(name="a", tenant_id="t", timestamp=later, attributes={}, signal="s2")
     helpers.update_agent_registry(registry, hb2)
@@ -74,7 +84,6 @@ async def test_service_wrapper_methods():
     svc.update_from_heartbeat(hb)
     agents = svc.list_agents()
     assert len(agents) == 1
-    # test extract_metrics_count via service
     assert svc.extract_metrics_count({}) == 0
     client = DummyClient({"data": {"result": []}})
     result = await svc.key_activity("k", client)

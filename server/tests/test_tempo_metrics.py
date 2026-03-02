@@ -1,12 +1,16 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from tests._env import ensure_test_env
 ensure_test_env()
-
 import asyncio
-
 import httpx
-
 from services.tempo import metrics as tempo_metrics
-
 
 def test_extract_metric_values_aggregates_and_skips():
     resp = {
@@ -19,20 +23,15 @@ def test_extract_metric_values_aggregates_and_skips():
     }
     out = tempo_metrics.extract_metric_values(resp)
     assert out == [[1600000000, "4"], [1600000060, "3"]]
-
-    # non-numeric values are skipped
     resp2 = {"data": {"result": [{"values": [[1600000000, "x"], [1600000060, "1"]]}]}}
     out2 = tempo_metrics.extract_metric_values(resp2)
     assert out2 == [[1600000060, "1"]]
 
 
 def test_query_metrics_range_disabled_and_4xx_behavior():
-    # disabled path
     result, enabled = asyncio.run(tempo_metrics.query_metrics_range(client=None, promql="x", start_us=None, end_us=None, metrics_enabled=False))
     assert isinstance(result, dict) and result.get("status") == "error"
     assert enabled is False
-
-    # simulate a successful Mimir response
     class DummyClient:
         async def get(self, url, params=None, headers=None):
             class R:

@@ -2,12 +2,9 @@
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
-
 you may not use this file except in compliance with the License.
-
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
-
 
 import importlib
 import os
@@ -102,7 +99,6 @@ class RateLimitTests(unittest.TestCase):
             with self.assertLogs("middleware.rate_limit", level="INFO") as cm:
                 module = _reload_rate_limit_module()
 
-        # should log connectivity / usage and choose Redis-backed limiter
         self.assertTrue(any("Connected to Redis for rate limiting" in m or "Using Redis-backed rate limiter" in m for m in cm.output))
         self.assertIsNotNone(module.rate_limiter._redis_limiter)
 

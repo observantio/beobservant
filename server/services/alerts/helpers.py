@@ -11,7 +11,7 @@ import httpx
 from fastapi import HTTPException, Request, status
 from models.access.auth_models import TokenData, Permission
 from config import config
-from services.grafana import proxy_auth_ops as benotified_proxy_service
+from services.benotified_proxy_service import benotified_proxy_service
 from json import JSONDecodeError
 import json
 from middleware.dependencies import enforce_public_endpoint_security, enforce_header_token

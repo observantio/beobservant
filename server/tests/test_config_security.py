@@ -2,12 +2,9 @@
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
-
 you may not use this file except in compliance with the License.
-
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
-
 
 import importlib
 import os
@@ -17,15 +14,11 @@ from unittest.mock import patch
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-# pytest sometimes imports a different `services` module (e.g. an unrelated
-# installed package) which lacks __path__. ensure our local package path is
-# present so submodule imports work correctly.
 try:
     import services
     if not hasattr(services, "__path__"):
         services.__path__ = [os.path.join(os.path.dirname(__file__), "..", "services")]
 except ImportError:
-    # if import fails, tests will likely fail later anyway
     pass
 
 
@@ -139,7 +132,6 @@ class ConfigSecurityTests(unittest.TestCase):
             "JWT_ALGORITHM": "RS256",
             "APP_ENV": "production",
             "VAULT_ENABLED": "true",
-            # deliberately omit VAULT_ADDR
             "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/beobservant",
             "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
         }, clear=False):
@@ -147,7 +139,6 @@ class ConfigSecurityTests(unittest.TestCase):
                 _reload_config_module()
 
     def test_loads_secrets_from_vault_when_enabled(self):
-        # Patch the VaultSecretProvider so tests don't require hvac or a real Vault
         class FakeVaultProvider:
             def __init__(self, *a, **k):
                 pass
@@ -170,10 +161,6 @@ class ConfigSecurityTests(unittest.TestCase):
             "VAULT_ADDR": "http://vault:8200",
             "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/beobservant",
         }, clear=False):
-            # insert a fake module into sys.modules so that when config.py
-            # tries to import services.secrets.vault_client it sees our
-            # provider class without touching the real package.  This avoids
-            # odd AttributeError issues that were occurring during import.
             import types, sys
             fake = types.SimpleNamespace(VaultSecretProvider=FakeVaultProvider, VaultClientError=Exception)
             sys.modules['services.secrets.vault_client'] = fake
@@ -181,9 +168,7 @@ class ConfigSecurityTests(unittest.TestCase):
             try:
                 module = _reload_config_module()
             finally:
-                # clean up to avoid polluting other tests
                 sys.modules.pop('services.secrets.vault_client', None)
-            # values from fake provider override env
             self.assertIsNotNone(module)
             self.assertEqual(module.config.DATABASE_URL, "postgresql://vaultuser:vaultpass@db:5432/beobservant")
             self.assertEqual(module.config.DEFAULT_ADMIN_PASSWORD, "vault-default-admin-pass")

@@ -1,3 +1,11 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from tests._env import ensure_test_env
 ensure_test_env()
 
@@ -22,18 +30,13 @@ def test_enroll_and_verify_mfa_flow():
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
-    # create a user and enroll TOTP
     user = svc.create_user(UserCreate(username='mfa-user', email='mfa-user@example.com', password='pwstrong', full_name='MFA User'), tenant_id)
     payload = svc.enroll_totp(user.id)
     assert 'secret' in payload and payload['secret']
-
-    # verify with a correct code
     secret = payload['secret']
     code = pyotp.TOTP(secret).now()
     recovery_codes = svc.verify_enable_totp(user.id, code)
     assert isinstance(recovery_codes, list) and len(recovery_codes) > 0
-
-    # ensure user now has MFA enabled
     updated = svc.get_user_by_id(user.id)
     assert updated.mfa_enabled is True
 
@@ -47,13 +50,11 @@ def test_skip_local_mfa_for_external(monkeypatch):
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
-    # create a normal local user and simulate MFA requirement
     user = svc.create_user(
         UserCreate(username='ext-mfa', email='ext-mfa@example.com', password='pw', full_name='External MFA'),
         tenant_id,
     )
 
-    # mark the account as belonging to an external provider and require setup
     with get_db_session() as db:
         db_user = db.query(User).filter_by(id=user.id).first()
         db_user.auth_provider = 'oidc'
@@ -61,11 +62,9 @@ def test_skip_local_mfa_for_external(monkeypatch):
         db_user.mfa_enabled = False
         db.commit()
 
-    # default config skips local MFA for external users
     result = svc._check_local_mfa(svc, db_user, None)
     assert result is True
 
-    # if the flag is disabled we should see the normal challenge behavior
     monkeypatch.setattr(config, 'SKIP_LOCAL_MFA_FOR_EXTERNAL', False)
     result2 = svc._check_local_mfa(svc, db_user, None)
     assert isinstance(result2, dict) and result2.get('mfa_setup_required')

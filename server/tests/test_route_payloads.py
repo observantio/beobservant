@@ -1,8 +1,14 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from tests._env import ensure_test_env
 ensure_test_env()
-
 import pytest
-
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate
 from services.grafana.route_payloads import parse_dashboard_create_payload, parse_dashboard_update_payload
 

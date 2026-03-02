@@ -242,3 +242,5 @@ class BeCertainProxyService(BaseProxyService):
             if owner and cache_key:
                 async with self._read_inflight_lock:
                     self._read_inflight.pop(cache_key, None)
+
+becertain_proxy_service = BeCertainProxyService()

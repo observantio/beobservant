@@ -1,3 +1,11 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 import pytest
 
 from services.loki.label_utils import (
@@ -12,7 +20,6 @@ def test_parse_labelset_value_handles_escaped_quotes_and_backslashes():
     raw = 'app="complex\\"value\\"",env="prod"'
     parsed = parse_labelset_value('app', raw)
     assert parsed and 'app' in parsed
-    # ensure escaped quote was unescaped in parser
     assert '"' in parsed['app'] or '\\"' in parsed['app']
 
 
@@ -24,7 +31,6 @@ def test_normalize_label_value_and_dict_and_values():
     labels = {'app': 'app="web",other="y",', 'env': 'prod'}
     extras = normalize_label_dict(labels)
     assert extras.get('other') == 'y'
-    # original labels should not be mutated by the pure helper
     assert labels['app'].startswith('app=')
 
     values = ['app="web",other="y",', 'plain']

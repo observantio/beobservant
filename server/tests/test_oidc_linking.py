@@ -1,8 +1,14 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from tests._env import ensure_test_env
 ensure_test_env()
-
 import pytest
-
 import database
 from database import get_db_session
 from config import config
@@ -20,14 +26,12 @@ def test_oidc_links_existing_local_account(monkeypatch):
         tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
-    # create a normal local user
     user = svc.create_user(
         UserCreate(username='linkuser', email='link@example.com', password='pw', full_name='Link User'),
         tenant_id,
     )
     assert user.auth_provider == 'local'
 
-    # configure service for OIDC
     monkeypatch.setattr(config, 'AUTH_PROVIDER', 'oidc')
     monkeypatch.setattr(config, 'OIDC_AUTO_PROVISION_USERS', True)
 
@@ -75,11 +79,9 @@ def test_local_user_needs_password_change_with_oidc_enabled(monkeypatch):
         tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
-    # enable OIDC globally but keep password flow active
     monkeypatch.setattr(config, 'AUTH_PROVIDER', 'oidc')
     monkeypatch.setattr(config, 'AUTH_PASSWORD_FLOW_ENABLED', True)
 
-    # create a purely local account
     user = svc.create_user(
         UserCreate(username='pwuser', email='pwuser@example.com', password='password123', full_name='Password User'),
         tenant_id,
@@ -97,28 +99,22 @@ def test_password_login_triggers_expiry_even_if_provider_set(monkeypatch):
         tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
-    # create a user and manually age the password
     user = svc.create_user(
         UserCreate(username='expire', email='expire@example.com', password='password123', full_name='Exp'),
         tenant_id,
     )
     assert user.auth_provider == 'local'
 
-    # make user appear as though it belongs to the external provider (simulating
-    # a linked account) and bump the password change date back in time
     with get_db_session() as db:
         u = db.query(database.db_models.User).filter_by(id=user.id).first()
         u.auth_provider = 'oidc'
-        # set last change far in the past
         from datetime import timedelta
 
         u.password_changed_at = u.password_changed_at - timedelta(days=365)
         db.commit()
 
-    # configure a short expiration window
     monkeypatch.setattr(config, 'PASSWORD_RESET_INTERVAL_DAYS', 30)
 
-    # calling authenticate_user with a password should still enforce expiry
     logged = svc.authenticate_user('expire', 'password123')
     assert logged is not None
     assert logged.needs_password_change
@@ -134,12 +130,9 @@ def test_oidc_auto_provisions_with_viewer_role(monkeypatch):
 
     monkeypatch.setattr(config, 'AUTH_PROVIDER', 'oidc')
     monkeypatch.setattr(config, 'OIDC_AUTO_PROVISION_USERS', True)
-
-    # user does not exist yet
     claims = {'email': 'newuser@example.com', 'sub': 'oidc-new'}
     new = svc._sync_user_from_oidc_claims(claims)
     assert new is not None
     assert new.role == Role.VIEWER.value
     assert new.auth_provider == 'oidc'
-    # OIDC-provisioned accounts should not require a password change
     assert not getattr(new, "needs_password_change", False)

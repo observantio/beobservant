@@ -1,7 +1,13 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from tests._env import ensure_test_env
-
 ensure_test_env()
-
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -123,7 +129,8 @@ async def test_manage_tenants_cannot_reset_temp_password():
     assert exc.value.status_code == 403
 
 
-def test_resolve_tenant_id_rejects_scope_conflict(monkeypatch):
+@pytest.mark.asyncio
+async def test_resolve_tenant_id_rejects_scope_conflict(monkeypatch):
     req = _request_with_scope_header("org-shared")
     current_user = _token_data()
     monkeypatch.setattr(
@@ -137,11 +144,12 @@ def test_resolve_tenant_id_rejects_scope_conflict(monkeypatch):
         lambda *, org_id, tenant_id: True,
     )
     with pytest.raises(HTTPException) as exc:
-        dependencies.resolve_tenant_id(req, current_user)
+        await dependencies.resolve_tenant_id(req, current_user)
     assert exc.value.status_code == 403
 
 
-def test_resolve_tenant_id_allows_non_conflicting_allowed_scope(monkeypatch):
+@pytest.mark.asyncio
+async def test_resolve_tenant_id_allows_non_conflicting_allowed_scope(monkeypatch):
     req = _request_with_scope_header("org-owned")
     current_user = _token_data()
     monkeypatch.setattr(
@@ -154,4 +162,4 @@ def test_resolve_tenant_id_allows_non_conflicting_allowed_scope(monkeypatch):
         "_scope_exists_in_other_tenants",
         lambda *, org_id, tenant_id: False,
     )
-    assert dependencies.resolve_tenant_id(req, current_user) == "org-owned"
+    assert await dependencies.resolve_tenant_id(req, current_user) == "org-owned"

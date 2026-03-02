@@ -1,4 +1,10 @@
-"""Tests for system helpers separated from the main service."""
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
 
 from typing import Any
 
@@ -13,7 +19,6 @@ class DummyProcess:
 
     def cpu_percent(self, interval=None):
         self._cpu_calls += 1
-        # first call returns 0, second returns 40
         return 0 if self._cpu_calls == 1 else 40
 
     def num_threads(self):
@@ -47,7 +52,6 @@ class DummyProcess:
 
 def test_cpu_metrics_normalization(monkeypatch):
     proc = DummyProcess()
-    # monkeypatch psutil.cpu_count to return 4
     monkeypatch.setattr(helpers.psutil, 'cpu_count', lambda: 4)
     metrics = helpers.cpu_metrics(proc)
     assert metrics['raw_utilization'] == 40

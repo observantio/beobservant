@@ -224,7 +224,8 @@ export default function IntegrationsPage() {
   const [editingJira, setEditingJira] = useState(null)
   const [showTestModal, setShowTestModal] = useState(false)
   const [testResult, setTestResult] = useState(null)
-  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, type: '', id: '', name: '' })
+  // state for current deletion target; null means no confirmation dialog
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [jiraForm, setJiraForm] = useState({
     name: '',
     visibility: 'private',
@@ -391,7 +392,7 @@ export default function IntegrationsPage() {
             </Button>
             )}
             {isOwner && (
-            <Button size="sm" variant="ghost" aria-label="Delete channel" title="Delete channel" onClick={() => setDeleteConfirm({ show: true, type: 'channel', id: channel.id, name: channel.name })} className="p-1 hover:bg-sre-primary/10">
+            <Button size="sm" variant="ghost" aria-label="Delete channel" title="Delete channel" onClick={() => setDeleteConfirm({ type: 'channel', id: channel.id, name: channel.name })} className="p-1 hover:bg-sre-primary/10">
               <span className="material-icons text-base">delete</span>
             </Button>
             )}
@@ -427,7 +428,7 @@ export default function IntegrationsPage() {
                 </Button>
               )}
               {isOwner && (
-                <Button size="sm" variant="ghost" aria-label="Delete integration" title="Delete integration" onClick={() => setDeleteConfirm({ show: true, type: 'Jira integration', id: integration.id, name: integration.name })} className="p-1 hover:bg-sre-primary/10">
+                <Button size="sm" variant="ghost" aria-label="Delete integration" title="Delete integration" onClick={() => setDeleteConfirm({ type: 'Jira integration', id: integration.id, name: integration.name })} className="p-1 hover:bg-sre-primary/10">
                   <span className="material-icons text-base">delete</span>
                 </Button>
               )}
@@ -712,11 +713,13 @@ export default function IntegrationsPage() {
       </Modal>
 
       <ConfirmModal
-        isOpen={deleteConfirm.show}
-        onCancel={() => setDeleteConfirm({ show: false, type: '', id: '', name: '' })}
+        isOpen={!!deleteConfirm}
+        onCancel={() => setDeleteConfirm(null)}
         onConfirm={async () => {
-          const target = { ...deleteConfirm }
-          setDeleteConfirm({ show: false, type: '', id: '', name: '' })
+          // capture current target, then immediately hide modal
+          const target = deleteConfirm
+          setDeleteConfirm(null)
+
           try {
             if (target.type === 'channel') {
               await handleDeleteChannel(target.id)
@@ -724,11 +727,12 @@ export default function IntegrationsPage() {
               await handleDeleteJiraIntegration(target.id)
             }
           } catch (e) {
+            // if the deletion failed we want the dialog back so the user can try again
             setDeleteConfirm(target)
           }
         }}
         title="Confirm Delete"
-        message={`Are you sure you want to delete the ${deleteConfirm.type} "${deleteConfirm.name}"? This action cannot be undone.`}
+        message={`Are you sure you want to delete the ${deleteConfirm?.type} "${deleteConfirm?.name}"? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"
         variant="danger"

@@ -1,11 +1,16 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 import httpx
 import pytest
 from fastapi import HTTPException
-
 from tests._env import ensure_test_env
-
 ensure_test_env()
-
 from config import config
 from models.access.auth_models import Role, TokenData
 from services.becertain_proxy_service import BeCertainProxyService

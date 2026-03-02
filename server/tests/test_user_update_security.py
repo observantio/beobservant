@@ -1,9 +1,15 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from tests._env import ensure_test_env
 ensure_test_env()
-
 import pytest
 from fastapi import HTTPException
-
 import database
 from database import get_db_session
 from config import config
@@ -11,7 +17,6 @@ from services.database_auth_service import DatabaseAuthService
 from models.access.user_models import UserCreate, UserUpdate
 from models.access.auth_models import Role
 from db_models import Tenant
-
 
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_non_admin_cannot_escalate_user_role():

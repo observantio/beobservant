@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from urllib.parse import urlparse
 
-from services.secrets.provider import  build_secret_provider
+from services.secrets.provider import  SecretProvider, EnvSecretProvider
 
 def _env_name() -> str:
     return (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "development").strip().lower()
@@ -33,8 +33,44 @@ def _is_weak_secret(value: str | None) -> bool:
     return any(marker in normalized for marker in weak_markers)
 
 
-secrets = build_secret_provider()
+def build_secret_provider() -> SecretProvider:
+    vault_addr = os.getenv("VAULT_ADDR", "").strip()
+    if not vault_addr:
+        return EnvSecretProvider()
 
+    from vault import VaultClientError, VaultSecretProvider
+
+    token = os.getenv("VAULT_TOKEN", "").strip() or None
+    role_id = os.getenv("VAULT_ROLE_ID", "").strip() or None
+    secret_id_file = os.getenv("VAULT_SECRET_ID_FILE", "").strip() or None
+    secret_id = os.getenv("VAULT_SECRET_ID", "").strip() or None
+
+    secret_id_fn = None
+    if role_id:
+        if secret_id_file:
+            def secret_id_fn() -> str:
+                with open(secret_id_file) as f:
+                    return f.read().strip()
+        elif secret_id:
+            secret_id_fn = lambda: secret_id
+        else:
+            raise VaultClientError(
+                "VAULT_ROLE_ID set but neither VAULT_SECRET_ID nor VAULT_SECRET_ID_FILE provided"
+            )
+
+    return VaultSecretProvider(
+        address=vault_addr,
+        token=token,
+        role_id=role_id,
+        secret_id_fn=secret_id_fn,
+        prefix=os.getenv("VAULT_PREFIX", "secret").strip(),
+        kv_version=int(os.getenv("VAULT_KV_VERSION", "2")),
+        timeout=float(os.getenv("VAULT_TIMEOUT", "2.0")),
+        cacert=os.getenv("VAULT_CACERT", "").strip() or None,
+        cache_ttl=float(os.getenv("VAULT_CACHE_TTL", "30.0")),
+    )
+
+secrets = build_secret_provider()
 APP_ENV: str = _env_name()
 IS_PRODUCTION: bool = _is_production_env()
 
@@ -97,3 +133,4 @@ if IS_PRODUCTION:
         raise ValueError("GATEWAY_INTERNAL_SERVICE_TOKEN must be a strong non-placeholder secret in production")
     if GATEWAY_STARTUP_CHECK_MODE == "strict" and not GATEWAY_STATUS_OTLP_TOKEN:
         raise ValueError("GATEWAY_STATUS_OTLP_TOKEN is required in production when GATEWAY_STARTUP_CHECK_MODE=strict")
+    

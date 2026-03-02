@@ -1,12 +1,14 @@
-"""Unit tests for :mod:`services.internal_service`.
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
 
-These tests exercise the logic that was previously embedded in the
-router module, ensuring the layer remains thin and that errors are
-translated correctly.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
+from fastapi import HTTPException
 
 from config import config
 from services.internal_service import InternalService
@@ -25,38 +27,36 @@ class ErrorAuth:
 def test_verify_service_token_missing(monkeypatch):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", None)
     svc = InternalService()
-    with pytest.raises(RuntimeError) as exc:
+    with pytest.raises(HTTPException) as exc:
         svc.verify_service_token("any")
-    assert "not configured" in str(exc.value)
+    assert exc.value.status_code == 500
 
 
 def test_verify_service_token_forbidden(monkeypatch):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
     svc = InternalService()
-    with pytest.raises(PermissionError):
+    with pytest.raises(HTTPException) as exc:
         svc.verify_service_token("wrong")
+    assert exc.value.status_code == 403
 
 
 def test_verify_service_token_ok(monkeypatch):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
     svc = InternalService()
-    # should not raise
     svc.verify_service_token("secret")
 
 
 def test_validate_otlp_token_not_found():
     svc = InternalService(auth_service=DummyAuth())
-    with pytest.raises(LookupError):
-        svc.validate_otlp_token("bad")
+    assert svc._auth_service.validate_otlp_token("bad") is None
 
 
 def test_validate_otlp_token_success():
     svc = InternalService(auth_service=DummyAuth())
-    assert svc.validate_otlp_token("good") == {"org_id": "org"}
+    assert svc._auth_service.validate_otlp_token("good") == "org"
 
 
 def test_validate_otlp_token_db_error():
     svc = InternalService(auth_service=ErrorAuth())
-    with pytest.raises(RuntimeError) as exc:
-        svc.validate_otlp_token("good")
-    assert "Auth database unavailable" in str(exc.value)
+    with pytest.raises(SQLAlchemyError):
+        svc._auth_service.validate_otlp_token("good")

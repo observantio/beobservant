@@ -215,13 +215,7 @@ class Config:
         self.BECERTAIN_PROXY_CACHE_TTL_SECONDS: int = int(os.getenv("BECERTAIN_PROXY_CACHE_TTL_SECONDS", "15"))
         self.BECERTAIN_TLS_ENABLED: bool = _to_bool(os.getenv("BECERTAIN_TLS_ENABLED"), default=False)
         self.BECERTAIN_CA_CERT_PATH: Optional[str] = os.getenv("BECERTAIN_CA_CERT_PATH")
-        self.BECERTAIN_ANALYZE_MAX_CONCURRENCY: int = int(os.getenv("BECERTAIN_ANALYZE_MAX_CONCURRENCY", "2"))
-        self.BECERTAIN_ANALYZE_MAX_RETAINED_PER_USER: int = int(os.getenv("BECERTAIN_ANALYZE_MAX_RETAINED_PER_USER", "50"))
-        self.BECERTAIN_ANALYZE_JOB_TTL_SECONDS: int = int(os.getenv("BECERTAIN_ANALYZE_JOB_TTL_SECONDS", "3600"))
-        self.BECERTAIN_ANALYZE_REPORT_RETENTION_DAYS: int = int(os.getenv("BECERTAIN_ANALYZE_REPORT_RETENTION_DAYS", "7"))
-        self.BECERTAIN_ANALYZE_STORAGE_PATH: str = os.getenv("BECERTAIN_ANALYZE_STORAGE_PATH", "./data/becertain_jobs")
-
-        # Authentication
+       # Authentication
         self.JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "RS256").strip().upper()
         self.JWT_EXPIRATION_MINUTES: int = int(os.getenv("JWT_EXPIRATION_MINUTES", "1440"))
         self.JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")

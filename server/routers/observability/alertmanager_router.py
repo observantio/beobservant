@@ -22,7 +22,7 @@ from middleware.dependencies import (
     get_current_user_or_mfa_setup,
 )
 from models.access.auth_models import TokenData
-from services.benotified_proxy_service import BeNotifiedProxyService
+from services.benotified_proxy_service import benotified_proxy_service
 from services.alerts.helpers import (
     assert_silence_owner,
     check_permissions,
@@ -36,8 +36,6 @@ from services.alerts.helpers import (
 
 router = APIRouter(prefix="/api/alertmanager", tags=["alertmanager"])
 webhook_router = APIRouter(tags=["alertmanager-webhooks"])
-
-benotified_proxy_service = BeNotifiedProxyService()
 
 webhook_router.add_api_route(
     "/alerts/webhook",

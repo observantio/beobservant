@@ -1,6 +1,13 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from tests._env import ensure_test_env
 ensure_test_env()
-
 import pytest
 from fastapi import HTTPException
 
@@ -16,13 +23,10 @@ from db_models import Tenant, AuditLog
 def test_update_group_permissions_logs_actor_user_id():
     svc = DatabaseAuthService()
     svc._lazy_init()
-
-    # find the default tenant created by bootstrap
     with get_db_session() as db:
         tenant = db.query(Tenant).first()
         tenant_id = tenant.id
 
-    # create a user and a group
     creator = svc.create_user(UserCreate(username='gcreator', email='gcreator@example.com', password='pw', full_name='Creator'), tenant_id)
     group = svc.create_group(GroupCreate(name='test-group', description='test'), tenant_id, creator.id)
 
@@ -34,8 +38,6 @@ def test_update_group_permissions_logs_actor_user_id():
         actor_role='user',
     )
     assert ok is True
-
-    # verify actor attribution is present in audit log
     with get_db_session() as db:
         row = db.query(AuditLog).filter_by(action='update_group_permissions', resource_id=group.id).order_by(AuditLog.created_at.desc()).first()
         assert row is not None

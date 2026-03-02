@@ -2,12 +2,9 @@
 Copyright (c) 2026 Stefan Kumarasinghe
 
 Licensed under the Apache License, Version 2.0 (the "License");
-
 you may not use this file except in compliance with the License.
-
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
-
 
 import importlib
 import os
@@ -15,6 +12,9 @@ import os
 os.environ.setdefault("DATABASE_URL", "postgresql://safeuser:safePass_123@db:5432/beobservant")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
 import unittest
+
+from services.common.cookies import cookie_secure
+from services.auth.helper import set_auth_cookie
 
 from starlette.requests import Request
 from fastapi.responses import Response
@@ -43,14 +43,12 @@ class AuthCookieFlagsTests(unittest.TestCase):
         previous_trust = config.TRUST_PROXY_HEADERS
         try:
             config.TRUST_PROXY_HEADERS = True
-            # no TRUSTED_PROXY_CIDRS configured => trust forwarded header
             req = _request_with_scheme_and_headers(headers={"x-forwarded-proto": "https"})
-            self.assertTrue(auth_router._cookie_secure(req))
+            self.assertTrue(cookie_secure(req))
 
-            # without proxy header trust the cookie should not be considered secure
             config.TRUST_PROXY_HEADERS = False
             req2 = _request_with_scheme_and_headers(headers={"x-forwarded-proto": "https"})
-            self.assertFalse(auth_router._cookie_secure(req2))
+            self.assertFalse(cookie_secure(req2))
         finally:
             config.TRUST_PROXY_HEADERS = previous_trust
 
@@ -63,7 +61,7 @@ class AuthCookieFlagsTests(unittest.TestCase):
 
             req = _request_with_scheme_and_headers(scheme="http", headers={})
             resp = Response()
-            auth_router._set_auth_cookie(req, resp, token="dummy-token")
+            set_auth_cookie(req, resp, token="dummy-token")
             hdr = resp.headers.get("set-cookie", "")
             self.assertIn("Secure", hdr)
         finally:

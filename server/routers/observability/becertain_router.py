@@ -28,12 +28,10 @@ from models.observability.becertain_models import (
     AnalyzeRequestPayload,
     AnalyzeProxyPayload,
 )
-from services.becertain_proxy_service import BeCertainProxyService
+from services.becertain_proxy_service import becertain_proxy_service
 from services.aiops.helpers import inject_tenant, correlation_id
 
 router = APIRouter(prefix="/api/becertain", tags=["becertain"])
-
-becertain_proxy_service = BeCertainProxyService()
 
 @router.post("/analyze/jobs", response_model=AnalyzeJobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_analyze_job(
