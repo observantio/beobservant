@@ -134,16 +134,12 @@ export function buildServiceGraphData(traces) {
 
     for (const [key, val] of localEdges.entries()) {
       const [src, dst] = key.split("->");
-      // Global aggregation for stats
       addEdge(src, dst, 0, false, 0);
       const edge = edges.get(key);
       edge.count += val.count;
       edge.durations.push(...val.durations);
       edge.errors += val.errors;
       edges.set(key, edge);
-
-      // Keep per-trace edge entries so we can render separate trace-level
-      // connections instead of collapsing all traces into a single line.
       traceEdges.push({
         key,
         source: src,
@@ -162,7 +158,6 @@ export function buildServiceGraphData(traces) {
     if (services.has(dst)) services.get(dst).inbound += val.count;
   }
 
-  // Mark start/end services: a start has zero inbound, an end has zero outbound.
   for (const [, stats] of services.entries()) {
     stats.isStart = stats.inbound === 0;
     stats.isEnd = stats.outbound === 0;

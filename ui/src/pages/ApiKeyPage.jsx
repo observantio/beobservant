@@ -245,7 +245,6 @@ export default function ApiKeyPage() {
     [apiKeys],
   );
 
-  // YAML modal state
   const [showYamlModal, setShowYamlModal] = useState(false);
   const [yamlModalKeyId, setYamlModalKeyId] = useState("");
   const [gatewayHost, setGatewayHost] = useState(OTLP_GATEWAY_HOST);
@@ -262,7 +261,6 @@ export default function ApiKeyPage() {
     setYamlShowToken(false);
   }, [yamlModalKeyId, showYamlModal]);
 
-  // derive endpoints from the gateway host
   const derivedLoki = useMemo(
     () => `${gatewayHost.replace(/\/$/, "")}/loki/otlp`,
     [gatewayHost],

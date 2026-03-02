@@ -6,7 +6,6 @@ export default function HelpTooltip({
   autoShow = false,
   showOnFocus = true,
 }) {
-  // optionally start visible (used in modals that open with context)
   const [show, setShow] = useState(autoShow);
   const wrapperRef = useRef(null);
   const tooltipRef = useRef(null);
@@ -42,27 +41,21 @@ export default function HelpTooltip({
 
       const maxWidth = Math.min(300, viewportW - margin * 2);
       tp.style.maxWidth = `${maxWidth}px`;
-
-      // measure after maxWidth applied
       const tpRect = tp.getBoundingClientRect();
       const tpWidth = tpRect.width;
       const tpHeight = tpRect.height;
       const wrRect = wr.getBoundingClientRect();
-
-      // center tooltip on the wrapper, then clamp to viewport
       let left = Math.round(wrRect.left + wrRect.width / 2 - tpWidth / 2);
       if (left < margin) left = margin;
       if (left + tpWidth + margin > viewportW)
         left = viewportW - tpWidth - margin;
 
-      // prefer placing tooltip above the element; if not enough space, place below
       let top = Math.round(wrRect.top - tpHeight - 8);
       let direction = "top";
       if (top < margin) {
         top = Math.round(wrRect.bottom + 8);
         direction = "bottom";
         if (top + tpHeight + margin > viewportH) {
-          // clamp vertical position if still overflowing
           top = Math.max(margin, viewportH - tpHeight - margin);
         }
       }
@@ -73,9 +66,8 @@ export default function HelpTooltip({
         position: "fixed",
       });
 
-      // compute arrow position inside tooltip (in px from left of tooltip)
       const wrCenter = wrRect.left + wrRect.width / 2;
-      let arrowLeft = Math.round(wrCenter - left - 8); // 8 = approx half arrow width
+      let arrowLeft = Math.round(wrCenter - left - 8); 
       const maxArrowLeft = Math.max(8, tpWidth - 16);
       if (arrowLeft < 8) arrowLeft = 8;
       if (arrowLeft > maxArrowLeft) arrowLeft = maxArrowLeft;
@@ -89,7 +81,6 @@ export default function HelpTooltip({
       });
     };
 
-    // initial position and keep it updated on resize/scroll
     update();
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);

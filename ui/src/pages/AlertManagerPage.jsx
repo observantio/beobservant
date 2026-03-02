@@ -84,13 +84,11 @@ export default function AlertManagerPage() {
 
   function handleApiError(e) {
     if (shouldIgnoreAlertManagerError(e)) return;
-    // delegate to hook-managed error state
     setHookError(e.message || String(e));
   }
 
   useEffect(() => {
-    // initial load handled by hook; keep API compatibility for existing code paths
-    // reloadData can be used after create/update/delete operations
+    // Load data on mount and whenever reloadData changes (e.g. after actions)
   }, [reloadData]);
 
   async function handleSaveRule(ruleData) {

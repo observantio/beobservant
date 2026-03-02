@@ -133,7 +133,6 @@ describe("AuthContext cookie-first behavior", () => {
   });
 
   it("logs out and navigates to /login when a 401 api-error event occurs", async () => {
-    // initial user load succeeds
     api.getCurrentUserNoRedirect.mockResolvedValue({ username: "joe" });
     api.getCurrentUser.mockResolvedValue({ username: "joe" });
 

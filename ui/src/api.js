@@ -106,7 +106,6 @@ function requestJson(
   });
 }
 
-// Health & Info
 export async function fetchInfo() {
   return request(`/`);
 }
@@ -121,20 +120,14 @@ export async function fetchSystemMetrics() {
 export async function login(username, password, mfa_code) {
   const payload = { username, password };
   if (mfa_code) payload.mfa_code = mfa_code;
-  // Server should set an httpOnly session cookie on success. If the server
-  // also returns an access_token we accept it as an in-memory fallback.
   return requestJson("/api/auth/login", { payload });
 }
 
-// Attempt a server-side session refresh (cookie-based). If the backend does
-// not implement /api/auth/refresh this will reject with 404 and callers should
-// handle the fallback gracefully.
 export async function refreshSession() {
   return request("/api/auth/refresh", { method: "POST" });
 }
 
 export async function enrollMFA() {
-  // prefer authenticated session, otherwise use setupToken for initial admin/setup flows
   if (authToken) return requestJson("/api/auth/mfa/enroll", { method: "POST" });
   if (!setupToken) throw new Error("Not authenticated");
   const res = await fetch(`${API_BASE}/api/auth/mfa/enroll`, {
@@ -403,7 +396,6 @@ export async function updateGroupMembers(groupId, userIds) {
   });
 }
 
-// Permission Management
 export async function getPermissions() {
   return request("/api/auth/permissions");
 }
@@ -437,18 +429,12 @@ export async function getActiveAgents() {
   return request("/api/agents/active");
 }
 
-// Alias for backward compatibility
 export const updatePassword = updateUserPassword;
 
-// AlertManager
 export async function getAlerts() {
   return request("/api/alertmanager/alerts");
 }
 
-/**
- * Get alerts filtered by labels and optional active/silenced/inhibited flags.
- * Example: getAlertsByFilter({ fingerprint: 'abc' }, true)
- */
 export async function getAlertsByFilter(filter = {}, active = true) {
   const params = new URLSearchParams();
   if (filter && Object.keys(filter).length > 0)
@@ -650,7 +636,6 @@ export async function testNotificationChannel(channelId) {
   );
 }
 
-// Mimir metrics for alert rule assistance
 export async function listMetricNames(orgId) {
   const params = new URLSearchParams();
   if (orgId) params.append("orgId", orgId);
@@ -661,7 +646,6 @@ export async function listMetricNames(orgId) {
   return request(path);
 }
 
-// Loki
 export async function queryLogs({
   query,
   limit = 100,
@@ -720,7 +704,6 @@ export async function getLogVolume(query, { start, end, step = 300 } = {}) {
   return request(`/api/loki/volume?${params.toString()}`);
 }
 
-// Tempo
 export async function searchTraces({
   service,
   operation,
@@ -749,7 +732,6 @@ export async function getTrace(traceID) {
   return request(`/api/tempo/traces/${encodeURIComponent(traceID)}`);
 }
 
-// BeCertain / RCA
 export async function createRcaAnalyzeJob(payload) {
   return requestJson("/api/becertain/analyze/jobs", { payload });
 }
@@ -852,7 +834,6 @@ export async function getRcaDeployments() {
   return request("/api/becertain/events/deployments");
 }
 
-// Grafana
 export async function searchDashboards({
   query = "",
   uid,

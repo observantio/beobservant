@@ -20,9 +20,7 @@ import {
   layoutServiceGraph,
 } from "../../utils/serviceGraphUtils";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+
 const STATUS_COLOR = (errorRate, isPain) => {
   if (isPain || errorRate > 5)
     return {
@@ -52,9 +50,7 @@ const EDGE_COLOR = (errorRate) => {
   return "#818cf8";
 };
 
-// ---------------------------------------------------------------------------
-// ServiceNode
-// ---------------------------------------------------------------------------
+
 const Stat = ({ label, value, highlight }) => (
   <div className="flex flex-col gap-0.5">
     <span className="text-[10px] text-sre-text-muted uppercase tracking-wider">
@@ -208,9 +204,6 @@ StatCard.propTypes = {
   empty: PropTypes.string,
 };
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
 export default function ServiceGraphAsync({ traces }) {
   const [activeNodeId, setActiveNodeId] = useState(null);
   const [activeEdgeId, setActiveEdgeId] = useState(null);
@@ -248,7 +241,6 @@ export default function ServiceGraphAsync({ traces }) {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const prevKeyRef = useRef(null);
 
-  // Reset only when topology changes; preserve dragged positions
   useEffect(() => {
     const key = [
       ...Array.from(graphData.services.keys()).sort(),
@@ -267,7 +259,6 @@ export default function ServiceGraphAsync({ traces }) {
     prevKeyRef.current = key;
   }, [graphData, layouted, nodes, setNodes, setEdges]);
 
-  // Apply active/hover purely as data mutation — never touches position
   useEffect(() => {
     setNodes((prev) =>
       prev.map((n) => ({
@@ -319,8 +310,6 @@ export default function ServiceGraphAsync({ traces }) {
   const handleNodeMouseEnter = useCallback((_, n) => setHoverNodeId(n.id), []);
   const handleNodeMouseLeave = useCallback(() => setHoverNodeId(null), []);
 
-  // Minimap: use inline style background so canvas has guaranteed dark bg
-  // nodeColor must return a fully-opaque hex — no CSS variables, no opacity
   const miniMapNodeColor = useCallback((node) => {
     const err = node?.data?.stats?.errorRateNum;
     if (err == null || Number.isNaN(+err)) return "#94a3b8";

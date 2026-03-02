@@ -38,7 +38,6 @@ export default function CreateUserModal({
   const isPasswordEnabled = Boolean(authMode?.password_enabled);
   const requirePassword = !isOidcEnabled || isPasswordEnabled;
 
-  // Filter and limit groups
   const filteredGroups = groups.filter((group) => {
     const query = groupSearchQuery.toLowerCase();
     return (
@@ -89,10 +88,8 @@ export default function CreateUserModal({
     const formatApiError = (err) => {
       try {
         if (!err) return "Unknown error";
-        // Pydantic detail array
         const detail = err?.body?.detail || err?.detail;
         if (Array.isArray(detail)) {
-          // also try to map field errors to input-level errors
           const fieldErrs = {};
           const messages = detail.map((d) => {
             if (typeof d === "string") return d;
@@ -180,7 +177,6 @@ export default function CreateUserModal({
                   const val = e.target.value;
                   const lower = val.toLowerCase();
                   setFormData({ ...formData, username: lower });
-                  // live validation
                   if (errors.username) {
                     if (lower && USERNAME_REGEX.test(lower)) {
                       const nextErrors = { ...errors };

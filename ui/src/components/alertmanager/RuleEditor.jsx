@@ -76,7 +76,6 @@ export default function RuleEditor({
     });
   }, [labelPairs, formData.labels]);
 
-  // Detect which template matches current form data
   useEffect(() => {
     const matchingTemplate = RULE_TEMPLATES.find(
       (template) =>
@@ -104,10 +103,6 @@ export default function RuleEditor({
   }, [formData, labelPairs]);
 
   const loadMetrics = async () => {
-    if (!formData.orgId) {
-      // We allow querying without orgId (backend falls back), but if the user
-      // explicitly selected a product we honour that preference.
-    }
     setLoadingMetrics(true);
     setMetricsError(null);
     try {
@@ -176,16 +171,16 @@ export default function RuleEditor({
   const canProceedToNextStep = () => {
     const { errors } = validateRuleForm(formData, labelPairs);
     switch (currentStep) {
-      case 0: // Basic
+      case 0: 
         return Boolean(!errors.name && formData.name.trim());
-      case 1: // Condition
+      case 1: 
         return Boolean(
           !errors.expr && !errors.duration && formData.expr.trim(),
         );
-      case 2: // Details
-        return true; // Optional fields
-      case 3: // Advanced
-        return true; // Optional fields
+      case 2: 
+        return true;
+      case 3: 
+        return true; 
       default:
         return false;
     }

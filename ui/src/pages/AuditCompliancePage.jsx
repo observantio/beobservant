@@ -91,7 +91,7 @@ export default function AuditCompliancePage() {
   const loadAudit = useCallback(
     async (baseFilters, { commit = true } = {}) => {
       setLoading(true);
-      const reqId = ++auditReqIdRef.current; // mark this request
+      const reqId = ++auditReqIdRef.current; 
       try {
         const queryFilters = baseFilters || {};
         const requestedLimit = Number(queryFilters.limit) || DEFAULT_LIMIT;
@@ -159,7 +159,6 @@ export default function AuditCompliancePage() {
     [loadAudit],
   );
 
-  // stable handlers
   const handleExportCsv = useCallback(async () => {
     setExporting(true);
     try {

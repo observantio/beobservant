@@ -35,13 +35,11 @@ export default function GroupsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  // Form states
   const [formData, setFormData] = useState({ name: "", description: "" });
   const [editGroupData, setEditGroupData] = useState({
     id: "",
@@ -51,7 +49,6 @@ export default function GroupsPage() {
   const [groupPermissions, setGroupPermissions] = useState([]);
   const [selectedMembers, setSelectedMembers] = useState([]);
 
-  // Create-group wizard state
   const [currentStep, setCurrentStep] = useState(0);
   const totalSteps = 3;
   const canProceedToNextStep = () => {
@@ -99,10 +96,7 @@ export default function GroupsPage() {
 
     setSaving(true);
     try {
-      // Create the group first
       const newGroup = await api.createGroup(formData);
-
-      // If permissions are selected, update them
       if (groupPermissions?.length > 0) {
         await api.updateGroupPermissions(newGroup.id, groupPermissions);
       }
@@ -134,7 +128,6 @@ export default function GroupsPage() {
 
   const openPermissionsModal = (group) => {
     setSelectedGroup(group);
-    // Set current group permissions
     const currentPerms = group.permissions?.map((p) => p.name || p) || [];
     setGroupPermissions(currentPerms);
     const memberIds = (users || [])

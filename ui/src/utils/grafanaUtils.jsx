@@ -47,9 +47,6 @@ export const GRAFANA_DATASOURCE_TYPES = DS_TYPES.filter((datasourceType) =>
   return { ...datasourceType, icon: icons[datasourceType.value] || null };
 });
 
-// Replace datasource references inside a Grafana `dashboard` object with the
-// selected datasource UID. This updates panel-level `datasource`, target
-// `datasource`/`datasourceUid`, and templating datasource variables.
 export function overrideDashboardDatasource(
   dashboard,
   datasourceUid,
@@ -63,10 +60,8 @@ export function overrideDashboardDatasource(
   );
   const dsName = dsObj ? dsObj.name : String(datasourceUid);
 
-  // deep clone to avoid mutating caller's object
   const out = JSON.parse(JSON.stringify(dashboard));
 
-  // only create/modify templating when caller explicitly requests it
   if (injectTemplating) {
     if (!out.templating || typeof out.templating !== "object") {
       out.templating = {
@@ -95,7 +90,6 @@ export function overrideDashboardDatasource(
           val[key] = datasourceUid;
         } else if (v && typeof v === "object") {
           if ("uid" in v) {
-            // replace object with uid string for simplicity
             val[key] = datasourceUid;
           } else if ("value" in v) {
             val[key].value = datasourceUid;
@@ -107,23 +101,16 @@ export function overrideDashboardDatasource(
       }
 
       if (key === "targets" && Array.isArray(v)) {
-        // Ensure each target explicitly references the selected datasource when
-        // possible (e.g. Prometheus `expr` targets). Also set panel-level
-        // `datasource` if the panel doesn't have one.
         v.forEach((t) => {
           if (t && typeof t === "object") {
             const hasExplicitDs = "datasource" in t || "datasourceUid" in t;
 
             if (hasExplicitDs) {
-              // set both string and uid forms
               if ("datasource" in t) t.datasource = datasourceUid;
               if ("datasourceUid" in t) t.datasourceUid = datasourceUid;
-              // also support object form that some Grafana panels use
               if (typeof t.datasource === "object" && t.datasource !== null)
                 t.datasource.uid = datasourceUid;
             } else {
-              // Heuristic: common query target fields that imply a Prometheus/metric
-              // panel — set string/uid forms so Grafana can persist them.
               if (t.expr || t.query || t.rawQuery || t.metric) {
                 t.datasource = datasourceUid;
                 t.datasourceUid = datasourceUid;
@@ -134,16 +121,12 @@ export function overrideDashboardDatasource(
           }
         });
 
-        // If the parent panel object has targets but no datasource, assign the
-        // selected datasource so Grafana will use it as the panel-level default.
         if (!("datasource" in val) && !("datasourceUid" in val)) {
           val.datasource = datasourceUid;
           val.datasourceUid = datasourceUid;
         }
 
-        // Also ensure panel-level datasource may exist as an object with uid
         if (val.datasource && typeof val.datasource === "string") {
-          // keep string form but also add object form for compatibility
           val.datasourceUid = val.datasourceUid || val.datasource;
         } else if (val.datasource && typeof val.datasource === "object") {
           val.datasourceUid =
@@ -155,13 +138,11 @@ export function overrideDashboardDatasource(
 
       if (key === "templating" && v && typeof v === "object") {
         if (!injectTemplating) {
-          // caller chose not to inject templating vars; recurse but don't modify
           replaceInValue(v.list);
           continue;
         }
 
         const list = v.list || [];
-        // update existing datasource templating vars
         let found = false;
         list.forEach((item) => {
           if (item && item.type === "datasource") {
@@ -172,7 +153,6 @@ export function overrideDashboardDatasource(
           }
         });
         if (!found) {
-          // insert a default datasource var at the front
           v.list = [
             {
               name: "ds_default",
@@ -186,8 +166,6 @@ export function overrideDashboardDatasource(
         replaceInValue(v.list);
         continue;
       }
-
-      // Recurse into nested objects/arrays
       if (v && typeof v === "object") replaceInValue(v);
     }
   }
@@ -196,8 +174,6 @@ export function overrideDashboardDatasource(
   return out;
 }
 
-// Resolve a templating value (uid or friendly name) to a datasource UID using
-// the provided list of available datasources. Returns empty string on no match.
 export function resolveToUid(candidate, availableDatasources = []) {
   if (!candidate && candidate !== 0) return "";
   const raw =
@@ -214,9 +190,6 @@ export function resolveToUid(candidate, availableDatasources = []) {
   return "";
 }
 
-// Infer the dashboard-level datasource: prefer a templating var (`ds_default`)
-// if present, otherwise fall back to the most common panel/target datasource.
-// Returns { uid, useTemplating }.
 export function inferDashboardDatasource(dashboard, availableDatasources = []) {
   if (!dashboard) return { uid: "", useTemplating: false };
 
@@ -232,7 +205,6 @@ export function inferDashboardDatasource(dashboard, availableDatasources = []) {
   return { uid: resolvedPrimary, useTemplating: false };
 }
 
-// Find the most common datasource uid used across panel/target entries.
 export function findPrimaryDatasourceUid(dashboard) {
   if (!dashboard) return "";
   const panels = dashboard.panels || dashboard.dashboard?.panels || [];

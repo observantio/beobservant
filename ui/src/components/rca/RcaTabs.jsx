@@ -1,10 +1,5 @@
 import PropTypes from "prop-types";
 
-// A simple tab list component.  The parent is responsible for storing
-// activeTab and handling onChange events.  "tabs" is an array of objects
-// with { key, label, [icon] }.  If `sticky` is true we apply the same styles
-// that RCAPage used previously (top sticky background) and any additional
-// `className` is merged.
 export default function RcaTabs({
   tabs,
   activeTab,

@@ -213,7 +213,6 @@ export default function GrafanaPage() {
     setQuery("");
   }
 
-  // ---- Hide/Show ----
   async function handleToggleDashboardHidden(dashboard) {
     const nowHidden = !dashboard.is_hidden;
     setConfirmDialog({
@@ -527,7 +526,6 @@ export default function GrafanaPage() {
     });
   }
 
-  // ---- Datasource CRUD ----
   function openDatasourceEditor(datasource = null) {
     if (datasource) {
       setEditingDatasource(datasource);
@@ -638,7 +636,6 @@ export default function GrafanaPage() {
     });
   }
 
-  // ---- Folders ----
   async function handleCreateFolder() {
     if (!folderName.trim()) return;
     try {

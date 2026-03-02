@@ -262,7 +262,6 @@ export default function LogResults({
                     displayText = formatted.data;
                   }
 
-                  // compact view
                   if (viewMode === "compact") {
                     return (
                       <div
@@ -285,7 +284,6 @@ export default function LogResults({
                     );
                   }
 
-                  // raw view
                   if (viewMode === "raw") {
                     return (
                       <div
@@ -303,7 +301,6 @@ export default function LogResults({
                     );
                   }
 
-                  // default (expanded) view
                   return (
                     <div
                       style={style}
@@ -420,7 +417,6 @@ export default function LogResults({
                   );
                 };
 
-                // render virtualized list
                 return (
                   <div>
                     <List

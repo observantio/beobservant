@@ -13,7 +13,6 @@ export default {
   theme: {
     extend: {
       colors: {
-        // SRE Dark Theme (default)
         "sre-bg": "var(--sre-bg)",
         "sre-bg-alt": "var(--sre-bg-alt)",
         "sre-bg-card": "var(--sre-bg-card)",

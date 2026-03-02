@@ -1,7 +1,6 @@
 import PropTypes from "prop-types";
 import { Card } from "../ui";
 
-// simple wrapper used by panels to avoid repeating compact/card logic
 export default function Section({ compact = false, className = "", children }) {
   if (compact) {
     return <div className={className}>{children}</div>;

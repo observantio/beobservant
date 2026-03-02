@@ -308,7 +308,7 @@ export function Select({
           "w-full px-4 pr-10 py-2 bg-sre-surface border border-sre-border rounded-lg",
           "text-sre-text",
           "focus:outline-none focus:ring-2 focus:ring-sre-primary focus:border-transparent",
-          "transition-all duration-200 cursor-pointer", // ensure long option labels don’t force the select to grow outside its container
+          "transition-all duration-200 cursor-pointer", 
           "truncate",
           error && "border-sre-error focus:ring-sre-error",
           className,
@@ -571,10 +571,6 @@ export function Sparkline({
   let min = Math.min(...safeValues);
   let max = Math.max(...safeValues);
   let range = max - min || 1;
-
-  // Prevent tiny numeric ranges from mapping to full-height visual swings.
-  // For small ranges (e.g. counts of 36 vs 37) expand the visual range so the
-  // sparkline appears stable instead of jumping between top/bottom pixels.
   const MIN_VISUAL_RANGE = 3;
   if (range < MIN_VISUAL_RANGE) {
     const mid = (min + max) / 2;

@@ -123,17 +123,13 @@ export default function TempoPage() {
     }
   }, []);
 
-  // Load services only after authentication is ready
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
       loadServices();
     }
   }, [isAuthenticated, authLoading, loadServices]);
 
-  // centralized auto-refresh hook (keeps previous behavior)
   useAutoRefresh(() => onSearch(), refreshInterval * 1000, autoRefresh);
-
-  // persist relevant state to localStorage whenever it changes
   useEffect(() => {
     try {
       const toSave = {
@@ -148,7 +144,6 @@ export default function TempoPage() {
         tracePage,
         viewMode,
         selectedTraceIds: Array.from(selectedTraceIds),
-        // only save trace id of opened detail view
         selectedTrace: selectedTrace
           ? selectedTrace.traceId || selectedTrace.traceID || selectedTrace.id
           : null,
@@ -172,9 +167,6 @@ export default function TempoPage() {
     selectedTrace,
   ]);
 
-  // run on mount only; dependencies are intentionally omitted because they represent
-  // initial state loaded from localStorage and we don't want this to re-run later.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (saved.selectedTrace && !selectedTrace) {
       void handleTraceClick(saved.selectedTrace, { silent: true });
@@ -207,7 +199,6 @@ export default function TempoPage() {
 
   const handleTraceClick = useCallback(
     async (traceId, { silent = false } = {}) => {
-      // ensure we show the list view when a trace is loaded
       if (viewMode !== "list") {
         setViewMode("list");
       }
@@ -822,7 +813,6 @@ export default function TempoPage() {
                   type="button"
                   className="text-xs text-sre-primary hover:underline"
                   onClick={() => {
-                    // select all visible
                     const ids = pagedTraces
                       .map((t) => t.traceID || t.traceId)
                       .filter(Boolean);

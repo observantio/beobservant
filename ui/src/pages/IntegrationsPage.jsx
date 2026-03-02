@@ -181,9 +181,6 @@ export default function IntegrationsPage() {
 
   const formatApiError = (err) => {
     if (!err) return "API error";
-
-    // Prefer explicit error body from our API client (err.body), otherwise
-    // fall back to the error object/string/message.
     let body = err && err.body ? err.body : err;
 
     if (typeof body === "string") {
@@ -217,7 +214,6 @@ export default function IntegrationsPage() {
 
     const m = err && err.message;
     if (m && typeof m === "string") {
-      // message may itself be a JSON-encoded string
       try {
         const parsed = JSON.parse(m);
         if (parsed) {
@@ -247,7 +243,6 @@ export default function IntegrationsPage() {
   const [editingJira, setEditingJira] = useState(null);
   const [showTestModal, setShowTestModal] = useState(false);
   const [testResult, setTestResult] = useState(null);
-  // state for current deletion target; null means no confirmation dialog
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [jiraForm, setJiraForm] = useState({
     name: "",
@@ -595,13 +590,10 @@ export default function IntegrationsPage() {
   }
 
   async function handleSaveJiraIntegration() {
-    // Validate required fields
     if (!jiraForm.baseUrl || !jiraForm.baseUrl.trim()) {
       toast.error("Jira Base URL is required");
       return;
     }
-
-    // Basic URL validation
     try {
       new URL(jiraForm.baseUrl.trim());
     } catch (e) {
@@ -873,7 +865,6 @@ export default function IntegrationsPage() {
         isOpen={!!deleteConfirm}
         onCancel={() => setDeleteConfirm(null)}
         onConfirm={async () => {
-          // capture current target, then immediately hide modal
           const target = deleteConfirm;
           setDeleteConfirm(null);
 
@@ -884,7 +875,6 @@ export default function IntegrationsPage() {
               await handleDeleteJiraIntegration(target.id);
             }
           } catch (e) {
-            // if the deletion failed we want the dialog back so the user can try again
             setDeleteConfirm(target);
           }
         }}

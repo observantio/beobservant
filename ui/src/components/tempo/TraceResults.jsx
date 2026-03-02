@@ -15,11 +15,9 @@ function TraceCard({
     t.spans?.find((s) => !s.parentSpanId && !s.parentSpanID) || t.spans?.[0];
   const duration = rootSpan?.duration || 0;
   const traceHasError = t.spans?.some(hasSpanError);
-  // determine if this is a summary-only trace, which means we only have the root span
   const isSummary =
     Array.isArray(t.warnings) &&
     t.warnings.some((w) => w.toLowerCase().includes("summary"));
-  // gather service names, ignore blanks and generic "unknown" labels
   const allServices =
     t.spans
       ?.map((s) => getServiceName(s))
@@ -160,7 +158,6 @@ export default function TraceResults({
     );
   }
 
-  // Responsive grid for trace cards — two cards per row on medium+ screens for better spacing
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {traces.map((t) => (

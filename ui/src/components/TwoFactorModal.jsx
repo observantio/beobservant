@@ -53,7 +53,6 @@ export default function TwoFactorModal({
       const res = await api.verifyMFA(code);
       setRecoveryCodes(res.recovery_codes || []);
       if (setupMode && typeof onVerified === "function") {
-        // Let caller complete the final login step (login + token issuance)
         onVerified({ code, recoveryCodes: res.recovery_codes || [] });
       } else {
         await refreshUser();

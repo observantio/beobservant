@@ -18,7 +18,6 @@ export default function LogQueryForm({
   setPattern,
   rangeMinutes,
   setRangeMinutes,
-  // renamed for clarity
   searchLimit,
   setSearchLimit,
   pageSize,

@@ -35,8 +35,6 @@ export default function LoginPage() {
     loading: authLoading,
   } = useAuth();
   const navigate = useNavigate();
-
-  // If user is already authenticated, redirect away from the login page
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       navigate("/", { replace: true });
@@ -70,14 +68,12 @@ export default function LoginPage() {
       await login(username.trim(), password);
       navigate("/");
     } catch (err) {
-      // Detect MFA challenge
       if (err?.status === 401 && err?.body?.detail === "MFA required") {
         setMfaRequired(true);
         setUseRecoveryCode(false);
         setError("");
         return;
       }
-      // Detect MFA setup required (first-time admin / forced requirement)
       const challenge =
         err?.body?.detail && typeof err.body.detail === "object"
           ? err.body.detail

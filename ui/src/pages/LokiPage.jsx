@@ -52,11 +52,9 @@ export default function LokiPage() {
   const [selectedValue, setSelectedValue] = useState(saved.selectedValue || "");
   const [pattern, setPattern] = useState(saved.pattern || "");
   const [rangeMinutes, setRangeMinutes] = useState(saved.rangeMinutes || 60);
-  // searchLimit controls how many log entries are fetched (analogous to Tempo Search Limit)
   const [searchLimit, setSearchLimit] = useState(
     saved.searchLimit || DEFAULT_QUERY_LIMITS.logs || 100,
   );
-  // pageSize controls how many streams are shown per page in results
   const [pageSize, setPageSize] = useState(
     saved.pageSize || Math.min(...MAX_LOG_OPTIONS) || 20,
   );
@@ -75,7 +73,6 @@ export default function LokiPage() {
   const [topTerms, setTopTerms] = useState([]);
 
   const logStats = useMemo(() => {
-    // if there is no result yet or there are no streams, hide the stats bar
     const res = queryResult?.data?.result || [];
     if (!queryResult || res.length === 0) {
       return null;
@@ -84,12 +81,10 @@ export default function LokiPage() {
     const totalStreams = res.length;
     const totalLogs = res.reduce((acc, s) => acc + (s.values?.length || 0), 0);
     const avgLogs = totalStreams ? Math.round(totalLogs / totalStreams) : 0;
-    // compute unique services present in streams and keep names
     const servicesSet = new Set(
       res
         .flatMap((s) => {
           if (s.stream) {
-            // common service labels
             return [
               s.stream.service_name,
               s.stream.service,
@@ -116,11 +111,7 @@ export default function LokiPage() {
   }, [queryResult, topTerms]);
 
   const toast = useToast();
-
-  // use shared hook for auto-refresh (keeps behavior identical but removes manual timers)
   useAutoRefresh(() => executeQuery(), refreshInterval * 1000, autoRefresh);
-
-  // save state whenever key values change
   useEffect(() => {
     try {
       const toSave = {
@@ -156,7 +147,6 @@ export default function LokiPage() {
     customLogQL,
   ]);
 
-  // run initial query if we restored search parameters
   useEffect(() => {
     if (
       saved.selectedFilters?.length ||
@@ -167,7 +157,6 @@ export default function LokiPage() {
     ) {
       executeQuery();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadInitialData = useCallback(async () => {
@@ -467,8 +456,6 @@ export default function LokiPage() {
     setQueryMode("builder");
     executeQuery([], term);
   }
-
-  // use shared helper and surface toast from page
   const copyToClipboard = async (text) => {
     const ok = await (
       await import("../utils/helpers")

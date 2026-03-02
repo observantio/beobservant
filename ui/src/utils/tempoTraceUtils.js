@@ -13,14 +13,7 @@ export function discoverServices(traces) {
 
 export function computeTraceStats(filteredTraces) {
   if (!filteredTraces.length) return null;
-
-  // Spans from the backend use microseconds for durations. For display
-  // and downstream formatting we use nanoseconds (ns). Compute stats in
-  // microseconds first, then convert to ns at the end.
   const durationsUs = filteredTraces.map((trace) => {
-    // Prefer the root span duration when available. If spans are absent
-    // (e.g., summary-only traces), fall back to common summary fields
-    // such as `durationMs` or `duration_us` if present.
     if (trace.spans?.length) {
       const rootSpan =
         trace.spans.find((span) => !span.parentSpanId && !span.parentSpanID) ||
@@ -58,7 +51,6 @@ export function computeTraceStats(filteredTraces) {
 
   return {
     total: filteredTraces.length,
-    // convert microseconds -> nanoseconds for formatting
     avgDuration: Math.round(avgDurationUs * 1000),
     maxDuration: Math.round(maxDurationUs * 1000),
     minDuration: Math.round(minDurationUs * 1000),

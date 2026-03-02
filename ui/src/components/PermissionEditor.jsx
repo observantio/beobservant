@@ -202,13 +202,12 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Update user role and groups
+
       await onSave({
         role,
         group_ids: Array.from(selectedGroups),
       });
 
-      // Update user permissions (direct permissions override group/role)
       await api.updateUserPermissions(user.id, Array.from(selectedPermissions));
 
       toast.success("Permissions saved successfully");

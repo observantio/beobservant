@@ -26,7 +26,6 @@ module.exports = [
     rules: {
       "react/prop-types": "off",
       "react/react-in-jsx-scope": "off",
-      // react-hooks rules are now supported with the current ESLint & plugin versions
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
       "jsx-a11y/no-noninteractive-element-interactions": "off",

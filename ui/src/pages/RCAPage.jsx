@@ -146,8 +146,6 @@ export default function RCAPage() {
     }
   }, [jobs, setSelectedJobId]);
 
-  // if the job referenced in storage disappears from the returned list we should
-  // also clear it so we don't keep an orphaned selection around.
   useEffect(() => {
     if (!jobs.length) return;
 
@@ -171,17 +169,12 @@ export default function RCAPage() {
     }
   }, [jobs, selectedJobId, setSelectedJobId]);
 
-  // if the user had previously looked up a report id we automatically re-open
-  // the modal when the page comes back, giving the sense of restoring state.
   useEffect(() => {
     if (reportLookupId) {
       setViewModalOpen(true);
     }
   }, [reportLookupId]);
 
-  // when a lookup ID is invalid (e.g. the report was deleted or the key changed)
-  // the backend will return a 404. Rather than continuously retrying on every
-  // mount we clear the stored value so the UI stops spamming error messages.
   useEffect(() => {
     if (reportErrorStatus === 404 && reportLookupId) {
       setReportLookupInput("");
@@ -224,7 +217,6 @@ export default function RCAPage() {
     setLookupError(null);
     setSelectedJobId(null);
     setReportLookupId(value);
-    // whenever a user looks up an ID explicitly, open the modal
     setViewModalOpen(true);
   }
 

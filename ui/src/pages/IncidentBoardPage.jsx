@@ -537,7 +537,7 @@ export default function IncidentBoardPage() {
     });
   }, [assignableIncidentUsers, assigneeSearch]);
 
-  // Format ISO timestamp to `DD/MM/YYYY, hh:mm:ss am/pm` (consistently used for notes/comments)
+  
   const formatDateTime = (iso) => {
     if (!iso) return "unknown time";
     try {
@@ -569,7 +569,7 @@ export default function IncidentBoardPage() {
       jiraTicketUrl: incident.jiraTicketUrl ?? "",
       jiraIntegrationId: defaultIntegrationId,
       hideWhenResolved: incident.hideWhenResolved ?? false,
-      // Jira create form defaults (prefer any existing draft value)
+      
       projectKey:
         incidentDrafts?.[incident.id]?.projectKey ||
         jiraProjects[0]?.key ||
@@ -607,8 +607,6 @@ export default function IncidentBoardPage() {
 
     loadJiraComments(incident.id);
   };
-
-  // Duplicate JSX removed — memoized `IncidentCard`/`Column` are used instead.
 
   const IncidentModalTabs = ({ tab, setTab }) => (
     <div className="mt-4 inline-flex bg-sre-bg-alt rounded-lg p-1 border border-sre-border">
@@ -715,7 +713,7 @@ export default function IncidentBoardPage() {
           payload.status = "resolved";
         }
 
-        // Prevent resolving if the underlying alert is still active (client-side check).
+        
         if (target === "resolved" && incident && incident.fingerprint) {
           try {
             const activeAlerts = await getAlertsByFilter(
@@ -730,7 +728,7 @@ export default function IncidentBoardPage() {
               return;
             }
           } catch (err) {
-            // If the check fails, fall back to server-side enforcement (do not block UX)
+            
             console.warn(
               "Alert active-check failed, will rely on server-side enforcement",
               err,
@@ -773,7 +771,7 @@ export default function IncidentBoardPage() {
             : incident.hideWhenResolved || false,
       };
 
-      // Client-side pre-check: disallow resolving if underlying alert still active
+      
       if (payload.status === "resolved" && incident.fingerprint) {
         try {
           const activeAlerts = await getAlertsByFilter(
@@ -789,7 +787,7 @@ export default function IncidentBoardPage() {
             return;
           }
         } catch (err) {
-          // fallback to server-side enforcement if the check fails
+          
           console.warn(
             "Alert active-check failed during save, will rely on server-side enforcement",
             err,
@@ -839,7 +837,6 @@ export default function IncidentBoardPage() {
     handleSaveIncident,
   ]);
 
-  // Quickly add a single note (does not close modal). Clears draft and refreshes notes.
   const handleAddNote = useCallback(
     async (incidentId) => {
       const draft = incidentDrafts[incidentId] || {};
@@ -849,16 +846,16 @@ export default function IncidentBoardPage() {
       try {
         const updated = await updateIncident(incidentId, { note: text });
 
-        // update modal / incidents immediately with the server response
+        
         setIncidentModal(() => ({ isOpen: true, incident: updated }));
 
-        // clear the draft note
+        
         setIncidentDrafts((prev) => ({
           ...prev,
           [incidentId]: { ...(prev[incidentId] || {}), note: "" },
         }));
 
-        // also update incidents list optimistically
+        
         setIncidents((prev) =>
           prev.map((it) =>
             String(it.id) === String(updated.id) ? updated : it,
@@ -1597,7 +1594,7 @@ export default function IncidentBoardPage() {
                             )
                           }
                           onClick={async () => {
-                            // create Jira ticket using server endpoint
+                            
                             if (!canUpdateIncidents) {
                               try {
                                 toast.error(
@@ -1652,7 +1649,7 @@ export default function IncidentBoardPage() {
                                   description,
                                 },
                               );
-                              // update local draft and refresh
+                              
                               setIncidentDrafts((prev) => ({
                                 ...prev,
                                 [activeIncident.id]: {
@@ -1737,7 +1734,7 @@ export default function IncidentBoardPage() {
                           }))
                         }
                         onKeyDown={(e) => {
-                          // Ctrl/Cmd + Enter submits the note immediately
+                          
                           if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                             e.preventDefault();
                             if (canUpdateIncidents)
@@ -1803,7 +1800,7 @@ export default function IncidentBoardPage() {
                                 type="button"
                                 className="text-xs text-sre-text-muted hover:text-sre-text flex items-center gap-2"
                                 onClick={() => {
-                                  // expand/collapse all notes by note key
+                                  
                                   const notes = activeIncident.notes
                                     .slice()
                                     .reverse()
@@ -1881,11 +1878,7 @@ export default function IncidentBoardPage() {
                                 const noteAuthorLabel = noteAuthorUser
                                   ? getUserLabel(noteAuthorUser)
                                   : note.author || "unknown";
-                                // clean up the text itself: drop trailing suffixes from usernames
-                                // (e.g. "admin-39fd1d43" → "admin") and translate any uuids
-                                // found in the string into real people when we have them cached.
                                 let displayText = note.text || "";
-                                // replace full uuid occurrences with user labels when available
                                 displayText = displayText.replace(
                                   /\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/g,
                                   (id) => {
@@ -1893,7 +1886,6 @@ export default function IncidentBoardPage() {
                                     return u ? getUserLabel(u) : id;
                                   },
                                 );
-                                // remove any trailing dash+hex from a leading word (common system notes)
                                 displayText = displayText.replace(
                                   /^([^\s-]+)-[0-9a-f]+/,
                                   "$1",

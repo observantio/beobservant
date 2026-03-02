@@ -106,7 +106,6 @@ export default function RcaReportSummary({ report, compact = false }) {
     return <div>{content}</div>;
   }
 
-  // non-compact, wrap using Section to keep consistent style
   return <Section>{content}</Section>;
 }
 

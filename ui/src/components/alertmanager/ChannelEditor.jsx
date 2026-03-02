@@ -24,7 +24,6 @@ export default function ChannelEditor({
       type: "webhook",
       enabled: true,
       config: {},
-      // visibility is controlled by the Integrations page tab (passed in via `visibility` prop)
       visibility: channel?.visibility || visibility,
       sharedGroupIds: incomingSharedGroupIds,
     },
@@ -492,6 +491,5 @@ ChannelEditor.propTypes = {
   onSave: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
   allowedTypes: PropTypes.arrayOf(PropTypes.string),
-  // the Integrations page tab controls visibility (private|group|tenant)
   visibility: PropTypes.oneOf(["private", "group", "tenant"]),
 };
