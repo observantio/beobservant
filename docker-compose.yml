@@ -164,7 +164,7 @@ services:
       - .env
     networks: [obs]
     environment:
-      OTEL_OTLP_TOKEN: ${OTEL_OTLP_TOKEN}
+      OTEL_OTLP_TOKEN: ${OTEL_OTLP_TOKEN:-${DEFAULT_OTLP_TOKEN:-DAMJ8xlh9UrUgK23yYWfzvLDJYeTRfase}}
     restart: unless-stopped
 
   loki:

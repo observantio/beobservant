@@ -152,9 +152,11 @@ services:
     build:
       context: ./tests
       dockerfile: Dockerfile
+    env_file:
+      - .env
     networks: [obs]
     environment:
-      OTEL_OTLP_TOKEN: "${DEFAULT_OTLP_TOKEN:-DAMJ8xlh9UrUgK23yYWfzvLDJYeTRfase}"
+      OTEL_OTLP_TOKEN: ${OTEL_OTLP_TOKEN:-${DEFAULT_OTLP_TOKEN:-DAMJ8xlh9UrUgK23yYWfzvLDJYeTRfase}}
     restart: unless-stopped
 
   loki:
