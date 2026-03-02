@@ -33,6 +33,8 @@ jobs:
   gateway:
     name: Gateway tests (pytest)
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
     defaults:
       run:
         working-directory: BeGateway
