@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect, useId } from "react";
 import PropTypes from "prop-types";
 
-export default function HelpTooltip({ text, autoShow = false }) {
+export default function HelpTooltip({
+  text,
+  autoShow = false,
+  showOnFocus = true,
+}) {
   // optionally start visible (used in modals that open with context)
   const [show, setShow] = useState(autoShow);
   const wrapperRef = useRef(null);
@@ -109,8 +113,8 @@ export default function HelpTooltip({ text, autoShow = false }) {
         aria-describedby={show ? tooltipId : undefined}
         onMouseEnter={() => setShow(true)}
         onMouseLeave={() => setShow(false)}
-        onFocus={() => setShow(true)}
-        onBlur={() => setShow(false)}
+        onFocus={showOnFocus ? () => setShow(true) : undefined}
+        onBlur={showOnFocus ? () => setShow(false) : undefined}
         onKeyDown={handleKeyDown}
         className="ml-1 text-sre-text-muted cursor-help bg-transparent border-0 p-0"
       >
@@ -135,3 +139,9 @@ export default function HelpTooltip({ text, autoShow = false }) {
     </div>
   );
 }
+
+HelpTooltip.propTypes = {
+  text: PropTypes.string.isRequired,
+  autoShow: PropTypes.bool,
+  showOnFocus: PropTypes.bool,
+};

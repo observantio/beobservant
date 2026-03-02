@@ -196,6 +196,7 @@ export default function ChangePasswordModal({
               </label>
               <HelpTooltip
                 text="Enter your current password to verify your identity before changing it."
+                showOnFocus={false}
               />
             </div>
             <Input
@@ -217,7 +218,10 @@ export default function ChangePasswordModal({
               >
                 New Password
               </label>
-              <HelpTooltip text="Choose a strong password with at least 12 characters, including uppercase, lowercase, numbers, and special characters." />
+              <HelpTooltip
+                text="Choose a strong password with at least 12 characters, including uppercase, lowercase, numbers, and special characters."
+                showOnFocus={false}
+              />
             </div>
             <Input
               id="newPassword"
@@ -238,7 +242,10 @@ export default function ChangePasswordModal({
               >
                 Confirm New Password
               </label>
-              <HelpTooltip text="Re-enter your new password to ensure it matches exactly." />
+              <HelpTooltip
+                text="Re-enter your new password to ensure it matches exactly."
+                showOnFocus={false}
+              />
             </div>
             <Input
               id="confirmPassword"

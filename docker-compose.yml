@@ -49,8 +49,8 @@ services:
       becertain:
         condition: service_started
     environment:
-      RATE_LIMIT_BACKEND: redis
-      RATE_LIMIT_REDIS_URL: redis://redis:6379/0
+      RATE_LIMIT_BACKEND: ${RATE_LIMIT_BACKEND:-redis}
+      RATE_LIMIT_REDIS_URL: ${RATE_LIMIT_REDIS_URL:-redis://redis:6379/0}
     networks: [obs]
     restart: unless-stopped
     healthcheck:
@@ -160,9 +160,11 @@ services:
     build:
       context: ./tests
       dockerfile: Dockerfile
+    env_file:
+      - .env
     networks: [obs]
     environment:
-      OTEL_OTLP_TOKEN: "${DEFAULT_OTLP_TOKEN:-DAMJ8xlh9UrUgK23yYWfzvLDJYeTRfase}"
+      OTEL_OTLP_TOKEN: ${OTEL_OTLP_TOKEN}
     restart: unless-stopped
 
   loki:
