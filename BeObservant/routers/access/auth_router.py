@@ -589,6 +589,7 @@ async def list_groups(current_user: TokenData = Depends(require_permission_with_
 
 
 @router.post("/groups", response_model=Group)
+@handle_route_errors()
 async def create_group(
     group_create: GroupCreate,
     current_user: TokenData = Depends(
@@ -614,6 +615,7 @@ async def get_group(
 
 
 @router.put("/groups/{group_id}", response_model=Group)
+@handle_route_errors()
 async def update_group(
     group_id: str,
     group_update: GroupUpdate,
