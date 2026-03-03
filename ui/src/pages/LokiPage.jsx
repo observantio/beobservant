@@ -376,6 +376,7 @@ export default function LokiPage() {
     const fallbackLabel = labels[0] || "service_name";
 
     try {
+      const normalizedLimit = Math.max(1, Number(searchLimit) || 1);
       let q;
       let selectorForVolume;
 
@@ -407,7 +408,7 @@ export default function LokiPage() {
         query: q,
         start: Math.round(startNs),
         end: Math.round(endNs),
-        limit: searchLimit,
+        limit: normalizedLimit,
       });
       const safeResult = res || { data: { result: [] } };
       setQueryResult(safeResult);

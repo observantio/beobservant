@@ -8,7 +8,7 @@ export default function RcaLookup({ value, onChange, onFind, onClear, error }) {
         Find by Report ID
       </p>
       <p className="text-xs text-sre-text-muted mb-3">
-        Enter a report UUID to open a persisted report in your tenant.
+        Enter a report UUID shared by your colleague to view the RCA details, this is a temporary lookup and will require the ID for continued access. For long-term sharing, consider exporting the report as a PDF or sharing the RCA workflow directly within the platform.
       </p>
       <div className="space-y-3">
         <Input

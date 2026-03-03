@@ -861,7 +861,7 @@ export default function AlertManagerPage() {
                     <h3 className="text-xl font-semibold text-sre-text mb-2">
                       No Rules Configured
                     </h3>
-                    <p className="text-sre-text-muted mb-6 max-w-md mx-auto">
+                    <p className="text-sre-text-muted text-sm mb-6 max-w-md mx-auto">
                       Create alert rules to monitor your systems and get
                       notified when issues occur.
                     </p>
@@ -1073,7 +1073,7 @@ export default function AlertManagerPage() {
                     <h3 className="text-xl font-semibold text-sre-text mb-2">
                       No Active Silences
                     </h3>
-                    <p className="text-sre-text-muted mb-6 max-w-md mx-auto">
+                    <p className="text-sre-text-muted text-sm mb-6 max-w-md mx-auto">
                       Silences temporarily suppress alert notifications. Create
                       a silence to stop alerts during maintenance.
                     </p>

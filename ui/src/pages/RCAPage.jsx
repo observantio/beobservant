@@ -39,13 +39,8 @@ const TABS = [
 export default function RCAPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useLocalStorage(TAB_STORAGE_KEY, "summary");
-  const [reportLookupInput, setReportLookupInput] = useLocalStorage(
-    REPORT_STORAGE_KEY,
-    "",
-  );
-  const [reportLookupId, setReportLookupId] = useState(
-    reportLookupInput || null,
-  );
+  const [reportLookupInput, setReportLookupInput] = useState("");
+  const [reportLookupId, setReportLookupId] = useState(null);
   const [lookupError, setLookupError] = useState(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
@@ -170,6 +165,14 @@ export default function RCAPage() {
   }, [jobs, selectedJobId, setSelectedJobId]);
 
   useEffect(() => {
+    try {
+      localStorage.removeItem(REPORT_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
     if (reportLookupId) {
       setViewModalOpen(true);
     }
@@ -180,11 +183,6 @@ export default function RCAPage() {
       setReportLookupInput("");
       setReportLookupId(null);
       setViewModalOpen(false);
-      try {
-        localStorage.removeItem(REPORT_STORAGE_KEY);
-      } catch {
-        // ignore
-      }
     }
   }, [
     reportErrorStatus,

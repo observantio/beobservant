@@ -52,9 +52,6 @@ export default function RcaJobQueuePanel({
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-sre-text font-mono truncate">
-                    {job.job_id}
-                  </span>
                   {isSelected ? (
                     <div className="flex items-center gap-1 ml-2">
                       <Button

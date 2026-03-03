@@ -689,9 +689,10 @@ export async function queryLogs({
   direction = "backward",
   step,
 }) {
+  const normalizedLimit = Math.max(1, Number(limit) || 100);
   const params = new URLSearchParams();
   params.append("query", query);
-  params.append("limit", limit.toString());
+  params.append("limit", normalizedLimit.toString());
   if (start) params.append("start", start);
   if (end) params.append("end", end);
   if (direction) params.append("direction", direction);

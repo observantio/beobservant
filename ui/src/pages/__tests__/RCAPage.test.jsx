@@ -105,16 +105,14 @@ describe("RCAPage", () => {
     expect(getByText("Duration (s)")).toBeInTheDocument();
     expect(getByText("42")).toBeInTheDocument();
   });
-  it("clears a lookup id from storage when the report cannot be found", async () => {
+  it("does not persist report lookup id in localStorage", async () => {
     localStorage.setItem("rcaPage.reportLookupId", JSON.stringify("bad-id"));
     reportState.reportError = "Report not found";
     reportState.reportErrorStatus = 404;
 
     render(<RCAPage />);
     await waitFor(() => {
-      expect(localStorage.getItem("rcaPage.reportLookupId")).toBe(
-        JSON.stringify(""),
-      );
+      expect(localStorage.getItem("rcaPage.reportLookupId")).toBeNull();
     });
   });
   it("restores selected job id from localStorage when jobs include it", () => {
