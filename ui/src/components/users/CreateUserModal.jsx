@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal, Input, Button, Checkbox } from "../ui";
 import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -13,6 +13,8 @@ import {
 } from "./createUserFormUtils";
 import { USER_ROLES } from "../../utils/constants";
 
+const ROLE_RANK = { provisioning: 0, viewer: 1, user: 2, admin: 3 };
+
 export default function CreateUserModal({
   isOpen,
   onClose,
@@ -21,7 +23,7 @@ export default function CreateUserModal({
   users = [],
 }) {
   const toast = useToast();
-  const { authMode } = useAuth();
+  const { authMode, user: currentUser } = useAuth();
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -34,9 +36,49 @@ export default function CreateUserModal({
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [groupSearchQuery, setGroupSearchQuery] = useState("");
+  const [roleDefaults, setRoleDefaults] = useState({});
   const isOidcEnabled = Boolean(authMode?.oidc_enabled);
   const isPasswordEnabled = Boolean(authMode?.password_enabled);
   const requirePassword = !isOidcEnabled || isPasswordEnabled;
+
+  useEffect(() => {
+    let active = true;
+    api
+      .getRoleDefaults()
+      .then((data) => {
+        if (!active) return;
+        setRoleDefaults(data || {});
+      })
+      .catch(() => {
+        if (!active) return;
+        setRoleDefaults({});
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const allowedRoleOptions = useMemo(() => {
+    const isSuperuser = Boolean(currentUser?.is_superuser);
+    const actorRole = String(currentUser?.role || "viewer");
+    const actorRank = ROLE_RANK[actorRole] ?? 0;
+    const actorPerms = new Set(currentUser?.permissions || []);
+
+    return USER_ROLES.filter((roleOption) => {
+      if (isSuperuser) return true;
+      if ((ROLE_RANK[roleOption.value] ?? 0) > actorRank) return false;
+      const defaults = roleDefaults?.[roleOption.value] || [];
+      return defaults.every((perm) => actorPerms.has(perm));
+    });
+  }, [currentUser?.is_superuser, currentUser?.permissions, currentUser?.role, roleDefaults]);
+
+  useEffect(() => {
+    if (allowedRoleOptions.some((r) => r.value === formData.role)) return;
+    setFormData((prev) => ({
+      ...prev,
+      role: allowedRoleOptions[0]?.value || "provisioning",
+    }));
+  }, [allowedRoleOptions, formData.role]);
 
   const filteredGroups = groups.filter((group) => {
     const query = groupSearchQuery.toLowerCase();
@@ -327,7 +369,7 @@ export default function CreateUserModal({
               }
               className="w-full max-w-xs rounded border border-sre-border bg-sre-bg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sre-primary"
             >
-              {USER_ROLES.map((r) => (
+              {allowedRoleOptions.map((r) => (
                 <option key={r.value} value={r.value}>
                   {r.label}
                 </option>

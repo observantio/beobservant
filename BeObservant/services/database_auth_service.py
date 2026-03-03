@@ -329,6 +329,7 @@ class DatabaseAuthService:
         tenant_id: str,
         creator_id: Optional[str] = None,
         actor_role: Optional[str] = None,
+        actor_permissions: Optional[List[str]] = None,
         actor_is_superuser: bool = False,
     ) -> UserSchema:
         return create_user_op(
@@ -337,6 +338,7 @@ class DatabaseAuthService:
             tenant_id,
             creator_id,
             actor_role=actor_role,
+            actor_permissions=actor_permissions,
             actor_is_superuser=actor_is_superuser,
         )
 

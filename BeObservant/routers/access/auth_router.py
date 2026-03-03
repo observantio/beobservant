@@ -454,7 +454,7 @@ async def create_user(
     user = await rtp(
         auth_service.create_user, user_create,
         current_user.tenant_id, current_user.user_id,
-        current_user.role, bool(getattr(current_user, "is_superuser", False)),
+        current_user.role, list(perms_check(current_user)), bool(getattr(current_user, "is_superuser", False)),
     )
     try:
         await notification_service.send_user_welcome_email(
@@ -684,7 +684,12 @@ async def list_all_permissions(
         )
     ),
 ):
-    return await rtp(auth_service.list_all_permissions)
+    all_permissions = await rtp(auth_service.list_all_permissions)
+    if getattr(current_user, "is_superuser", False):
+        return all_permissions
+
+    allowed = set(perms_check(current_user))
+    return [p for p in all_permissions if str(p.get("name") or "") in allowed]
 
 
 @router.get("/role-defaults")
@@ -695,4 +700,12 @@ async def list_role_defaults(
         )
     ),
 ):
-    return {role.value: [p.value for p in perms] for role, perms in ROLE_PERMISSIONS.items()}
+    defaults = {role.value: [p.value for p in perms] for role, perms in ROLE_PERMISSIONS.items()}
+    if getattr(current_user, "is_superuser", False):
+        return defaults
+
+    allowed = set(perms_check(current_user))
+    return {
+        role: [perm for perm in perm_list if perm in allowed]
+        for role, perm_list in defaults.items()
+    }

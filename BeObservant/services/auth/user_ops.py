@@ -20,7 +20,7 @@ from config import config
 from database import get_db_session
 from db_models import User, Group, Permission
 from models.access.user_models import UserCreate, UserUpdate, User as UserSchema
-from models.access.auth_models import Role
+from models.access.auth_models import Role, ROLE_PERMISSIONS
 
 
 MUTABLE_USER_FIELDS = {
@@ -167,6 +167,19 @@ def _enforce_permission_delegation(
             detail=f"Only administrators can grant privileged permissions: {privileged}",
         )
 
+
+def _role_default_permissions(role_value: str) -> Set[str]:
+    role_text = _role_to_text(role_value)
+    try:
+        role_enum = Role(role_text)
+    except ValueError:
+        return set()
+    return {
+        str(getattr(perm, "value", perm)).strip()
+        for perm in (ROLE_PERMISSIONS.get(role_enum) or [])
+        if str(getattr(perm, "value", perm)).strip()
+    }
+
 def get_user_by_id(service, user_id: str,tenant_id: Optional[str] = None, db: Optional[Session] = None) -> Optional[UserSchema]:
     if not user_id:
         return None
@@ -218,6 +231,7 @@ def create_user(
     tenant_id: str,
     creator_id: Optional[str] = None,
     actor_role: Optional[str] = None,
+    actor_permissions: Optional[List[str]] = None,
     actor_is_superuser: bool = False,
 ) -> UserSchema:
     service._lazy_init()
@@ -241,6 +255,13 @@ def create_user(
             actor_role_text = Role.USER.value
 
         actor_is_admin = _is_admin_actor(actor_role=actor_role_text, actor_is_superuser=actor_is_superuser)
+        actor_perm_set = _resolve_actor_permissions(
+            service,
+            db=db,
+            actor_user_id=creator_id,
+            tenant_id=tenant_id,
+            actor_permissions=actor_permissions,
+        ) if creator_id else set()
 
         if not actor_is_admin:
             if _role_rank(requested_role) > _role_rank(actor_role_text):
@@ -264,6 +285,13 @@ def create_user(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Only administrators can assign tenant scope during user creation",
                 )
+            requested_role_defaults = _role_default_permissions(requested_role)
+            _enforce_permission_delegation(
+                requested_permissions=requested_role_defaults,
+                actor_permissions=actor_perm_set,
+                actor_role=actor_role_text,
+                actor_is_superuser=actor_is_superuser,
+            )
 
         normalized_username = (user_create.username or "").strip().lower()
         if db.query(User).filter(func.lower(User.username) == normalized_username).first():
@@ -568,8 +596,25 @@ def update_user_permissions(
                 )
 
         normalized_requested = _normalize_permissions(permission_names)
+        existing_permissions = {
+            str(getattr(p, "name", "")).strip()
+            for p in (user.permissions or [])
+            if str(getattr(p, "name", "")).strip()
+        }
+
+        requested_for_actor_scope = normalized_requested
+        if not actor_is_superuser:
+            existing_out_of_scope = existing_permissions - actor_perm_set
+            requested_out_of_scope = normalized_requested - actor_perm_set
+            if requested_out_of_scope != existing_out_of_scope:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Cannot modify permissions outside your own scope",
+                )
+            requested_for_actor_scope = normalized_requested & actor_perm_set
+
         _enforce_permission_delegation(
-            requested_permissions=normalized_requested,
+            requested_permissions=requested_for_actor_scope,
             actor_permissions=actor_perm_set,
             actor_role=actor_role_text,
             actor_is_superuser=actor_is_superuser,

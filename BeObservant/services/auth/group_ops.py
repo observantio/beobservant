@@ -317,9 +317,25 @@ def update_group_permissions(
             )
 
         requested = _normalize_permissions(permission_names)
+        existing_permissions = {
+            str(getattr(p, "name", "")).strip()
+            for p in (group.permissions or [])
+            if str(getattr(p, "name", "")).strip()
+        }
+
+        requested_for_actor_scope = requested
+        if not is_superuser:
+            existing_out_of_scope = existing_permissions - perm_set
+            requested_out_of_scope = requested - perm_set
+            if requested_out_of_scope != existing_out_of_scope:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Cannot modify permissions outside your own scope",
+                )
+            requested_for_actor_scope = requested & perm_set
 
         _enforce_permission_delegation(
-            requested_permissions=requested,
+            requested_permissions=requested_for_actor_scope,
             actor_permissions=perm_set,
             actor_role=role_text,
             actor_is_superuser=is_superuser,

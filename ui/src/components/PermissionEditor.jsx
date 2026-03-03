@@ -2,13 +2,17 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import PropTypes from "prop-types";
 import { Button, Card, Spinner, Modal } from "./ui";
 import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
 import HelpTooltip from "./HelpTooltip";
 import * as api from "../api";
 import { USER_ROLES } from "../utils/constants";
 import { getCategoryDescription } from "../utils/groupManagementUtils";
 
+const ROLE_RANK = { provisioning: 0, viewer: 1, user: 2, admin: 3 };
+
 export default function PermissionEditor({ user, groups, onClose, onSave }) {
   const toast = useToast();
+  const { user: currentUser } = useAuth();
   const [saving, setSaving] = useState(false);
   const [loadingPermissions, setLoadingPermissions] = useState(true);
   const [permissionsList, setPermissionsList] = useState([]);
@@ -72,6 +76,20 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
     [permissionsList],
   );
 
+  const allowedRoleOptions = useMemo(() => {
+    const isSuperuser = Boolean(currentUser?.is_superuser);
+    const actorRole = String(currentUser?.role || "viewer");
+    const actorRank = ROLE_RANK[actorRole] ?? 0;
+    const actorPerms = new Set(currentUser?.permissions || []);
+
+    return USER_ROLES.filter((roleOption) => {
+      if (isSuperuser) return true;
+      if ((ROLE_RANK[roleOption.value] ?? 0) > actorRank) return false;
+      const defaults = roleDefaults?.[roleOption.value] || [];
+      return defaults.every((perm) => actorPerms.has(perm));
+    });
+  }, [currentUser?.is_superuser, currentUser?.permissions, currentUser?.role, roleDefaults]);
+
   const getRoleDefaults = useCallback(
     (roleName) => {
       if (roleDefaults?.[roleName]?.length) return roleDefaults[roleName];
@@ -121,6 +139,11 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
     setSelectedGroups(new Set(user.group_ids || []));
     setRole(user.role);
   }, [user]);
+
+  useEffect(() => {
+    if (allowedRoleOptions.some((r) => r.value === role)) return;
+    setRole(allowedRoleOptions[0]?.value || "provisioning");
+  }, [allowedRoleOptions, role]);
 
   useEffect(() => {
     const rolePerms = getRoleDefaults(role);
@@ -260,7 +283,7 @@ export default function PermissionEditor({ user, groups, onClose, onSave }) {
                 onChange={(e) => handleRoleChange(e.target.value)}
                 className="w-full max-w-xs rounded border border-sre-border bg-sre-bg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sre-primary"
               >
-                {USER_ROLES.map((r) => (
+                {allowedRoleOptions.map((r) => (
                   <option key={r.value} value={r.value}>
                     {r.label}
                   </option>
