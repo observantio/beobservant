@@ -10,7 +10,7 @@ import { NAV_ITEMS } from "../utils/constants";
 
 const NAV_ITEM_LIST = Object.values(NAV_ITEMS);
 
-function NavItem({ item, isMobile = false }) {
+function NavItem({ item, isMobile = false, incidentSummary = null }) {
   const baseClasses = isMobile
     ? "rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-2 transition-all px-3 py-1.5"
     : "px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2";
@@ -30,6 +30,19 @@ function NavItem({ item, isMobile = false }) {
         {item.icon}
       </span>{" "}
       {item.label}
+      {item.path === "/incidents" && incidentSummary && (
+        <span className="inline-flex items-center gap-1 ml-1">
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sre-primary/15 text-sre-primary">
+            {incidentSummary.open_total || 0}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sre-warning/15 text-sre-warning">
+            ua {incidentSummary.unassigned_open || 0}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sre-surface-light text-sre-text-muted">
+            me {incidentSummary.assigned_to_me_open || 0}
+          </span>
+        </span>
+      )}
     </NavLink>
   );
 }
@@ -41,6 +54,11 @@ NavItem.propTypes = {
     path: PropTypes.string.isRequired,
   }).isRequired,
   isMobile: PropTypes.bool,
+  incidentSummary: PropTypes.shape({
+    open_total: PropTypes.number,
+    unassigned_open: PropTypes.number,
+    assigned_to_me_open: PropTypes.number,
+  }),
 };
 
 function ApiKeyDropdown({
@@ -134,6 +152,7 @@ export default function Header() {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [activeKeyId, setActiveKeyId] = useState("");
   const [switchingKey, setSwitchingKey] = useState(false);
+  const [incidentSummary, setIncidentSummary] = useState(null);
 
   const visibleApiKeys = (user?.api_keys || []).filter(
     (k) => (!k.is_shared || k.can_use) && !k.is_hidden,
@@ -169,6 +188,32 @@ export default function Header() {
     (item) => !item.permission || hasPermission(item.permission),
   );
 
+  useEffect(() => {
+    let alive = true;
+    if (!hasPermission("read:incidents")) {
+      setIncidentSummary(null);
+      return () => {
+        alive = false;
+      };
+    }
+    const loadSummary = async () => {
+      try {
+        const data = await api.getIncidentsSummary();
+        if (!alive) return;
+        setIncidentSummary(data || null);
+      } catch {
+        if (!alive) return;
+        setIncidentSummary(null);
+      }
+    };
+    loadSummary();
+    const timer = setInterval(loadSummary, 30000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [hasPermission]);
+
   return (
     <header className="sticky top-0 z-50 bg-sre-surface/80 backdrop-blur-xl border-b border-sre-border shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -178,7 +223,11 @@ export default function Header() {
             aria-label="Main navigation"
           >
             {visibleNavItems.map((item) => (
-              <NavItem key={item.path} item={item} />
+              <NavItem
+                key={item.path}
+                item={item}
+                incidentSummary={incidentSummary}
+              />
             ))}
           </nav>
 
@@ -216,7 +265,12 @@ export default function Header() {
       {/* Mobile Navigation */}
       <div className="md:hidden border-t border-sre-border px-4 py-2 flex gap-2 overflow-x-auto">
         {visibleNavItems.map((item) => (
-          <NavItem key={item.path} item={item} isMobile />
+          <NavItem
+            key={item.path}
+            item={item}
+            isMobile
+            incidentSummary={incidentSummary}
+          />
         ))}
         {visibleApiKeys.length > 0 && (
           <div className="flex items-center gap-2 ml-auto">

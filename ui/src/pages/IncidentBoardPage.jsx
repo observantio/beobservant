@@ -52,6 +52,7 @@ import {
   listIncidentJiraComments,
   syncIncidentJiraNotes,
   listJiraIntegrations,
+  getIncidentsSummary,
   getAlertsByFilter,
 } from "../api";
 import {
@@ -264,6 +265,19 @@ const IncidentCard = memo(function IncidentCard({
               variant="ghost"
               onClick={() => {
                 onOpenModal(incident);
+                onSetModalTab("jira");
+              }}
+              className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
+              title="Jira"
+            >
+              <span className="material-icons text-sm">link</span>
+            </Button>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                onOpenModal(incident);
                 onSetModalTab("notes");
               }}
               className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50 relative"
@@ -418,6 +432,7 @@ export default function IncidentBoardPage() {
   const [jiraComments, setJiraComments] = useState([]);
   const [jiraCommentsLoading, setJiraCommentsLoading] = useState(false);
   const [jiraSyncingNotes, setJiraSyncingNotes] = useState({});
+  const [incidentSummary, setIncidentSummary] = useState(null);
   const toast = useToast();
 
   const canReadUsers =
@@ -488,6 +503,21 @@ export default function IncidentBoardPage() {
     loadJiraIntegrations();
   }, []);
 
+  const loadIncidentSummary = useCallback(async () => {
+    try {
+      const summary = await getIncidentsSummary();
+      setIncidentSummary(summary || null);
+    } catch {
+      setIncidentSummary(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadIncidentSummary();
+    const timer = setInterval(loadIncidentSummary, 30000);
+    return () => clearInterval(timer);
+  }, [loadIncidentSummary]);
+
   async function loadJiraIntegrations() {
     try {
       const data = await listJiraIntegrations();
@@ -498,7 +528,7 @@ export default function IncidentBoardPage() {
     }
   }
 
-  async function loadJiraIssueTypes(projectKey, integrationId) {
+  const loadJiraIssueTypes = useCallback(async (projectKey, integrationId) => {
     try {
       if (!projectKey) {
         setJiraIssueTypes([]);
@@ -509,7 +539,7 @@ export default function IncidentBoardPage() {
     } catch {
       setJiraIssueTypes([]);
     }
-  }
+  }, []);
 
   const loadJiraComments = useCallback(async (incidentId) => {
     if (!incidentId) return;
@@ -668,7 +698,7 @@ export default function IncidentBoardPage() {
     [userById, resolveAuthorLabel],
   );
 
-  const openIncidentModal = (incident) => {
+  const openIncidentModal = useCallback((incident) => {
     const defaultIntegrationId =
       incident.jiraIntegrationId || jiraIntegrations[0]?.id || "";
     const draftDefaults = {
@@ -735,7 +765,13 @@ export default function IncidentBoardPage() {
     }
 
     loadJiraComments(incident.id);
-  };
+  }, [
+    incidentDrafts,
+    jiraIntegrations,
+    loadJiraComments,
+    loadJiraIssueTypes,
+    toast,
+  ]);
 
   const IncidentModalTabs = ({ tab, setTab }) => (
     <div className="mt-4 inline-flex bg-sre-bg-alt rounded-lg p-1 border border-sre-border">
@@ -1125,6 +1161,13 @@ export default function IncidentBoardPage() {
     totalIncidents: incidents.length,
     unresolved: incidentsByState.unresolved.length,
     unassigned: incidentsByState.unassigned.length,
+    assignedToMe:
+      incidentSummary?.assigned_to_me_open ??
+      incidentsByState.assigned.filter(
+        (incident) =>
+          String(incident.assignee || "") ===
+          String(user?.id || user?.user_id || ""),
+      ).length,
   };
 
   return (
@@ -1160,6 +1203,9 @@ export default function IncidentBoardPage() {
                   >
                     <span className="material-icons text-sm mr-2">public</span>
                     Public
+                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-sre-surface border border-sre-border">
+                      {incidentSummary?.by_visibility?.public ?? 0}
+                    </span>
                   </Button>
                   <Button
                     variant={
@@ -1174,6 +1220,9 @@ export default function IncidentBoardPage() {
                   >
                     <span className="material-icons text-sm mr-2">lock</span>
                     Private
+                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-sre-surface border border-sre-border">
+                      {incidentSummary?.by_visibility?.private ?? 0}
+                    </span>
                   </Button>
                   <Button
                     variant={
@@ -1185,6 +1234,9 @@ export default function IncidentBoardPage() {
                   >
                     <span className="material-icons text-sm mr-2">group</span>
                     Group
+                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-sre-surface border border-sre-border">
+                      {incidentSummary?.by_visibility?.group ?? 0}
+                    </span>
                   </Button>
                 </div>
                 <div className="mt-2 w-fit">
@@ -1241,6 +1293,16 @@ export default function IncidentBoardPage() {
                   </span>
                   <span className="text-sre-text-muted">total</span>
                   <HelpTooltip text="Total number of incidents currently visible based on your filters." />
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2 bg-sre-surface rounded-lg border border-sre-border">
+                  <span className="material-icons text-base text-green-500">
+                    person
+                  </span>
+                  <span className="font-medium text-sre-text">
+                    {stats.assignedToMe}
+                  </span>
+                  <span className="text-sre-text-muted">assigned to me</span>
+                  <HelpTooltip text="Open incidents currently assigned to your user." />
                 </div>
               </div>
 

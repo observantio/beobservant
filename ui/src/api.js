@@ -518,6 +518,9 @@ export async function getIncidents(status, visibility, groupId) {
   const qs = params.toString() ? `?${params.toString()}` : "";
   return request(`/api/alertmanager/incidents${qs}`);
 }
+export async function getIncidentsSummary() {
+  return request("/api/alertmanager/incidents/summary");
+}
 export async function updateIncident(incidentId, payload) {
   return requestJson(
     `/api/alertmanager/incidents/${encodeURIComponent(incidentId)}`,
