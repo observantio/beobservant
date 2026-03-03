@@ -3,6 +3,7 @@ import { createRcaAnalyzeJob, deleteRcaReport, listRcaJobs } from "../api";
 import { useToast } from "../contexts/ToastContext";
 
 const JOB_POLL_MS = 5000;
+const ACTIVE_JOBS_STORAGE_KEY = "rcaPage.activeJobs";
 const TERMINAL_JOB_STATUSES = new Set([
   "completed",
   "failed",
@@ -41,9 +42,38 @@ function mergeJobs(authoritative, local = []) {
     .slice(0, 30);
 }
 
+function loadActiveJobsFromStorage() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_JOBS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (job) => job && job.job_id && !isTerminalStatus(job.status),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function persistActiveJobsToStorage(items) {
+  try {
+    const active = (items || [])
+      .filter((job) => job?.job_id && !isTerminalStatus(job?.status))
+      .slice(0, 30);
+    if (active.length === 0) {
+      localStorage.removeItem(ACTIVE_JOBS_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(ACTIVE_JOBS_STORAGE_KEY, JSON.stringify(active));
+  } catch {
+    // ignore storage errors
+  }
+}
+
 export function useRcaJobs() {
   const toast = useToast();
-  const [jobs, setJobs] = useState([]);
+  const [jobs, setJobs] = useState(() => loadActiveJobsFromStorage());
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [creatingJob, setCreatingJob] = useState(false);
   const [deletingReport, setDeletingReport] = useState(false);
@@ -75,6 +105,10 @@ export function useRcaJobs() {
   useEffect(() => {
     refreshJobs();
   }, [refreshJobs]);
+
+  useEffect(() => {
+    persistActiveJobsToStorage(jobs);
+  }, [jobs]);
 
   useEffect(() => {
     if (!hasActiveJobs(jobs)) return undefined;

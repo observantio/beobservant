@@ -24,6 +24,7 @@ from models.access.auth_models import Role
 
 
 MUTABLE_USER_FIELDS = {
+    "username",
     "full_name",
     "email",
     "is_active",
@@ -298,7 +299,9 @@ def create_user(
             if requested_org:
                 org_value = requested_org
 
-        enforce_change = auth_provider == "local"
+        # New users should rotate away from the bootstrap password on first use,
+        # including externally provisioned accounts that may later move to local auth.
+        enforce_change = True
 
         user = User(
             tenant_id=tenant_id,
@@ -419,6 +422,28 @@ def update_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email is managed by the external identity provider",
             )
+
+        if "username" in update_data:
+            normalized_username = str(update_data.get("username") or "").strip().lower()
+            if not normalized_username:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username is required",
+                )
+            existing_username = (
+                db.query(User)
+                .filter(
+                    func.lower(User.username) == normalized_username,
+                    User.id != user.id,
+                )
+                .first()
+            )
+            if existing_username:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already exists",
+                )
+            update_data["username"] = normalized_username
 
         for field, value in update_data.items():
             if field == "group_ids" and value is not None:

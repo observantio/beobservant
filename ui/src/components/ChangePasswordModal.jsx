@@ -9,6 +9,7 @@ export default function ChangePasswordModal({
   isOpen,
   onClose,
   userId,
+  authProvider = "local",
   isForced = false,
 }) {
   const toast = useToast();
@@ -56,6 +57,8 @@ export default function ChangePasswordModal({
     },
   ];
 
+  const canSkipCurrentPassword = isForced && authProvider !== "local";
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -72,7 +75,7 @@ export default function ChangePasswordModal({
     setLoading(true);
     try {
       await api.updateUserPassword(userId, {
-        current_password: formData.currentPassword,
+        current_password: canSkipCurrentPassword ? null : formData.currentPassword,
         new_password: formData.newPassword,
       });
       toast.success("Password updated successfully");
@@ -186,29 +189,31 @@ export default function ChangePasswordModal({
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <label
-                htmlFor="currentPassword"
-                className="block text-sm font-medium text-sre-text"
-              >
-                Current Password
-              </label>
-              <HelpTooltip
-                text="Enter your current password to verify your identity before changing it."
-                showOnFocus={false}
+          {!canSkipCurrentPassword && (
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <label
+                  htmlFor="currentPassword"
+                  className="block text-sm font-medium text-sre-text"
+                >
+                  Current Password
+                </label>
+                <HelpTooltip
+                  text="Enter your current password to verify your identity before changing it."
+                  showOnFocus={false}
+                />
+              </div>
+              <Input
+                id="currentPassword"
+                type="password"
+                value={formData.currentPassword}
+                onChange={(e) => handleChange("currentPassword", e.target.value)}
+                placeholder="Enter current password"
+                required
+                autoFocus
               />
             </div>
-            <Input
-              id="currentPassword"
-              type="password"
-              value={formData.currentPassword}
-              onChange={(e) => handleChange("currentPassword", e.target.value)}
-              placeholder="Enter current password"
-              required
-              autoFocus
-            />
-          </div>
+          )}
 
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -278,5 +283,6 @@ ChangePasswordModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   userId: PropTypes.string.isRequired,
+  authProvider: PropTypes.string,
   isForced: PropTypes.bool,
 };

@@ -237,8 +237,22 @@ def update_password(service, user_id: str, password_update, tenant_id: str) -> b
         user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
         if not user:
             return False
-        if not service.verify_password(current_password, user.hashed_password):
-            return False
+
+        auth_provider = str(getattr(user, "auth_provider", "local") or "local").strip().lower()
+        pending_password_bootstrap = bool(
+            auth_provider != "local" and getattr(user, "needs_password_change", False)
+        )
+
+        if pending_password_bootstrap:
+            # User is authenticated via OIDC and is setting their first local
+            # password. Current password verification is intentionally skipped.
+            user.auth_provider = "local"
+        else:
+            if auth_provider != "local":
+                raise ValueError("Password updates are managed by the external identity provider")
+            if not service.verify_password(current_password, user.hashed_password):
+                return False
+
         if service.verify_password(new_password, user.hashed_password):
             raise ValueError("New password must be different from current password")
 

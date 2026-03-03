@@ -50,8 +50,7 @@ import {
   listJiraProjectsByIntegration,
   listJiraIssueTypes,
   listIncidentJiraComments,
-  createIncidentJiraComment,
-  syncIncidentJiraComments,
+  syncIncidentJiraNotes,
   listJiraIntegrations,
   getAlertsByFilter,
 } from "../api";
@@ -84,11 +83,13 @@ export function clearDroppedState(prev, droppedId) {
 
 const IncidentCard = memo(function IncidentCard({
   incident,
+  columnKey,
   canUpdateIncidents,
   userById,
   currentUser,
   onOpenModal,
   onSetModalTab,
+  onQuickResolve,
   onUnhide,
   droppingState,
 }) {
@@ -156,12 +157,12 @@ const IncidentCard = memo(function IncidentCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-sm text-sre-text-muted">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 text-sm text-sre-text-muted min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <span className="material-icons text-base text-sre-primary/70">
                 person
               </span>
-              <span className="font-medium truncate min-w-0">
+              <span className="font-medium truncate min-w-0 max-w-full">
                 {assigneeLabel}
               </span>
             </div>
@@ -217,6 +218,35 @@ const IncidentCard = memo(function IncidentCard({
           </div>
 
           <div className="flex items-center gap-1">
+            {canUpdateIncidents && columnKey === "unassigned" && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  onOpenModal(incident);
+                  onSetModalTab("assignment");
+                }}
+                className="transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
+                title="Quick assign"
+              >
+                <span className="material-icons text-sm">person_add</span>
+              </Button>
+            )}
+
+            {canUpdateIncidents &&
+              columnKey === "assigned" &&
+              incident.status !== "resolved" && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onQuickResolve(incident)}
+                  className="transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
+                  title="Quick resolve"
+                >
+                  <span className="material-icons text-sm">task_alt</span>
+                </Button>
+              )}
+
             {incident.status === "resolved" && incident.hideWhenResolved && (
               <Button
                 size="sm"
@@ -291,6 +321,7 @@ const Column = memo(function Column({
   currentUser,
   openIncidentModal,
   setIncidentModalTab,
+  onQuickResolve,
   handleUnhideIncident,
   dropping,
 }) {
@@ -331,11 +362,13 @@ const Column = memo(function Column({
               <IncidentCard
                 key={it.id}
                 incident={it}
+                columnKey={icon}
                 canUpdateIncidents={canUpdateIncidents}
                 userById={userById}
                 currentUser={currentUser}
                 onOpenModal={openIncidentModal}
                 onSetModalTab={setIncidentModalTab}
+                onQuickResolve={onQuickResolve}
                 onUnhide={handleUnhideIncident}
                 droppingState={!!dropping[it.id]}
               />
@@ -384,6 +417,7 @@ export default function IncidentBoardPage() {
   const [jiraIssueTypes, setJiraIssueTypes] = useState([]);
   const [jiraComments, setJiraComments] = useState([]);
   const [jiraCommentsLoading, setJiraCommentsLoading] = useState(false);
+  const [jiraSyncingNotes, setJiraSyncingNotes] = useState({});
   const toast = useToast();
 
   const canReadUsers =
@@ -646,12 +680,8 @@ export default function IncidentBoardPage() {
       jiraIntegrationId: defaultIntegrationId,
       hideWhenResolved: incident.hideWhenResolved ?? false,
       
-      projectKey:
-        incidentDrafts?.[incident.id]?.projectKey ||
-        jiraProjects[0]?.key ||
-        "SRE",
+      projectKey: incidentDrafts?.[incident.id]?.projectKey || "",
       issueType: incidentDrafts?.[incident.id]?.issueType || "Task",
-      jiraComment: "",
     };
 
     setIncidentModal({ isOpen: true, incident });
@@ -668,13 +698,36 @@ export default function IncidentBoardPage() {
         .then((data) => {
           const projects = Array.isArray(data?.projects) ? data.projects : [];
           setJiraProjects(projects);
-          const selectedProject =
-            draftDefaults.projectKey || projects[0]?.key || "SRE";
-          loadJiraIssueTypes(selectedProject, defaultIntegrationId);
+          const requestedProject = (draftDefaults.projectKey || "").trim();
+          const hasRequestedProject = projects.some(
+            (project) => String(project?.key || "") === requestedProject,
+          );
+          const selectedProject = hasRequestedProject
+            ? requestedProject
+            : (projects[0]?.key || "");
+          setIncidentDrafts((prev) => ({
+            ...prev,
+            [incident.id]: {
+              ...(prev[incident.id] || {}),
+              projectKey: selectedProject,
+            },
+          }));
+          if (selectedProject) {
+            loadJiraIssueTypes(selectedProject, defaultIntegrationId);
+          } else {
+            setJiraIssueTypes([]);
+          }
         })
-        .catch(() => {
+        .catch((err) => {
           setJiraProjects([]);
           setJiraIssueTypes([]);
+          try {
+            toast.error(
+              err?.body?.detail ||
+                err?.message ||
+                "Failed to load Jira projects for integration",
+            );
+          } catch (_) {}
         });
     } else {
       setJiraProjects([]);
@@ -784,6 +837,15 @@ export default function IncidentBoardPage() {
           payload.assignee = null;
           payload.status = "open";
         } else if (target === "assigned") {
+          if (!incident.assignee) {
+            setDropping((prev) => clearDroppedState(prev, droppedId));
+            openIncidentModal(incident);
+            setIncidentModalTab("assignment");
+            try {
+              toast.info("Choose an assignee to move this incident to Assigned");
+            } catch (_) {}
+            return;
+          }
           payload.status = "open";
         } else if (target === "resolved") {
           payload.status = "resolved";
@@ -828,7 +890,47 @@ export default function IncidentBoardPage() {
         setDropping((prev) => clearDroppedState(prev, droppedId));
       }
     },
-    [incidents, refresh, setError, toast],
+    [incidents, openIncidentModal, refresh, setError, setIncidentModalTab, toast],
+  );
+
+  const handleQuickResolveIncident = useCallback(
+    async (incident) => {
+      if (!incident?.id) return;
+      const droppedId = String(incident.id);
+      try {
+        setDropping((prev) => ({ ...prev, [droppedId]: true }));
+        if (incident.fingerprint) {
+          try {
+            const activeAlerts = await getAlertsByFilter(
+              { fingerprint: incident.fingerprint },
+              true,
+            );
+            if (Array.isArray(activeAlerts) && activeAlerts.length > 0) {
+              try {
+                toast.error("Cannot resolve: underlying alert is still active");
+              } catch (_) {}
+              return;
+            }
+          } catch (err) {
+            console.warn("Alert active-check failed during quick resolve", err);
+          }
+        }
+        await updateIncident(incident.id, { status: "resolved" });
+        await refresh();
+      } catch (err) {
+        setError(
+          err?.body?.detail || err?.message || "Unable to update incident",
+        );
+        try {
+          toast.error(
+            err?.body?.detail || err?.message || "Unable to update incident",
+          );
+        } catch (_) {}
+      } finally {
+        setDropping((prev) => clearDroppedState(prev, droppedId));
+      }
+    },
+    [refresh, setError, toast],
   );
 
   const handleSaveIncident = useCallback(
@@ -1002,6 +1104,19 @@ export default function IncidentBoardPage() {
   const activeIncidentDraft = activeIncident
     ? incidentDrafts[activeIncident.id] || {}
     : {};
+  const isIncidentLinkedToJira = Boolean(
+    activeIncident?.jiraTicketKey || activeIncidentDraft?.jiraTicketKey,
+  );
+  const jiraIssueTypeOptions = (() => {
+    const filtered = (Array.isArray(jiraIssueTypes) ? jiraIssueTypes : []).filter(
+      (issueType) => {
+        const normalized = String(issueType || "").trim().toLowerCase();
+        return normalized === "task" || normalized === "bug";
+      },
+    );
+    if (filtered.length > 0) return filtered;
+    return ["Task", "Bug"];
+  })();
   const activeIncidentAssigneeLabel = activeIncident
     ? getIncidentAssigneeLabel(activeIncident, userById, user)
     : "Unassigned";
@@ -1150,16 +1265,16 @@ export default function IncidentBoardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-[600px]">
             <>
               <Column
-                title="Unassigned"
+                title="To Do"
                 count={incidentsByState.unassigned.length}
                 colorDot="bg-blue-500"
                 icon="unassigned"
-                help="Incidents that haven't been assigned to anyone yet. These need immediate attention."
+                help="New or re-opened incidents awaiting assignment."
                 items={incidentsByState.unassigned}
                 empty={{
                   icon: "person_off",
-                  title: "No unassigned incidents",
-                  subtitle: "Drag incidents here to unassign",
+                  title: "No incidents in To Do",
+                  subtitle: "New and re-opened incidents appear here",
                 }}
                 canUpdateIncidents={canUpdateIncidents}
                 onDropColumn={handleDropOnColumn}
@@ -1167,6 +1282,7 @@ export default function IncidentBoardPage() {
                 currentUser={user}
                 openIncidentModal={openIncidentModal}
                 setIncidentModalTab={setIncidentModalTab}
+                onQuickResolve={handleQuickResolveIncident}
                 handleUnhideIncident={handleUnhideIncident}
                 dropping={dropping}
               />
@@ -1189,6 +1305,7 @@ export default function IncidentBoardPage() {
                 currentUser={user}
                 openIncidentModal={openIncidentModal}
                 setIncidentModalTab={setIncidentModalTab}
+                onQuickResolve={handleQuickResolveIncident}
                 handleUnhideIncident={handleUnhideIncident}
                 dropping={dropping}
               />
@@ -1211,6 +1328,7 @@ export default function IncidentBoardPage() {
                 currentUser={user}
                 openIncidentModal={openIncidentModal}
                 setIncidentModalTab={setIncidentModalTab}
+                onQuickResolve={handleQuickResolveIncident}
                 handleUnhideIncident={handleUnhideIncident}
                 dropping={dropping}
               />
@@ -1534,6 +1652,12 @@ export default function IncidentBoardPage() {
                       </div>
                     )}
                   </div>
+                  {isIncidentLinkedToJira && (
+                    <div className="mt-3 text-xs text-sre-text-muted text-left">
+                      This incident is already linked to Jira. You can create a
+                      new ticket to replace the existing link.
+                    </div>
+                  )}
 
                   {jiraIntegrations.length > 0 ? (
                     <div className="mt-3 grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
@@ -1584,9 +1708,16 @@ export default function IncidentBoardPage() {
                               } else {
                                 setJiraIssueTypes([]);
                               }
-                            } catch {
+                            } catch (err) {
                               setJiraProjects([]);
                               setJiraIssueTypes([]);
+                              try {
+                                toast.error(
+                                  err?.body?.detail ||
+                                    err?.message ||
+                                    "Failed to load Jira projects for integration",
+                                );
+                              } catch (_) {}
                             }
                           }}
                         >
@@ -1648,15 +1779,11 @@ export default function IncidentBoardPage() {
                             }))
                           }
                         >
-                          {jiraIssueTypes.length > 0 ? (
-                            jiraIssueTypes.map((issueType) => (
-                              <option key={issueType} value={issueType}>
-                                {issueType}
-                              </option>
-                            ))
-                          ) : (
-                            <option value="Task">Task</option>
-                          )}
+                          {jiraIssueTypeOptions.map((issueType) => (
+                            <option key={issueType} value={issueType}>
+                              {issueType}
+                            </option>
+                          ))}
                         </Select>
                       </div>
                       <div className="md:col-span-2 flex items-center gap-2">
@@ -1695,10 +1822,13 @@ export default function IncidentBoardPage() {
                             const issueType = (
                               draft.issueType || "Task"
                             ).trim();
+                            const normalizedIssueType =
+                              String(issueType).toLowerCase() === "bug"
+                                ? "Bug"
+                                : "Task";
                             const summary =
                               (draft.jiraSummary && draft.jiraSummary.trim()) ||
                               activeIncident.alertName;
-                            const description = `Incident: ${activeIncident.alertName}\n\nLabels: ${JSON.stringify(activeIncident.labels || {})}\nAnnotations: ${JSON.stringify(activeIncident.annotations || {})}`;
                             if (!integrationId) {
                               try {
                                 toast.error("Choose a Jira integration first");
@@ -1721,9 +1851,9 @@ export default function IncidentBoardPage() {
                                 {
                                   integrationId,
                                   projectKey,
-                                  issueType,
+                                  issueType: normalizedIssueType,
                                   summary,
-                                  description,
+                                  replaceExisting: isIncidentLinkedToJira,
                                 },
                               );
                               
@@ -1765,7 +1895,9 @@ export default function IncidentBoardPage() {
                               <span className="ml-2">Creating…</span>
                             </>
                           ) : (
-                            "Create Jira"
+                            isIncidentLinkedToJira
+                              ? "Create New Jira"
+                              : "Create Jira"
                           )}
                         </Button>
                       </div>
@@ -1782,6 +1914,92 @@ export default function IncidentBoardPage() {
                         >
                           Create Jira integration
                         </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeIncident.jiraTicketKey && (
+                    <div className="mt-3 p-3 border border-sre-border rounded-lg bg-sre-bg-alt space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-sre-text text-left">
+                          Jira comments
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={!!jiraSyncingNotes[activeIncident.id]}
+                          onClick={async () => {
+                            try {
+                              setJiraSyncingNotes((prev) => ({
+                                ...prev,
+                                [activeIncident.id]: true,
+                              }));
+                              const result = await syncIncidentJiraNotes(
+                                activeIncident.id,
+                              );
+                              const synced = Number(result?.synced || 0);
+                              const skipped = Number(result?.skipped || 0);
+                              toast.success(
+                                `Synced ${synced} note${synced === 1 ? "" : "s"} (${skipped} already present)`,
+                              );
+                              await loadJiraComments(activeIncident.id);
+                            } catch (err) {
+                              toast.error(
+                                err?.body?.detail ||
+                                  err?.message ||
+                                  "Failed to sync notes to Jira",
+                              );
+                            } finally {
+                              setJiraSyncingNotes((prev) => ({
+                                ...prev,
+                                [activeIncident.id]: false,
+                              }));
+                            }
+                          }}
+                        >
+                          {jiraSyncingNotes[activeIncident.id]
+                            ? "Syncing..."
+                            : "Sync notes"}
+                        </Button>
+                      </div>
+
+                      {jiraCommentsLoading ? (
+                        <div className="text-xs text-sre-text-muted">
+                          Loading Jira comments...
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-40 overflow-auto">
+                          {jiraComments.length === 0 ? (
+                            <div className="text-xs text-sre-text-muted">
+                              No Jira comments yet.
+                            </div>
+                          ) : (
+                            jiraComments.map((comment) => (
+                              <div
+                                key={
+                                  comment.id ||
+                                  `${comment.author}-${comment.created}`
+                                }
+                                className="text-xs text-sre-text-muted text-left"
+                              >
+                                <span className="font-medium text-sre-text">
+                                  {comment.author}
+                                </span>{" "}
+                                ·{" "}
+                                {comment.created
+                                  ? formatDateTime(comment.created)
+                                  : "unknown time"}
+                                <br />
+                                {comment.body}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+
+                      <div className="text-xs text-sre-text-muted">
+                        Jira comments are read-only here. Add notes in the
+                        Notes tab to sync them to Jira automatically.
                       </div>
                     </div>
                   )}
@@ -2057,121 +2275,6 @@ export default function IncidentBoardPage() {
                         </div>
                       )}
 
-                    {activeIncident.jiraTicketKey && (
-                      <div className="p-3 border border-sre-border rounded-lg bg-sre-bg-alt space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium text-sre-text text-left">
-                            Jira comments
-                          </p>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={async () => {
-                              try {
-                                await syncIncidentJiraComments(
-                                  activeIncident.id,
-                                );
-                                await refresh();
-                                await loadJiraComments(activeIncident.id);
-                                toast.success(
-                                  "Synced Jira comments to incident notes",
-                                );
-                              } catch (e) {
-                                toast.error(
-                                  e?.body?.detail ||
-                                    e?.message ||
-                                    "Failed to sync Jira comments",
-                                );
-                              }
-                            }}
-                          >
-                            Sync
-                          </Button>
-                        </div>
-
-                        {jiraCommentsLoading ? (
-                          <div className="text-xs text-sre-text-muted">
-                            Loading Jira comments…
-                          </div>
-                        ) : (
-                          <div className="space-y-2 max-h-40 overflow-auto">
-                            {jiraComments.length === 0 ? (
-                              <div className="text-xs text-sre-text-muted">
-                                No Jira comments yet.
-                              </div>
-                            ) : (
-                              jiraComments.map((comment) => (
-                                <div
-                                  key={
-                                    comment.id ||
-                                    `${comment.author}-${comment.created}`
-                                  }
-                                  className="text-xs text-sre-text-muted text-left"
-                                >
-                                  <span className="font-medium text-sre-text">
-                                    {comment.author}
-                                  </span>{" "}
-                                  ·{" "}
-                                  {comment.created
-                                    ? formatDateTime(comment.created)
-                                    : "unknown time"}
-                                  <br />
-                                  {comment.body}
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-2">
-                          <Input
-                            value={activeIncidentDraft.jiraComment ?? ""}
-                            onChange={(e) =>
-                              setIncidentDrafts((prev) => ({
-                                ...prev,
-                                [activeIncident.id]: {
-                                  ...(prev[activeIncident.id] || {}),
-                                  jiraComment: e.target.value,
-                                },
-                              }))
-                            }
-                            placeholder="Add Jira comment"
-                          />
-                          <Button
-                            size="sm"
-                            onClick={async () => {
-                              const text = (
-                                activeIncidentDraft.jiraComment || ""
-                              ).trim();
-                              if (!text) return;
-                              try {
-                                await createIncidentJiraComment(
-                                  activeIncident.id,
-                                  { text },
-                                );
-                                setIncidentDrafts((prev) => ({
-                                  ...prev,
-                                  [activeIncident.id]: {
-                                    ...(prev[activeIncident.id] || {}),
-                                    jiraComment: "",
-                                  },
-                                }));
-                                await loadJiraComments(activeIncident.id);
-                                toast.success("Comment added to Jira");
-                              } catch (e) {
-                                toast.error(
-                                  e?.body?.detail ||
-                                    e?.message ||
-                                    "Failed to add Jira comment",
-                                );
-                              }
-                            }}
-                          >
-                            Add
-                          </Button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </Card>
               )}

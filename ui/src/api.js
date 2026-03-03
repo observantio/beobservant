@@ -538,21 +538,10 @@ export async function listIncidentJiraComments(incidentId) {
     `/api/alertmanager/incidents/${encodeURIComponent(incidentId)}/jira/comments`,
   );
 }
-export async function createIncidentJiraComment(incidentId, payload) {
+export async function syncIncidentJiraNotes(incidentId) {
   return requestJson(
-    `/api/alertmanager/incidents/${encodeURIComponent(incidentId)}/jira/comments`,
-    {
-      method: "POST",
-      payload,
-    },
-  );
-}
-export async function syncIncidentJiraComments(incidentId) {
-  return request(
-    `/api/alertmanager/incidents/${encodeURIComponent(incidentId)}/jira/sync-comments`,
-    {
-      method: "POST",
-    },
+    `/api/alertmanager/incidents/${encodeURIComponent(incidentId)}/jira/sync-notes`,
+    { method: "POST" },
   );
 }
 export async function importAlertRules(payload) {

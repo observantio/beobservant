@@ -333,7 +333,7 @@ export default function IntegrationsPage() {
       email: "",
       apiToken: "",
       bearerToken: "",
-      authMode: canUseSso ? "sso" : "api_token",
+      authMode: "api_token",
     });
     setShowJiraModal(true);
   };

@@ -234,7 +234,8 @@ def provision_oidc_user(
             is_active=True,
             is_superuser=False,
             hashed_password=service.hash_password(secrets.token_urlsafe(24)),
-            needs_password_change=False,
+            # Force first-time local password bootstrap after OIDC onboarding.
+            needs_password_change=True,
             password_changed_at=datetime.now(timezone.utc),
             must_setup_mfa=must_setup_mfa,
             auth_provider=config.AUTH_PROVIDER,
@@ -259,11 +260,10 @@ def update_oidc_user(
     full_name: Optional[str],
     subject: str,
 ) -> None:
-    # switch the account to the configured external provider and clear any
-    # outstanding password-change requirement since credentials are no longer
-    # used.
+    # Keep the account linked to the configured external provider, but do not
+    # clear `needs_password_change` automatically: first-login password bootstrap
+    # may still be pending for newly provisioned users.
     user.auth_provider = config.AUTH_PROVIDER
-    user.needs_password_change = False
 
     if subject and user.external_subject != subject:
         conflict = db.query(User).filter(

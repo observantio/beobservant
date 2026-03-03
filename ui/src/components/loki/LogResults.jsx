@@ -227,7 +227,6 @@ export default function LogResults({
               {(() => {
                 const displayValues = filteredValues
                   .slice()
-                  .reverse()
                   .slice(0, viewMode === "compact" ? 200 : 100)
                   .map((value, index) => ({
                     value,

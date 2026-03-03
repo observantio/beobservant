@@ -376,8 +376,6 @@ class DatabaseAuthService:
         )
 
     def update_password(self, user_id: str, password_update: UserPasswordUpdate, tenant_id: str) -> bool:
-        if self.is_external_auth_enabled():
-            raise ValueError("Password updates are managed by the external identity provider")
         return update_password_op(self, user_id, password_update, tenant_id)
 
     def list_api_keys(self, user_id: str) -> List[ApiKey]:

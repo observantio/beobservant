@@ -42,6 +42,7 @@ def to_user_schema(service, user) -> UserSchema:
         "api_keys": api_keys,
         "mfa_enabled": getattr(user, "mfa_enabled", False),
         "must_setup_mfa": getattr(user, "must_setup_mfa", False),
+        "auth_provider": getattr(user, "auth_provider", "local"),
     }
 
     grafana_uid = getattr(user, "grafana_user_id", None)

@@ -160,6 +160,7 @@ function AppContent() {
           isOpen={showPasswordChange}
           onClose={handlePasswordChangeClose}
           userId={user.id}
+          authProvider={user.auth_provider}
           isForced
         />
       )}

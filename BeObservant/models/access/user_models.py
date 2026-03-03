@@ -51,6 +51,7 @@ class UserCreate(UserBase):
     must_setup_mfa: Optional[bool] = False
 
 class UserUpdate(BaseModel):
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
     org_id: Optional[str] = None
@@ -59,8 +60,14 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     must_setup_mfa: Optional[bool] = None
 
+    @field_validator("username", mode="before")
+    def normalize_update_username(cls, v):
+        if v is None:
+            return None
+        return _normalize_username(v, full_check=True)
+
 class UserPasswordUpdate(BaseModel):
-    current_password: str
+    current_password: Optional[str] = None
     new_password: str = Field(..., min_length=8)
 
 class User(UserBase):
@@ -76,6 +83,7 @@ class User(UserBase):
     api_keys: List[ApiKey] = Field(default_factory=list)
     mfa_enabled: bool = False
     must_setup_mfa: bool = False
+    auth_provider: Optional[str] = "local"
     model_config = ConfigDict(from_attributes=True)
 
 class UserInDB(User):
@@ -99,6 +107,7 @@ class UserResponse(BaseModel):
     api_keys: List[ApiKey] = Field(default_factory=list)
     mfa_enabled: bool = False
     must_setup_mfa: bool = False
+    auth_provider: Optional[str] = "local"
 
 class LoginRequest(BaseModel):
     username: str

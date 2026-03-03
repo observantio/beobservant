@@ -191,7 +191,7 @@ export default function UsersPage() {
     try {
       const payload = canEditAllUserFields
         ? {
-            email: editUserData.email,
+            username: editUserData.username,
             full_name: editUserData.full_name,
             role: editUserData.role,
             is_active: editUserData.is_active,
@@ -487,10 +487,16 @@ export default function UsersPage() {
                     <Input
                       label="Username"
                       value={editUserData.username}
-                      disabled
+                      onChange={(e) =>
+                        setEditUserData({
+                          ...editUserData,
+                          username: e.target.value.toLowerCase(),
+                        })
+                      }
+                      disabled={!canEditAllUserFields}
                     />
                   </div>
-                  <HelpTooltip text="The unique username for this user. This field cannot be edited." />
+                  <HelpTooltip text="Unique username for this user. Must be unique system-wide." />
                 </div>
                 <div className="flex items-start gap-2">
                   <div className="flex-1">
@@ -498,17 +504,11 @@ export default function UsersPage() {
                       label="Email"
                       type="email"
                       value={editUserData.email}
-                      onChange={(e) =>
-                        setEditUserData({
-                          ...editUserData,
-                          email: e.target.value,
-                        })
-                      }
-                      disabled={!canEditAllUserFields}
+                      disabled
                       required
                     />
                   </div>
-                  <HelpTooltip text="The primary email address for this user account, used for notifications and login." />
+                  <HelpTooltip text="Email is managed externally and cannot be edited here." />
                 </div>
                 <div className="flex items-start gap-2">
                   <div className="flex-1">
