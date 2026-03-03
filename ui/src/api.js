@@ -431,8 +431,11 @@ export async function getActiveAgents() {
 
 export const updatePassword = updateUserPassword;
 
-export async function getAlerts() {
-  return request("/api/alertmanager/alerts");
+export async function getAlerts({ showHidden = false } = {}) {
+  const params = new URLSearchParams();
+  if (showHidden) params.set("show_hidden", "true");
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return request(`/api/alertmanager/alerts${qs}`);
 }
 
 export async function getAlertsByFilter(filter = {}, active = true) {
@@ -448,8 +451,11 @@ export async function getAlertsByFilter(filter = {}, active = true) {
 export async function getAlertGroups() {
   return request("/api/alertmanager/alerts/groups");
 }
-export async function getSilences() {
-  return request("/api/alertmanager/silences");
+export async function getSilences({ showHidden = false } = {}) {
+  const params = new URLSearchParams();
+  if (showHidden) params.set("show_hidden", "true");
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return request(`/api/alertmanager/silences${qs}`);
 }
 export async function createSilence(payload) {
   return requestJson("/api/alertmanager/silences", { payload });
@@ -473,8 +479,23 @@ export async function deleteAlerts(filter) {
     },
   );
 }
-export async function getAlertRules() {
-  return request("/api/alertmanager/rules");
+export async function getAlertRules({ showHidden = false } = {}) {
+  const params = new URLSearchParams();
+  if (showHidden) params.set("show_hidden", "true");
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return request(`/api/alertmanager/rules${qs}`);
+}
+export async function setAlertRuleHidden(ruleId, hidden = true) {
+  return requestJson(`/api/alertmanager/rules/${encodeURIComponent(ruleId)}/hide`, {
+    method: "POST",
+    payload: { hidden: !!hidden },
+  });
+}
+export async function setSilenceHidden(silenceId, hidden = true) {
+  return requestJson(`/api/alertmanager/silences/${encodeURIComponent(silenceId)}/hide`, {
+    method: "POST",
+    payload: { hidden: !!hidden },
+  });
 }
 export async function getPublicAlertRules() {
   return request("/api/alertmanager/public/rules");

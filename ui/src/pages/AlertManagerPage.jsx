@@ -7,6 +7,8 @@ import {
   deleteAlertRule,
   testAlertRule,
   importAlertRules,
+  setAlertRuleHidden,
+  setSilenceHidden,
 } from "../api";
 import { Card, Button, Select, Alert, Spinner, Modal } from "../components/ui";
 import { useToast } from "../contexts/ToastContext";
@@ -52,6 +54,14 @@ export default function AlertManagerPage() {
     DEFAULT_ALERTMANAGER_METRIC_KEYS,
   );
   const [showImportRulesModal, setShowImportRulesModal] = useState(false);
+  const [showHiddenRules, setShowHiddenRules] = useLocalStorage(
+    "alertmanager-show-hidden-rules",
+    false,
+  );
+  const [showHiddenSilences, setShowHiddenSilences] = useLocalStorage(
+    "alertmanager-show-hidden-silences",
+    false,
+  );
   const [importYamlContent, setImportYamlContent] = useState("");
   const [importRunning, setImportRunning] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -68,7 +78,10 @@ export default function AlertManagerPage() {
     error,
     reloadData,
     setError: setHookError,
-  } = useAlertManagerData();
+  } = useAlertManagerData({
+    showHiddenRules,
+    showHiddenSilences,
+  });
 
   useEffect(() => {
     const defaults = DEFAULT_ALERTMANAGER_METRIC_KEYS;
@@ -209,6 +222,71 @@ export default function AlertManagerPage() {
         }
       },
     });
+  }
+
+  async function handleToggleRuleHidden(rule, hidden) {
+    if (!rule?.id) return;
+    if (hidden) {
+      setConfirmDialog({
+        isOpen: true,
+        title: "Hide Alert Rule",
+        message:
+          'If you hide this shared alert rule, you will not receive alerts fired by it. This is only hidden for your account. Continue?',
+        confirmText: "Hide Rule",
+        variant: "danger",
+        onConfirm: async () => {
+          try {
+            await setAlertRuleHidden(rule.id, true);
+            await reloadData();
+            setConfirmDialog(EMPTY_CONFIRM_DIALOG);
+          } catch (e) {
+            handleApiError(e);
+            setConfirmDialog(EMPTY_CONFIRM_DIALOG);
+          }
+        },
+      });
+      return;
+    }
+
+    try {
+      await setAlertRuleHidden(rule.id, false);
+      await reloadData();
+    } catch (e) {
+      handleApiError(e);
+    }
+  }
+
+  async function handleToggleSilenceHidden(silence, hidden) {
+    const silenceId = silence?.id;
+    if (!silenceId) return;
+    if (hidden) {
+      setConfirmDialog({
+        isOpen: true,
+        title: "Hide Silence",
+        message:
+          'If you hide this shared silence, you will not see it in your active silences list unless "Show hidden" is enabled. This is only hidden for your account. Continue?',
+        confirmText: "Hide Silence",
+        variant: "danger",
+        onConfirm: async () => {
+          try {
+            await setSilenceHidden(silenceId, true);
+            await reloadData();
+            setConfirmDialog(EMPTY_CONFIRM_DIALOG);
+          } catch (e) {
+            handleApiError(e);
+            setConfirmDialog(EMPTY_CONFIRM_DIALOG);
+          }
+        },
+      });
+      return;
+    }
+
+    try {
+      await setSilenceHidden(silenceId, false);
+      await reloadData();
+    } catch (e) {
+      handleApiError(e);
+    }
   }
 
   const filteredAlerts = useMemo(() => {
@@ -558,6 +636,14 @@ export default function AlertManagerPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-2 text-xs text-sre-text-muted">
+                      <input
+                        type="checkbox"
+                        checked={!!showHiddenRules}
+                        onChange={(e) => setShowHiddenRules(e.target.checked)}
+                      />
+                      Show hidden
+                    </label>
                     <Button
                       variant="secondary"
                       onClick={() => {
@@ -587,10 +673,17 @@ export default function AlertManagerPage() {
                 {rules.length > 0 ? (
                   <div className="grid gap-4">
                     {rules.map((rule) => {
+                      const ownerId = String(rule.createdBy || rule.created_by || "");
+                      const isOwnRule = ownerId && ownerId === String(user?.id || "");
+                      const canHideRule = !isOwnRule;
                       return (
                         <div
                           key={rule.id}
-                          className="p-6 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
+                          className={`p-6 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+                            rule.isHidden || rule.is_hidden
+                              ? "border-amber-400/60 opacity-90"
+                              : "border-sre-border"
+                          }`}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
@@ -648,6 +741,11 @@ export default function AlertManagerPage() {
                                     <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
                                       {rule.group}
                                     </span>
+                                    {(rule.isHidden || rule.is_hidden) && (
+                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                                        Hidden
+                                      </span>
+                                    )}
                                     {rule.orgId ? (
                                       <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200">
                                         {orgIdToName[rule.orgId] ||
@@ -689,6 +787,30 @@ export default function AlertManagerPage() {
                             </div>
 
                             <div className="flex gap-1 ml-4">
+                              {canHideRule && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleToggleRuleHidden(
+                                      rule,
+                                      !(rule.isHidden || rule.is_hidden),
+                                    )
+                                  }
+                                  className="p-2"
+                                  title={
+                                    rule.isHidden || rule.is_hidden
+                                      ? "Unhide Rule"
+                                      : "Hide Rule"
+                                  }
+                                >
+                                  <span className="material-icons text-base">
+                                    {rule.isHidden || rule.is_hidden
+                                      ? "visibility"
+                                      : "visibility_off"}
+                                  </span>
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -777,17 +899,34 @@ export default function AlertManagerPage() {
                       </p>
                     </div>
                   </div>
-                  {silences.length > 0 && (
-                    <Button onClick={() => setShowSilenceForm(true)}>
-                      <span className="material-icons text-sm mr-2">add</span>
-                      Create Silence
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex items-center gap-2 text-xs text-sre-text-muted">
+                      <input
+                        type="checkbox"
+                        checked={!!showHiddenSilences}
+                        onChange={(e) =>
+                          setShowHiddenSilences(e.target.checked)
+                        }
+                      />
+                      Show hidden
+                    </label>
+                    {silences.length > 0 && (
+                      <Button onClick={() => setShowSilenceForm(true)}>
+                        <span className="material-icons text-sm mr-2">add</span>
+                        Create Silence
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {silences.length > 0 ? (
                   <div className="space-y-4">
                     {silences.map((s) => {
+                      const silenceOwner = String(s.createdBy || s.created_by || "");
+                      const isOwnSilence =
+                        silenceOwner &&
+                        silenceOwner === String(user?.username || "");
+                      const canHideSilence = !isOwnSilence;
                       const visibilityLabel =
                         s.visibility === "tenant"
                           ? "Public"
@@ -798,7 +937,11 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={s.id}
-                          className="p-6 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
+                          className={`p-6 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+                            s.isHidden || s.is_hidden
+                              ? "border-amber-400/60 opacity-90"
+                              : "border-sre-border"
+                          }`}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
@@ -827,6 +970,11 @@ export default function AlertManagerPage() {
                                     >
                                       {visibilityLabel}
                                     </span>
+                                    {(s.isHidden || s.is_hidden) && (
+                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                                        Hidden
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -876,6 +1024,30 @@ export default function AlertManagerPage() {
                             </div>
 
                             <div className="flex gap-1 ml-4">
+                              {canHideSilence && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleToggleSilenceHidden(
+                                      s,
+                                      !(s.isHidden || s.is_hidden),
+                                    )
+                                  }
+                                  className="p-2"
+                                  title={
+                                    s.isHidden || s.is_hidden
+                                      ? "Unhide Silence"
+                                      : "Hide Silence"
+                                  }
+                                >
+                                  <span className="material-icons text-base">
+                                    {s.isHidden || s.is_hidden
+                                      ? "visibility"
+                                      : "visibility_off"}
+                                  </span>
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="sm"

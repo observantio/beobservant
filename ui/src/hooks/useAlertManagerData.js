@@ -7,7 +7,7 @@ import {
 } from "../api";
 import { normalizeRuleForUI } from "../utils/alertmanagerRuleUtils";
 
-export const useAlertManagerData = () => {
+export const useAlertManagerData = ({ showHiddenRules = false, showHiddenSilences = false } = {}) => {
   const [alerts, setAlerts] = useState([]);
   const [silences, setSilences] = useState([]);
   const [rules, setRules] = useState([]);
@@ -25,8 +25,8 @@ export const useAlertManagerData = () => {
       const [alertsData, silencesData, rulesData, channelsData] =
         await Promise.all([
           getAlerts().catch(() => []),
-          getSilences().catch(() => []),
-          getAlertRules().catch(() => []),
+          getSilences({ showHidden: showHiddenSilences }).catch(() => []),
+          getAlertRules({ showHidden: showHiddenRules }).catch(() => []),
           getNotificationChannels().catch(() => []),
         ]);
       if (requestId !== requestIdRef.current) return;
@@ -52,7 +52,7 @@ export const useAlertManagerData = () => {
         setLoading(false);
       }
     }
-  }, []);
+  }, [showHiddenRules, showHiddenSilences]);
 
   useEffect(() => {
     loadData();
