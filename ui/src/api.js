@@ -572,12 +572,6 @@ export async function listIncidentJiraComments(incidentId) {
     `/api/alertmanager/incidents/${encodeURIComponent(incidentId)}/jira/comments`,
   );
 }
-export async function syncIncidentJiraNotes(incidentId) {
-  return requestJson(
-    `/api/alertmanager/incidents/${encodeURIComponent(incidentId)}/jira/sync-notes`,
-    { method: "POST" },
-  );
-}
 export async function importAlertRules(payload) {
   return requestJson("/api/alertmanager/rules/import", {
     method: "POST",

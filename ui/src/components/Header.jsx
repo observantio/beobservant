@@ -14,12 +14,16 @@ function NavItem({ item, isMobile = false, incidentSummary = null }) {
   const baseClasses = isMobile
     ? "rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-2 transition-all px-3 py-1.5"
     : "px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2";
+  const incidentsWithBadges = item.path === "/incidents" && incidentSummary;
+  const classesWithBadges = incidentsWithBadges
+    ? `${baseClasses} relative`
+    : baseClasses;
 
   return (
     <NavLink
       to={item.path}
       className={({ isActive }) =>
-        `${baseClasses} ${
+        `${classesWithBadges} ${
           isActive
             ? "bg-sre-primary/10 text-sre-primary shadow-glow-sm"
             : "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light"
@@ -30,17 +34,16 @@ function NavItem({ item, isMobile = false, incidentSummary = null }) {
         {item.icon}
       </span>{" "}
       {item.label}
-      {item.path === "/incidents" && incidentSummary && (
-        <span className="inline-flex items-center gap-1 ml-1">
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sre-primary/15 text-sre-primary">
-            {incidentSummary.open_total || 0}
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sre-warning/15 text-sre-warning">
-            ua {incidentSummary.unassigned_open || 0}
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sre-surface-light text-sre-text-muted">
-            me {incidentSummary.assigned_to_me_open || 0}
-          </span>
+      {incidentsWithBadges && (
+        <span className="pointer-events-none absolute -top-2 -right-3 flex items-center gap-1">
+          {(incidentSummary.assigned_to_me_open || 0) > 0 && (
+            <span
+              className="inline-flex h-6 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-emerald-400 text-[10px] font-semibold px-1 shadow-sm"
+              title="Assigned to me"
+            >
+              {incidentSummary.assigned_to_me_open}
+            </span>
+          )}
         </span>
       )}
     </NavLink>

@@ -585,7 +585,19 @@ async def delete_user(
 
 @router.get("/groups", response_model=List[Group])
 async def list_groups(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_GROUPS, "auth"))):
-    return await rtp(auth_service.list_groups, current_user.tenant_id)
+    groups = await rtp(auth_service.list_groups, current_user.tenant_id)
+    if is_admin_check(current_user) or bool(getattr(current_user, "is_superuser", False)):
+        return groups
+
+    actor_group_ids = {
+        str(group_id).strip()
+        for group_id in (getattr(current_user, "group_ids", None) or [])
+        if str(group_id).strip()
+    }
+    if not actor_group_ids:
+        return []
+
+    return [group for group in groups if str(getattr(group, "id", "")).strip() in actor_group_ids]
 
 
 @router.post("/groups", response_model=Group)

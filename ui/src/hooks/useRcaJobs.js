@@ -4,6 +4,7 @@ import { useToast } from "../contexts/ToastContext";
 
 const JOB_POLL_MS = 5000;
 const ACTIVE_JOBS_STORAGE_KEY = "rcaPage.activeJobs";
+const DELETED_REPORTS_STORAGE_KEY = "rcaPage.deletedReportIds";
 const TERMINAL_JOB_STATUSES = new Set([
   "completed",
   "failed",
@@ -71,9 +72,54 @@ function persistActiveJobsToStorage(items) {
   }
 }
 
+function loadDeletedReportIdsFromStorage() {
+  try {
+    const raw = localStorage.getItem(DELETED_REPORTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+      .slice(0, 200);
+  } catch {
+    return [];
+  }
+}
+
+function persistDeletedReportIdsToStorage(reportIds) {
+  try {
+    const normalized = Array.from(
+      new Set((reportIds || []).map((id) => String(id || "").trim()).filter(Boolean)),
+    ).slice(0, 200);
+    if (normalized.length === 0) {
+      localStorage.removeItem(DELETED_REPORTS_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(DELETED_REPORTS_STORAGE_KEY, JSON.stringify(normalized));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function filterDeletedJobs(items, deletedReportIds) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const deleted = new Set(
+    (deletedReportIds || []).map((id) => String(id || "").trim()).filter(Boolean),
+  );
+  return items.filter((job) => {
+    const reportId = String(job?.report_id || "").trim();
+    if (reportId && deleted.has(reportId)) return false;
+    return !isTerminalStatus(job?.status) || String(job?.status || "").toLowerCase() !== "deleted";
+  });
+}
+
 export function useRcaJobs() {
   const toast = useToast();
   const [jobs, setJobs] = useState(() => loadActiveJobsFromStorage());
+  const [deletedReportIds, setDeletedReportIds] = useState(() =>
+    loadDeletedReportIdsFromStorage(),
+  );
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [creatingJob, setCreatingJob] = useState(false);
   const [deletingReport, setDeletingReport] = useState(false);
@@ -83,7 +129,10 @@ export function useRcaJobs() {
     setLoadingJobs(true);
     try {
       const res = await listRcaJobs({ limit: 30 });
-      const items = Array.isArray(res?.items) ? res.items : [];
+      const items = filterDeletedJobs(
+        Array.isArray(res?.items) ? res.items : [],
+        deletedReportIds,
+      );
       setJobs((prev) => {
         const merged = mergeJobs(items, prev);
         if (
@@ -100,7 +149,7 @@ export function useRcaJobs() {
     } finally {
       setLoadingJobs(false);
     }
-  }, [selectedJobId, toast]);
+  }, [deletedReportIds, selectedJobId, toast]);
 
   useEffect(() => {
     refreshJobs();
@@ -109,6 +158,10 @@ export function useRcaJobs() {
   useEffect(() => {
     persistActiveJobsToStorage(jobs);
   }, [jobs]);
+
+  useEffect(() => {
+    persistDeletedReportIdsToStorage(deletedReportIds);
+  }, [deletedReportIds]);
 
   useEffect(() => {
     if (!hasActiveJobs(jobs)) return undefined;
@@ -201,6 +254,9 @@ export function useRcaJobs() {
       setDeletingReport(true);
       try {
         await deleteRcaReport(reportId);
+        setDeletedReportIds((prev) =>
+          prev.includes(reportId) ? prev : [reportId, ...prev].slice(0, 200),
+        );
         removeJobByReportId(reportId);
         toast?.success?.("RCA report deleted");
       } catch (err) {

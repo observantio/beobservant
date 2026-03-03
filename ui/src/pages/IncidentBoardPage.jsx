@@ -50,7 +50,6 @@ import {
   listJiraProjectsByIntegration,
   listJiraIssueTypes,
   listIncidentJiraComments,
-  syncIncidentJiraNotes,
   listJiraIntegrations,
   getIncidentsSummary,
   getAlertsByFilter,
@@ -431,7 +430,6 @@ export default function IncidentBoardPage() {
   const [jiraIssueTypes, setJiraIssueTypes] = useState([]);
   const [jiraComments, setJiraComments] = useState([]);
   const [jiraCommentsLoading, setJiraCommentsLoading] = useState(false);
-  const [jiraSyncingNotes, setJiraSyncingNotes] = useState({});
   const [incidentSummary, setIncidentSummary] = useState(null);
   const toast = useToast();
 
@@ -1199,11 +1197,11 @@ export default function IncidentBoardPage() {
                       setIncidentVisibilityTab("public");
                       setSelectedGroup("");
                     }}
-                    className="px-4 py-2"
+                    className="relative px-5 py-2 pr-8"
                   >
                     <span className="material-icons text-sm mr-2">public</span>
                     Public
-                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-sre-surface border border-sre-border">
+                    <span className="absolute -top-2 -right-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-blue-400 text-[10px] font-semibold px-1 shadow-sm">
                       {incidentSummary?.by_visibility?.public ?? 0}
                     </span>
                   </Button>
@@ -1216,11 +1214,11 @@ export default function IncidentBoardPage() {
                       setIncidentVisibilityTab("private");
                       setSelectedGroup("");
                     }}
-                    className="px-4 py-2"
+                    className="relative px-5 py-2 pr-8"
                   >
                     <span className="material-icons text-sm mr-2">lock</span>
                     Private
-                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-sre-surface border border-sre-border">
+                    <span className="absolute -top-2 -right-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-amber-400 text-[10px] font-semibold px-1 shadow-sm">
                       {incidentSummary?.by_visibility?.private ?? 0}
                     </span>
                   </Button>
@@ -1230,11 +1228,11 @@ export default function IncidentBoardPage() {
                     }
                     size="sm"
                     onClick={() => setIncidentVisibilityTab("group")}
-                    className="px-4 py-2"
+                    className="relative px-5 py-2 pr-8"
                   >
                     <span className="material-icons text-sm mr-2">group</span>
                     Group
-                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-sre-surface border border-sre-border">
+                    <span className="absolute -top-2 -right-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-emerald-400 text-[10px] font-semibold px-1 shadow-sm">
                       {incidentSummary?.by_visibility?.group ?? 0}
                     </span>
                   </Button>
@@ -1301,8 +1299,7 @@ export default function IncidentBoardPage() {
                   <span className="font-medium text-sre-text">
                     {stats.assignedToMe}
                   </span>
-                  <span className="text-sre-text-muted">assigned to me</span>
-                  <HelpTooltip text="Open incidents currently assigned to your user." />
+                  <HelpTooltip text="Open incidents currently assigned to you." />
                 </div>
               </div>
 
@@ -1983,47 +1980,10 @@ export default function IncidentBoardPage() {
 
                   {activeIncident.jiraTicketKey && (
                     <div className="mt-3 p-3 border border-sre-border rounded-lg bg-sre-bg-alt space-y-2">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
                         <p className="text-xs font-medium text-sre-text text-left">
                           Jira comments
                         </p>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={!!jiraSyncingNotes[activeIncident.id]}
-                          onClick={async () => {
-                            try {
-                              setJiraSyncingNotes((prev) => ({
-                                ...prev,
-                                [activeIncident.id]: true,
-                              }));
-                              const result = await syncIncidentJiraNotes(
-                                activeIncident.id,
-                              );
-                              const synced = Number(result?.synced || 0);
-                              const skipped = Number(result?.skipped || 0);
-                              toast.success(
-                                `Synced ${synced} note${synced === 1 ? "" : "s"} (${skipped} already present)`,
-                              );
-                              await loadJiraComments(activeIncident.id);
-                            } catch (err) {
-                              toast.error(
-                                err?.body?.detail ||
-                                  err?.message ||
-                                  "Failed to sync notes to Jira",
-                              );
-                            } finally {
-                              setJiraSyncingNotes((prev) => ({
-                                ...prev,
-                                [activeIncident.id]: false,
-                              }));
-                            }
-                          }}
-                        >
-                          {jiraSyncingNotes[activeIncident.id]
-                            ? "Syncing..."
-                            : "Sync notes"}
-                        </Button>
                       </div>
 
                       {jiraCommentsLoading ? (

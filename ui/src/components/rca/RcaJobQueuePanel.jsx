@@ -35,7 +35,7 @@ export default function RcaJobQueuePanel({
           <Spinner />
         </div>
       ) : jobs.length === 0 ? (
-        <p className="text-sm text-sre-text-muted">No RCA jobs yet.</p>
+        <p className="text-sm text-sre-text-muted">There are currently no RCA jobs available. Please start a job to add it to the queue. It will appear here once it has been completed. Note that if no real anomalies are detected, the system may display false positives. This happens because the baseline is calculated over a time range where the data was relatively constant. As a result, even small spikes can trigger false alarms. To improve accuracy, it’s best to use a larger time range or select a period that includes a known incident.</p>
       ) : (
         <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
           {jobs.map((job) => {
