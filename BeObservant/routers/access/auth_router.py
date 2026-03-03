@@ -585,19 +585,13 @@ async def delete_user(
 
 @router.get("/groups", response_model=List[Group])
 async def list_groups(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_GROUPS, "auth"))):
-    groups = await rtp(auth_service.list_groups, current_user.tenant_id)
-    if is_admin_check(current_user) or bool(getattr(current_user, "is_superuser", False)):
-        return groups
-
-    actor_group_ids = {
-        str(group_id).strip()
-        for group_id in (getattr(current_user, "group_ids", None) or [])
-        if str(group_id).strip()
-    }
-    if not actor_group_ids:
-        return []
-
-    return [group for group in groups if str(getattr(group, "id", "")).strip() in actor_group_ids]
+    return await rtp(
+        auth_service.list_groups,
+        current_user.tenant_id,
+        current_user.user_id,
+        current_user.role,
+        bool(getattr(current_user, "is_superuser", False)),
+    )
 
 
 @router.post("/groups", response_model=Group)
@@ -620,7 +614,14 @@ async def get_group(
         require_any_permission_with_scope([Permission.READ_GROUPS, Permission.MANAGE_GROUPS], "auth")
     ),
 ):
-    group = await rtp(auth_service.get_group, group_id, current_user.tenant_id)
+    group = await rtp(
+        auth_service.get_group,
+        group_id,
+        current_user.tenant_id,
+        current_user.user_id,
+        current_user.role,
+        bool(getattr(current_user, "is_superuser", False)),
+    )
     if not group:
         raise HTTPException(status.HTTP_404_NOT_FOUND, GROUP_NOT_FOUND)
     return group
@@ -635,7 +636,15 @@ async def update_group(
         require_any_permission_with_scope([Permission.UPDATE_GROUPS, Permission.MANAGE_GROUPS], "auth")
     ),
 ):
-    group = await rtp(auth_service.update_group, group_id, group_update, current_user.tenant_id, current_user.user_id)
+    group = await rtp(
+        auth_service.update_group,
+        group_id,
+        group_update,
+        current_user.tenant_id,
+        current_user.user_id,
+        current_user.role,
+        bool(getattr(current_user, "is_superuser", False)),
+    )
     if not group:
         raise HTTPException(status.HTTP_404_NOT_FOUND, GROUP_NOT_FOUND)
     invalidate_grafana_proxy_auth_cache()
@@ -649,7 +658,14 @@ async def delete_group(
         require_any_permission_with_scope([Permission.DELETE_GROUPS, Permission.MANAGE_GROUPS], "auth")
     ),
 ):
-    if not await rtp(auth_service.delete_group, group_id, current_user.tenant_id, current_user.user_id):
+    if not await rtp(
+        auth_service.delete_group,
+        group_id,
+        current_user.tenant_id,
+        current_user.user_id,
+        current_user.role,
+        bool(getattr(current_user, "is_superuser", False)),
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, GROUP_NOT_FOUND)
     invalidate_grafana_proxy_auth_cache()
     return {"message": "Group deleted successfully"}

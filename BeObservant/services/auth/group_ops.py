@@ -90,6 +90,21 @@ def _get_group(db, *, group_id: str, tenant_id: str, load_members: bool = False)
     )
 
 
+def _can_access_group(
+    group: Group,
+    *,
+    actor_user_id: Optional[str],
+    actor_role: Optional[str],
+    actor_is_superuser: bool,
+) -> bool:
+    if _is_admin_actor(actor_role=actor_role, actor_is_superuser=actor_is_superuser):
+        return True
+    actor_id = str(actor_user_id or "").strip()
+    if not actor_id:
+        return False
+    return any(str(getattr(member, "id", "")).strip() == actor_id for member in (group.members or []))
+
+
 def _resolve_actor_permissions(service, *, db, actor_user_id: str, tenant_id: str, actor_permissions: Optional[List[str]]) -> Set[str]:
     provided = _normalize_permissions(actor_permissions)
     if provided:
@@ -151,7 +166,7 @@ def _enforce_permission_delegation(
         forbidden = sorted(requested_permissions - actor_permissions)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Cannot grant permissions outside your own scope: {forbidden}",
+            detail="You can't set group permissions higher than your own",
         )
 
     if actor_is_admin:
@@ -161,7 +176,7 @@ def _enforce_permission_delegation(
     if privileged:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Only administrators can grant privileged permissions: {privileged}",
+            detail="You can't set group permissions higher than your own",
         )
 
 
@@ -189,6 +204,11 @@ def create_group(service, group_create: GroupCreate, tenant_id: str, creator_id:
         db.flush()
 
         if creator_id:
+            creator = db.query(User).filter_by(id=creator_id, tenant_id=tenant_id).first()
+            if creator and all(str(member.id) != str(creator.id) for member in (group.members or [])):
+                group.members.append(creator)
+
+        if creator_id:
             service._log_audit(db, tenant_id, creator_id, "create_group", "groups", group.id, {"name": group.name})
 
         db.commit()
@@ -197,28 +217,67 @@ def create_group(service, group_create: GroupCreate, tenant_id: str, creator_id:
         return service._to_group_schema(group)
 
 
-def list_groups(service, tenant_id: str) -> List[GroupSchema]:
+def list_groups(
+    service,
+    tenant_id: str,
+    actor_user_id: Optional[str] = None,
+    actor_role: Optional[str] = None,
+    actor_is_superuser: bool = False,
+) -> List[GroupSchema]:
     with get_db_session() as db:
-        groups = (
+        query = (
             db.query(Group)
-            .options(joinedload(Group.permissions))
+            .options(joinedload(Group.permissions), joinedload(Group.members))
             .filter_by(tenant_id=tenant_id)
-            .all()
         )
+        if not _is_admin_actor(actor_role=actor_role, actor_is_superuser=actor_is_superuser):
+            actor_id = str(actor_user_id or "").strip()
+            if not actor_id:
+                return []
+            query = query.filter(Group.members.any(User.id == actor_id))
+        groups = query.all()
         return [service._to_group_schema(g) for g in groups]
 
 
-def get_group(service, group_id: str, tenant_id: str) -> Optional[GroupSchema]:
+def get_group(
+    service,
+    group_id: str,
+    tenant_id: str,
+    actor_user_id: Optional[str] = None,
+    actor_role: Optional[str] = None,
+    actor_is_superuser: bool = False,
+) -> Optional[GroupSchema]:
     with get_db_session() as db:
-        group = _get_group(db, group_id=group_id, tenant_id=tenant_id)
+        group = _get_group(db, group_id=group_id, tenant_id=tenant_id, load_members=True)
+        if group and not _can_access_group(
+            group,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            actor_is_superuser=actor_is_superuser,
+        ):
+            return None
         return service._to_group_schema(group) if group else None
 
 
-def delete_group(service, group_id: str, tenant_id: str, deleter_id: Optional[str] = None) -> bool:
+def delete_group(
+    service,
+    group_id: str,
+    tenant_id: str,
+    deleter_id: Optional[str] = None,
+    actor_role: Optional[str] = None,
+    actor_is_superuser: bool = False,
+) -> bool:
     with get_db_session() as db:
-        group = db.query(Group).filter_by(id=group_id, tenant_id=tenant_id).first()
+        group = _get_group(db, group_id=group_id, tenant_id=tenant_id, load_members=True)
         if not group:
             return False
+        if not _can_access_group(
+            group,
+            actor_user_id=deleter_id,
+            actor_role=actor_role,
+            actor_is_superuser=actor_is_superuser,
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to manage this group")
 
         if deleter_id:
             service._log_audit(db, tenant_id, deleter_id, "delete_group", "groups", group_id, {"name": group.name})
@@ -234,11 +293,20 @@ def update_group(
     group_update: GroupUpdate,
     tenant_id: str,
     updater_id: Optional[str] = None,
+    actor_role: Optional[str] = None,
+    actor_is_superuser: bool = False,
 ) -> Optional[GroupSchema]:
     with get_db_session() as db:
-        group = db.query(Group).filter_by(id=group_id, tenant_id=tenant_id).first()
+        group = _get_group(db, group_id=group_id, tenant_id=tenant_id, load_members=True)
         if not group:
             return None
+        if not _can_access_group(
+            group,
+            actor_user_id=updater_id,
+            actor_role=actor_role,
+            actor_is_superuser=actor_is_superuser,
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to manage this group")
 
         update_data = {
             k: v
@@ -316,6 +384,14 @@ def update_group_permissions(
                 detail="Missing permission to modify group permissions",
             )
 
+        if not _can_access_group(
+            group,
+            actor_user_id=actor_user_id,
+            actor_role=role_text,
+            actor_is_superuser=is_superuser,
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to manage this group")
+
         requested = _normalize_permissions(permission_names)
         existing_permissions = {
             str(getattr(p, "name", "")).strip()
@@ -330,7 +406,7 @@ def update_group_permissions(
             if requested_out_of_scope != existing_out_of_scope:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Cannot modify permissions outside your own scope",
+                    detail="You can't set group permissions higher than your own",
                 )
             requested_for_actor_scope = requested & perm_set
 
@@ -416,6 +492,14 @@ def update_group_members(
                 detail="Missing permission to modify group memberships",
             )
 
+        if not _can_access_group(
+            group,
+            actor_user_id=actor_user_id,
+            actor_role=role_text,
+            actor_is_superuser=is_superuser,
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to manage this group")
+
         members: List[User] = []
         requested_ids = [str(u).strip() for u in (user_ids or []) if str(u).strip()]
         if requested_ids:
@@ -453,6 +537,21 @@ def update_group_members(
                 )
 
         group.members = members
+
+        # Auto-cleanup: if a group has no members after an update, delete it.
+        if not members:
+            service._log_audit(
+                db,
+                tenant_id,
+                actor_user_id,
+                "delete_group",
+                "groups",
+                group_id,
+                {"reason": "auto_delete_empty_group", "name": group.name},
+            )
+            db.delete(group)
+            db.commit()
+            return True
 
         service._log_audit(
             db,

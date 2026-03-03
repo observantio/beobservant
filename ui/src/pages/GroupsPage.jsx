@@ -95,8 +95,10 @@ export default function GroupsPage() {
     }
 
     setSaving(true);
+    let createdGroupId = null;
     try {
       const newGroup = await api.createGroup(formData);
+      createdGroupId = newGroup?.id || null;
       if (groupPermissions?.length > 0) {
         await api.updateGroupPermissions(newGroup.id, groupPermissions);
       }
@@ -110,6 +112,13 @@ export default function GroupsPage() {
       setSelectedMembers([]);
       await fetchData();
     } catch (err) {
+      if (createdGroupId) {
+        try {
+          await api.deleteGroup(createdGroupId);
+        } catch (_) {
+          // ignore rollback failures; surface original create flow error
+        }
+      }
       toast.error("Failed to create group: " + err.message);
     } finally {
       setSaving(false);

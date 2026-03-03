@@ -606,7 +606,7 @@ export default function AlertManagerPage() {
                     <h3 className="text-xl font-semibold text-sre-text mb-2">
                       No Active Alerts
                     </h3>
-                    <p className="text-sre-text-muted mb-6 max-w-md mx-auto">
+                    <p className="text-sre-text-muted text-sm mb-6 max-w-md mx-auto">
                       All systems are running smoothly. No alerts are currently
                       firing.
                     </p>

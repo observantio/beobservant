@@ -635,6 +635,46 @@ export default function IncidentBoardPage() {
     });
   }, [assignableIncidentUsers, assigneeSearch]);
 
+  const RESOLVE_BLOCK_TOAST = "Alert still active. Resolve it first.";
+
+  const isResolveBlockedError = useCallback((err) => {
+    const detail = String(err?.body?.detail || err?.message || "").toLowerCase();
+    return (
+      Number(err?.status) === 400 &&
+      detail.includes("underlying alert is still active")
+    );
+  }, []);
+
+  const ensureCanResolveIncident = useCallback(
+    async (incident, { quietOnCheckError = false } = {}) => {
+      if (!incident?.fingerprint) return true;
+      try {
+        const activeAlerts = await getAlertsByFilter(
+          { fingerprint: incident.fingerprint },
+          true,
+        );
+        if (Array.isArray(activeAlerts) && activeAlerts.length > 0) {
+          try {
+            toast.error(RESOLVE_BLOCK_TOAST);
+          } catch (_) {}
+          return false;
+        }
+      } catch (err) {
+        if (!quietOnCheckError) {
+          try {
+            toast.error(
+              err?.body?.detail ||
+                err?.message ||
+                "Failed to validate alert state before resolving",
+            );
+          } catch (_) {}
+        }
+      }
+      return true;
+    },
+    [toast],
+  );
+
   
   const formatDateTime = (iso) => {
     if (!iso) return "unknown time";
@@ -885,26 +925,13 @@ export default function IncidentBoardPage() {
           payload.status = "resolved";
         }
 
-        
-        if (target === "resolved" && incident && incident.fingerprint) {
-          try {
-            const activeAlerts = await getAlertsByFilter(
-              { fingerprint: incident.fingerprint },
-              true,
-            );
-            if (Array.isArray(activeAlerts) && activeAlerts.length > 0) {
-              setDropping((prev) => clearDroppedState(prev, droppedId));
-              try {
-                toast.error("Cannot resolve: underlying alert is still active");
-              } catch (_) {}
-              return;
-            }
-          } catch (err) {
-            
-            console.warn(
-              "Alert active-check failed, will rely on server-side enforcement",
-              err,
-            );
+        if (target === "resolved") {
+          const canResolve = await ensureCanResolveIncident(incident, {
+            quietOnCheckError: true,
+          });
+          if (!canResolve) {
+            setDropping((prev) => clearDroppedState(prev, droppedId));
+            return;
           }
         }
 
@@ -912,19 +939,28 @@ export default function IncidentBoardPage() {
         setDropping((prev) => clearDroppedState(prev, droppedId));
         await refresh();
       } catch (err) {
-        setError(
-          err?.body?.detail || err?.message || "Unable to update incident",
-        );
+        const detail =
+          isResolveBlockedError(err)
+            ? RESOLVE_BLOCK_TOAST
+            : err?.body?.detail || err?.message || "Unable to update incident";
+        setError(detail);
         try {
-          toast.error(
-            err?.body?.detail || err?.message || "Unable to update incident",
-          );
+          toast.error(detail);
         } catch (_) {}
       } finally {
         setDropping((prev) => clearDroppedState(prev, droppedId));
       }
     },
-    [incidents, openIncidentModal, refresh, setError, setIncidentModalTab, toast],
+    [
+      ensureCanResolveIncident,
+      incidents,
+      isResolveBlockedError,
+      openIncidentModal,
+      refresh,
+      setError,
+      setIncidentModalTab,
+      toast,
+    ],
   );
 
   const handleQuickResolveIncident = useCallback(
@@ -933,38 +969,28 @@ export default function IncidentBoardPage() {
       const droppedId = String(incident.id);
       try {
         setDropping((prev) => ({ ...prev, [droppedId]: true }));
-        if (incident.fingerprint) {
-          try {
-            const activeAlerts = await getAlertsByFilter(
-              { fingerprint: incident.fingerprint },
-              true,
-            );
-            if (Array.isArray(activeAlerts) && activeAlerts.length > 0) {
-              try {
-                toast.error("Cannot resolve: underlying alert is still active");
-              } catch (_) {}
-              return;
-            }
-          } catch (err) {
-            console.warn("Alert active-check failed during quick resolve", err);
-          }
+        const canResolve = await ensureCanResolveIncident(incident, {
+          quietOnCheckError: true,
+        });
+        if (!canResolve) {
+          return;
         }
         await updateIncident(incident.id, { status: "resolved" });
         await refresh();
       } catch (err) {
-        setError(
-          err?.body?.detail || err?.message || "Unable to update incident",
-        );
+        const detail =
+          isResolveBlockedError(err)
+            ? RESOLVE_BLOCK_TOAST
+            : err?.body?.detail || err?.message || "Unable to update incident";
+        setError(detail);
         try {
-          toast.error(
-            err?.body?.detail || err?.message || "Unable to update incident",
-          );
+          toast.error(detail);
         } catch (_) {}
       } finally {
         setDropping((prev) => clearDroppedState(prev, droppedId));
       }
     },
-    [refresh, setError, toast],
+    [ensureCanResolveIncident, isResolveBlockedError, refresh, setError, toast],
   );
 
   const handleSaveIncident = useCallback(
@@ -984,27 +1010,12 @@ export default function IncidentBoardPage() {
             : incident.hideWhenResolved || false,
       };
 
-      
-      if (payload.status === "resolved" && incident.fingerprint) {
-        try {
-          const activeAlerts = await getAlertsByFilter(
-            { fingerprint: incident.fingerprint },
-            true,
-          );
-          if (Array.isArray(activeAlerts) && activeAlerts.length > 0) {
-            try {
-              toast.error(
-                "Cannot mark resolved: underlying alert is still active",
-              );
-            } catch (_) {}
-            return;
-          }
-        } catch (err) {
-          
-          console.warn(
-            "Alert active-check failed during save, will rely on server-side enforcement",
-            err,
-          );
+      if (payload.status === "resolved") {
+        const canResolve = await ensureCanResolveIncident(incident, {
+          quietOnCheckError: true,
+        });
+        if (!canResolve) {
+          return;
         }
       }
 
@@ -1019,17 +1030,24 @@ export default function IncidentBoardPage() {
         });
         await refresh();
       } catch (err) {
-        setError(
-          err?.body?.detail || err?.message || "Unable to update incident",
-        );
+        const detail =
+          isResolveBlockedError(err)
+            ? RESOLVE_BLOCK_TOAST
+            : err?.body?.detail || err?.message || "Unable to update incident";
+        setError(detail);
         try {
-          toast.error(
-            err?.body?.detail || err?.message || "Unable to update incident",
-          );
+          toast.error(detail);
         } catch (_) {}
       }
     },
-    [incidentDrafts, refresh, setError, toast],
+    [
+      ensureCanResolveIncident,
+      incidentDrafts,
+      isResolveBlockedError,
+      refresh,
+      setError,
+      toast,
+    ],
   );
 
   useEffect(() => {
@@ -1404,7 +1422,7 @@ export default function IncidentBoardPage() {
             <h3 className="text-xl font-semibold text-sre-text mb-2">
               No incidents found
             </h3>
-            <p className="text-sre-text-muted text-center max-w-md">
+            <p className="text-sre-text-muted text-sm text-center max-w-md">
               Ensure you have the permissions to view incidents and that your
               filters are set correctly. Try adjusting the visibility or group
               filters, or check back later when new incidents are created.
@@ -1530,15 +1548,20 @@ export default function IncidentBoardPage() {
                             (activeIncidentDraft.status ??
                               activeIncident.status) === "resolved"
                           }
-                          onClick={() =>
+                          onClick={async () => {
+                            const canResolve = await ensureCanResolveIncident(
+                              activeIncident,
+                              { quietOnCheckError: true },
+                            );
+                            if (!canResolve) return;
                             setIncidentDrafts((prev) => ({
                               ...prev,
                               [activeIncident.id]: {
                                 ...(prev[activeIncident.id] || {}),
                                 status: "resolved",
                               },
-                            }))
-                          }
+                            }));
+                          }}
                         >
                           Resolved
                         </button>

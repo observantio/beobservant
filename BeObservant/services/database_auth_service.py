@@ -427,19 +427,73 @@ class DatabaseAuthService:
     def create_group(self, group_create: GroupCreate, tenant_id: str, creator_id: Optional[str] = None) -> GroupSchema:
         return create_group_op(self, group_create, tenant_id, creator_id)
 
-    def list_groups(self, tenant_id: str) -> List[GroupSchema]:
-        return list_groups_op(self, tenant_id)
+    def list_groups(
+        self,
+        tenant_id: str,
+        actor_user_id: Optional[str] = None,
+        actor_role: Optional[str] = None,
+        actor_is_superuser: bool = False,
+    ) -> List[GroupSchema]:
+        return list_groups_op(
+            self,
+            tenant_id,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            actor_is_superuser=actor_is_superuser,
+        )
 
-    def get_group(self, group_id: str, tenant_id: str) -> Optional[GroupSchema]:
-        return get_group_op(self, group_id, tenant_id)
+    def get_group(
+        self,
+        group_id: str,
+        tenant_id: str,
+        actor_user_id: Optional[str] = None,
+        actor_role: Optional[str] = None,
+        actor_is_superuser: bool = False,
+    ) -> Optional[GroupSchema]:
+        return get_group_op(
+            self,
+            group_id,
+            tenant_id,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            actor_is_superuser=actor_is_superuser,
+        )
 
-    def delete_group(self, group_id: str, tenant_id: str, deleter_id: Optional[str] = None) -> bool:
-        return delete_group_op(self, group_id, tenant_id, deleter_id)
+    def delete_group(
+        self,
+        group_id: str,
+        tenant_id: str,
+        deleter_id: Optional[str] = None,
+        actor_role: Optional[str] = None,
+        actor_is_superuser: bool = False,
+    ) -> bool:
+        return delete_group_op(
+            self,
+            group_id,
+            tenant_id,
+            deleter_id,
+            actor_role=actor_role,
+            actor_is_superuser=actor_is_superuser,
+        )
 
     def update_group(
-        self, group_id: str, group_update: GroupUpdate, tenant_id: str, updater_id: Optional[str] = None
+        self,
+        group_id: str,
+        group_update: GroupUpdate,
+        tenant_id: str,
+        updater_id: Optional[str] = None,
+        actor_role: Optional[str] = None,
+        actor_is_superuser: bool = False,
     ) -> Optional[GroupSchema]:
-        return update_group_op(self, group_id, group_update, tenant_id, updater_id)
+        return update_group_op(
+            self,
+            group_id,
+            group_update,
+            tenant_id,
+            updater_id,
+            actor_role=actor_role,
+            actor_is_superuser=actor_is_superuser,
+        )
 
     def update_group_permissions(
         self,

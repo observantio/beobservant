@@ -55,7 +55,7 @@ function JiraIntegrationForm({ value, onChange, canUseSso = false }) {
               onChange={(e) => next({ authMode: e.target.value })}
               className="bg-sre-bg border-sre-border/60 focus:border-sre-primary"
             >
-              <option value="api_token">Email + API token</option>
+              <option value="api_token">Email + API token (Recommended)</option>
               <option value="bearer">Bearer token</option>
               {canUseSso && <option value="sso">SSO available (token-based)</option>}
             </Select>
