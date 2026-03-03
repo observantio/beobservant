@@ -574,8 +574,17 @@ export async function importAlertRules(payload) {
 export async function getAllowedChannelTypes() {
   return request("/api/alertmanager/integrations/channel-types");
 }
-export async function listJiraIntegrations() {
-  return request("/api/alertmanager/integrations/jira");
+export async function listJiraIntegrations({ showHidden = false } = {}) {
+  const params = new URLSearchParams();
+  if (showHidden) params.set("show_hidden", "true");
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return request(`/api/alertmanager/integrations/jira${qs}`);
+}
+export async function setJiraIntegrationHidden(integrationId, hidden = true) {
+  return requestJson(
+    `/api/alertmanager/integrations/jira/${encodeURIComponent(integrationId)}/hide`,
+    { method: "POST", payload: { hidden: !!hidden } },
+  );
 }
 export async function createJiraIntegration(payload) {
   return requestJson("/api/alertmanager/integrations/jira", {
@@ -614,8 +623,17 @@ export async function testAlertRule(ruleId) {
     method: "POST",
   });
 }
-export async function getNotificationChannels() {
-  return request("/api/alertmanager/channels");
+export async function getNotificationChannels({ showHidden = false } = {}) {
+  const params = new URLSearchParams();
+  if (showHidden) params.set("show_hidden", "true");
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return request(`/api/alertmanager/channels${qs}`);
+}
+export async function setNotificationChannelHidden(channelId, hidden = true) {
+  return requestJson(
+    `/api/alertmanager/channels/${encodeURIComponent(channelId)}/hide`,
+    { method: "POST", payload: { hidden: !!hidden } },
+  );
 }
 export async function createNotificationChannel(payload) {
   return requestJson("/api/alertmanager/channels", { payload });

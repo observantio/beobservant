@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getNotificationChannels,
+  setNotificationChannelHidden,
   createNotificationChannel,
   updateNotificationChannel,
   deleteNotificationChannel,
   testNotificationChannel,
   getAllowedChannelTypes,
   listJiraIntegrations,
+  setJiraIntegrationHidden,
   createJiraIntegration,
   updateJiraIntegration,
   deleteJiraIntegration,
@@ -208,6 +210,7 @@ export default function IntegrationsPage() {
   const [canUseSso, setCanUseSso] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showHidden, setShowHidden] = useState(false);
 
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [editingChannel, setEditingChannel] = useState(null);
@@ -234,18 +237,14 @@ export default function IntegrationsPage() {
 
   const userId = user?.id;
 
-  useEffect(() => {
-    loadAll();
-  }, []);
-
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [channelsData, allowedTypesData, jiraData, authModeData] = await Promise.all([
-        getNotificationChannels().catch(() => []),
+        getNotificationChannels({ showHidden }).catch(() => []),
         getAllowedChannelTypes().catch(() => ({ allowedTypes: [] })),
-        listJiraIntegrations().catch(() => ({ items: [] })),
+        listJiraIntegrations({ showHidden }).catch(() => ({ items: [] })),
         getAuthMode().catch(() => ({ oidc_enabled: false })),
       ]);
 
@@ -278,7 +277,11 @@ export default function IntegrationsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [showHidden]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
 
   const visibleChannels = useMemo(
     () => channels.filter((channel) => channel.visibility === activeTab),
@@ -394,6 +397,7 @@ export default function IntegrationsPage() {
 
   function ChannelCard({ channel }) {
     const isOwner = channel.createdBy === userId;
+    const canToggleHidden = !isOwner && (channel.visibility || "private") !== "private";
     const typeIcon = channelIconForType(channel.type);
     const colorClasses = channelColorForType(channel.type);
 
@@ -414,6 +418,11 @@ export default function IntegrationsPage() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <div className="font-semibold text-sre-text truncate">{channel.name}</div>
+                  {!!channel.isHidden && (
+                    <span className="text-[11px] px-2 py-0.5 rounded bg-sre-surface border border-sre-border text-sre-text-muted">
+                      hidden
+                    </span>
+                  )}
                   <div className="text-xs text-sre-text-muted rounded px-2 py-1 bg-sre-surface/40 border border-sre-border/30">
                     {channel.visibility || "private"}
                   </div>
@@ -442,6 +451,21 @@ export default function IntegrationsPage() {
                 </div>
 
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {canToggleHidden && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={channel.isHidden ? "Unhide channel" : "Hide channel"}
+                      title={channel.isHidden ? "Unhide channel" : "Hide channel"}
+                      onClick={() => handleToggleChannelHidden(channel)}
+                      className="p-1 hover:bg-sre-primary/10"
+                    >
+                      <span className="material-icons text-base">
+                        {channel.isHidden ? "visibility" : "visibility_off"}
+                      </span>
+                    </Button>
+                  )}
+
                   {isOwner && (
                     <Button
                       size="sm"
@@ -503,6 +527,7 @@ export default function IntegrationsPage() {
 
   function JiraCard({ integration }) {
     const isOwner = integration.createdBy === userId;
+    const canToggleHidden = !isOwner && (integration.visibility || "private") !== "private";
 
     return (
       <div className="p-4 rounded-xl border border-sre-border bg-white/3 shadow-sm hover:shadow-md transition-all hover:border-sre-primary/30">
@@ -513,13 +538,35 @@ export default function IntegrationsPage() {
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-3 mb-2">
-              <div className="font-semibold text-sre-text truncate">{integration.name}</div>
+              <div className="font-semibold text-sre-text truncate flex items-center gap-2">
+                <span className="truncate">{integration.name}</span>
+                {!!integration.isHidden && (
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-sre-surface border border-sre-border text-sre-text-muted">
+                    hidden
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-sre-text-muted">{integration.visibility || "private"}</div>
             </div>
 
             <div className="text-sm text-sre-text-muted truncate mb-3">{integration.baseUrl}</div>
 
             <div className="flex items-center gap-2 justify-end">
+              {canToggleHidden && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={integration.isHidden ? "Unhide integration" : "Hide integration"}
+                  title={integration.isHidden ? "Unhide integration" : "Hide integration"}
+                  onClick={() => handleToggleJiraHidden(integration)}
+                  className="p-1 hover:bg-sre-primary/10"
+                >
+                  <span className="material-icons text-base">
+                    {integration.isHidden ? "visibility" : "visibility_off"}
+                  </span>
+                </Button>
+              )}
+
               {isOwner && (
                 <Button
                   size="sm"
@@ -657,6 +704,26 @@ export default function IntegrationsPage() {
     }
   }
 
+  async function handleToggleChannelHidden(channel) {
+    try {
+      await setNotificationChannelHidden(channel.id, !channel.isHidden);
+      await loadAll();
+      toast.success(channel.isHidden ? "Channel unhidden" : "Channel hidden");
+    } catch (e) {
+      toast.error(formatApiError(e) || "Failed to update channel visibility");
+    }
+  }
+
+  async function handleToggleJiraHidden(integration) {
+    try {
+      await setJiraIntegrationHidden(integration.id, !integration.isHidden);
+      await loadAll();
+      toast.success(integration.isHidden ? "Jira integration unhidden" : "Jira integration hidden");
+    } catch (e) {
+      toast.error(formatApiError(e) || "Failed to update Jira integration visibility");
+    }
+  }
+
   if (loading) {
     return (
       <div className="py-12">
@@ -691,6 +758,18 @@ export default function IntegrationsPage() {
             {tab.label}
           </button>
         ))}
+      </div>
+
+      <div className="flex items-center justify-end">
+        <label className="inline-flex items-center gap-2 text-sm text-sre-text-muted cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showHidden}
+            onChange={(e) => setShowHidden(e.target.checked)}
+            className="rounded border-sre-border"
+          />
+          Show hidden
+        </label>
       </div>
 
       <div className="space-y-6">
