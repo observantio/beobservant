@@ -289,6 +289,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const handler = (e) => {
       if (e?.detail?.status !== 401) return;
+      if (!e?.detail?.shouldExpireSession) return;
       if (isOnOidcCallback()) return;
       clearSession();
       navigate("/login", { replace: true });

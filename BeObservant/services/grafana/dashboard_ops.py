@@ -550,7 +550,7 @@ async def create_dashboard(
     groups = []
     if visibility == "group":
         groups = service._validate_group_visibility(
-            db, tenant_id=tenant_id, group_ids=group_ids,
+            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
             shared_group_ids=shared_group_ids, is_admin=is_admin,
         )
 
@@ -684,7 +684,7 @@ async def update_dashboard(
         db_dashboard.visibility = visibility
         if visibility == "group" and shared_group_ids is not None:
             groups = service._validate_group_visibility(
-                db, tenant_id=tenant_id, group_ids=group_ids,
+                db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
                 shared_group_ids=shared_group_ids, is_admin=is_admin,
             )
             db_dashboard.shared_groups.clear()

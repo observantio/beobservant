@@ -799,7 +799,7 @@ export function Modal({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6  scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-transparent">
+        <div className="flex-1 overflow-y-auto px-6 pb-3 scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-transparent">
           {children}
         </div>
 

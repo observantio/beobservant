@@ -161,11 +161,15 @@ async def create_folder(
     groups = []
     if visibility == "group":
         groups = service._validate_group_visibility(
-            db, tenant_id=tenant_id, group_ids=group_ids,
+            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
             shared_group_ids=shared_group_ids, is_admin=is_admin,
         )
 
-    created = await service.grafana_service.create_folder(title)
+    try:
+        created = await service.grafana_service.create_folder(title)
+    except Exception as exc:
+        service._raise_http_from_grafana_error(exc)
+        return None
     if not created:
         return None
 
@@ -236,7 +240,7 @@ async def update_folder(
         db_folder.visibility = visibility
         if visibility == "group":
             groups = service._validate_group_visibility(
-                db, tenant_id=tenant_id, group_ids=group_ids,
+                db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
                 shared_group_ids=shared_group_ids, is_admin=is_admin,
             )
             db_folder.shared_groups.clear()
@@ -271,7 +275,11 @@ async def delete_folder(
     ):
         return False
 
-    ok = await service.grafana_service.delete_folder(uid)
+    try:
+        ok = await service.grafana_service.delete_folder(uid)
+    except Exception as exc:
+        service._raise_http_from_grafana_error(exc)
+        return False
     if not ok:
         return False
 

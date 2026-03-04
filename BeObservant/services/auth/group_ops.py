@@ -18,7 +18,7 @@ from sqlalchemy import and_, func
 from sqlalchemy.orm import joinedload
 
 from database import get_db_session
-from db_models import Group, Permission, User
+from db_models import GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, Permission, User
 from models.access.group_models import GroupCreate, GroupUpdate, Group as GroupSchema
 from models.access.auth_models import Role
 
@@ -500,6 +500,8 @@ def update_group_members(
         ):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to manage this group")
 
+        existing_member_ids = {str(u.id) for u in (group.members or [])}
+
         members: List[User] = []
         requested_ids = [str(u).strip() for u in (user_ids or []) if str(u).strip()]
         if requested_ids:
@@ -536,7 +538,18 @@ def update_group_members(
                     detail="Cannot modify group membership for users with higher role",
                 )
 
+        requested_member_ids = {str(u.id) for u in members}
+        removed_member_ids = sorted(existing_member_ids - requested_member_ids)
+
         group.members = members
+
+        if removed_member_ids:
+            _prune_removed_member_grafana_group_shares(
+                db,
+                tenant_id=tenant_id,
+                group_id=group_id,
+                removed_user_ids=removed_member_ids,
+            )
 
         # Auto-cleanup: if a group has no members after an update, delete it.
         if not members:
@@ -565,3 +578,37 @@ def update_group_members(
 
         db.commit()
         return True
+
+
+def _prune_removed_member_grafana_group_shares(
+    db,
+    *,
+    tenant_id: str,
+    group_id: str,
+    removed_user_ids: List[str],
+) -> None:
+    target_group_id = str(group_id)
+    removed_ids = [str(uid) for uid in (removed_user_ids or []) if str(uid).strip()]
+    if not removed_ids:
+        return
+
+    def _prune(model) -> None:
+        rows = (
+            db.query(model)
+            .options(joinedload(model.shared_groups))
+            .filter(
+                model.tenant_id == tenant_id,
+                model.created_by.in_(removed_ids),
+                model.visibility == "group",
+                model.shared_groups.any(Group.id == target_group_id),
+            )
+            .all()
+        )
+        for row in rows:
+            row.shared_groups = [g for g in (row.shared_groups or []) if str(getattr(g, "id", "")) != target_group_id]
+            if not row.shared_groups:
+                row.visibility = "private"
+
+    _prune(GrafanaDashboard)
+    _prune(GrafanaDatasource)
+    _prune(GrafanaFolder)

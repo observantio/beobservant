@@ -103,7 +103,7 @@ for name in (
 sys.modules["services.grafana.datasource_ops"] = ds_mod
 
 from services.grafana_proxy_service import GrafanaProxyService
-from db_models import Base, Group
+from db_models import Base, Group, Tenant, User
 from fastapi import HTTPException
 GrafanaAPIError = gf_mod.GrafanaAPIError
 
@@ -199,6 +199,65 @@ def test_validate_group_visibility_success_for_admin_and_member():
 
     groups2 = svc._validate_group_visibility(db, tenant_id="t1", group_ids=["g1", "g2"], shared_group_ids=["g1", "g2"], is_admin=False)
     assert {g.id for g in groups2} == {"g1", "g2"}
+
+
+def test_validate_group_visibility_uses_live_db_membership_when_user_id_provided():
+    db = make_session()
+    db.add(Tenant(id="t1", name="tenant-1", display_name="Tenant 1"))
+    user = User(
+        id="u1",
+        tenant_id="t1",
+        username="user1",
+        email="u1@example.com",
+        hashed_password="x",
+        org_id="org-a",
+        is_active=True,
+    )
+    g1 = Group(id="g1", tenant_id="t1", name="one")
+    g1.members.append(user)
+    db.add_all([user, g1])
+    db.commit()
+
+    svc = GrafanaProxyService()
+    groups = svc._validate_group_visibility(
+        db,
+        user_id="u1",
+        tenant_id="t1",
+        group_ids=[],
+        shared_group_ids=["g1"],
+        is_admin=False,
+    )
+    assert {g.id for g in groups} == {"g1"}
+
+
+def test_validate_group_visibility_denies_when_live_membership_removed_even_with_stale_group_ids():
+    db = make_session()
+    db.add(Tenant(id="t1", name="tenant-1", display_name="Tenant 1"))
+    user = User(
+        id="u1",
+        tenant_id="t1",
+        username="user1",
+        email="u1@example.com",
+        hashed_password="x",
+        org_id="org-a",
+        is_active=True,
+    )
+    g1 = Group(id="g1", tenant_id="t1", name="one")
+    db.add_all([user, g1])
+    db.commit()
+
+    svc = GrafanaProxyService()
+    with pytest.raises(HTTPException) as exc:
+        svc._validate_group_visibility(
+            db,
+            user_id="u1",
+            tenant_id="t1",
+            group_ids=["g1"],
+            shared_group_ids=["g1"],
+            is_admin=False,
+        )
+    assert exc.value.status_code == 403
+    assert "User is not a member of one or more specified groups" in exc.value.detail
 
 
 def test_required_permissions_for_rotate_path():

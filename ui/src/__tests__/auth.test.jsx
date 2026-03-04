@@ -150,7 +150,7 @@ describe("AuthContext cookie-first behavior", () => {
     await waitFor(() => expect(api.getCurrentUser).toHaveBeenCalled());
   });
 
-  it("logs out and navigates to /login when a 401 api-error event occurs", async () => {
+  it("logs out and navigates to /login only when 401 event marks session expiry", async () => {
     api.getCurrentUserNoRedirect.mockResolvedValue({
       username: "joe",
       org_id: "org-j",
@@ -178,7 +178,9 @@ describe("AuthContext cookie-first behavior", () => {
     );
     act(() => {
       globalThis.window.dispatchEvent(
-        new CustomEvent("api-error", { detail: { status: 401, body: {} } }),
+        new CustomEvent("api-error", {
+          detail: { status: 401, body: {}, shouldExpireSession: true },
+        }),
       );
     });
     await waitFor(() => {

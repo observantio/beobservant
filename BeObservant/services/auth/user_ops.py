@@ -21,6 +21,7 @@ from database import get_db_session
 from db_models import User, Group, Permission
 from models.access.user_models import UserCreate, UserUpdate, User as UserSchema
 from models.access.auth_models import Role, ROLE_PERMISSIONS
+from services.auth.group_ops import _prune_removed_member_grafana_group_shares
 
 
 MUTABLE_USER_FIELDS = {
@@ -475,12 +476,22 @@ def update_user(
 
         for field, value in update_data.items():
             if field == "group_ids" and value is not None:
+                existing_group_ids = {str(g.id) for g in (user.groups or [])}
                 groups = (
                     db.query(Group)
                     .filter(and_(Group.id.in_(value), Group.tenant_id == tenant_id))
                     .all()
                 )
                 user.groups = groups
+                updated_group_ids = {str(g.id) for g in groups}
+                removed_group_ids = sorted(existing_group_ids - updated_group_ids)
+                for removed_group_id in removed_group_ids:
+                    _prune_removed_member_grafana_group_shares(
+                        db,
+                        tenant_id=tenant_id,
+                        group_id=removed_group_id,
+                        removed_user_ids=[user_id],
+                    )
             else:
                 setattr(user, field, value)
 

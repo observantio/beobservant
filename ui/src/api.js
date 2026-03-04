@@ -49,17 +49,31 @@ async function requestWithHeaders(path, opts = {}, headers = {}) {
       body = { message: text || res.statusText };
     }
 
-    globalThis.window.dispatchEvent(
-      new CustomEvent("api-error", { detail: { status: res.status, body } }),
-    );
-
     const isAuthLoginEndpoint =
       path === "/api/auth/login" || path === "/api/auth/oidc/exchange";
+    const shouldExpireSessionOn401 =
+      path === "/api/auth/me" || path === "/api/auth/refresh";
+
+    globalThis.window.dispatchEvent(
+      new CustomEvent("api-error", {
+        detail: {
+          status: res.status,
+          body,
+          path,
+          shouldExpireSession: res.status === 401 && shouldExpireSessionOn401,
+        },
+      }),
+    );
+
     if (res.status === 401 && !isAuthLoginEndpoint) {
-      authToken = null;
-      globalThis.window.dispatchEvent(
-        new CustomEvent("session-expired", { detail: { status: 401 } }),
-      );
+      if (shouldExpireSessionOn401) {
+        authToken = null;
+        globalThis.window.dispatchEvent(
+          new CustomEvent("session-expired", {
+            detail: { status: 401, path, shouldExpireSession: true },
+          }),
+        );
+      }
     }
 
     const err = new Error(

@@ -38,7 +38,7 @@ class _ProxyStub:
     def __init__(self, grafana_service):
         self.grafana_service = grafana_service
 
-    def _validate_group_visibility(self, db, *, tenant_id, group_ids, shared_group_ids, is_admin):
+    def _validate_group_visibility(self, db, *, user_id=None, tenant_id, group_ids, shared_group_ids, is_admin):
         return []
 
 

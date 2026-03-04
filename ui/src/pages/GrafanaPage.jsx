@@ -60,9 +60,15 @@ export default function GrafanaPage() {
   const handleApiError = useCallback(
     (e) => {
       if (!e) return;
+      const detail =
+        typeof e?.body?.detail === "string"
+          ? e.body.detail
+          : e?.body?.detail?.message;
+      const message =
+        typeof e?.body?.message === "string" ? e.body.message : null;
       const msg =
-        e?.body?.detail ||
-        e?.body?.message ||
+        detail ||
+        message ||
         e?.message ||
         String(e || "Request failed");
       const key = `${e?.status || "x"}:${msg}`;
