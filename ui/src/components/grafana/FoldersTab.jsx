@@ -65,13 +65,8 @@ export default function FoldersTab({
                 setFilters((prev) => ({ ...(prev || {}), showHidden: !prev?.showHidden }))
               }
             >
-              {filters?.showHidden ? "Hide Hidden" : "Show Hidden"}
+              {filters?.showHidden ? "Hide" : "Unhide"} 
             </Button>
-            {hasActiveFilters ? (
-              <Button type="button" onClick={onClearFilters} size="sm" variant="ghost">
-                Reset Filters
-              </Button>
-            ) : null}
           </form>
           {folders.length ? (
             <Button onClick={onCreateFolder} variant="primary" size="sm">

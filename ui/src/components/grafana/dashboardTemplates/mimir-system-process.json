@@ -1,20 +1,20 @@
 {
   "schemaVersion": 38,
-  "title": "System & Process Metrics (Mimir)",
+  "title": "System & Process Metrics (Mimir / OTel Hostmetrics)",
   "timezone": "browser",
   "refresh": "30s",
-  "uid": "system-process-mimir",
+  "uid": "system-process-mimir-otel",
   "version": 1,
   "time": { "from": "now-1h", "to": "now" },
   "panels": [
     {
       "type": "timeseries",
-      "title": "CPU Busy %",
+      "title": "High CPU Systems (%)",
       "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 },
       "datasource": { "uid": "mimir-prometheus", "type": "prometheus" },
       "targets": [
         {
-          "expr": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "expr": "topk(10, 100 * (1 - avg by(instance) (rate(system_cpu_time_seconds_total{state=\"idle\"}[5m])))) or topk(10, 100 * (1 - avg by(instance) (rate(system_cpu_time{state=\"idle\"}[5m]))))",
           "refId": "A"
         }
       ]
@@ -26,7 +26,7 @@
       "datasource": { "uid": "mimir-prometheus", "type": "prometheus" },
       "targets": [
         {
-          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+          "expr": "100 * avg by(instance) (system_memory_utilization{state=\"used\"}) or 100 * (sum by(instance) (system_memory_usage_bytes{state=\"used\"}) / clamp_min(sum by(instance) (system_memory_limit_bytes), 1)) or 100 * (sum by(instance) (system_memory_usage{state=\"used\"}) / clamp_min(sum by(instance) (system_memory_limit), 1))",
           "refId": "A"
         }
       ]
@@ -38,7 +38,7 @@
       "datasource": { "uid": "mimir-prometheus", "type": "prometheus" },
       "targets": [
         {
-          "expr": "node_load5",
+          "expr": "system_cpu_load_average_5m or system_cpu_load_average_1m or system_load_average_5m",
           "refId": "A"
         }
       ]
@@ -50,7 +50,7 @@
       "datasource": { "uid": "mimir-prometheus", "type": "prometheus" },
       "targets": [
         {
-          "expr": "sum by(instance) (rate(node_disk_read_bytes_total[5m]))",
+          "expr": "sum by(instance) (rate(system_disk_io_bytes_total{direction=\"read\"}[5m])) or sum by(instance) (rate(system_disk_io_bytes{direction=\"read\"}[5m]))",
           "refId": "A"
         }
       ]
@@ -62,7 +62,7 @@
       "datasource": { "uid": "mimir-prometheus", "type": "prometheus" },
       "targets": [
         {
-          "expr": "sum by(instance) (rate(node_disk_written_bytes_total[5m]))",
+          "expr": "sum by(instance) (rate(system_disk_io_bytes_total{direction=\"write\"}[5m])) or sum by(instance) (rate(system_disk_io_bytes{direction=\"write\"}[5m]))",
           "refId": "A"
         }
       ]
@@ -74,7 +74,7 @@
       "datasource": { "uid": "mimir-prometheus", "type": "prometheus" },
       "targets": [
         {
-          "expr": "sum by(instance) (rate(node_network_receive_bytes_total[5m]))",
+          "expr": "sum by(instance) (rate(system_network_io_bytes_total{direction=\"receive\"}[5m])) or sum by(instance) (rate(system_network_io_bytes{direction=\"receive\"}[5m]))",
           "refId": "A"
         }
       ]
@@ -86,7 +86,7 @@
       "datasource": { "uid": "mimir-prometheus", "type": "prometheus" },
       "targets": [
         {
-          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total[5m]))",
+          "expr": "sum by(instance) (rate(system_network_io_bytes_total{direction=\"transmit\"}[5m])) or sum by(instance) (rate(system_network_io_bytes{direction=\"transmit\"}[5m]))",
           "refId": "A"
         }
       ]

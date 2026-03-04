@@ -224,9 +224,7 @@ async def create_dashboard(
     payload: GrafanaDashboardPayloadRequest,
     visibility: str = Query("private"),
     shared_group_ids: Optional[List[str]] = Query(None),
-    current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.CREATE_DASHBOARDS, Permission.WRITE_DASHBOARDS], "grafana")
-    ),
+    current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ):
     validate_visibility(visibility)
@@ -241,6 +239,7 @@ async def create_dashboard(
         visibility=visibility,
         shared_group_ids=shared_group_ids or [],
         is_admin=is_admin,
+        actor_permissions=current_user.permissions or [],
     )
     if not result:
         raise HTTPException(status_code=500, detail="Failed to create dashboard")
@@ -252,12 +251,7 @@ async def create_dashboard(
 @handle_route_errors()
 async def save_dashboard_from_grafana_ui(
     payload: GrafanaDashboardPayloadRequest,
-    current_user: TokenData = Depends(
-        require_any_permission_with_scope(
-            [Permission.CREATE_DASHBOARDS, Permission.UPDATE_DASHBOARDS, Permission.WRITE_DASHBOARDS],
-            "grafana",
-        )
-    ),
+    current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ):
     user_id, tenant_id, group_ids, is_admin = _scope(current_user)
@@ -282,6 +276,7 @@ async def save_dashboard_from_grafana_ui(
                 visibility=None,
                 shared_group_ids=None,
                 is_admin=is_admin,
+                actor_permissions=current_user.permissions or [],
             )
             if result:
                 return result
@@ -295,6 +290,7 @@ async def save_dashboard_from_grafana_ui(
         visibility="private",
         shared_group_ids=[],
         is_admin=is_admin,
+        actor_permissions=current_user.permissions or [],
     )
     if not result:
         raise HTTPException(status_code=500, detail="Failed to save dashboard")
@@ -308,9 +304,7 @@ async def update_dashboard(
     payload: GrafanaDashboardPayloadRequest,
     visibility: Optional[str] = Query(None),
     shared_group_ids: Optional[List[str]] = Query(None),
-    current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.UPDATE_DASHBOARDS, Permission.WRITE_DASHBOARDS], "grafana")
-    ),
+    current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ):
     validate_visibility(visibility)
@@ -326,6 +320,7 @@ async def update_dashboard(
         visibility=visibility,
         shared_group_ids=shared_group_ids,
         is_admin=is_admin,
+        actor_permissions=current_user.permissions or [],
     )
     if not result:
         raise HTTPException(status_code=404, detail=f"Dashboard {uid} not found, access denied, or update failed")
@@ -541,7 +536,7 @@ async def hide_datasource(
 @router.get("/folders", response_model=List[Folder])
 async def get_folders(
     show_hidden: bool = Query(False),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_FOLDERS, "grafana")),
+    current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ):
     return await proxy.get_folders(
@@ -557,7 +552,7 @@ async def get_folders(
 @router.get("/folders/{uid}", response_model=Folder)
 async def get_folder_by_uid(
     uid: str,
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_FOLDERS, "grafana")),
+    current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ):
     folder = await proxy.get_folder(

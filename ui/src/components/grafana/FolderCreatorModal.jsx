@@ -78,7 +78,7 @@ export default function FolderCreatorModal({
             groups={groups || []}
           />
         </div>
-        <label className="flex items-start gap-3 rounded-lg border border-sre-border/40 p-3">
+        <label className="flex items-start gap-3 ">
           <input
             type="checkbox"
             checked={!!allowDashboardWrites}

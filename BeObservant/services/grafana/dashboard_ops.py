@@ -525,9 +525,15 @@ async def create_dashboard(
     visibility: str = "private",
     shared_group_ids: Optional[List[str]] = None,
     is_admin: bool = False,
+    actor_permissions: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     requested_title = str(getattr(getattr(dashboard_create, "dashboard", None), "title", "") or "").strip()
     gids = _group_id_strs(group_ids)
+    if actor_permissions is None:
+        has_create_scope = True
+    else:
+        perm_set = {str(p).strip() for p in (actor_permissions or []) if str(p).strip()}
+        has_create_scope = bool({"create:dashboards", "write:dashboards"} & perm_set)
     if requested_title and await _has_accessible_title_conflict(
         service, db, tenant_id=tenant_id, user_id=user_id, group_ids=group_ids, title=requested_title,
     ):
@@ -551,6 +557,17 @@ async def create_dashboard(
             status_code=403,
             detail="Folder is owner-only for dashboard creation",
         )
+    if not has_create_scope:
+        if not target_folder:
+            raise HTTPException(
+                status_code=403,
+                detail="Missing permission to create dashboards",
+            )
+        if visibility != "private" or (shared_group_ids or []):
+            raise HTTPException(
+                status_code=403,
+                detail="Delegated folder dashboard creation only supports private visibility",
+            )
 
     dash_obj = getattr(dashboard_create, "dashboard", None)
     if dash_obj and not _dashboard_has_datasource(dash_obj):
@@ -645,11 +662,40 @@ async def update_dashboard(
     visibility: Optional[str] = None,
     shared_group_ids: Optional[List[str]] = None,
     is_admin: bool = False,
+    actor_permissions: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     gids = _group_id_strs(group_ids)
-    db_dashboard = check_dashboard_access(db, uid, user_id, tenant_id, gids, require_write=True)
+    if actor_permissions is None:
+        has_update_scope = True
+    else:
+        perm_set = {str(p).strip() for p in (actor_permissions or []) if str(p).strip()}
+        has_update_scope = bool({"update:dashboards", "write:dashboards"} & perm_set)
+
+    db_dashboard = _db_dashboard_by_uid(db, tenant_id, uid)
     if not db_dashboard:
         return None
+    is_owner = str(getattr(db_dashboard, "created_by", "")) == str(user_id)
+
+    delegated_update_allowed = False
+    if not is_owner and db_dashboard.folder_uid:
+        folder = check_folder_access(
+            db,
+            db_dashboard.folder_uid,
+            user_id,
+            tenant_id,
+            gids,
+            require_write=False,
+            is_admin=is_admin,
+        )
+        delegated_update_allowed = bool(
+            folder and bool(getattr(folder, "allow_dashboard_writes", False))
+        )
+
+    if not is_owner and not delegated_update_allowed:
+        return None
+
+    if not has_update_scope and not delegated_update_allowed:
+        raise HTTPException(status_code=403, detail="Missing permission to update dashboards")
 
     requested_title = str(getattr(getattr(dashboard_update, "dashboard", None), "title", "") or "").strip()
     if requested_title and await _has_accessible_title_conflict(
@@ -660,10 +706,44 @@ async def update_dashboard(
 
     target_folder_id = getattr(dashboard_update, "folder_id", None)
     target_folder_uid = await _resolve_folder_uid_by_id(service, target_folder_id)
-    if target_folder_uid and not is_folder_accessible(
-        db, target_folder_uid, user_id, tenant_id, gids, require_write=True, is_admin=is_admin,
-    ):
-        raise HTTPException(status_code=403, detail="Folder access denied")
+    if is_owner:
+        if target_folder_uid:
+            target_folder = check_folder_access(
+                db,
+                target_folder_uid,
+                user_id,
+                tenant_id,
+                gids,
+                require_write=False,
+                is_admin=is_admin,
+            )
+            if not target_folder:
+                raise HTTPException(status_code=403, detail="Folder access denied")
+            if (
+                str(getattr(target_folder, "created_by", "")) != str(user_id)
+                and not bool(getattr(target_folder, "allow_dashboard_writes", False))
+            ):
+                raise HTTPException(status_code=403, detail="Folder access denied")
+    else:
+        current_visibility = (db_dashboard.visibility or "private") or "private"
+        if visibility is not None and str(visibility) != str(current_visibility):
+            raise HTTPException(
+                status_code=403,
+                detail="Only owners can change dashboard visibility",
+            )
+        if shared_group_ids is not None:
+            requested_groups = {str(g) for g in (shared_group_ids or [])}
+            current_groups = set(_shared_group_ids(db_dashboard))
+            if requested_groups != current_groups:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only owners can change dashboard visibility",
+                )
+        if target_folder_uid and str(target_folder_uid) != str(db_dashboard.folder_uid or ""):
+            raise HTTPException(
+                status_code=403,
+                detail="Only owners can move dashboards between folders",
+            )
 
     dash_obj = getattr(dashboard_update, "dashboard", None)
     if dash_obj and not _dashboard_has_datasource(dash_obj):

@@ -258,13 +258,14 @@ class GrafanaProxyService:
         visibility: str = "private",
         shared_group_ids: Optional[List[str]] = None,
         is_admin: bool = False,
+        actor_permissions: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
         effective_group_ids = self._effective_group_ids(
             db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
         )
         return await create_dashboard(
             self, db, dashboard_create, user_id, tenant_id, effective_group_ids,
-            visibility, shared_group_ids, is_admin,
+            visibility, shared_group_ids, is_admin, actor_permissions,
         )
 
     async def update_dashboard(
@@ -278,13 +279,14 @@ class GrafanaProxyService:
         visibility: Optional[str] = None,
         shared_group_ids: Optional[List[str]] = None,
         is_admin: bool = False,
+        actor_permissions: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
         effective_group_ids = self._effective_group_ids(
             db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
         )
         return await update_dashboard(
             self, db, uid, dashboard_update, user_id, tenant_id, effective_group_ids,
-            visibility, shared_group_ids, is_admin,
+            visibility, shared_group_ids, is_admin, actor_permissions,
         )
 
     async def delete_dashboard(
