@@ -11,10 +11,8 @@ import sys
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models.access.auth_models import Permission
-from services.grafana import proxy_auth_ops
 
-os.environ.setdefault('DATABASE_URL', 'postgresql://test:test@localhost/testdb')
+os.environ.setdefault('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/observantio_test')
 os.environ.setdefault('CORS_ALLOW_CREDENTIALS', 'False')
 os.environ.setdefault('CORS_ORIGINS', 'http://localhost')
 
@@ -22,90 +20,12 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-
-import types
-
-gf_mod = types.ModuleType("services.grafana.grafana_service")
-class _LocalGrafanaAPIError(Exception):
-    def __init__(self, status: int, body=None):
-        self.status = status
-        self.body = body
-gf_mod.GrafanaAPIError = _LocalGrafanaAPIError 
-gf_mod.GrafanaService = lambda *a, **k: None  
-sys.modules["services.grafana_service"] = gf_mod
-sys.modules["services.grafana.grafana_service"] = gf_mod
-
-pa_mod = types.ModuleType("services.grafana.proxy_auth_ops")
-
-pa_mod = types.ModuleType("services.grafana.proxy_auth_ops")
-def _is_admin_user(self, token_data):
-    return False
-def _is_resource_accessible(self, resource, token_data):
-    return True
-def _extract_dashboard_uid(self, path):
-    return None
-def _extract_datasource_uid(self, path):
-    return None
-def _extract_datasource_id(self, path):
-    return None
-def _extract_proxy_token(self, request, token=None):
-    return token
-async def _authorize_proxy_request(self, request, db, auth_service, token, orig):
-    return {}
-
-def _required_permissions_for_path(path, method):
-    return ["read:dashboards"]
-
-pa_mod.is_admin_user = _is_admin_user  
-pa_mod.is_resource_accessible = _is_resource_accessible  
-pa_mod.extract_dashboard_uid = _extract_dashboard_uid  
-pa_mod.extract_datasource_uid = _extract_datasource_uid  
-pa_mod.extract_datasource_id = _extract_datasource_id  
-pa_mod.extract_proxy_token = _extract_proxy_token  
-pa_mod.authorize_proxy_request = _authorize_proxy_request  
-pa_mod._required_permissions_for_path = _required_permissions_for_path  
-sys.modules["services.grafana.proxy_auth_ops"] = pa_mod
-
-do_mod = types.ModuleType("services.grafana.dashboard_ops")
-for name in (
-    "check_dashboard_access",
-    "get_accessible_dashboard_uids",
-    "build_dashboard_search_context",
-    "search_dashboards",
-    "get_dashboard",
-    "create_dashboard",
-    "update_dashboard",
-    "delete_dashboard",
-    "toggle_dashboard_hidden",
-    "get_dashboard_metadata",
-):
-    setattr(do_mod, name, lambda *a, **k: None)
-sys.modules["services.grafana.dashboard_ops"] = do_mod
-
-ds_mod = types.ModuleType("services.grafana.datasource_ops")
-for name in (
-    "check_datasource_access",
-    "check_datasource_access_by_id",
-    "get_accessible_datasource_uids",
-    "build_datasource_list_context",
-    "enforce_datasource_query_access",
-    "get_datasources",
-    "get_datasource",
-    "get_datasource_by_name",
-    "query_datasource",
-    "create_datasource",
-    "update_datasource",
-    "delete_datasource",
-    "toggle_datasource_hidden",
-    "get_datasource_metadata",
-):
-    setattr(ds_mod, name, lambda *a, **k: None)
-sys.modules["services.grafana.datasource_ops"] = ds_mod
-
+from models.access.auth_models import Permission
+from services.grafana import proxy_auth_ops
+from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana_proxy_service import GrafanaProxyService
 from db_models import Base, Group, Tenant, User
 from fastapi import HTTPException
-GrafanaAPIError = gf_mod.GrafanaAPIError
 
 
 def make_session():
