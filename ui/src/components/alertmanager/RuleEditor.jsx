@@ -235,15 +235,10 @@ export default function RuleEditor({
           hasErrors={hasErrors}
           showButtons={false}
         />
-
-        {/* main content... (wizard footer will be shown below) */}
-
-        {/* Step Content */}
-        <div className="min-h-[500px] bg-gradient-to-br from-sre-bg to-sre-surface/30 rounded-xl p-6 border border-sre-border/50 shadow-inner overflow-hidden">
+        <div className="min-h-[500px] py-3 overflow-hidden">
           {currentStep === 0 && (
             <>
-              {/* Basic Setup */}
-              <div className="space-y-8">
+              <div className="space-y-8 p-2">
                 <div className="text-left mb-6">
                   <h2 className="text-xl font-bold text-sre-text mb-2">
                     Basic Setup
@@ -326,7 +321,7 @@ export default function RuleEditor({
                 )}
 
                 {/* Quick Templates */}
-                <div className="bg-gradient-to-r from-sre-primary/5 to-sre-primary/10 rounded-xl p-6 border border-sre-primary/20">
+                <div>
                   <div className="mb-4">
                     <div className="flex items-center gap-3 mb-2">
                       <span className="material-icons text-2xl text-sre-primary">
@@ -341,7 +336,7 @@ export default function RuleEditor({
                       and thresholds for your environment.
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-80 overflow-y-auto pr-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-80 scrollbar-thin overflow-y-auto pr-2">
                     {RULE_TEMPLATES.map((template) => {
                       const isSelected = selectedTemplate === template.id;
                       return (
@@ -389,7 +384,7 @@ export default function RuleEditor({
           {currentStep === 1 && (
             <>
               {/* Alert Condition */}
-              <div className="space-y-8">
+              <div className="space-y-8 p-2">
                 <div className="text-left mb-6">
                   <h2 className="text-xl font-bold text-sre-text mb-2">
                     Alert Condition
@@ -564,7 +559,7 @@ export default function RuleEditor({
           {currentStep === 2 && (
             <>
               {/* Alert Details */}
-              <div className="space-y-8">
+              <div className="space-y-8 p-2">
                 <div className="text-left mb-6">
                   <h2 className="text-xl font-bold text-sre-text mb-2">
                     Alert Details
@@ -711,7 +706,7 @@ export default function RuleEditor({
                 </div>
 
                 {/* Rule Preview */}
-                <div className="bg-gradient-to-r from-sre-primary/5 to-sre-primary/10 rounded-xl p-6 border border-sre-primary/20">
+                <div>
                   <h4 className="text-lg font-semibold text-sre-text mb-4 flex items-center gap-2">
                     <span className="material-icons text-xl text-sre-primary">
                       visibility
@@ -788,7 +783,7 @@ export default function RuleEditor({
           {currentStep === 3 && (
             <>
               {/* Advanced Settings */}
-              <div className="space-y-8">
+              <div className="space-y-8 p-2">
                 <div className="text-left mb-6">
                   <h2 className="text-xl font-bold text-sre-text mb-2">
                     Advanced Settings
@@ -1139,7 +1134,6 @@ export default function RuleEditor({
           showIndicator={false}
         />
 
-        {/* Checks and Issues - Collapsible */}
         {(hasErrors || validationWarnings.length > 0 || saveError) && (
           <div className="border-2 border-red-200 dark:border-red-800 rounded-xl p-4 bg-red-50 dark:bg-red-900/20 shadow-inner">
             <button

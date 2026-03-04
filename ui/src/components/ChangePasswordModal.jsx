@@ -129,7 +129,7 @@ export default function ChangePasswordModal({
       size="md"
       closeOnOverlayClick={false}
       showCloseButton={!!modalOnClose}
-      className="bg-sre-bg-card rounded-xl shadow-2xl w-full mx-auto border border-sre-border/50 animate-slide-up flex flex-col max-w-2xl"
+      className="bg-sre-bg-card rounded-xl shadow-2xl p-4 w-full mx-auto border border-sre-border/50 animate-slide-up flex flex-col max-w-2xl"
     >
       {isForced && !showTour && (
         <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500 rounded text-yellow-500 text-sm">

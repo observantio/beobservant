@@ -106,7 +106,7 @@ export default function RuleEditorWizard({
 
       {/* Navigation Buttons */}
       {showButtons && (
-        <div className="flex justify-between items-center  border-sre-border">
+        <div className="flex justify-between items-center  border-sre-border p-2">
           <Button
             type="button"
             variant="ghost"
