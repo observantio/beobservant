@@ -42,6 +42,8 @@ def client_ip(request: Request) -> str:
 
         try:
             peer_ip = ip_address(validated)
+            if peer_ip.is_loopback:
+                return True
             for cidr in trusted_cidrs:
                 try:
                     if peer_ip in ip_network(cidr, strict=False):
