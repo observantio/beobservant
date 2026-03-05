@@ -20,7 +20,6 @@ from starlette.requests import Request
 from fastapi.responses import Response
 
 import middleware.dependencies as deps_module
-from routers.access import auth_router
 from config import config
 
 

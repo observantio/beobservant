@@ -18,7 +18,7 @@ from starlette.requests import Request
 from middleware import dependencies
 from models.access.auth_models import Role, TokenData
 from models.access.user_models import UserUpdate
-from routers.access import auth_router
+from routers.access.auth_router import users as users_router
 from services.auth.helper import is_admin_check
 
 
@@ -85,16 +85,16 @@ async def test_reset_temp_password_blocks_admin_target(monkeypatch):
     async def _run_sync(fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
-    monkeypatch.setattr(auth_router, "run_in_threadpool", _run_sync)
+    monkeypatch.setattr(users_router, "rtp", _run_sync)
     monkeypatch.setattr(
-        auth_router.auth_service,
+        users_router.auth_service,
         "get_user_by_id_in_tenant",
         lambda _uid, _tenant_id: SimpleNamespace(id="u2", username="admin-user", role=Role.ADMIN),
     )
 
     current_user = _token_data(perms=["manage:users"])
     with pytest.raises(HTTPException) as exc:
-        await auth_router.reset_user_password_temp("u2", current_user)
+        await users_router.reset_user_password_temp("u2", current_user)
     assert exc.value.status_code == 403
 
 
@@ -102,7 +102,7 @@ async def test_reset_temp_password_blocks_admin_target(monkeypatch):
 async def test_delete_user_requires_admin_role():
     current_user = _token_data(perms=["manage:users"])
     with pytest.raises(HTTPException) as exc:
-        await auth_router.delete_user("u2", current_user)
+        await users_router.delete_user("u2", current_user)
     assert exc.value.status_code == 403
 
 
@@ -110,7 +110,7 @@ async def test_delete_user_requires_admin_role():
 async def test_manage_tenants_update_restricted_to_active_flag():
     current_user = _token_data(perms=["manage:tenants"])
     with pytest.raises(HTTPException) as exc:
-        await auth_router.update_user("u2", UserUpdate(email="new@example.com"), current_user)
+        await users_router.update_user("u2", UserUpdate(email="new@example.com"), current_user)
     assert exc.value.status_code == 403
 
 
@@ -118,7 +118,7 @@ async def test_manage_tenants_update_restricted_to_active_flag():
 async def test_non_admin_cannot_change_role_org_or_groups():
     current_user = _token_data(role=Role.USER, perms=["update:users"])
     with pytest.raises(HTTPException) as exc:
-        await auth_router.update_user("u2", UserUpdate(role=Role.ADMIN), current_user)
+        await users_router.update_user("u2", UserUpdate(role=Role.ADMIN), current_user)
     assert exc.value.status_code == 403
 
 
@@ -142,7 +142,7 @@ def test_is_admin_check_accepts_string_role():
 async def test_manage_tenants_cannot_reset_temp_password():
     current_user = _token_data(perms=["manage:tenants"])
     with pytest.raises(HTTPException) as exc:
-        await auth_router.reset_user_password_temp("u2", current_user)
+        await users_router.reset_user_password_temp("u2", current_user)
     assert exc.value.status_code == 403
 
 
