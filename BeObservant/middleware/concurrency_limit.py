@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 _concurrency_busy_total = 0
 
-
 def _inc_concurrency_busy() -> int:
     global _concurrency_busy_total
     _concurrency_busy_total += 1

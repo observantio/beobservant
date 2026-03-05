@@ -44,6 +44,8 @@ compactor:
       store: memberlist
 
 limits:
-  max_global_series_per_user: 0
-  ingestion_rate: 200000
+  # Protect a small single-node deployment from unbounded cardinality and bursts.
+  max_global_series_per_user: 250000
+  ingestion_rate: 30000
+  ingestion_burst_size: 60000
   out_of_order_time_window: 5m

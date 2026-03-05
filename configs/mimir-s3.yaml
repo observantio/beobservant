@@ -1,7 +1,3 @@
-# Mimir configuration using S3 object storage for blocks (bucket store)
-# Replace the ${...} placeholders with your environment variables or values.
-# For MinIO/S3-compatible endpoints, set `s3forcepathstyle: true` and provide endpoint URL.
-
 server:
   http_listen_port: 9009
   grpc_listen_port: 9095
@@ -19,6 +15,7 @@ common:
       access_key_id: ${MIMIR_S3_ACCESS_KEY:-}
       secret_access_key: ${MIMIR_S3_SECRET_KEY:-}
       s3forcepathstyle: ${MIMIR_S3_FORCEPATHSTYLE:-true}
+      insecure: ${MIMIR_S3_INSECURE:-false}
       part_size: 134217728
 
 blocks_storage:
@@ -54,6 +51,8 @@ compactor:
       store: memberlist
 
 limits:
-  max_global_series_per_user: 0
-  ingestion_rate: 200000
+  # Protect a small single-node deployment from unbounded cardinality and bursts.
+  max_global_series_per_user: 250000
+  ingestion_rate: 30000
+  ingestion_burst_size: 60000
   out_of_order_time_window: 5m

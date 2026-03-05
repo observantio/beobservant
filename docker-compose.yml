@@ -7,6 +7,9 @@ volumes:
   alertmanager:
   postgres_data:
   redis_data:
+  loki_data:
+  tempo_data:
+  mimir_data:
 
 services:
   postgres:
@@ -172,11 +175,15 @@ services:
     command: -config.file=/etc/loki/loki.yaml
     volumes:
       - ./configs/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/loki
+    cpus: "1.0"
+    mem_limit: 768m
+    stop_grace_period: 45s
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 2048M
+          cpus: '1.0'
+          memory: 768M
         reservations:
           cpus: '0.25'
           memory: 256M
@@ -188,11 +195,15 @@ services:
     command: -config.file=/etc/tempo/tempo.yaml
     volumes:
       - ./configs/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/tmp/tempo
+    cpus: "1.0"
+    mem_limit: 768m
+    stop_grace_period: 45s
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 2048M
+          cpus: '1.0'
+          memory: 768M
         reservations:
           cpus: '0.25'
           memory: 256M
@@ -203,12 +214,16 @@ services:
     image: grafana/mimir:2.12.0
     command: ["-config.file=/etc/mimir/mimir.yaml"]
     volumes:
-      - ./configs/mimir.yaml:/etc/mimir/mimir.yaml:ro
+      - ${MIMIR_CONFIG_FILE:-./configs/mimir.yaml}:/etc/mimir/mimir.yaml:ro
+      - mimir_data:/data
+    cpus: "1.5"
+    mem_limit: 1536m
+    stop_grace_period: 60s
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 2048M
+          cpus: '1.5'
+          memory: 1536M
         reservations:
           cpus: '0.25'
           memory: 256M

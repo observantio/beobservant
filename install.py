@@ -11,13 +11,12 @@ import subprocess
 from pathlib import Path
 from typing import Iterable, List, Sequence
 
-
 REPO_URL = "https://github.com/observantio/beobservant.git"
 BECERTAIN_REPO_URL = "https://github.com/observantio/becertain.git"
 BENOTIFIED_REPO_URL = "https://github.com/observantio/benotified.git"
 
-_PASSWORD_RE = re.compile(r"^[A-Za-z0-9._-]+$")
-_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+PASSWORD_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 INTRO_TEXT = """\
@@ -113,7 +112,7 @@ def ask_non_empty(prompt: str) -> str:
 def ask_email(prompt: str) -> str:
     while True:
         v = ask_non_empty(prompt)
-        if _EMAIL_RE.fullmatch(v):
+        if EMAIL_RE.fullmatch(v):
             return v
         warn("Invalid email. Example: user@example.com")
 
@@ -133,7 +132,7 @@ def ask_password() -> str:
         if p1 != p2:
             warn("Passwords do not match.")
             continue
-        if not _PASSWORD_RE.fullmatch(p1):
+        if not PASSWORD_RE.fullmatch(p1):
             warn("Password must match: [A-Za-z0-9._-]")
             continue
         return p1
@@ -146,7 +145,7 @@ def random_alnum(length: int) -> str:
 
 def fernet_key() -> str:
     try:
-        from cryptography.fernet import Fernet  # type: ignore
+        from cryptography.fernet import Fernet 
 
         return Fernet.generate_key().decode("ascii")
     except Exception:
