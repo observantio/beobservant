@@ -1,171 +1,142 @@
-# 🔭 Be Observant: The Complete User Guide
+# Be Observant User Guide
 
-Welcome to the central command for your observability stack. This guide will walk you through deploying, using, and hardening the **Be Observant** platform.
+This guide covers deployment, first-time usage, core workflows, and operational hardening for Be Observant.
 
----
+## 1. Scope and Assumptions
 
-## 🏗️ Part 1: Deployment & Getting Started
+- Current focus: local, homelab, and pre-production evaluation.
+- You should validate hardening, backups, and failure scenarios before production rollout.
+- Main stack components: `beobservant`, `gateway-auth`, `otlp-gateway`, `grafana-proxy`, `benotified`, `becertain`.
 
-### Choosing Your Workflow
+## 2. Prerequisites
 
-Be Observant supports three deployment paths. **Note:** These are intended for **experimentation and homelab use only**. You must manually create configuration files (like EKS config or Docker Swarm) for specific environments.
+- Docker + Docker Compose
+- Linux/macOS shell environment
+- Open ports: `5173`, `4319`, `4320`, `8080`
+- Git and Python 3 (for installer/manual setup)
 
-#### Option A: Quick Mode
+## 3. Deployment Options
 
-Best for rapid setups. This script creates a workspace and clones the services and runs docker compose
+### Option A: Installer (Fastest)
 
 ```bash
-# direct executions
 curl -fsSL https://raw.githubusercontent.com/observantio/beobservant/main/install.py | python3
-
-# or using the git clone
-git clone https://github.com/observantio/benotified Observantio && cd Observantio
-python3 install.py
 ```
 
-* **Setup:** You will be prompted for a username and a password (**min 16 characters**).
-* **Secrets:** This method defaults to password auth. If you require OIDC, manually update the `.env` file after installation. Vault providers are recommended only for cloud or production-simulated hosting.
-* **Networking:** Ensure the following ports are available:
-    * **5173:** UI Login Page
-    * **8080:** Grafana Proxy (Requires UI token; will 401 otherwise)
-    * **4139:** Actual Control Plane
-    * **4320:** OTel Gateway (The only port needing external exposure)
-
-#### Option B: Manual Mode
-
-Ideal for developers who want to modify the source code.
+### Option B: Source Build (Development)
 
 ```bash
-# clone the main repo and dependencies
-git clone https://github.com/observantio/benotified Observantio && cd Observantio
+git clone https://github.com/observantio/beobservant Observantio
+cd Observantio
 git clone https://github.com/observantio/becertain BeCertain
 git clone https://github.com/observantio/benotified BeNotified
-
-# configure environment
 cp .env.example .env
-```
-
-You must configure credentials, OIDC, and default tokens. For the AI engine (**BeCertain**), you may need to tweak configurations for your specific hardware to get optimal AI outcomes. Note that you need to set the data encryption key using the below method
-
-**Generate your Fernet encryption key:**
-
-```bash
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# set the output as the data encryption key in the .env or in your vault
+# Put value into DATA_ENCRYPTION_KEY in .env
+
+docker compose up -d --build
 ```
 
-#### Option C: Image Mode
-
-For those who prefer stable, pre-built containers.
-
-1. Define your tags in `.env` (e.g., `BEOBSERVANT_IMAGE=observantio/beobservant:latest`).
-2. Download the stable compose file and start:
+### Option C: Stable Images
 
 ```bash
-curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/observantio/beobservant/main/docker-compose.stable.yml
+curl -fsSL -o docker-compose.stable.yml https://raw.githubusercontent.com/observantio/beobservant/main/docker-compose.stable.yml
 docker compose -f docker-compose.stable.yml up -d
 ```
----
 
-## 👤 Part 2: The User Experience
+### Option D: Kubernetes/EKS
 
-### Accessing the Platform
+Use manifests under `deployments/eks/` as a starting point. You must provide cluster-specific ingress, secrets, storage classes, and TLS.
 
-The UI is hosted at `http://localhost:5173`.
+## 4. Post-Deploy Verification
 
-* **Authentication Logic:** OIDC is mapped 1:1 to email addresses. If you create a local password account, you can later sign in via OIDC using the same email seamlessly.
-* **Bootstrap Admin:** The initial admin account is created locally. It is recommended to use this to "claim" the admin identity via OIDC before disabling local database syncing or ensure that you match the email that you set for the admin so the OIDC can be automatically mapped
-* **External IDP:** You can set up a local Keycloak instance instead of relying on the local DB.
+```bash
+docker compose ps
+curl http://localhost:4319/health
+curl http://localhost:4319/ready
+```
 
-### Core Capabilities
+Access:
 
-| Feature | Your Workflow |
-| --- | --- |
-| **Grafana Management** | Scoped dashboard and datasource creation via proxy for a swift DX. |
-| **Alert Engine** | Integrate with PagerDuty, Email, Teams, Slack, and Webhooks. |
-| **Logs & Traces** | Search Loki logs and analyze Tempo traces with deep context. |
-| **RCA (BeCertain)** | Run AI-driven jobs to find the "smoking gun" using statistical/deterministic AI. |
-| **Incidents (InOps)** | Manage alerts from trigger to Jira resolution via a collaborative board. |
-| **RBAC & Groups** | Users inherit permissions from groups. New users default to a "provisioning" role. |
-| **Auditing** | Detailed logs of user actions, routes, responses, and timestamps. |
-| **KBAC (Key Management)** | Create tenant-specific API keys for isolation (Multi-tenancy). |
+- UI: `http://localhost:5173`
+- API Docs: `http://localhost:4319/docs`
+- Grafana proxy: `http://localhost:8080/grafana/`
+- OTLP gateway: `http://localhost:4320`
 
-### Visibility Scopes
-* 👤 **Private:** Visible only to the creator.
-* 👥 **Group:** Shared with the team (**Read-only**). Shared alerts notify all group members.
-* 🏢 **Tenant:** Global visibility across the org (**Read-only**).
+## 5. Core User Flows
 
----
+### 5.1 First Login and Access Model
 
-## 🛠️ Part 3: Operational Workflows
+1. Sign in with bootstrap admin (or configured auth flow).
+2. If using OIDC/Keycloak, align account emails for expected mapping behavior.
+3. Assign users to groups and permissions (new users should stay least-privileged until approved).
 
-### 1. Visualizing Telemetry
+### 5.2 API Key and Tenant Scope Flow
 
-1. **Generate API Key:** Create a token in the **API Keys** section.
-2. **Configure:** Use the generated config file for your OTel agent.
-3. **Active Scope:** Switch your active API key in the top nav to filter metrics/traces for that specific environment.
-4. **Grafana:** Connect your datasource (that you configured to use the specific API key) and click "Open in Grafana" to view data.
+1. Open API Keys / key management.
+2. Create a scoped key for the environment/team.
+3. Set active key in UI key switcher.
+4. Confirm dashboards/queries reflect the selected key scope.
 
-### 2. Investigating with BeCertain (RCA)
+### 5.3 Telemetry Ingestion Flow
 
-Trigger an asynchronous analysis job via the RCA page when an anomaly occurs.
+1. Configure OTel collector exporter to send to `http://<host>:4320`.
+2. Add `x-otlp-token` header using an active API key token.
+3. Verify data appears in Logs, Metrics, and Traces pages.
 
-* **How it works:** It analyzes anomaly groups, topology blast radius, and causal links.
-* **Requirement:** Ensure you have a large enough dataset to reduce sensitivity and prevent false positives.
+### 5.4 Alert and Incident Flow
 
-### 3. Incident Management (InOps)
+1. Configure channels (Slack/Jira/Email/PagerDuty/Teams/Webhook) in integrations.
+2. Create alert rules in Alert Manager.
+3. Validate test alert delivery.
+4. Track incidents in Incident Board (InOps) with assignees and notes.
+5. Close incidents with a resolution note for long-term learning context.
 
-Alerts automatically populate the **Incident Board**.
+### 5.5 RCA Flow (BeCertain)
 
-* **Collaboration:** Add notes and assign teammates directly.
-* **Knowledge Base:** Closing an incident requires a resolution note, which populates the system's long-term knowledge base.
-* **Security:** Channel configurations are encrypted and scoped to the owner unless visibility is explicitly granted to others.
+1. Open RCA page and choose target service/window.
+2. Trigger analysis job.
+3. Review ranked hypotheses and evidence links.
+4. Use output to drive incident actions and post-incident notes.
 
----
+## 6. Configuration Keys You Should Know
 
-## 🔐 Part 4: The Administrator’s Handbook
+From `.env.example`:
 
-### Security & Hardening
+- Core/API: `PORT`, `LOG_LEVEL`, `DATABASE_URL`, `DB_AUTO_CREATE_SCHEMA`
+- Auth/JWT: `JWT_ALGORITHM`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `JWT_AUTO_GENERATE_KEYS`
+- Tenancy: `DEFAULT_ORG_ID`, `DEFAULT_ADMIN_*`
+- Proxy/service auth: `BENOTIFIED_*`, `BECERTAIN_*`, `GATEWAY_INTERNAL_SERVICE_TOKEN`
+- Security boundaries: `TRUST_PROXY_HEADERS`, `TRUSTED_PROXY_CIDRS`, `FORCE_SECURE_COOKIES`, `ALLOWLIST_FAIL_OPEN`
+- Allowlists: `AUTH_PUBLIC_IP_ALLOWLIST`, `WEBHOOK_IP_ALLOWLIST`, `GATEWAY_IP_ALLOWLIST`, `GRAFANA_PROXY_IP_ALLOWLIST`
+- Rate limits: `RATE_LIMIT_*`, `MAX_REQUEST_BYTES`, `MAX_CONCURRENT_REQUESTS`
+- OIDC/Keycloak: `AUTH_PROVIDER`, `OIDC_*`, `KEYCLOAK_*`
+- Secrets: `DATA_ENCRYPTION_KEY`, `VAULT_ENABLED`, `VAULT_*`
 
-* **Secret Management:** Enable `VAULT_ENABLED=true` for HashiCorp Vault.
-* **Asymmetric Auth:** Use RS256/ES256 keys via `JWT_PRIVATE_KEY` for production-like setups.
-* **MFA:** Enforce TOTP for local accounts. Use `SKIP_LOCAL_MFA_FOR_EXTERNAL=true` if using an external IDP.
-* **Rate Limiting:** Powered by Redis for user-level protection.
-* **CORS:** Restrict origins with `CORS_ORIGINS` and set `CORS_ALLOW_CREDENTIALS` appropriately. In production, list only the hostnames your UI or services use.
-* **Proxy & IP controls:**
-  * `TRUST_PROXY_HEADERS=true` when running behind a reverse proxy; configure `TRUSTED_PROXY_CIDRS`.
-  * Whitelist client IPs with `AUTH_PUBLIC_IP_ALLOWLIST`, `WEBHOOK_IP_ALLOWLIST` and `GATEWAY_IP_ALLOWLIST`.
-  * Fail‑open behavior can be toggled with `ALLOWLIST_FAIL_OPEN=false`.
-* **Secure Cookies:** `FORCE_SECURE_COOKIES=true` (requires SSL/TLS) and set `SESSION_COOKIE_DOMAIN`/`SESSION_COOKIE_PATH` if needed.
-* **Other hardening keys:** Consider `MAX_REQUEST_BYTES`, `MAX_CONCURRENT_REQUESTS`, and `RATE_LIMIT_*` values to cap abuse.
+## 7. Hardening Checklist
 
-### Administrative Runbooks
+- Set `JWT_AUTO_GENERATE_KEYS=false` and provide managed keys.
+- Set strong values for service tokens and context signing keys.
+- Restrict CORS origins (`CORS_ORIGINS`) and enable secure cookies in TLS environments.
+- Configure allowlists and `TRUST_PROXY_HEADERS` correctly behind reverse proxies.
+- Move secrets to Vault or equivalent managed secret stores.
+- Use Redis-backed rate limiting in shared/multi-instance setups.
+- Define backup/restore procedures for Postgres before broader rollout.
 
-| Task | Action |
-| --- | --- |
-| **Rotate Keys** | Update `JWT_PRIVATE_KEY` and restart the `beobservant` service. |
-| **Reset MFA** | `POST /api/auth/users/{id}/mfa/reset`. |
-| **Secure Cookies** | Set `FORCE_SECURE_COOKIES=true` (Requires SSL). |
-| **CORS** | Adjust `CORS_ORIGINS` and `CORS_ALLOW_CREDENTIALS` for the UI. |
-| **Whitelisting** | Use `WEBHOOK_IP_ALLOWLIST`, `AUTH_PUBLIC_IP_ALLOWLIST` and `GATEWAY_IP_ALLOWLIST`. |
+## 8. Common Troubleshooting
 
-> **Note:** If "fail-open" is disabled, the system will throw a 403 error for any IP not explicitly whitelisted.
+| Symptom | Likely Cause | Action |
+| --- | --- | --- |
+| `403` on API actions | Missing permission or wrong active scope | Verify user permissions, group membership, and selected API key |
+| No telemetry data | Token mismatch or collector misconfiguration | Validate `x-otlp-token`, endpoint, and collector exporter config |
+| Grafana proxy unauthorized | Missing UI session/auth mismatch | Sign in via UI first; verify auth and proxy configuration |
+| RCA jobs fail/hang | BeCertain unavailable or no usable signal | Check service health/logs and ensure dataset has enough volume |
+| Alert test fails | No enabled channels or misconfigured integration | Enable channels and validate credentials/config |
 
----
+## 9. Helpful Links
 
-## 🚀 Pre-Production Checklist
-
-* [ ] **Auth:** `JWT_AUTO_GENERATE_KEYS=false` (Use your own PEM keys).
-* [ ] **Bootstrap:** `DEFAULT_ADMIN_BOOTSTRAP_ENABLED=false`.
-* [ ] **Encryption:** `DATA_ENCRYPTION_KEY` set for channel storage and TOTP storage
-* [ ] **Networking:** `RATE_LIMIT_BACKEND=redis` is active.
-* [ ] **Database:** `DB_AUTO_CREATE_SCHEMA=false` (Use CI/CD migrations).
-
----
-
-## ❓ Troubleshooting
-
-* **403 Forbidden?** Check your Tenant ID scope or API key expiration or it could be the FAILOPEN gateway which requires the IP listing or CORS setup or Certificate setup.
-* **No Data in Grafana?** Check OTLP gateway health: `curl http://localhost:4319/ready` and ensure you are using the correct key and datasource.
-* **RCA Job Hanging?** Verify the `BeCertain` service connectivity and token matching.
+- README: [README.md](README.md)
+- Environment reference: [.env.example](.env.example)
+- Issues: https://github.com/observantio/beobservant/issues
+- Repository: https://github.com/observantio/beobservant
 
