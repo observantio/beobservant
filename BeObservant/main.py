@@ -30,7 +30,8 @@ from routers import (
     internal_router,
 )
 from database import init_database, init_db, connection_test
-from middleware.limits import RequestSizeLimitMiddleware, ConcurrencyLimitMiddleware
+from middleware.request_size_limit import RequestSizeLimitMiddleware
+from middleware.concurrency_limit import ConcurrencyLimitMiddleware
 
 from middleware.audit import security_headers_middleware
 from middleware.error_handlers import (
