@@ -75,7 +75,7 @@ class TempoService:
 
     # --- Public API ---
 
-    @with_retry()
+    @with_retry(max_retries=1, backoff=0.2)
     @with_timeout()
     async def search_traces(
         self,
@@ -133,7 +133,7 @@ class TempoService:
                 "offset": 0,
             })
 
-    @with_retry()
+    @with_retry(max_retries=1, backoff=0.2)
     @with_timeout()
     async def get_trace(self, trace_id: str, tenant_id: str = config.DEFAULT_ORG_ID) -> Optional[Trace]:
         headers = self._get_headers(tenant_id)
