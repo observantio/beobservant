@@ -30,6 +30,16 @@ import {
 export default function AlertManagerPage() {
   const { user } = useAuth();
   const apiKeys = useMemo(() => user?.api_keys || [], [user?.api_keys]);
+  const apiKeyNameByScope = useMemo(() => {
+    const out = new Map();
+    for (const key of apiKeys) {
+      const scope = String(key?.key || "").trim();
+      const name = String(key?.name || "").trim();
+      if (!scope || !name) continue;
+      out.set(scope, name);
+    }
+    return out;
+  }, [apiKeys]);
   const [activeTab, setActiveTab] = useLocalStorage(
     "alertmanager-active-tab",
     "alerts",
@@ -131,21 +141,44 @@ export default function AlertManagerPage() {
       ),
     );
 
+    const payloadWithProductName = (rawPayload, orgIdValue) => {
+      const payload = { ...rawPayload };
+      const annotations = { ...(payload.annotations || {}) };
+      const normalizedOrg = String(orgIdValue || "").trim();
+      const productName =
+        (normalizedOrg && apiKeyNameByScope.get(normalizedOrg)) ||
+        (normalizedOrg ? "" : String(apiKeys.find((k) => k?.is_default)?.name || "").trim());
+      if (productName) {
+        annotations.beobservantProductName = productName;
+      }
+      payload.annotations = annotations;
+      return payload;
+    };
+
     try {
       if (editingRule) {
-        const payload = buildRulePayload({
-          ...ruleData,
-          orgId: normalizedOrgIds[0] || ruleData?.orgId,
-        });
+        const payload = payloadWithProductName(
+          buildRulePayload({
+            ...ruleData,
+            orgId: normalizedOrgIds[0] || ruleData?.orgId,
+          }),
+          normalizedOrgIds[0] || ruleData?.orgId,
+        );
         await updateAlertRule(editingRule.id, payload);
       } else {
         if (normalizedOrgIds.length > 1) {
           for (const orgId of normalizedOrgIds) {
-            const payload = buildRulePayload({ ...ruleData, orgId });
+            const payload = payloadWithProductName(
+              buildRulePayload({ ...ruleData, orgId }),
+              orgId,
+            );
             await createAlertRule(payload);
           }
         } else {
-          const payload = buildRulePayload(ruleData);
+          const payload = payloadWithProductName(
+            buildRulePayload(ruleData),
+            ruleData?.orgId,
+          );
           await createAlertRule(payload);
         }
       }

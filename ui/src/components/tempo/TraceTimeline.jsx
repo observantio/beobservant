@@ -169,7 +169,7 @@ export default function TraceTimeline({ trace, onClose, onCopyTraceId }) {
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto overflow-x-hidden flex-1">
+        <div className="p-6 overflow-y-auto overflow-x-hidden flex-1 scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-sre-bg-alt scrollbar-thumb-rounded">
           {/* Summary Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="p-4 bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 border-sre-border/50 rounded-lg hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm">

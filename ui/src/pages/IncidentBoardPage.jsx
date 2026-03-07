@@ -462,7 +462,7 @@ const Column = memo(function Column({
           onDropColumn(icon, e);
         }}
       >
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[500px] pr-3 overflow-y-auto scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-sre-bg-alt scrollbar-thumb-rounded">
           {items.length > 0 ? (
             items.map((it) => (
               <IncidentCard

@@ -9,6 +9,7 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, List, Optional
 
@@ -53,7 +54,13 @@ async def search_traces(
         limit=limit,
     )
     tenant_id = await resolve_tenant_id(request, current_user)
-    return await tempo_service.search_traces(query, tenant_id=tenant_id, fetch_full_traces=fetch_full)
+    try:
+        return await tempo_service.search_traces(query, tenant_id=tenant_id, fetch_full_traces=fetch_full)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Tempo search timed out",
+        )
 
 
 @router.get("/traces/{trace_id}", response_model=Trace)
@@ -63,7 +70,13 @@ async def get_trace(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo")),
 ) -> Trace:
     tenant_id = await resolve_tenant_id(request, current_user)
-    trace = await tempo_service.get_trace(trace_id, tenant_id=tenant_id)
+    try:
+        trace = await tempo_service.get_trace(trace_id, tenant_id=tenant_id)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=f"Tempo trace lookup timed out for {trace_id}",
+        )
     if not trace:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Trace {trace_id} not found")
     return trace
@@ -75,7 +88,13 @@ async def get_services(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo")),
 ) -> List[str]:
     tenant_id = await resolve_tenant_id(request, current_user)
-    return await tempo_service.get_services(tenant_id=tenant_id)
+    try:
+        return await tempo_service.get_services(tenant_id=tenant_id)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Tempo services lookup timed out",
+        )
 
 
 @router.get("/services/{service}/operations", response_model=List[str])
@@ -85,4 +104,10 @@ async def get_operations(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo")),
 ) -> List[str]:
     tenant_id = await resolve_tenant_id(request, current_user)
-    return await tempo_service.get_operations(service, tenant_id=tenant_id)
+    try:
+        return await tempo_service.get_operations(service, tenant_id=tenant_id)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=f"Tempo operations lookup timed out for service {service}",
+        )

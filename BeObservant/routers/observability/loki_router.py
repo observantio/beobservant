@@ -7,7 +7,8 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
-from fastapi import APIRouter, Query, Body, Depends, Request
+import asyncio
+from fastapi import APIRouter, Query, Body, Depends, Request, HTTPException, status
 from typing import Optional
 from models.observability.loki_models import (
     LogQuery, LogResponse, LogLabelsResponse,
@@ -24,6 +25,16 @@ END_TIME_DESC = "End time in nanoseconds"
 router = APIRouter(prefix="/api/loki", tags=["loki"])
 
 loki_service = LokiService()
+
+
+async def _handle_timeout(coro, detail: str):
+    try:
+        return await coro
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=detail,
+        )
 
 @router.get("/query", response_model=LogResponse)
 async def query_logs(
@@ -45,7 +56,10 @@ async def query_logs(
         step=step
     )
     tenant_id =  await resolve_tenant_id(request, current_user)
-    return await loki_service.query_logs(log_query, tenant_id=tenant_id)
+    return await _handle_timeout(
+        loki_service.query_logs(log_query, tenant_id=tenant_id),
+        "Loki query timed out",
+    )
 
 
 @router.get("/query_instant", response_model=LogResponse)
@@ -57,7 +71,10 @@ async def query_logs_instant(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki"))
 ):
     tenant_id = await resolve_tenant_id(request, current_user)
-    return await loki_service.query_logs_instant(query, time, tenant_id=tenant_id, limit=limit)
+    return await _handle_timeout(
+        loki_service.query_logs_instant(query, time, tenant_id=tenant_id, limit=limit),
+        "Loki instant query timed out",
+    )
 
 
 @router.get("/labels", response_model=LogLabelsResponse)
@@ -68,7 +85,10 @@ async def get_labels(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki"))
 ):
     tenant_id = await resolve_tenant_id(request, current_user)
-    return await loki_service.get_labels(start, end, tenant_id=tenant_id)
+    return await _handle_timeout(
+        loki_service.get_labels(start, end, tenant_id=tenant_id),
+        "Loki labels lookup timed out",
+    )
 
 
 @router.get("/label/{label}/values", response_model=LogLabelValuesResponse)
@@ -81,7 +101,10 @@ async def get_label_values(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki"))
 ):
     tenant_id = await resolve_tenant_id(request, current_user)
-    return await loki_service.get_label_values(label, start, end, query, tenant_id=tenant_id)
+    return await _handle_timeout(
+        loki_service.get_label_values(label, start, end, query, tenant_id=tenant_id),
+        f"Loki label values lookup timed out for {label}",
+    )
 
 
 @router.post("/search")
@@ -91,13 +114,16 @@ async def search_logs(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki"))
 ):
     tenant_id = await resolve_tenant_id(request, current_user)
-    return await loki_service.search_logs_by_pattern(
-        pattern=payload.pattern,
-        labels=payload.labels or {},
-        start=payload.start,
-        end=payload.end,
-        limit=payload.limit,
-        tenant_id=tenant_id
+    return await _handle_timeout(
+        loki_service.search_logs_by_pattern(
+            pattern=payload.pattern,
+            labels=payload.labels or {},
+            start=payload.start,
+            end=payload.end,
+            limit=payload.limit,
+            tenant_id=tenant_id
+        ),
+        "Loki search timed out",
     )
 
 
@@ -108,13 +134,16 @@ async def filter_logs(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki"))
 ):
     tenant_id = await resolve_tenant_id(request, current_user)
-    return await loki_service.filter_logs(
-        labels=payload.labels or {},
-        filters=payload.filters,
-        start=payload.start,
-        end=payload.end,
-        limit=payload.limit,
-        tenant_id=tenant_id
+    return await _handle_timeout(
+        loki_service.filter_logs(
+            labels=payload.labels or {},
+            filters=payload.filters,
+            start=payload.start,
+            end=payload.end,
+            limit=payload.limit,
+            tenant_id=tenant_id
+        ),
+        "Loki filter query timed out",
     )
 
 
@@ -128,7 +157,10 @@ async def aggregate_logs(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki"))
 ):
     tenant_id = await resolve_tenant_id(request, current_user)
-    return await loki_service.aggregate_logs(query, start, end, step, tenant_id=tenant_id)
+    return await _handle_timeout(
+        loki_service.aggregate_logs(query, start, end, step, tenant_id=tenant_id),
+        "Loki aggregation timed out",
+    )
 
 
 @router.get("/volume")
@@ -141,4 +173,7 @@ async def get_log_volume(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki"))
 ):
     tenant_id = await resolve_tenant_id(request, current_user)
-    return await loki_service.get_log_volume(query, start, end, step, tenant_id=tenant_id)
+    return await _handle_timeout(
+        loki_service.get_log_volume(query, start, end, step, tenant_id=tenant_id),
+        "Loki volume query timed out",
+    )

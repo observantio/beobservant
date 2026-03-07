@@ -158,7 +158,7 @@ export default function LogResults({
   const visibleStreams = filteredStreams.slice(startIndex, endIndex);
 
   return (
-    <div className="space-y-4 overflow-auto scrollbar-thin max-h-[calc(100vh-18rem)] min-h-[28rem] pr-2 md:pr-4">
+    <div className="space-y-4 overflow-auto scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-sre-bg-alt scrollbar-thumb-rounded max-h-[calc(100vh-18rem)] min-h-[28rem] pr-2 md:pr-4">
       {totalStreams > perPage && (
         <div className="flex items-center justify-between text-xs text-sre-text-muted">
           <div>
