@@ -880,6 +880,22 @@ export async function getRcaMlWeights() {
   return request("/api/becertain/ml/weights");
 }
 
+export async function submitRcaMlWeightFeedback(signal, wasCorrect) {
+  const params = new URLSearchParams({
+    signal: String(signal || ""),
+    was_correct: wasCorrect ? "true" : "false",
+  });
+  return request(`/api/becertain/ml/weights/feedback?${params.toString()}`, {
+    method: "POST",
+  });
+}
+
+export async function resetRcaMlWeights() {
+  return request("/api/becertain/ml/weights/reset", {
+    method: "POST",
+  });
+}
+
 export async function getRcaDeployments() {
   return request("/api/becertain/events/deployments");
 }

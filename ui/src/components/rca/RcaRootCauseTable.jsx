@@ -32,6 +32,17 @@ function ConfidenceBar({ value }) {
   );
 }
 
+function DetailRow({ label, children }) {
+  return (
+    <div className="grid grid-cols-[120px_minmax(0,1fr)] items-start gap-x-3 py-2 border-b border-sre-border/50 last:border-b-0">
+      <span className="text-xs text-sre-text-muted shrink-0 pt-0.5">
+        {label}
+      </span>
+      <div className="min-w-0 leading-5">{children}</div>
+    </div>
+  );
+}
+
 function CauseCard({ cause, rank, index }) {
   let tag = null;
   let text = cause.hypothesis || "";
@@ -49,14 +60,16 @@ function CauseCard({ cause, rank, index }) {
             {index + 1}
           </span>
           <div className="min-w-0">
-            {tag && (
-              <span className="inline-block text-xs font-mono text-sre-text-muted mb-1">
-                [{tag}]
-              </span>
-            )}
-            <p className="text-sm font-medium text-sre-text leading-snug">
-              {text}
-            </p>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              {tag && (
+                <span className="text-xs font-mono text-sre-text-muted">
+                  [{tag}]
+                </span>
+              )}
+              <p className="text-sm font-medium text-sre-text leading-snug">
+                {text}
+              </p>
+            </div>
           </div>
         </div>
         <Badge
@@ -67,96 +80,75 @@ function CauseCard({ cause, rank, index }) {
         </Badge>
       </div>
 
-      <div className="pl-9 flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-sre-text-muted w-20 shrink-0">
-            Confidence
-          </span>
+      <div className="pl-9 flex flex-col gap-2.5">
+        <DetailRow label="Confidence">
           <div className="flex-1">
             <ConfidenceBar value={cause.confidence} />
           </div>
-        </div>
+        </DetailRow>
 
         {rank?.final_score !== undefined && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-sre-text-muted w-20 shrink-0">
-              Rank score
-            </span>
+          <DetailRow label="Rank score">
             <span className="text-xs tabular-nums text-sre-text">
               {Number(rank.final_score).toFixed(3)}
               <span className="text-sre-text-muted ml-1">
                 (ML {Number(rank.ml_score || 0).toFixed(3)})
               </span>
             </span>
-          </div>
+          </DetailRow>
         )}
 
         {cause.recommended_action && (
-          <div className="flex items-start gap-2">
-            <span className="text-xs text-sre-text-muted w-20 shrink-0">
-              Action
-            </span>
+          <DetailRow label="Action">
             <span className="text-xs text-sre-primary leading-snug">
               {cause.recommended_action}
             </span>
-          </div>
+          </DetailRow>
         )}
 
         {cause.corroboration_summary && (
-          <div className="flex items-start gap-2">
-            <span className="text-xs text-sre-text-muted w-20 shrink-0">
-              Corroboration
-            </span>
+          <DetailRow label="Corroboration">
             <span className="text-xs text-sre-text leading-snug">
               {cause.corroboration_summary}
             </span>
-          </div>
+          </DetailRow>
         )}
 
         {Array.isArray(cause.evidence) && cause.evidence.length > 0 && (
-          <div className="flex items-start gap-2">
-            <span className="text-xs text-sre-text-muted w-20 shrink-0">
-              Evidence
-            </span>
-            <div className="flex flex-wrap gap-1">
+          <DetailRow label="Evidence">
+            <div className="flex flex-wrap gap-1.5">
               {cause.evidence.map((e, i) => (
                 <span
                   key={i}
-                  className="text-xs bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md"
+                  className="text-xs border border-sre-border/70 bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md"
                 >
                   {e}
                 </span>
               ))}
             </div>
-          </div>
+          </DetailRow>
         )}
 
         {Array.isArray(cause.contributing_signals) &&
           cause.contributing_signals.length > 0 && (
-            <div className="flex items-start gap-2">
-              <span className="text-xs text-sre-text-muted w-20 shrink-0">
-                Signals
-              </span>
-              <div className="flex flex-wrap gap-1">
+            <DetailRow label="Signals">
+              <div className="flex flex-wrap gap-1.5">
                 {cause.contributing_signals.map((s, i) => (
                   <span
                     key={i}
-                    className="text-xs bg-sre-surface text-sre-primary px-2 py-0.5 rounded-md"
+                    className="text-xs border border-sre-border/70 bg-sre-surface text-sre-primary px-2 py-0.5 rounded-md"
                   >
                     {s}
                   </span>
                 ))}
               </div>
-            </div>
+            </DetailRow>
           )}
 
         {cause.selection_score_components &&
           Object.keys(cause.selection_score_components).length > 0 && (
-            <div className="flex items-start gap-2">
-              <span className="text-xs text-sre-text-muted w-20 shrink-0">
-                Selection
-              </span>
-              <div className="flex flex-wrap gap-1">
+            <DetailRow label="Selection">
+              <div className="flex flex-wrap gap-1.5">
                 {Object.entries(cause.selection_score_components)
                   .sort((a, b) => {
                     const order = [
@@ -174,34 +166,31 @@ function CauseCard({ cause, rank, index }) {
                   .map(([k, v]) => (
                     <span
                       key={k}
-                      className="text-xs bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md"
+                      className="text-xs border border-sre-border/70 bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md"
                     >
                       {k}:{Number(v).toFixed(3)}
                     </span>
                   ))}
               </div>
-            </div>
+            </DetailRow>
           )}
 
         {cause.suppression_diagnostics &&
           Object.keys(cause.suppression_diagnostics).length > 0 && (
-            <div className="flex items-start gap-2">
-              <span className="text-xs text-sre-text-muted w-20 shrink-0">
-                Diagnostics
-              </span>
-              <div className="flex flex-wrap gap-1">
+            <DetailRow label="Diagnostics">
+              <div className="flex flex-wrap gap-1.5">
                 {Object.entries(cause.suppression_diagnostics)
                   .slice(0, 6)
                   .map(([k, v]) => (
                     <span
                       key={k}
-                      className="text-xs bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md"
+                      className="text-xs border border-sre-border/70 bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md"
                     >
                       {k}:{String(v)}
                     </span>
                   ))}
               </div>
-            </div>
+            </DetailRow>
           )}
       </div>
     </Card>
@@ -259,4 +248,9 @@ export default function RcaRootCauseTable({ report, compact = false }) {
 RcaRootCauseTable.propTypes = {
   report: PropTypes.object,
   compact: PropTypes.bool,
+};
+
+DetailRow.propTypes = {
+  label: PropTypes.string.isRequired,
+  children: PropTypes.node.isRequired,
 };

@@ -4,6 +4,7 @@ receivers:
     scrapers:
       cpu:
       memory:
+      process:
       disk:
       filesystem:
       network:

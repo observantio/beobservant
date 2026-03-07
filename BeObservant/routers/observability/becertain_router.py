@@ -283,6 +283,46 @@ async def ml_weights(
     )
 
 
+@router.post("/ml/weights/feedback")
+async def ml_weights_feedback(
+    request: Request,
+    signal: str = Query(..., min_length=1),
+    was_correct: bool = Query(...),
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_RCA, "becertain")),
+):
+    tenant_id = await resolve_tenant_id(request, current_user)
+    return await becertain_proxy_service.request_json(
+        method="POST",
+        upstream_path="/api/v1/ml/weights/feedback",
+        current_user=current_user,
+        tenant_id=tenant_id,
+        params={
+            "tenant_id": tenant_id,
+            "signal": signal,
+            "was_correct": str(bool(was_correct)).lower(),
+        },
+        audit_action="becertain.proxy.ml.weights.feedback",
+        correlation_id=correlation_id(request),
+    )
+
+
+@router.post("/ml/weights/reset")
+async def ml_weights_reset(
+    request: Request,
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_RCA, "becertain")),
+):
+    tenant_id = await resolve_tenant_id(request, current_user)
+    return await becertain_proxy_service.request_json(
+        method="POST",
+        upstream_path="/api/v1/ml/weights/reset",
+        current_user=current_user,
+        tenant_id=tenant_id,
+        params={"tenant_id": tenant_id},
+        audit_action="becertain.proxy.ml.weights.reset",
+        correlation_id=correlation_id(request),
+    )
+
+
 @router.get("/events/deployments")
 async def events_deployments(
     request: Request,

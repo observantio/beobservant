@@ -3,6 +3,7 @@ import {
   getRcaReportById,
   getRcaJobResult,
   fetchRcaBayesian,
+  fetchRcaCorrelate,
   fetchRcaForecast,
   fetchRcaGranger,
   fetchRcaSloBurn,
@@ -73,7 +74,7 @@ const TERMINAL_JOB_STATUSES = new Set([
 
 const TAB_INSIGHT_KEYS = {
   topology: ["topology"],
-  causal: ["granger", "bayesian", "mlWeights", "deployments"],
+  causal: ["correlate", "granger", "bayesian", "mlWeights", "deployments"],
   "forecast-slo": ["forecast", "slo"],
 };
 
@@ -85,6 +86,7 @@ function normalizeEmbeddedInsights(reportData) {
     forecast: reportData?.forecast || null,
     granger: reportData?.granger || null,
     bayesian: reportData?.bayesian || null,
+    correlate: reportData?.correlate || null,
     mlWeights: reportData?.ml_weights || reportData?.mlWeights || null,
     deployments: reportData?.deployments || null,
   };
@@ -138,6 +140,15 @@ export function useRcaReport(
       calls.push({
         key: "forecast",
         req: fetchRcaForecast(basePayload, { limit: 100 }),
+      });
+    }
+    if (missing.includes("correlate")) {
+      calls.push({
+        key: "correlate",
+        req: fetchRcaCorrelate({
+          ...basePayload,
+          window_seconds: 60,
+        }),
       });
     }
     if (missing.includes("granger")) {

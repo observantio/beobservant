@@ -51,6 +51,23 @@ export default function RcaClusterPanel({ report, compact = false }) {
   const [hoveredPointId, setHoveredPointId] = useState(null);
   const [tooltip, setTooltip] = useState(null);
   const containerRef = useRef(null);
+  const [chartWidth, setChartWidth] = useState(780);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+
+    const updateWidth = () => {
+      const next = Math.max(320, Math.floor(el.clientWidth || 0));
+      if (next > 0) setChartWidth(next);
+    };
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const chart = useMemo(() => {
     if (points.length === 0) return { svgPoints: [], bounds: null };
@@ -61,7 +78,7 @@ export default function RcaClusterPanel({ report, compact = false }) {
     const yMax = Math.max(...points.map((p) => p.value));
     const maxSize = Math.max(...points.map((p) => p.size), 1);
 
-    const width = 780;
+    const width = chartWidth;
     const height = 280;
     const padLeft = 40;
     const padRight = 18;
@@ -95,7 +112,7 @@ export default function RcaClusterPanel({ report, compact = false }) {
         end: formatTimestamp(xMax),
       },
     };
-  }, [points]);
+  }, [points, chartWidth]);
 
   const content = (
     <>
@@ -109,14 +126,17 @@ export default function RcaClusterPanel({ report, compact = false }) {
       ) : (
         <div className="space-y-3">
           <div
-            className={`${compact ? "" : "border border-sre-border rounded-xl"} bg-sre-surface/20`}
+            className={`${compact ? "" : "border border-sre-border rounded-xl"} bg-sre-surface/20 w-full`}
           >
             <p className="text-xs text-sre-text-muted mb-2">
               Each circle is a cluster. Size shows the number of anomalies,
               horizontal position is the centroid time and vertical position is
               centroid value.
             </p>
-            <div className="relative my-5 overflow-hidden" ref={containerRef}>
+            <div
+              className="relative my-5 overflow-hidden w-full"
+              ref={containerRef}
+            >
               <svg
                 viewBox={`0 0 ${chart.width} ${chart.height}`}
                 className="w-full h-[280px]"

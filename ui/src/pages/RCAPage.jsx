@@ -267,21 +267,33 @@ export default function RCAPage() {
         );
       },
       causal: () => {
-        if (loadingInsights && !insights.granger && !insights.bayesian) {
+        if (
+          loadingInsights &&
+          !insights.correlate &&
+          !insights.granger &&
+          !insights.bayesian
+        ) {
           return (
             <Card className="border border-sre-border p-6 flex items-center justify-center">
               <Spinner />
             </Card>
           );
         }
-        if (insightErrors?.granger || insightErrors?.bayesian)
+        if (
+          insightErrors?.correlate ||
+          insightErrors?.granger ||
+          insightErrors?.bayesian
+        )
           return (
             <Alert variant="error">
-              {insightErrors.granger || insightErrors.bayesian}
+              {insightErrors.correlate ||
+                insightErrors.granger ||
+                insightErrors.bayesian}
             </Alert>
           );
         return (
           <RcaCausalPanel
+            correlate={insights.correlate}
             granger={insights.granger}
             bayesian={insights.bayesian}
             mlWeights={insights.mlWeights}

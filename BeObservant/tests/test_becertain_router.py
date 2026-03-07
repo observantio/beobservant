@@ -139,3 +139,54 @@ async def test_get_analyze_job_result_tolerates_unknown_running_status(monkeypat
         current_user=_user(),
     )
     assert result.status.value == "pending"
+
+
+@pytest.mark.asyncio
+async def test_ml_weights_feedback_proxies(monkeypatch):
+    captured = {}
+
+    async def fake_request_json(**kwargs):
+        captured.update(kwargs)
+        return {"updated_weights": {"metrics": 0.5}, "update_count": 1}
+
+    monkeypatch.setattr("routers.observability.becertain_router.becertain_proxy_service.request_json", fake_request_json)
+    result = await becertain_router.ml_weights_feedback(
+        request=_request(),
+        signal="metrics",
+        was_correct=True,
+        current_user=_user(),
+    )
+    assert result["update_count"] == 1
+    assert captured["upstream_path"] == "/api/v1/ml/weights/feedback"
+    assert captured["params"]["tenant_id"] == "tenant-a"
+    assert captured["params"]["signal"] == "metrics"
+    assert captured["params"]["was_correct"] == "true"
+
+
+@pytest.mark.asyncio
+async def test_ml_weights_reset_proxies(monkeypatch):
+    captured = {}
+
+    async def fake_request_json(**kwargs):
+        captured.update(kwargs)
+        return {"weights": {"metrics": 0.3, "logs": 0.35, "traces": 0.35}, "update_count": 0}
+
+    monkeypatch.setattr("routers.observability.becertain_router.becertain_proxy_service.request_json", fake_request_json)
+    user = TokenData(
+        user_id="u1",
+        username="user-1",
+        tenant_id="tenant-a",
+        org_id="tenant-a",
+        role=Role.USER,
+        permissions=["delete:rca", "read:rca", "create:rca"],
+        group_ids=[],
+        is_superuser=False,
+        is_mfa_setup=False,
+    )
+    result = await becertain_router.ml_weights_reset(
+        request=_request(),
+        current_user=user,
+    )
+    assert result["update_count"] == 0
+    assert captured["upstream_path"] == "/api/v1/ml/weights/reset"
+    assert captured["params"]["tenant_id"] == "tenant-a"
