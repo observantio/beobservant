@@ -148,6 +148,17 @@ const IncidentCard = memo(function IncidentCard({
   const previewLabels = getIncidentLabelEntries(incident).slice(0, 3);
   const isHiddenResolvedIncident =
     incident.status === "resolved" && !!incident.hideWhenResolved;
+  const priorityLabel =
+    incident.severity === "critical"
+      ? "P1"
+      : incident.severity === "warning"
+        ? "P2"
+        : "P3";
+  const hoverOnlyQuickButtonClass =
+    "opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50";
+  const quickButtonClass = isHiddenResolvedIncident
+    ? "transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
+    : hoverOnlyQuickButtonClass;
 
   return (
     <div
@@ -175,217 +186,268 @@ const IncidentCard = memo(function IncidentCard({
       />
 
       <div className={compact ? "p-3" : "p-5"}>
-        <div className={`flex items-start justify-between gap-4 ${compact ? "mb-2" : "mb-4"}`}>
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div
-              className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                incident.severity === "critical"
-                  ? "bg-red-500 shadow-red-500/50 shadow-lg"
-                  : incident.severity === "warning"
-                    ? "bg-yellow-500 shadow-yellow-500/50 shadow-lg"
-                    : "bg-blue-500 shadow-blue-500/50 shadow-lg"
-              }`}
-            />
-            <h3 className={`font-semibold text-sre-text leading-tight flex-1 min-w-0 truncate ${compact ? "text-sm" : "text-base"}`}>
-              {incident.alertName}
-            </h3>
-          </div>
+        {!isHiddenResolvedIncident ? (
+          <>
+            <div className={`flex items-start justify-between gap-4 ${compact ? "mb-2" : "mb-4"}`}>
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div
+                  className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                    incident.severity === "critical"
+                      ? "bg-red-500 shadow-red-500/50 shadow-lg"
+                      : incident.severity === "warning"
+                        ? "bg-yellow-500 shadow-yellow-500/50 shadow-lg"
+                        : "bg-blue-500 shadow-blue-500/50 shadow-lg"
+                  }`}
+                />
+                <h3 className={`font-semibold text-sre-text leading-tight flex-1 min-w-0 truncate ${compact ? "text-sm" : "text-base"}`}>
+                  {incident.alertName}
+                </h3>
+              </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <Badge
-              variant={incident.status === "resolved" ? "success" : "warning"}
-              className="text-xs px-3 py-1.5 rounded-full font-medium shadow-sm"
-            >
-              {incident.status}
-            </Badge>
-          </div>
-        </div>
-
-        <div className={`${compact ? "space-y-2 mb-2" : "space-y-3 mb-4"}`}>
-          {(correlationId || previewLabels.length > 0) && (
-            <div className="flex items-center gap-2 text-xs flex-wrap">
-              {correlationId && (
-                <Badge variant="ghost" className="max-w-full truncate">
-                  Correlation: {correlationId}
-                </Badge>
-              )}
-              {!compact &&
-                previewLabels.map(([key, value]) => (
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <Badge
-                  key={`${incident.id}-label-${key}`}
-                  variant="ghost"
-                  className="max-w-full truncate"
+                  variant={incident.status === "resolved" ? "success" : "warning"}
+                  className="text-xs px-3 py-1.5 rounded-full font-medium shadow-sm"
                 >
-                  {key}: {String(value)}
+                  {incident.status}
                 </Badge>
-                ))}
+              </div>
             </div>
-          )}
 
-          <div className="flex items-center gap-3 text-sm text-sre-text-muted">
-            <div className="flex items-center gap-2">
-              <span className="material-icons text-base text-sre-primary/70">
-                schedule
-              </span>
-              <span className="font-medium">
+            <div className={`${compact ? "space-y-2 mb-2" : "space-y-3 mb-4"}`}>
+              {(correlationId || previewLabels.length > 0) && (
+                <div className="flex items-center gap-2 text-xs flex-wrap">
+                  {correlationId && (
+                    <Badge variant="ghost" className="max-w-full truncate">
+                      Correlation: {correlationId}
+                    </Badge>
+                  )}
+                  {!compact &&
+                    previewLabels.map(([key, value]) => (
+                    <Badge
+                      key={`${incident.id}-label-${key}`}
+                      variant="ghost"
+                      className="max-w-full truncate"
+                    >
+                      {key}: {String(value)}
+                    </Badge>
+                    ))}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 text-sm text-sre-text-muted">
+                <div className="flex items-center gap-2">
+                  <span className="material-icons text-base text-sre-primary/70">
+                    schedule
+                  </span>
+                  <span className="font-medium">
+                    {new Date(incident.lastSeenAt).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {!compact && (
+                <div className="flex items-center gap-3 text-sm text-sre-text-muted min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="material-icons text-base text-sre-primary/70">
+                      person
+                    </span>
+                    <span className="font-medium truncate min-w-0 max-w-full">
+                      {assigneeLabel}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {!compact && incident.jiraTicketKey && (
+                <div className="flex items-center gap-3 text-sm text-sre-text-muted">
+                  <div className="flex items-center gap-2">
+                    <span className="material-icons text-base text-sre-primary/70">
+                      link
+                    </span>
+                    <span className="font-medium text-sre-primary hover:text-sre-primary/80 transition-colors truncate">
+                      {incident.jiraTicketKey}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className={`flex items-center justify-between ${compact ? "mb-2" : "mb-4"}`}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge
+                  variant={
+                    incident.severity === "critical"
+                      ? "error"
+                      : incident.severity === "warning"
+                        ? "warning"
+                        : "info"
+                  }
+                  className="text-xs px-3 py-1.5 rounded-full font-medium shadow-sm"
+                >
+                  <span className="material-icons text-sm mr-1">
+                    {incident.severity === "critical"
+                      ? "error"
+                      : incident.severity === "warning"
+                        ? "warning"
+                        : "info"}
+                  </span>
+                  {incident.severity}
+                </Badge>
+              </div>
+
+              <div className="flex items-center gap-1">
+                {canUpdateIncidents && columnKey === "unassigned" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      onOpenModal(incident);
+                      onSetModalTab("assignment");
+                    }}
+                    className="transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
+                    title="Quick assign"
+                  >
+                    <span className="material-icons text-sm">person_add</span>
+                  </Button>
+                )}
+
+                {canUpdateIncidents &&
+                  columnKey === "assigned" &&
+                  incident.status !== "resolved" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onQuickResolve(incident)}
+                      className="transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
+                      title="Quick resolve"
+                    >
+                      <span className="material-icons text-sm">task_alt</span>
+                    </Button>
+                  )}
+
+                {incident.status === "resolved" && incident.hideWhenResolved && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onUnhide(incident.id)}
+                    className={quickButtonClass}
+                    title="Unhide incident"
+                  >
+                    <span className="material-icons text-sm">visibility</span>
+                  </Button>
+                )}
+
+                {canUpdateIncidents &&
+                  incident.status === "resolved" &&
+                  !incident.hideWhenResolved && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onHide(incident.id)}
+                      className={quickButtonClass}
+                      title="Hide incident"
+                    >
+                      <span className="material-icons text-sm">visibility_off</span>
+                    </Button>
+                  )}
+
+                {!compact && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    onOpenModal(incident);
+                    onSetModalTab("jira");
+                  }}
+                  className={quickButtonClass}
+                  title="Jira"
+                >
+                  <span className="material-icons text-sm">link</span>
+                </Button>
+                )}
+
+                {!compact && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    onOpenModal(incident);
+                    onSetModalTab("notes");
+                  }}
+                  className={`${quickButtonClass} relative`}
+                  title="View notes"
+                >
+                  <span className="material-icons text-sm">notes</span>
+                  {Array.isArray(incident.notes) && incident.notes.length > 0 && (
+                    <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs rounded-full bg-sre-primary text-white">
+                      {incident.notes.length}
+                    </span>
+                  )}
+                </Button>
+                )}
+
+                {!isHiddenResolvedIncident && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onOpenModal(incident)}
+                    className={quickButtonClass}
+                  >
+                    <span className="material-icons text-sm">edit</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div
+                  className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                    incident.severity === "critical"
+                      ? "bg-red-500"
+                      : incident.severity === "warning"
+                        ? "bg-yellow-500"
+                        : "bg-blue-500"
+                  }`}
+                />
+                <h3 className={`font-semibold text-sre-text leading-tight flex-1 min-w-0 truncate ${compact ? "text-sm" : "text-base"}`}>
+                  {incident.alertName}
+                </h3>
+              </div>
+              <div className="flex items-center gap-1">
+                {incident.status === "resolved" && incident.hideWhenResolved && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onUnhide(incident.id)}
+                    className={quickButtonClass}
+                    title="Unhide incident"
+                  >
+                    <span className="material-icons text-sm">visibility</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-md bg-sre-bg-alt/70 px-1 py-1 text-sm font-semibold text-sre-text max-w-full">
+              <span className="truncate whitespace-nowrap max-w-[10rem]">
                 {new Date(incident.lastSeenAt).toLocaleString()}
               </span>
             </div>
-          </div>
-
-          {!compact && (
-            <div className="flex items-center gap-3 text-sm text-sre-text-muted min-w-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="material-icons text-base text-sre-primary/70">
-                  person
-                </span>
-                <span className="font-medium truncate min-w-0 max-w-full">
-                  {assigneeLabel}
-                </span>
-              </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {correlationId && (
+                <Badge variant="ghost" className="max-w-full truncate text-xs">
+                  {correlationId}
+                </Badge>
+              )}
+              <Badge variant="ghost" className="text-xs">
+                {priorityLabel}
+              </Badge>
             </div>
-          )}
-
-          {!compact && incident.jiraTicketKey && (
-            <div className="flex items-center gap-3 text-sm text-sre-text-muted">
-              <div className="flex items-center gap-2">
-                <span className="material-icons text-base text-sre-primary/70">
-                  link
-                </span>
-                <span className="font-medium text-sre-primary hover:text-sre-primary/80 transition-colors truncate">
-                  {incident.jiraTicketKey}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className={`flex items-center justify-between ${compact ? "mb-2" : "mb-4"}`}>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge
-              variant={
-                incident.severity === "critical"
-                  ? "error"
-                  : incident.severity === "warning"
-                    ? "warning"
-                    : "info"
-              }
-              className="text-xs px-3 py-1.5 rounded-full font-medium shadow-sm"
-            >
-              <span className="material-icons text-sm mr-1">
-                {incident.severity === "critical"
-                  ? "error"
-                  : incident.severity === "warning"
-                    ? "warning"
-                    : "info"}
-              </span>
-              {incident.severity}
-            </Badge>
           </div>
-
-          <div className="flex items-center gap-1">
-            {canUpdateIncidents && columnKey === "unassigned" && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  onOpenModal(incident);
-                  onSetModalTab("assignment");
-                }}
-                className="transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
-                title="Quick assign"
-              >
-                <span className="material-icons text-sm">person_add</span>
-              </Button>
-            )}
-
-            {canUpdateIncidents &&
-              columnKey === "assigned" &&
-              incident.status !== "resolved" && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onQuickResolve(incident)}
-                  className="transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
-                  title="Quick resolve"
-                >
-                  <span className="material-icons text-sm">task_alt</span>
-                </Button>
-              )}
-
-            {incident.status === "resolved" && incident.hideWhenResolved && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onUnhide(incident.id)}
-                className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
-                title="Unhide incident"
-              >
-                <span className="material-icons text-sm">visibility</span>
-              </Button>
-            )}
-
-            {canUpdateIncidents &&
-              incident.status === "resolved" &&
-              !incident.hideWhenResolved && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onHide(incident.id)}
-                  className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
-                  title="Hide incident"
-                >
-                  <span className="material-icons text-sm">visibility_off</span>
-                </Button>
-              )}
-
-            {!compact && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                onOpenModal(incident);
-                onSetModalTab("jira");
-              }}
-              className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
-              title="Jira"
-            >
-              <span className="material-icons text-sm">link</span>
-            </Button>
-            )}
-
-            {!compact && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                onOpenModal(incident);
-                onSetModalTab("notes");
-              }}
-              className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50 relative"
-              title="View notes"
-            >
-              <span className="material-icons text-sm">notes</span>
-              {Array.isArray(incident.notes) && incident.notes.length > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs rounded-full bg-sre-primary text-white">
-                  {incident.notes.length}
-                </span>
-              )}
-            </Button>
-            )}
-
-            {!isHiddenResolvedIncident && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onOpenModal(incident)}
-                className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
-              >
-                <span className="material-icons text-sm">edit</span>
-              </Button>
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
       <div className={`absolute ${compact ? "top-2 left-2" : "top-3 left-3"} opacity-0 group-hover:opacity-100 transition-opacity duration-200`}>

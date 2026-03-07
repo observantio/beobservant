@@ -1084,7 +1084,7 @@ export default function AlertManagerPage() {
                       const silenceOwner = String(s.createdBy || s.created_by || "");
                       const isOwnSilence =
                         silenceOwner &&
-                        silenceOwner === String(user?.username || "");
+                        silenceOwner === String(user?.id || "");
                       const canHideSilence = !isOwnSilence;
                       const visibilityLabel =
                         s.visibility === "tenant"

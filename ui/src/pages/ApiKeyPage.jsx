@@ -668,29 +668,31 @@ export default function ApiKeyPage() {
                         </div>
                       </td>
                       <td className="py-2 px-4">
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-3">
                           {!key.is_shared && !key.is_default && (
-                            <Button
-                              size="sm"
-                              variant="primary"
-                              onClick={() => openShareModal(key)}
+                            <span
+                              className="material-icons text-base text-sre-primary hover:text-sre-primary/80 cursor-pointer"
+                              role="button"
+                              title="Share key"
                               aria-label={`Share ${key.name}`}
+                              onClick={() => openShareModal(key)}
                             >
-                              Share
-                            </Button>
+                              share
+                            </span>
                           )}
                           {!key.is_default && (
-                            <Button
-                              size="sm"
-                              variant="danger"
+                            <span
+                              className="material-icons text-base text-red-500 hover:text-red-600 cursor-pointer"
+                              role="button"
+                              title="Delete key"
+                              aria-label={`Delete ${key.name}`}
                               onClick={() => {
                                 setKeyToDelete(key);
                                 setShowDeleteConfirm(true);
                               }}
-                              aria-label={`Delete ${key.name}`}
                             >
-                              Delete
-                            </Button>
+                              delete
+                            </span>
                           )}
                           {key.is_shared && (
                             <Button

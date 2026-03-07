@@ -1,5 +1,5 @@
 import React from "react";
-import { render, fireEvent, waitFor, screen } from "@testing-library/react";
+import { render, fireEvent, waitFor, screen, within } from "@testing-library/react";
 import { vi, describe, it, beforeEach, expect } from "vitest";
 
 vi.mock("../../components/ui", () => ({
@@ -275,7 +275,12 @@ describe("IncidentBoardPage — UI refresh & persistence", () => {
     render(<IncidentBoardPage />);
     await screen.findByText("Hidden Resolved Alert");
 
+    const hiddenCard = screen.getByText("Hidden Resolved Alert").closest("[draggable]");
+    expect(hiddenCard).not.toBeNull();
+
     expect(screen.getByTitle("Unhide incident")).toBeInTheDocument();
     expect(screen.queryByText("edit")).not.toBeInTheDocument();
+    expect(within(hiddenCard).queryByText(/^resolved$/i)).not.toBeInTheDocument();
+    expect(within(hiddenCard).queryByText(/^warning$/i)).not.toBeInTheDocument();
   });
 });

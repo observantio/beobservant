@@ -167,7 +167,9 @@ def assert_silence_owner(current_user: TokenData, silence: Dict[str, Any]) -> No
     creator_id = str(creator).strip() if creator is not None else ""
     if not creator_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Silence ownership metadata is missing; update/delete is denied")
-    if creator_id != str(current_user.user_id):
+
+    actor_id = str(getattr(current_user, "user_id", "") or "").strip()
+    if not actor_id or creator_id != actor_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update or delete silences that you created")
 
 

@@ -129,6 +129,7 @@ export default function GrafanaPage() {
     message: "",
     onConfirm: null,
     variant: "danger",
+    confirmText: "Delete",
   });
 
   const [grafanaConfirmDialog, setGrafanaConfirmDialog] = useState({
@@ -242,6 +243,7 @@ export default function GrafanaPage() {
     setConfirmDialog({
       isOpen: true,
       title: nowHidden ? "Hide Dashboard" : "Unhide Dashboard",
+      confirmText: nowHidden ? "Hide" : "Unhide",
       message: nowHidden
         ? `Are you sure you want to hide "${dashboard.title}"? This will hide the dashboard for your account.`
         : `Are you sure you want to unhide "${dashboard.title}"? This will make the dashboard visible again for your account.`,
@@ -263,6 +265,7 @@ export default function GrafanaPage() {
     setConfirmDialog({
       isOpen: true,
       title: nowHidden ? "Hide Datasource" : "Unhide Datasource",
+      confirmText: nowHidden ? "Hide" : "Unhide",
       message: nowHidden
         ? `Are you sure you want to hide "${datasource.name}"? This will hide the datasource for your account.`
         : `Are you sure you want to unhide "${datasource.name}"? This will make the datasource visible again for your account.`,
@@ -743,6 +746,7 @@ export default function GrafanaPage() {
     setConfirmDialog({
       isOpen: true,
       title: nowHidden ? "Hide Folder" : "Unhide Folder",
+      confirmText: nowHidden ? "Hide" : "Unhide",
       message: nowHidden
         ? `Are you sure you want to hide "${folder.title}"? This will hide the folder and its dashboards for your account.`
         : `Are you sure you want to unhide "${folder.title}"? This will make the folder visible again for your account.`,
@@ -875,7 +879,7 @@ export default function GrafanaPage() {
         title={confirmDialog.title}
         message={confirmDialog.message}
         variant={confirmDialog.variant || "danger"}
-        confirmText="Delete"
+        confirmText={confirmDialog.confirmText || "Delete"}
         cancelText="Cancel"
       />
 
