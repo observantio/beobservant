@@ -44,6 +44,7 @@ export default function GrafanaContent({
       <DashboardsTab
         dashboards={dashboards}
         groups={groups}
+        folders={folders}
         query={query}
         setQuery={setQuery}
         filters={filters}

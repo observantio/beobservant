@@ -50,7 +50,7 @@ function DsFilterBar({
                 onChange={(e) =>
                   setFilters({ ...filters, teamId: e.target.value })
                 }
-                className="px-3 py-2 text-sm bg-sre-bg border border-sre-border rounded-lg text-sre-text focus:outline-none focus:ring-2 focus:ring-sre-primary focus:border-transparent transition-all duration-200"
+                className="px-3  min-w-[220px] py-2 text-sm bg-sre-bg border border-sre-border rounded-lg text-sre-text focus:outline-none focus:ring-2 focus:ring-sre-primary focus:border-transparent transition-all duration-200"
               >
                 <option value="">All teams</option>
                 {(groups || []).map((g) => (
@@ -212,9 +212,11 @@ export default function DatasourcesTab({
                         {getDatasourceIcon(ds.type)}
                       </span>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-sre-text text-lg flex items-center gap-2">
-                        {ds.name}
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-sre-text text-lg flex items-center gap-2 min-w-0">
+                        <span className="truncate" title={ds.name}>
+                          {ds.name}
+                        </span>
                         {ds.is_hidden && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                             Hidden

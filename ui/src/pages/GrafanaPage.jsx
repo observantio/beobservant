@@ -33,7 +33,6 @@ import { MIMIR_PROMETHEUS_URL } from "../utils/constants";
 import {
   GRAFANA_DATASOURCE_TYPES as DATASOURCE_TYPES,
   overrideDashboardDatasource,
-  inferDashboardDatasource,
 } from "../utils/grafanaUtils";
 import { buildGrafanaLaunchUrl } from "../utils/grafanaLaunchUtils";
 
@@ -52,6 +51,7 @@ export default function GrafanaPage() {
 
   const [filters, setFilters] = useLocalStorage("grafana-filters", {
     teamId: "",
+    folderKey: "",
     showHidden: false,
   });
 
@@ -186,6 +186,13 @@ export default function GrafanaPage() {
             searchDashboards({
               query: query || undefined,
               teamId: filters.teamId || undefined,
+              folderId:
+                filters.folderKey === "__general__" ? 0 : undefined,
+              folderUid:
+                filters.folderKey &&
+                filters.folderKey !== "__general__"
+                  ? filters.folderKey
+                  : undefined,
               showHidden: filters.showHidden,
             }).catch(() => []),
             getFolders({ showHidden: filters.showHidden }).catch(() => []),
@@ -226,7 +233,7 @@ export default function GrafanaPage() {
   }
 
   function clearFilters() {
-    setFilters({ teamId: "", showHidden: false });
+    setFilters({ teamId: "", folderKey: "", showHidden: false });
     setQuery("");
   }
 
@@ -281,8 +288,6 @@ export default function GrafanaPage() {
     if (dashboard) {
       setEditingDashboard(dashboard);
 
-      const inferred = inferDashboardDatasource(dashboard, datasources);
-
       setDashboardForm({
         title: dashboard.title || dashboard?.dashboard?.title || "",
         tags:
@@ -291,8 +296,8 @@ export default function GrafanaPage() {
           "",
         folderId: dashboard.folderId || dashboard?.dashboard?.folderId || 0,
         refresh: dashboard.refresh || dashboard?.dashboard?.refresh || "30s",
-        datasourceUid: inferred.uid || "",
-        useTemplating: Boolean(inferred.useTemplating),
+        datasourceUid: "",
+        useTemplating: false,
         visibility: dashboard.visibility || "private",
         sharedGroupIds:
           dashboard.sharedGroupIds || dashboard.shared_group_ids || [],
@@ -311,18 +316,6 @@ export default function GrafanaPage() {
         (async () => {
           try {
             const full = await getDashboard(dashboard.uid).catch(() => null);
-            const inferred = inferDashboardDatasource(
-              full?.dashboard || full,
-              datasources,
-            );
-            if (inferred.uid) {
-              setDashboardForm((prev) => ({
-                ...prev,
-                datasourceUid: inferred.uid,
-                useTemplating: inferred.useTemplating,
-              }));
-            }
-
             if (full?.dashboard) {
               try {
                 setJsonContent(JSON.stringify(full.dashboard, null, 2));
@@ -354,6 +347,11 @@ export default function GrafanaPage() {
   }
 
   async function saveDashboard(jsonOverride = null) {
+    if (!dashboardForm.datasourceUid) {
+      toast.error("Select a default datasource before saving the dashboard");
+      return;
+    }
+
     try {
       let payload = null;
       if (jsonOverride) {
@@ -766,7 +764,7 @@ export default function GrafanaPage() {
     return found ? found.icon : "🔧";
   }
 
-  const hasActiveFilters = filters.teamId || filters.showHidden;
+  const hasActiveFilters = filters.teamId || filters.folderKey || filters.showHidden;
 
   return (
     <div className="animate-fade-in">

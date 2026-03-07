@@ -890,6 +890,8 @@ export async function searchDashboards({
   labelKey,
   labelValue,
   teamId,
+  folderId,
+  folderUid,
   showHidden = false,
   tag,
   starred,
@@ -900,6 +902,9 @@ export async function searchDashboards({
   if (labelKey) params.append("label_key", labelKey);
   if (labelValue) params.append("label_value", labelValue);
   if (teamId) params.append("team_id", teamId);
+  if (folderId !== undefined && folderId !== null && `${folderId}` !== "")
+    params.append("folderIds", String(folderId));
+  if (folderUid) params.append("folderUIDs", folderUid);
   if (showHidden) params.append("show_hidden", "true");
   if (tag) params.append("tag", tag);
   if (starred !== undefined && starred !== null)

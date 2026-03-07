@@ -68,7 +68,7 @@ describe("DashboardEditorModal — JSON sample loader", () => {
           tags: "a,b",
           folderId: 0,
           refresh: "30s",
-          datasourceUid: "",
+          datasourceUid: "mimir-prometheus",
           useTemplating: false,
           visibility: "private",
           sharedGroupIds: [],

@@ -178,9 +178,10 @@ export default function DashboardEditorModal({
             variant="primary"
             onClick={handleSave}
             disabled={
-              editorTab === "form"
+              !dashboardForm.datasourceUid ||
+              (editorTab === "form"
                 ? !dashboardForm.title.trim()
-                : !jsonContent.trim() || !!jsonError
+                : !jsonContent.trim() || !!jsonError)
             }
           >
             {editingDashboard ? "Update Dashboard" : "Create Dashboard"}
@@ -322,10 +323,6 @@ export default function DashboardEditorModal({
               datasourceUid={dashboardForm.datasourceUid}
               onDatasourceChange={(v) =>
                 setDashboardForm({ ...dashboardForm, datasourceUid: v })
-              }
-              useTemplating={dashboardForm.useTemplating}
-              onUseTemplatingChange={(v) =>
-                setDashboardForm({ ...dashboardForm, useTemplating: v })
               }
               datasources={datasources}
             />
@@ -519,10 +516,6 @@ export default function DashboardEditorModal({
                   datasourceUid={dashboardForm.datasourceUid}
                   onDatasourceChange={(v) =>
                     setDashboardForm({ ...dashboardForm, datasourceUid: v })
-                  }
-                  useTemplating={dashboardForm.useTemplating}
-                  onUseTemplatingChange={(v) =>
-                    setDashboardForm({ ...dashboardForm, useTemplating: v })
                   }
                   datasources={datasources}
                 />

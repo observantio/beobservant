@@ -113,8 +113,11 @@ export default function FoldersTab({
                           />
                         </svg>
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-sre-text text-lg">
+                      <div className="min-w-0">
+                        <h3
+                          className="font-semibold text-sre-text text-lg truncate"
+                          title={folder.title}
+                        >
                           {folder.title}
                         </h3>
                       </div>
