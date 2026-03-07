@@ -69,7 +69,7 @@ function FilterBar({
                     folderKey: e.target.value,
                   })
                 }
-                className="px-3 py-2 text-sm bg-sre-bg border border-sre-border rounded-lg text-sre-text focus:outline-none focus:ring-2 focus:ring-sre-primary focus:border-transparent transition-all duration-200"
+                className="px-3 py-2 min-w-[320px] text-sm bg-sre-bg border border-sre-border rounded-lg text-sre-text focus:outline-none focus:ring-2 focus:ring-sre-primary focus:border-transparent transition-all duration-200"
               >
                 <option value="">All folders</option>
                 <option value="__general__">Default (General/Public)</option>
