@@ -1,4 +1,4 @@
-# Be Observant User Guide
+# Observantio User Guide
 
 This guide explains how to install, understand, and use the full application stack in this workspace.
 
@@ -25,6 +25,7 @@ When you run this project, you are not starting one server. You are starting a p
 | `postgres` | Persistent storage for BeObservant, BeNotified, and BeCertain. |
 | `redis` | Rate limits, token caches, and shared fast state. |
 | `otlp-gateway` | Envoy edge for OTLP traffic. Calls BeGateway before forwarding telemetry. |
+| `gateway-auth` | Decoupled server that acts as redis cache between the main server and envoy to validate and translate otlp keys to tenant keys |
 | `loki` | Log storage and query engine. |
 | `tempo` | Trace storage and query engine. |
 | `mimir` | Metrics storage and rule evaluation backend. |
@@ -599,16 +600,6 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 docker compose up -d --build
 ```
 
-### Option C: Stable Images
-
-```bash
-curl -fsSL -o docker-compose.stable.yml https://raw.githubusercontent.com/observantio/beobservant/main/docker-compose.stable.yml
-docker compose -f docker-compose.stable.yml up -d
-```
-
-### Option D: Kubernetes/EKS
-
-Use manifests under `deployments/eks/` as a starting point. You must provide cluster-specific ingress, secrets, storage classes, and TLS.
 
 ## 4. Post-Deploy Verification
 

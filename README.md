@@ -1,4 +1,4 @@
-# Be Observant
+# Observantio
 
 Be Observant is a self-hosted observability control plane built around Grafana, Loki, Tempo, Mimir, Alertmanager, and a set of application services that add tenancy, access control, alert workflows, and AI-assisted root cause analysis.
 
@@ -216,7 +216,6 @@ python3 install.py
 ```bash
 git clone https://github.com/observantio/beobservant Observantio
 cd Observantio
-
 cp .env.example .env
 ```
 
@@ -304,54 +303,81 @@ The alerting flow is intentionally opinionated:
 
 If you are new to the rule editor, start from a known-good template, then tune expressions and thresholds for your environment. That approach matches how the stack is built: validate the workflow first, then narrow noise and sensitivity.
 
-## What The UI Gives An Operator
 
-#### Dashboard
+## What the UI Gives an Operator
 
-Shows platform health, active alerts, log volume, dashboard count, silence count, datasource count, and service status. At this stage, if you are using OIDC, you will be asked to provide a backup local password, incase the business wishes to switch to local authentication methods. Note, the dashboard components are draggable to be reorder based on the developer's experience and they can wish to swtich the dark/light theme with ease.
+### Dashboard
 
-#### Logs
+The Dashboard provides a high-level view of platform health, including active alerts, log volume, dashboard count, silence count, datasource count, and overall service status.
 
-Provides label discovery, builder-mode filters, raw LogQL, log volume views, result browsing, and quick filters. We recommend using the quick filters provided to do text searches and see the log volumes over the past time to 
+If OIDC is enabled, operators are asked to set a backup local password during setup. This supports a fallback to local authentication if the business later decides to change authentication methods.
 
-#### Traces
+Dashboard widgets are draggable, so users can reorder components to suit their workflow. The UI also supports easy switching between dark and light themes.
 
-Provides Tempo-backed trace exploration, direct trace lookup, and a graph view for comparing selected traces and service relationships.
+### Logs
 
-#### Alert Manager
+The Logs view provides label discovery, builder-mode filtering, raw LogQL support, log volume visualisation, result browsing, and quick filters.
 
-Provides:
+For most investigations, the quick filters are the fastest way to search text and review log volume over time, making it easier to identify bursts or unusual spikes in activity.
 
-- Active alerts.
-- Alert rules.
-- Silences.
-- YAML rule import with preview.
-- Rule testing.
-- Hidden/shared object handling.
+### Traces
 
-#### Incidents
+The Traces view provides Tempo-backed trace exploration, direct trace lookup, and a graph view for comparing traces and understanding service relationships.
 
-Provides a board-driven view of operational incidents with assignment, notes, status changes, and Jira integration.
+Operators can filter traces, inspect trace data, and use the dependency map to identify pain points, bottlenecks, and issues in service-to-service data flow.
 
-#### API Keys
+### Alert Manager
 
-Provides tenant and product scoping, OTLP token management, key sharing with users and groups, token regeneration, and a downloadable starter OTel collector configuration.
+Alert Manager provides:
 
-#### Users And Groups
+* Active alerts
+* Alert rules
+* Silences
+* YAML rule import with preview
+* Rule testing
+* Hidden and shared object handling
 
-Provides user creation, role and permission management, group-based permission inheritance, temporary password reset flows, and membership administration.
+Alerts and silences are fully scoped by tenant and channel configuration. Integrations such as Jira are also scoped appropriately. All related configuration is stored securely and encrypted in PostgreSQL.
 
-#### Audit And Compliance
+### Incidents
 
-Provides searchable audit history with filters, detail inspection, and CSV export for administrative review.
+The Incidents view provides a board-based operational workflow for managing incidents, including assignment, notes, status updates, and Jira integration.
 
-#### Grafana
+Operators can create notes, assign incidents to users, and link incidents to Jira so that comments and lifecycle changes remain synchronised across both systems.
 
-Provides controlled management of dashboards, folders, and datasources, plus a secure hand-off into the Grafana UI through the auth proxy.
+### API Keys
 
-#### RCA
+The API Keys area provides tenant and product scoping, OTLP token management, key sharing with users and groups, token regeneration, and a downloadable starter OpenTelemetry Collector configuration.
 
-Provides job creation, queue monitoring, historical report lookup, ranked root causes, anomalies, topology, causal views, and forecast/SLO views.
+Operators can create a new API key, download a YAML configuration for that key, or use their own collector configuration with the provided token. Once the collector runs with `otelcol-contrib --config otel.yaml`, the platform accepts metrics, logs, and traces, and maps them to the correct organisation or tenant context for retrieval through Mimir, Tempo, Loki, and Be Certain.
+
+### Users and Groups
+
+The Users and Groups section provides user creation, role and permission management, group-based permission inheritance, temporary password reset flows, and membership administration.
+
+Operators can rename users, manage passwords, update permissions and roles, create groups, and assign group permissions that members inherit. A user cannot create a group with permissions higher than their own. The same restriction applies to users with `manage:tenants` capabilities — they can only grant permissions up to their own level.
+
+Admins can update the roles of existing members. Only an admin can deactivate another admin, and admins cannot delete other admins.
+
+### Audit and Compliance
+
+The Audit and Compliance section provides searchable audit history with filters, detailed inspection, and CSV export for administrative review.
+
+Audit records are not currently designed as immutable at the database level. However, there are no routes or services that allow audit logs to be edited or deleted.
+
+### Grafana
+
+The Grafana section provides controlled management of dashboards, folders, and datasources, along with secure access into the Grafana UI through the auth proxy.
+
+All access is scoped according to the user’s permissions and visibility rights. Folder visibility acts as a container-level boundary for dashboards. If a folder is public, dashboard visibility still depends on the visibility settings of each individual dashboard.
+
+### RCA
+
+The RCA section provides job creation, queue monitoring, historical report lookup, ranked root causes, anomaly detection, topology views, causal analysis, and forecast/SLO views.
+
+This area is functionally in place, but it still requires real production data for full validation and testing.
+
+If you want, I can also turn this into a more polished enterprise-style version for docs, PRs, or stakeholder demos.
 
 ## Important Security Model
 
