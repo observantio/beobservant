@@ -6,7 +6,6 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-import importlib
 import os
 
 os.environ.setdefault("DATABASE_URL", "postgresql://safeuser:safePass_123@db:5432/beobservant")
@@ -19,7 +18,6 @@ from services.auth.helper import set_auth_cookie
 from starlette.requests import Request
 from fastapi.responses import Response
 
-import middleware.dependencies as deps_module
 from config import config
 
 

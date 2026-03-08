@@ -9,7 +9,6 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 from tests._env import ensure_test_env
 ensure_test_env()
 import asyncio
-import httpx
 from services.tempo import metrics as tempo_metrics
 
 def test_extract_metric_values_aggregates_and_skips():

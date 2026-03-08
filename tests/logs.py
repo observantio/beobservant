@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-import sys, time, random, secrets, json, threading
+import sys
+import time
+import random
+import secrets
+import json
+import threading
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 

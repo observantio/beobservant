@@ -20,7 +20,6 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from models.access.auth_models import Permission
 from services.grafana import proxy_auth_ops
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana_proxy_service import GrafanaProxyService

@@ -4,12 +4,6 @@ This guide explains how to install, understand, and use the full application sta
 
 It is written for someone who wants more than a quick start. The goal is to make the system understandable enough that you know what each service does, why it exists, how the pieces fit together, and what to do first after the stack is running.
 
-If you want the shortest mental model, use this one:
-
-- Grafana, Loki, Tempo, Mimir, and Alertmanager are the engines.
-- Be Observant is the product layer that makes those engines usable as one secure application.
-- The UI is where most operators will spend their time.
-
 ## 1. What You Are Deploying
 
 When you run this project, you are not starting one server. You are starting a product composed of multiple servers and infrastructure components.
@@ -274,28 +268,13 @@ What success looks like:
 2. Open the API Key page.
 3. Create at least one API key.
 4. Treat that key as your first product or tenant scope.
-5. Mark the right key as the default key in the UI so queries, rules, and scoped actions start from the right place.
-6. Keep note of its OTLP token usage because telemetry routing depends on it.
-7. If you want a faster first integration, use the API Keys page to generate a starter OpenTelemetry Collector YAML file with the correct gateway endpoints.
+5. Keep note of its OTLP token usage because telemetry routing depends on it.
 
 Why API keys matter here:
 
 - They are not only secrets for ingestion.
 - The UI also uses the active scope to send `X-Scope-OrgID` on observability and alerting requests.
 - Alert rules and metrics names can be scoped by org/product.
-- Shared keys can be granted to other users or groups, which matters when teams need the same scoped view.
-- Regenerating an OTLP token invalidates the previous token for any running agents that still depend on it.
-
-### 8.1 Access model in plain English
-
-The access model is easier to reason about if you break it into four layers:
-
-1. Users sign in and get a session.
-2. Users can belong to groups.
-3. Groups can carry permissions that members inherit.
-4. API keys define the data scope a user is actively working in.
-
-That means a person can have permission to manage alerts, but still be looking at the wrong product scope if the wrong API key is active.
 
 ## 9. Send Test Telemetry
 
@@ -333,8 +312,6 @@ exporters:
       x-otlp-token: YOUR_OTLP_TOKEN
 ```
 
-One detail worth calling out: the API Keys page generates a collector file that uses the exact gateway paths this stack expects, including Loki, Tempo, and Mimir-specific endpoints. If you are unsure whether your collector config is shaped correctly, start from that generated file and then edit it.
-
 ## 10. Learn The UI By Page
 
 ### 10.1 Dashboard
@@ -367,15 +344,12 @@ Good first test:
 
 Use the Traces page to inspect request paths, latency, parent/child spans, and service relationships.
 
-It supports both normal trace exploration and a graph-oriented workflow where you can select multiple traces and view the service graph they imply together.
-
 Good first test:
 
 1. Open Traces.
 2. Search within the last hour.
 3. Pick a generated trace.
 4. Confirm span trees and service names are visible.
-5. Select a few traces and open the graph view to confirm service-to-service relationships are being captured the way you expect.
 
 ### 10.4 Alert Manager
 
@@ -403,8 +377,6 @@ Use this page to manage:
 Recommended first action:
 
 Create one test webhook or email/slack channel and use the built-in channel test before wiring incident workflows around it.
-
-Visibility matters here. Channels and Jira integrations can be private, shared across the organization, or shared by group, so it is worth deciding early whether an integration is personal, team-level, or tenant-wide.
 
 ### 10.6 Incidents
 
@@ -435,8 +407,6 @@ Use it to:
 - Manage datasources.
 - Open Grafana through a bootstrap session and auth proxy.
 
-If direct access to the Grafana proxy returns `401`, that usually means you are bypassing the Be Observant-authenticated path. Open it from the UI first so the bootstrap session is created.
-
 ### 10.8 RCA
 
 This page is the BeCertain frontend.
@@ -452,55 +422,6 @@ Important expectation:
 
 RCA quality depends on data quality. Sparse or synthetic data can still demonstrate the workflow, but the most useful reports appear once your environment has enough real cross-signal activity.
 
-### 10.9 API Keys
-
-Use the API Keys page for more than key creation.
-
-It is where you:
-
-- set the default working scope
-- reveal or regenerate OTLP tokens
-- share keys with other users or groups
-- hide keys you no longer want shown in normal views
-- download a starter OTel collector YAML file
-
-For a first rollout, this page is one of the most important ones in the product. If scopes feel wrong elsewhere in the UI, come back here first.
-
-### 10.10 Users And Groups
-
-The user and group pages are how you turn a single-admin demo into a shared tool.
-
-Users page highlights:
-
-- create users
-- edit user profile fields
-- activate or deactivate accounts
-- reset a user into a temporary-password flow
-- manage user-level permissions when allowed
-
-Groups page highlights:
-
-- create groups
-- assign permissions to groups
-- assign members to groups
-- let members inherit the group permission set
-
-The practical rule is simple: prefer group-based permissions for teams, and use direct user edits for exceptions.
-
-### 10.11 Audit And Compliance
-
-The audit page is a real operational tool, not just a log dump.
-
-It supports:
-
-- filtering by time window
-- filtering by user, action, and resource type
-- text search across audit content
-- viewing full record details
-- exporting matching rows to CSV
-
-If you are trying to answer "who changed this" or "when did this happen", this is the page to use.
-
 ## 11. Alerting Setup Walkthrough
 
 ### 11.1 Create a notification channel
@@ -509,7 +430,6 @@ If you are trying to answer "who changed this" or "when did this happen", this i
 2. Create a channel.
 3. Keep it enabled.
 4. Test it immediately.
-5. Decide whether that channel should be private, team-shared, or tenant-shared before others start depending on it.
 
 ### 11.2 Create or import a rule
 
@@ -517,8 +437,6 @@ If you are trying to answer "who changed this" or "when did this happen", this i
 2. Create a simple rule or import YAML with dry run first.
 3. Bind the rule to the correct org/product scope.
 4. Save and allow the rule to sync to Mimir.
-
-If you are unsure where to begin, start with one rule that is easy to reason about, verify it appears in the UI and syncs cleanly, then add complexity later. That usually teaches you more than importing a large bundle too early.
 
 ### 11.3 Watch active alerts
 
@@ -572,7 +490,6 @@ Best for first deployment.
 - Username/password login.
 - Optional MFA flows.
 - Bootstrap admin support.
-- Admin-side temporary password resets for non-admin users.
 
 ### 13.2 OIDC or Keycloak
 
@@ -586,8 +503,6 @@ You will need to configure:
 - client credentials
 
 The frontend supports OIDC authorization URL creation, PKCE, state/nonce handling, and callback exchange.
-
-Move to external identity after the local flow is already understood. It is much easier to debug OIDC once you know the rest of the platform is healthy.
 
 ## 14. Security Hardening Checklist
 
@@ -609,12 +524,10 @@ For anything beyond local evaluation, review this list:
 | UI loads but login fails | Bootstrap credentials or auth mode mismatch | `.env`, auth provider, admin bootstrap values |
 | No logs or traces appear | Bad OTLP token, wrong endpoint, or collector misrouting | `x-otlp-token`, `http://localhost:4320`, collector exporter endpoints |
 | `ready` stays not ready | One or more downstream services are still unhealthy | `docker compose ps`, BeObservant ready payload |
-| Data appears under the wrong product or tenant | Wrong default API key or shared key confusion | API Keys page, selected default key, org-scoped rule target |
 | Grafana opens incorrectly | Proxy/root URL mismatch or not authenticated | Grafana proxy settings and browser auth state |
 | Alert rule exists but nothing fires | Rule expression, scope, or dataset mismatch | org/product selection, metric names, actual metric presence |
 | Incident cannot be resolved | Underlying alert still active | active alerts state in Alert Manager |
 | RCA job completes with weak results | Not enough cross-signal data | logs/traces/metrics volume and time window |
-| Audit export or user/group actions fail with `403` | Missing admin-level permission rather than backend failure | role, inherited group permissions, current signed-in account |
 
 ## 16. What To Tune Later, Not First
 
@@ -686,6 +599,17 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 docker compose up -d --build
 ```
 
+### Option C: Stable Images
+
+```bash
+curl -fsSL -o docker-compose.stable.yml https://raw.githubusercontent.com/observantio/beobservant/main/docker-compose.stable.yml
+docker compose -f docker-compose.stable.yml up -d
+```
+
+### Option D: Kubernetes/EKS
+
+Use manifests under `deployments/eks/` as a starting point. You must provide cluster-specific ingress, secrets, storage classes, and TLS.
+
 ## 4. Post-Deploy Verification
 
 ```bash
@@ -717,3 +641,64 @@ Access:
 4. Confirm dashboards/queries reflect the selected key scope.
 
 ### 5.3 Telemetry Ingestion Flow
+
+1. Configure OTel collector exporter to send to `http://<host>:4320`.
+2. Add `x-otlp-token` header using an active API key token.
+3. Verify data appears in Logs, Metrics, and Traces pages.
+
+### 5.4 Alert and Incident Flow
+
+1. Configure channels (Slack/Jira/Email/PagerDuty/Teams/Webhook) in integrations.
+2. Create alert rules in Alert Manager.
+3. Validate test alert delivery.
+4. Track incidents in Incident Board (InOps) with assignees and notes.
+5. Close incidents with a resolution note for long-term learning context.
+
+### 5.5 RCA Flow (BeCertain)
+
+1. Open RCA page and choose target service/window.
+2. Trigger analysis job.
+3. Review ranked hypotheses and evidence links.
+4. Use output to drive incident actions and post-incident notes.
+
+## 6. Configuration Keys You Should Know
+
+From `.env.example`:
+
+- Core/API: `PORT`, `LOG_LEVEL`, `DATABASE_URL`, `DB_AUTO_CREATE_SCHEMA`
+- Auth/JWT: `JWT_ALGORITHM`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `JWT_AUTO_GENERATE_KEYS`
+- Tenancy: `DEFAULT_ORG_ID`, `DEFAULT_ADMIN_*`
+- Proxy/service auth: `BENOTIFIED_*`, `BECERTAIN_*`, `GATEWAY_INTERNAL_SERVICE_TOKEN`
+- Security boundaries: `TRUST_PROXY_HEADERS`, `TRUSTED_PROXY_CIDRS`, `FORCE_SECURE_COOKIES`, `ALLOWLIST_FAIL_OPEN`
+- Allowlists: `AUTH_PUBLIC_IP_ALLOWLIST`, `WEBHOOK_IP_ALLOWLIST`, `GATEWAY_IP_ALLOWLIST`, `GRAFANA_PROXY_IP_ALLOWLIST`
+- Rate limits: `RATE_LIMIT_*`, `MAX_REQUEST_BYTES`, `MAX_CONCURRENT_REQUESTS`
+- OIDC/Keycloak: `AUTH_PROVIDER`, `OIDC_*`, `KEYCLOAK_*`
+- Secrets: `DATA_ENCRYPTION_KEY`, `VAULT_ENABLED`, `VAULT_*`
+
+## 7. Hardening Checklist
+
+- Set `JWT_AUTO_GENERATE_KEYS=false` and provide managed keys.
+- Set strong values for service tokens and context signing keys.
+- Restrict CORS origins (`CORS_ORIGINS`) and enable secure cookies in TLS environments.
+- Configure allowlists and `TRUST_PROXY_HEADERS` correctly behind reverse proxies.
+- Move secrets to Vault or equivalent managed secret stores.
+- Use Redis-backed rate limiting in shared/multi-instance setups.
+- Define backup/restore procedures for Postgres before broader rollout.
+
+## 8. Common Troubleshooting
+
+| Symptom | Likely Cause | Action |
+| --- | --- | --- |
+| `403` on API actions | Missing permission or wrong active scope | Verify user permissions, group membership, and selected API key |
+| No telemetry data | Token mismatch or collector misconfiguration | Validate `x-otlp-token`, endpoint, and collector exporter config |
+| Grafana proxy unauthorized | Missing UI session/auth mismatch | Sign in via UI first; verify auth and proxy configuration |
+| RCA jobs fail/hang | BeCertain unavailable or no usable signal | Check service health/logs and ensure dataset has enough volume |
+| Alert test fails | No enabled channels or misconfigured integration | Enable channels and validate credentials/config |
+| Grafana Proxy 500 | This means the proxy can't communicate with either Be Observant or Grafana and is an IP drift, restart the grafana proxy server |
+
+## 9. Helpful Links
+
+- README: [README.md](README.md)
+- Environment reference: [.env.example](.env.example)
+- Issues: https://github.com/observantio/beobservant/issues
+- Repository: https://github.com/observantio/beobservant

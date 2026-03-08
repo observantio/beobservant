@@ -7,7 +7,6 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """
 
 import os
-import asyncio
 import httpx
 
 os.environ.setdefault('DATABASE_URL', 'postgresql://test:test@localhost/testdb')
@@ -17,9 +16,7 @@ os.environ.setdefault('CORS_ORIGINS', 'http://localhost')
 from tests._env import ensure_test_env
 ensure_test_env()
 
-from models.observability.loki_models import LogQuery
 from services.loki_service import LokiService
-from models.observability.loki_models import LogLabelValuesResponse, LogLabelsResponse, LogResponse
 
 
 class FakeResponse:

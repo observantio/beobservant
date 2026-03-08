@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from config import config
-from db_models import GrafanaFolder, Group
+from db_models import GrafanaFolder
 from models.grafana.grafana_folder_models import Folder
 from services.grafana.grafana_service import GrafanaAPIError
 

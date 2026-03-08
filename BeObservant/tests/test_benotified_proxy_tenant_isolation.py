@@ -11,9 +11,8 @@ from tests._env import ensure_test_env
 ensure_test_env()
 
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import Response
 from starlette.requests import Request
-from types import SimpleNamespace
 
 from models.access.auth_models import TokenData, Role
 from services.benotified_proxy_service import BeNotifiedProxyService

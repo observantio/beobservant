@@ -161,7 +161,8 @@ class ConfigSecurityTests(unittest.TestCase):
             "VAULT_ADDR": "http://vault:8200",
             "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/beobservant",
         }, clear=False):
-            import types, sys
+            import types
+            import sys
             fake = types.SimpleNamespace(VaultSecretProvider=FakeVaultProvider, VaultClientError=Exception)
             sys.modules['services.secrets.vault_client'] = fake
             module = None

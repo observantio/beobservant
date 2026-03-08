@@ -15,7 +15,6 @@ import httpx
 from models.observability.agent_models import AgentHeartbeat, AgentInfo
 
 from services.agent.helpers import (
-    make_agent_id,
     update_agent_registry,
     extract_metrics_count,
     query_key_activity,

@@ -306,19 +306,19 @@ If you are new to the rule editor, start from a known-good template, then tune e
 
 ## What The UI Gives An Operator
 
-### Dashboard
+#### Dashboard
 
-Shows platform health, active alerts, log volume, dashboard count, silence count, datasource count, and service status.
+Shows platform health, active alerts, log volume, dashboard count, silence count, datasource count, and service status. At this stage, if you are using OIDC, you will be asked to provide a backup local password, incase the business wishes to switch to local authentication methods. Note, the dashboard components are draggable to be reorder based on the developer's experience and they can wish to swtich the dark/light theme with ease.
 
-### Logs
+#### Logs
 
-Provides label discovery, builder-mode filters, raw LogQL, log volume views, result browsing, and quick filters.
+Provides label discovery, builder-mode filters, raw LogQL, log volume views, result browsing, and quick filters. We recommend using the quick filters provided to do text searches and see the log volumes over the past time to 
 
-### Traces
+#### Traces
 
 Provides Tempo-backed trace exploration, direct trace lookup, and a graph view for comparing selected traces and service relationships.
 
-### Alert Manager
+#### Alert Manager
 
 Provides:
 
@@ -329,27 +329,27 @@ Provides:
 - Rule testing.
 - Hidden/shared object handling.
 
-### Incidents
+#### Incidents
 
 Provides a board-driven view of operational incidents with assignment, notes, status changes, and Jira integration.
 
-### API Keys
+#### API Keys
 
 Provides tenant and product scoping, OTLP token management, key sharing with users and groups, token regeneration, and a downloadable starter OTel collector configuration.
 
-### Users And Groups
+#### Users And Groups
 
 Provides user creation, role and permission management, group-based permission inheritance, temporary password reset flows, and membership administration.
 
-### Audit And Compliance
+#### Audit And Compliance
 
 Provides searchable audit history with filters, detail inspection, and CSV export for administrative review.
 
-### Grafana
+#### Grafana
 
 Provides controlled management of dashboards, folders, and datasources, plus a secure hand-off into the Grafana UI through the auth proxy.
 
-### RCA
+#### RCA
 
 Provides job creation, queue monitoring, historical report lookup, ranked root causes, anomalies, topology, causal views, and forecast/SLO views.
 
