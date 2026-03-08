@@ -17,6 +17,7 @@ from ipaddress import ip_address, ip_network
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.exc import SQLAlchemyError
 
 from config import config
 from database import get_db_session
@@ -61,11 +62,11 @@ async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
             current_user=current_user,
             default_org_id=default_org_id,
         )
-    except Exception:
+    except SQLAlchemyError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to resolve tenant scope",
-        )
+        ) from exc
 
     if candidate_org_id not in allowed_org_ids:
         raise HTTPException(
@@ -79,11 +80,11 @@ async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
             org_id=candidate_org_id,
             tenant_id=current_user.tenant_id,
         )
-    except Exception:
+    except SQLAlchemyError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to resolve tenant scope",
-        )
+        ) from exc
 
     if conflict:
         raise HTTPException(
@@ -196,12 +197,12 @@ def _parse_ip_allowlist(allowlist: str | None) -> list:
                 ip = ip_address(entry)
                 suffix = 32 if ip.version == 4 else 128
                 networks.append(ip_network(f"{entry}/{suffix}", strict=False))
-        except ValueError:
+        except ValueError as exc:
             logger.error("Invalid IP allowlist entry %r — failing closed", entry)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied: server misconfiguration",
-            )
+            ) from exc
     return networks
 
 
@@ -220,11 +221,11 @@ def enforce_ip_allowlist(request: Request, allowlist: str | None, *, scope: str)
     client = client_ip(request)
     try:
         client_addr = ip_address(client)
-    except ValueError:
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Access denied for {scope}: invalid client IP",
-        )
+        ) from exc
 
     if any(client_addr in network for network in networks):
         return
@@ -301,12 +302,12 @@ def get_current_user(
     if isinstance(token_data, dict):
         try:
             token_data = TokenData(**token_data)
-        except Exception:
+        except (TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Your session has expired or your token is invalid. Let's get you a new one.",
                 headers={"WWW-Authenticate": "Bearer"},
-            )
+            ) from exc
 
     if getattr(token_data, "is_mfa_setup", False):
         raise HTTPException(
@@ -328,7 +329,14 @@ def get_current_user(
 
     live_group_ids = getattr(user, "group_ids", None)
     if isinstance(live_group_ids, list):
-        token_data.group_ids = [str(gid) for gid in live_group_ids if str(gid).strip()]
+        source_group_ids = live_group_ids
+    elif isinstance(live_group_ids, tuple):
+        source_group_ids = list(live_group_ids)
+    elif isinstance(live_group_ids, set):
+        source_group_ids = list(live_group_ids)
+    else:
+        source_group_ids = []
+    token_data.group_ids = [str(gid) for gid in source_group_ids if str(gid).strip()]
 
     enforce_rate_limit(
         key=f"user:{token_data.user_id}",
@@ -361,12 +369,12 @@ def get_current_user_or_mfa_setup(
     if isinstance(token_data, dict):
         try:
             token_data = TokenData(**token_data)
-        except Exception:
+        except (TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Your session has expired or your token is invalid. Let's get you a new one.",
                 headers={"WWW-Authenticate": "Bearer"},
-            )
+            ) from exc
 
     if getattr(token_data, "is_mfa_setup", False):
         user = auth_service.get_user_by_id(token_data.user_id)

@@ -37,7 +37,7 @@ def cpu_metrics(proc: psutil.Process) -> Dict[str, Any]:
             "threads": num_threads,
             "frequency_mhz": None,
         }
-    except Exception as e:
+    except psutil.Error as e:
         logger.error(f"Error getting CPU metrics: {e}")
         return _fallback({
             "utilization": 0,
@@ -60,7 +60,7 @@ def memory_metrics(proc: psutil.Process) -> Dict[str, Any]:
             "vms_mb": round(vms_mb, 2),
             "utilization": round(mem_percent, 2),
         }
-    except Exception as e:
+    except psutil.Error as e:
         logger.error(f"Error getting memory metrics: {e}")
         return _fallback({
             "rss_mb": 0,
@@ -79,7 +79,7 @@ def disk_metrics(proc: psutil.Process) -> Dict[str, Any]:
             "read_count": io_counters.read_count,
             "write_count": io_counters.write_count,
         }
-    except Exception as e:
+    except psutil.Error as e:
         logger.error(f"Error getting I/O metrics: {e}")
         return _fallback({
             "read_mb": 0,
@@ -104,7 +104,7 @@ def network_metrics(proc: psutil.Process) -> Dict[str, Any]:
             "time_wait": status_counts.get("TIME_WAIT", 0),
             "close_wait": status_counts.get("CLOSE_WAIT", 0),
         }
-    except Exception as e:
+    except psutil.Error as e:
         logger.error(f"Error getting network metrics: {e}")
         return _fallback({
             "total_connections": 0,

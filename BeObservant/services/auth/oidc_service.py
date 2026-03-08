@@ -75,14 +75,14 @@ class OIDCService:
     def close(self) -> None:
         try:
             self._http.close()
-        except Exception:
+        except RuntimeError:
             pass
 
         loop = self._bg_loop
         if loop and loop.is_running():
             try:
                 loop.call_soon_threadsafe(loop.stop)
-            except Exception:
+            except RuntimeError:
                 pass
 
     def is_enabled(self) -> bool:
@@ -238,7 +238,7 @@ class OIDCService:
         except jwt.PyJWTError:
             logger.warning("OIDC token validation failed")
             return None
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             logger.error("OIDC token validation error")
             return None
 
@@ -260,7 +260,7 @@ class OIDCService:
             resp.raise_for_status()
             data = resp.json()
             return data if isinstance(data, dict) else None
-        except Exception:
+        except (httpx.HTTPError, RuntimeError, ValueError):
             logger.warning("OIDC userinfo fetch failed")
             return None
 
@@ -382,7 +382,7 @@ class OIDCService:
             self._bg_thread = t
             t.start()
             self._bg_ready.wait()
-            return self._bg_loop 
+            return self._bg_loop
 
     def _run_async(self, coro: Coroutine[Any, Any, Any]):
         if self._in_event_loop():

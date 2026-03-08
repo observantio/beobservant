@@ -112,4 +112,3 @@ async def alertmanager_proxy(
         require_api_key=is_mutating(request.method),
         audit_action="alertmanager.proxy",
     )
-

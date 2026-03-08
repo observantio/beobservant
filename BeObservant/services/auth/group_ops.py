@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
-from typing import Optional, List, Set, Tuple, Iterable
+from typing import List, Optional, Set, Tuple
 
 import httpx
 from fastapi import HTTPException, status
@@ -24,10 +24,17 @@ from database import get_db_session
 from db_models import GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, Permission, User
 from models.access.group_models import GroupCreate, GroupUpdate, Group as GroupSchema
 from models.access.auth_models import Role
+from services.auth.delegation import (
+    is_admin_actor as _is_admin_actor,
+    normalize_permissions as _normalize_permissions,
+    permission_is_admin_only as _permission_is_admin_only,
+    require_actor as _require_actor,
+    resolve_actor_permissions as _resolve_actor_permissions,
+    role_rank as _shared_role_rank,
+    role_to_text as _role_to_text,
+)
 
 MUTABLE_GROUP_FIELDS = {"name", "description", "is_active"}
-ADMIN_PERMISSION_PATTERNS = ("manage:",)
-ADMIN_ONLY_PERMISSION_EXACT = {"update:user_permissions", "update:group_permissions"}
 
 ROLE_RANK = {
     Role.VIEWER.value: 0,
@@ -42,45 +49,8 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _role_to_text(value) -> str:
-    if isinstance(value, Role):
-        return value.value
-    normalized = str(value or "").strip().lower()
-    if normalized.startswith("role."):
-        normalized = normalized.split(".", 1)[1]
-    return normalized
-
-
 def _role_rank(value) -> int:
-    return ROLE_RANK.get(_role_to_text(value), 0)
-
-
-def _is_admin_actor(*, actor_role: Optional[str], actor_is_superuser: bool) -> bool:
-    return bool(actor_is_superuser or _role_to_text(actor_role) == Role.ADMIN.value)
-
-
-def _permission_is_admin_only(name: str) -> bool:
-    perm = str(name or "").strip()
-    if not perm:
-        return False
-    if perm in ADMIN_ONLY_PERMISSION_EXACT:
-        return True
-    if any(perm.startswith(prefix) for prefix in ADMIN_PERMISSION_PATTERNS):
-        return True
-    return perm.startswith("update:") and perm.endswith("permissions")
-
-
-def _normalize_permissions(values: Optional[Iterable[str]]) -> Set[str]:
-    return {str(v).strip() for v in (values or []) if str(v).strip()}
-
-
-def _require_actor(actor_user_id: Optional[str], *, purpose: str) -> str:
-    if actor_user_id:
-        return actor_user_id
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Actor context is required for {purpose}",
-    )
+    return _shared_role_rank(value, ROLE_RANK)
 
 
 def _get_group(db, *, group_id: str, tenant_id: str, load_members: bool = False) -> Optional[Group]:
@@ -108,25 +78,6 @@ def _can_access_group(
     if not actor_id:
         return False
     return any(str(getattr(member, "id", "")).strip() == actor_id for member in (group.members or []))
-
-
-def _resolve_actor_permissions(service, *, db, actor_user_id: str, tenant_id: str, actor_permissions: Optional[List[str]]) -> Set[str]:
-    provided = _normalize_permissions(actor_permissions)
-    if provided:
-        return provided
-
-    actor = (
-        db.query(User)
-        .options(
-            joinedload(User.groups).joinedload(Group.permissions),
-            joinedload(User.permissions),
-        )
-        .filter_by(id=actor_user_id, tenant_id=tenant_id)
-        .first()
-    )
-    if not actor:
-        return set()
-    return set(service._collect_permissions(actor))
 
 
 def _get_actor_context(
@@ -168,7 +119,6 @@ def _enforce_permission_delegation(
     actor_is_admin = _is_admin_actor(actor_role=actor_role, actor_is_superuser=False)
 
     if not requested_permissions.issubset(actor_permissions):
-        forbidden = sorted(requested_permissions - actor_permissions)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can't set group permissions higher than your own",

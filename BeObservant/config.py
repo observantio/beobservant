@@ -276,7 +276,7 @@ class Config:
 
         try:
             self._load_vault_secrets()
-        except Exception as exc:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             if self.VAULT_ENABLED and (self.IS_PRODUCTION or self.VAULT_FAIL_ON_MISSING):
                 raise
             logger.warning("Vault not available or misconfigured; continuing with environment variables: %s", exc)
@@ -351,7 +351,7 @@ class Config:
         for sk in secret_keys:
             try:
                 val = provider.get(sk)
-            except Exception:
+            except (OSError, RuntimeError, TypeError, ValueError):
                 val = None
             if val:
                 setattr(self, sk, val)
@@ -363,7 +363,7 @@ class Config:
             return val
         try:
             return self._secret_provider.get(key)
-        except Exception:
+        except (OSError, RuntimeError, TypeError, ValueError):
             return None
 
     def _apply_security_defaults(self) -> None:
@@ -427,7 +427,7 @@ class Config:
         if self.DATA_ENCRYPTION_KEY:
             try:
                 Fernet(self.DATA_ENCRYPTION_KEY)
-            except Exception as exc:
+            except (TypeError, ValueError) as exc:
                 raise ValueError("DATA_ENCRYPTION_KEY must be a valid Fernet key") from exc
 
         wildcard_enabled = any(origin.strip() == "*" for origin in self.CORS_ORIGINS)

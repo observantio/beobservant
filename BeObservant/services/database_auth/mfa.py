@@ -32,8 +32,8 @@ def _get_fernet(service) -> Optional[Fernet]:
         return None
     try:
         return Fernet(cfg.DATA_ENCRYPTION_KEY)
-    except (TypeError, ValueError):
-        raise ValueError("Invalid DATA_ENCRYPTION_KEY format")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid DATA_ENCRYPTION_KEY format") from exc
 
 
 def _encrypt_mfa_secret(service, secret: str) -> str:

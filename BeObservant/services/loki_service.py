@@ -116,7 +116,7 @@ class LokiService:
                 "streams": len(result),
                 "chunks": 0,
             })
-        except Exception as e:
+        except (KeyError, TypeError, ValueError) as e:
             logger.error("Error calculating stats: %s", e)
             return None
 
@@ -330,7 +330,7 @@ class LokiService:
         try:
             values = await self._labels_cache.get_or_set(cache_key, _fetch, self._cache_ttl)
             return LogLabelValuesResponse(status="success", data=values or [])
-        except Exception as e:
+        except (httpx.HTTPError, OSError, RuntimeError, ValueError) as e:
             logger.error("Error fetching label values for %s: %s", label, e)
             return LogLabelValuesResponse(status="error", data=[])
 

@@ -101,6 +101,6 @@ def list_all_permissions() -> List[Dict[str, Any]]:
 
 def _safe_role(raw_role: Optional[str]) -> Role:
     try:
-        return Role(raw_role) 
-    except Exception:
+        return Role(raw_role)
+    except ValueError:
         return Role.USER

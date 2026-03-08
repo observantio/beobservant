@@ -6,6 +6,7 @@ from typing import Any, Dict, Mapping, Optional, Union
 import httpx
 
 from models.access.auth_models import Token
+from services.database_auth.shared import sync_active_user_from_claims
 
 MFARequired = Dict[str, bool]
 AuthResult = Optional[Union[Token, MFARequired]]
@@ -87,11 +88,8 @@ def login(service, username: str, password: str, mfa_code: Optional[str] = None)
             expected_nonce="",
             enforce_nonce=False,
         )
-        if not claims:
-            return None
-
-        user = service._sync_user_from_oidc_claims(claims)
-        if not user or not getattr(user, "is_active", False):
+        user = sync_active_user_from_claims(service, claims)
+        if user is None:
             return None
 
         return service.create_access_token(user)

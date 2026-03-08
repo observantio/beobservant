@@ -18,6 +18,7 @@ import uvicorn
 from fastapi import FastAPI
 
 import config as gw_config
+from models.exceptions import DatabaseUnavailable
 from routers import router as gateway_router
 from services.gateway_service import GatewayAuthService
 
@@ -29,9 +30,11 @@ logging.basicConfig(
 logger = logging.getLogger("gateway_auth")
 
 service = GatewayAuthService()
+STARTUP_CHECK_ERRORS = (RuntimeError, DatabaseUnavailable)
+
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     logger.info("Starting standalone gateway auth service")
 
     max_retries = gw_config.GATEWAY_STARTUP_RETRIES
@@ -51,12 +54,19 @@ async def lifespan(app: FastAPI):
                     logger.warning(
                         "GATEWAY_STATUS_OTLP_TOKEN is not set; using synthetic startup probe token to verify auth API connectivity"
                     )
-                service._fetch_org_from_api(probe_token)
+                service.probe_auth_api(probe_token)
             logger.info("Startup connectivity checks passed")
             break
-        except Exception as exc:
+        except STARTUP_CHECK_ERRORS as exc:
             attempt += 1
             if attempt >= max_retries:
+                if gw_config.GATEWAY_STARTUP_CHECK_MODE == "warn":
+                    logger.warning(
+                        "Gateway startup check failed after %d attempts; continuing in warn mode: %s",
+                        attempt,
+                        exc,
+                    )
+                    break
                 logger.exception("Gateway startup check failed after %d attempts: %s", attempt, exc)
                 raise
             logger.warning(
@@ -84,6 +94,7 @@ app.include_router(gateway_router)
 @app.get("/health")
 async def health_root():
     return service.health()
+
 
 if __name__ == "__main__":
     uvicorn_kwargs: dict = {

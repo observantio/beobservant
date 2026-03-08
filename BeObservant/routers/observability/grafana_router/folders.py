@@ -25,9 +25,9 @@ from models.observability.grafana_request_models import (
     GrafanaHiddenToggleRequest,
     GrafanaUpdateFolderRequest,
 )
-from services.grafana.route_payloads import is_admin_user, user_group_ids, validate_visibility
+from services.grafana.route_payloads import validate_visibility
 
-from .shared import proxy, router, rtp
+from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
 
 
 @router.get("/folders", response_model=List[Folder])
@@ -36,13 +36,14 @@ async def get_folders(
     current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ):
+    user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     return await proxy.get_folders(
         db=db,
-        user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id,
-        group_ids=user_group_ids(current_user),
+        user_id=user_id,
+        tenant_id=tenant_id,
+        group_ids=group_ids,
         show_hidden=show_hidden,
-        is_admin=is_admin_user(current_user),
+        is_admin=is_admin,
     )
 
 
@@ -52,13 +53,14 @@ async def get_folder_by_uid(
     current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ):
+    user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     folder = await proxy.get_folder(
         db=db,
         uid=uid,
-        user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id,
-        group_ids=user_group_ids(current_user),
-        is_admin=is_admin_user(current_user),
+        user_id=user_id,
+        tenant_id=tenant_id,
+        group_ids=group_ids,
+        is_admin=is_admin,
     )
     if not folder:
         raise HTTPException(status_code=404, detail=f"Folder {uid} not found or access denied")
@@ -75,16 +77,17 @@ async def create_folder(
     db: Session = Depends(get_db),
 ):
     validate_visibility(visibility)
+    user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     result = await proxy.create_folder(
         db=db,
         title=payload.title,
-        user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id,
-        group_ids=user_group_ids(current_user),
+        user_id=user_id,
+        tenant_id=tenant_id,
+        group_ids=group_ids,
         visibility=visibility,
         shared_group_ids=shared_group_ids or [],
         allow_dashboard_writes=payload.allow_dashboard_writes,
-        is_admin=is_admin_user(current_user),
+        is_admin=is_admin,
     )
     if not result:
         raise HTTPException(status_code=500, detail="Failed to create folder")
@@ -98,13 +101,14 @@ async def delete_folder(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_FOLDERS, "grafana")),
     db: Session = Depends(get_db),
 ):
+    user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     ok = await proxy.delete_folder(
         db=db,
         uid=uid,
-        user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id,
-        group_ids=user_group_ids(current_user),
-        is_admin=is_admin_user(current_user),
+        user_id=user_id,
+        tenant_id=tenant_id,
+        group_ids=group_ids,
+        is_admin=is_admin,
     )
     if not ok:
         raise HTTPException(status_code=404, detail=f"Folder {uid} not found or delete failed")
@@ -122,17 +126,18 @@ async def update_folder(
     db: Session = Depends(get_db),
 ):
     validate_visibility(visibility)
+    user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     result = await proxy.update_folder(
         db=db,
         uid=uid,
-        user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id,
-        group_ids=user_group_ids(current_user),
+        user_id=user_id,
+        tenant_id=tenant_id,
+        group_ids=group_ids,
         title=payload.title,
         visibility=visibility,
         shared_group_ids=shared_group_ids,
         allow_dashboard_writes=payload.allow_dashboard_writes,
-        is_admin=is_admin_user(current_user),
+        is_admin=is_admin,
     )
     if not result:
         raise HTTPException(status_code=404, detail=f"Folder {uid} not found or update failed")
@@ -148,12 +153,13 @@ async def hide_folder(
     ),
     db: Session = Depends(get_db),
 ):
+    user_id, tenant_id = hidden_toggle_context(current_user)
     ok = await rtp(
         proxy.toggle_folder_hidden,
         db=db,
         uid=uid,
-        user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id,
+        user_id=user_id,
+        tenant_id=tenant_id,
         hidden=payload.hidden,
     )
     if not ok:

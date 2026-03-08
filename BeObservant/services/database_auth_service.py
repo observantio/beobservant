@@ -536,7 +536,7 @@ class DatabaseAuthService:
             actor_permissions=actor_permissions,
             actor_is_superuser=actor_is_superuser,
         )
-        
+
     def _log_audit(
         self,
         db: Session,

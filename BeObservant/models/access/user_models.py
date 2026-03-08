@@ -1,22 +1,15 @@
-"""
-This module defines Pydantic models for user-related data structures used in the API layer.
-
-Copyright (c) 2026 Stefan Kumarasinghe
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-"""
-from typing import List, Optional
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 import re
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from config import config
-from .auth_models import Role, Permission
 from .api_key_models import ApiKey
+from .auth_models import Permission, Role
 
 _USERNAME_RE = re.compile(r'^[a-z0-9._-]{3,50}$')
+
 
 def _normalize_username(v: str, *, full_check: bool = True) -> str:
     if v is None:
@@ -43,6 +36,7 @@ class UserBase(BaseModel):
     is_active: bool = True
 
     @field_validator('username', mode='before')
+    @classmethod
     def normalize_username(cls, v):
         return _normalize_username(v, full_check=True)
 
@@ -61,6 +55,7 @@ class UserUpdate(BaseModel):
     must_setup_mfa: Optional[bool] = None
 
     @field_validator("username", mode="before")
+    @classmethod
     def normalize_update_username(cls, v):
         if v is None:
             return None
@@ -115,6 +110,7 @@ class LoginRequest(BaseModel):
     mfa_code: Optional[str] = None
 
     @field_validator('username', mode='before')
+    @classmethod
     def normalize_login_username(cls, v):
         return _normalize_username(v, full_check=False)
 
@@ -123,7 +119,9 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: Optional[str] = None
+
     @field_validator('username', mode='before')
+    @classmethod
     def normalize_register_username(cls, v):
         return _normalize_username(v, full_check=True)
 

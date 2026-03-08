@@ -58,7 +58,7 @@ if not config.SKIP_STARTUP_DB_INIT:
     logger.info("✓ Auth service initialized")
 
 
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
@@ -164,7 +164,7 @@ async def _upstream_reachable(base_url: str) -> bool:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
             response = await client.get(base_url)
             return 200 <= response.status_code < 500
-    except Exception:
+    except (httpx.HTTPError, asyncio.TimeoutError):
         return False
 
 

@@ -10,6 +10,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 from typing import Dict, List, Optional
 
+import httpx
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -17,10 +18,7 @@ from config import config
 from db_models import GrafanaFolder
 from models.grafana.grafana_folder_models import Folder
 from services.grafana.grafana_service import GrafanaAPIError
-
-
-def _group_id_strs(group_ids: List[str]) -> List[str]:
-    return [str(g) for g in (group_ids or [])]
+from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
 
 
 def _db_folder_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[GrafanaFolder]:
@@ -54,7 +52,7 @@ def check_folder_access(
     if folder.visibility == "tenant":
         return folder
     if folder.visibility == "group":
-        allowed = set(_group_id_strs(group_ids))
+        allowed = set(group_id_strs(group_ids))
         shared = {str(g.id) for g in (folder.shared_groups or [])}
         return folder if allowed.intersection(shared) else None
     return None
@@ -190,7 +188,7 @@ async def create_folder(
 
     try:
         created = await service.grafana_service.create_folder(title)
-    except Exception as exc:
+    except (GrafanaAPIError, httpx.HTTPError) as exc:
         service._raise_http_from_grafana_error(exc)
         return None
     if not created:
@@ -213,12 +211,8 @@ async def create_folder(
     if visibility == "group" and shared_group_ids:
         db_folder.shared_groups.extend(groups)
 
-    try:
-        db.add(db_folder)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    db.add(db_folder)
+    commit_session(db)
 
     return Folder.model_validate(_folder_payload(created, db_folder=db_folder, user_id=user_id))
 
@@ -248,12 +242,12 @@ async def update_folder(
     new_title = str(title or db_folder.title).strip()
     try:
         updated = await service.grafana_service.update_folder(uid, new_title)
-    except Exception as exc:
-        if isinstance(exc, GrafanaAPIError) and exc.status == 412:
+    except GrafanaAPIError as exc:
+        if exc.status == 412:
             raise HTTPException(
                 status_code=409,
                 detail="Folder changed by another request; reload folders and retry.",
-            )
+            ) from exc
         service._raise_http_from_grafana_error(exc)
         return None
     if not updated:
@@ -274,11 +268,7 @@ async def update_folder(
         else:
             db_folder.shared_groups.clear()
 
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    commit_session(db)
 
     return Folder.model_validate(_folder_payload(updated, db_folder=db_folder, user_id=user_id))
 
@@ -303,19 +293,15 @@ async def delete_folder(
 
     try:
         ok = await service.grafana_service.delete_folder(uid)
-    except Exception as exc:
+    except (GrafanaAPIError, httpx.HTTPError) as exc:
         service._raise_http_from_grafana_error(exc)
         return False
     if not ok:
         return False
 
     if db_folder:
-        try:
-            db.delete(db_folder)
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
+        db.delete(db_folder)
+        commit_session(db)
     return True
 
 
@@ -325,17 +311,6 @@ def toggle_folder_hidden(db: Session, uid: str, user_id: str, tenant_id: str, hi
         return False
     if hidden and str(getattr(db_folder, "created_by", "")) == str(user_id):
         raise HTTPException(status_code=400, detail="You cannot hide folders you own")
-    hidden_list = list(db_folder.hidden_by or [])
-    if hidden:
-        if user_id not in hidden_list:
-            hidden_list.append(user_id)
-    else:
-        if user_id in hidden_list:
-            hidden_list.remove(user_id)
-    db_folder.hidden_by = hidden_list
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    db_folder.hidden_by = update_hidden_members(db_folder.hidden_by, user_id, hidden)
+    commit_session(db)
     return True

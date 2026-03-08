@@ -40,6 +40,11 @@ def scope_context(current_user: TokenData) -> tuple[str, str, List[str], bool]:
     )
 
 
+def hidden_toggle_context(current_user: TokenData) -> tuple[str, str]:
+    user_id, tenant_id, _, _ = scope_context(current_user)
+    return user_id, tenant_id
+
+
 def dashboard_payload(payload: GrafanaDashboardPayloadRequest) -> dict:
     raw = payload.model_dump(exclude_none=True)
     return raw if isinstance(raw, dict) else {}

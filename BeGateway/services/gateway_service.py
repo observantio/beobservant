@@ -15,16 +15,16 @@ from ipaddress import ip_address, ip_network
 from typing import Optional
 from urllib.parse import quote
 
-
 import httpx
 from fastapi import HTTPException, Request, status
 
 import config as gw_config
+from models.exceptions import DatabaseUnavailable
 from .rate_limit import make_default_rate_limiter
 from .token_cache import make_token_cache
-from models.exceptions import DatabaseUnavailable
 
 logger = logging.getLogger(__name__)
+
 
 def _parse_networks(allowlist: str) -> list:
     networks = []
@@ -119,8 +119,8 @@ class GatewayAuthService:
         raw_ip = self._client_ip(request)
         try:
             addr = ip_address(raw_ip)
-        except ValueError:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid client IP")
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid client IP") from exc
 
         if not any(addr in net for net in self._networks):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Source IP not allowed")
@@ -167,9 +167,6 @@ class GatewayAuthService:
         except httpx.HTTPError as exc:
             logger.warning("Auth API HTTP transport failure: %s", type(exc).__name__)
             raise DatabaseUnavailable from exc
-        except Exception as exc:
-            logger.warning("Auth API request failed: %s", exc)
-            raise DatabaseUnavailable from exc
 
     def _fetch_org_from_api_legacy_query(self, token: str) -> Optional[str]:
         legacy_url = f"{self._auth_api_url}?token={quote(token)}"
@@ -185,9 +182,9 @@ class GatewayAuthService:
         except httpx.HTTPError as exc:
             logger.warning("Auth API legacy HTTP failure: %s", type(exc).__name__)
             raise DatabaseUnavailable from exc
-        except Exception as exc:
-            logger.warning("Auth API request failed: %s", exc)
-            raise DatabaseUnavailable from exc
+
+    def probe_auth_api(self, token: str) -> Optional[str]:
+        return self._fetch_org_from_api(token)
 
     def validate_otlp_token(self, token: str) -> Optional[str]:
         if not token:
@@ -207,7 +204,7 @@ class GatewayAuthService:
             if type(exc).__name__ == "DatabaseUnavailable":
                 raise exc
             logger.warning("Auth API fetch unexpected error", exc_info=True)
-            raise DatabaseUnavailable
+            raise DatabaseUnavailable from exc
 
         self._token_cache.set(token, org)
         return org

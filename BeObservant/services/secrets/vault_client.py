@@ -19,7 +19,7 @@ from typing import Callable, Dict, Optional, Tuple
 try:
     import hvac
     from hvac.exceptions import Forbidden, InvalidPath, VaultError
-except ImportError: 
+except ImportError:
     hvac = None
     Forbidden = Exception
     InvalidPath = Exception

@@ -35,9 +35,9 @@ def test_list_api_keys_hides_otlp_token_for_shared_user():
     other = svc.create_user(UserCreate(username='other', email='other@example.com', password='pw', full_name='Other'), tenant_id)
 
     created = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name='owner-key', key='org-owner'))
-    assert created.otlp_token  
+    assert created.otlp_token
 
-    
+
     svc.replace_api_key_shares(owner.id, tenant_id, created.id, [other.id], group_ids=[])
 
     keys_for_other = svc.list_api_keys(other.id)
@@ -120,7 +120,7 @@ def test_enabling_owned_key_updates_user_org_and_keeps_single_active_view():
     mine = svc.create_api_key(other.id, tenant_id, ApiKeyCreate(name='mine', key='org-mine-1'))
     svc.replace_api_key_shares(owner.id, tenant_id, shared_key.id, [other.id], group_ids=[])
 
-    
+
     svc.update_api_key(other.id, shared_key.id, ApiKeyUpdate(is_enabled=True))
     keys_after_shared = svc.list_api_keys(other.id)
     mine_after_shared = next(k for k in keys_after_shared if k.id == mine.id)
@@ -128,7 +128,7 @@ def test_enabling_owned_key_updates_user_org_and_keeps_single_active_view():
     assert mine_after_shared.is_enabled is False
     assert shared_after_shared.is_enabled is True
 
-    
+
     svc.update_api_key(other.id, mine.id, ApiKeyUpdate(is_enabled=True))
     keys_after_mine = svc.list_api_keys(other.id)
     mine_after_mine = next(k for k in keys_after_mine if k.id == mine.id)

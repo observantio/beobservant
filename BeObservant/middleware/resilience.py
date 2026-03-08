@@ -67,7 +67,7 @@ def with_retry(
             for attempt in range(max_retries + 1):
                 try:
                     return await func(*args, **kwargs)
-                except Exception as e:
+                except (httpx.HTTPError, asyncio.TimeoutError, OSError, RuntimeError, ValueError) as e:
                     if not retriable(e):
                         raise
 

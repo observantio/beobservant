@@ -7,7 +7,7 @@ from db_models import AuditLog
 from sqlalchemy import String
 
 from fastapi import Depends, HTTPException, status, Response
-    
+
 from config import config
 from models.access.auth_models import TokenData, Permission, Role, ROLE_PERMISSIONS
 from services.common.cookies import cookie_secure
@@ -34,7 +34,7 @@ def invalidate_grafana_proxy_auth_cache() -> None:
         from services.grafana.proxy_auth_ops import clear_proxy_auth_cache
 
         clear_proxy_auth_cache()
-    except Exception as exc:
+    except (AttributeError, ImportError) as exc:
         logger.warning("Failed to invalidate Grafana proxy auth cache: %s", exc)
 
 

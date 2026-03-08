@@ -318,9 +318,9 @@ def create_api_key(service, user_id: str, tenant_id: str, key_create: ApiKeyCrea
 
         try:
             db.flush()
-        except IntegrityError:
+        except IntegrityError as exc:
             db.rollback()
-            raise ValueError("API key value already exists in this tenant")
+            raise ValueError("API key value already exists in this tenant") from exc
 
         user.org_id = api_key.key
         user.updated_at = now

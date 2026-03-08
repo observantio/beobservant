@@ -84,9 +84,9 @@ async def oidc_authorize_url(request: Request, payload: OIDCAuthURLRequest):
             payload.code_challenge_method,
         )
         return OIDCAuthURLResponse(**session)
-    except Exception as exc:
+    except ValueError as exc:
         logger.error("Failed to build OIDC authorization URL: %s", exc)
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to initialize OIDC login")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to initialize OIDC login") from exc
 
 
 @router.post("/oidc/exchange", response_model=Token)
@@ -104,10 +104,10 @@ async def oidc_exchange_token(request: Request, payload: OIDCCodeExchangeRequest
             payload.code_verifier,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc) or "OIDC authentication failed")
-    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc) or "OIDC authentication failed") from exc
+    except (OSError, RuntimeError) as exc:
         logger.exception("OIDC exchange failed")
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "OIDC authentication failed")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "OIDC authentication failed") from exc
     if not token_or_challenge:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "OIDC authentication failed")
     if isinstance(token_or_challenge, dict) and token_or_challenge.get("mfa_setup_required"):
@@ -145,13 +145,10 @@ async def register(request: Request, register_request: RegisterRequest):
         ),
         tenant_id,
     )
-    try:
-        await notification_service.send_user_welcome_email(
-            recipient_email=user.email,
-            username=user.username,
-            full_name=user.full_name,
-            login_url=None,
-        )
-    except Exception as exc:
-        logger.warning("User welcome email skipped: %s", exc)
+    await notification_service.send_user_welcome_email(
+        recipient_email=user.email,
+        username=user.username,
+        full_name=user.full_name,
+        login_url=None,
+    )
     return await rtp(auth_service.build_user_response, user, role_permission_strings(user.role))

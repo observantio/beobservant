@@ -18,7 +18,7 @@ try:
     redis: object
 except ImportError:
     redis = None
-    
+
 def _sanitize_redis_url(url: str) -> str:
     try:
         p = urlparse(url)

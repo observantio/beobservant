@@ -30,7 +30,7 @@ from services.auth.helper import (
     role_permission_strings,
 )
 
-from .shared import USER_NOT_FOUND, logger, notification_service, router, rtp
+from .shared import USER_NOT_FOUND, notification_service, router, rtp
 
 
 @router.get("/me", response_model=UserResponse)
@@ -97,15 +97,12 @@ async def create_user(
         list(perms_check(current_user)),
         bool(getattr(current_user, "is_superuser", False)),
     )
-    try:
-        await notification_service.send_user_welcome_email(
-            recipient_email=user.email,
-            username=user.username,
-            full_name=user.full_name,
-            login_url=None,
-        )
-    except Exception as exc:
-        logger.warning("User welcome email skipped: %s", exc)
+    await notification_service.send_user_welcome_email(
+        recipient_email=user.email,
+        username=user.username,
+        full_name=user.full_name,
+        login_url=None,
+    )
     invalidate_grafana_proxy_auth_cache()
     return await rtp(auth_service.build_user_response, user, role_permission_strings(user.role))
 
@@ -179,15 +176,12 @@ async def reset_user_password_temp(
     temp_pw = result.get("temporary_password", "")
     email_sent = False
     if result.get("target_email"):
-        try:
-            email_sent = await notification_service.send_temporary_password_email(
-                recipient_email=result["target_email"],
-                username=result.get("target_username") or target.username,
-                temporary_password=temp_pw,
-                login_url=None,
-            )
-        except Exception as exc:
-            logger.warning("Temporary password email skipped: %s", exc)
+        email_sent = await notification_service.send_temporary_password_email(
+            recipient_email=result["target_email"],
+            username=result.get("target_username") or target.username,
+            temporary_password=temp_pw,
+            login_url=None,
+        )
     return TempPasswordResetResponse(
         temporary_password=temp_pw,
         email_sent=bool(email_sent),

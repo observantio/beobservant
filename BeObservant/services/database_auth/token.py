@@ -14,6 +14,7 @@ from typing import Optional, Set
 
 from models.access.auth_models import Role, TokenData
 from services.auth.auth_ops import decode_token as decode_token_op
+from services.database_auth.shared import sync_active_user_from_claims
 
 def build_token_data_for_user(service, user) -> TokenData:
     role = _safe_role(getattr(user, "role", None))
@@ -38,11 +39,8 @@ def decode_token(service, token: str) -> Optional[TokenData]:
         return None
 
     claims = service.oidc_service.verify_access_token(token)
-    if not claims:
-        return None
-
-    user = service._sync_user_from_oidc_claims(claims)
-    if not user or not getattr(user, "is_active", False):
+    user = sync_active_user_from_claims(service, claims)
+    if user is None:
         return None
 
     token_data = build_token_data_for_user(service, user)
@@ -57,8 +55,8 @@ def decode_token(service, token: str) -> Optional[TokenData]:
 
 def _safe_role(raw_role: Optional[str]) -> Role:
     try:
-        return Role(raw_role) 
-    except Exception:
+        return Role(raw_role)
+    except ValueError:
         return Role.USER
 
 def _known_permission_names(service) -> Set[str]:

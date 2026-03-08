@@ -102,7 +102,7 @@ class TempoService:
                                 processes={},
                                 warnings=["Trace details unavailable"],
                             )
-                        except Exception:
+                        except (httpx.HTTPError, OSError, RuntimeError, ValueError):
                             logger.warning("Failed to fetch trace %s", trace_id)
                             return Trace(
                                 traceID=trace_id,
@@ -212,7 +212,7 @@ class TempoService:
                             for span in trace.spans
                             if span.service_name
                         ]
-                    except Exception as e:
+                    except (httpx.HTTPError, OSError, RuntimeError, ValueError) as e:
                         logger.warning("Failed to infer services from traces: %s", e)
 
                 return sorted(set(filter(None, services))) or None
@@ -255,6 +255,6 @@ class TempoService:
                 fetch_full_traces=False,
             )
             return sorted({span.operation_name for trace in response.data for span in trace.spans})
-        except Exception as e:
+        except (httpx.HTTPError, OSError, RuntimeError, ValueError) as e:
             logger.warning("Failed to fetch operations for %s: %s", service, e)
             return []

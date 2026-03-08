@@ -146,7 +146,7 @@ async def security_headers_middleware(request: Request, call_next):
                         ip_address=request_ip,
                         user_agent=user_agent,
                     )
-    except Exception:
+    except (ValueError, RuntimeError):
         logger.debug("Skipping middleware audit write for request %s", request.url.path, exc_info=True)
 
     _set_header_if_missing(response.headers, "X-Content-Type-Options", "nosniff")

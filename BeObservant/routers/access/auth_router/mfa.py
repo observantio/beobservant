@@ -28,8 +28,8 @@ from .shared import USER_NOT_FOUND, router, rtp
 async def mfa_enroll(current_user: TokenData = Depends(get_current_user_or_mfa_setup)):
     try:
         return TotpEnrollResponse(**(await rtp(auth_service.enroll_totp, current_user.user_id)))
-    except Exception:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unable to enroll MFA")
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unable to enroll MFA") from exc
 
 
 @router.post("/mfa/verify", response_model=RecoveryCodesResponse)
@@ -46,9 +46,7 @@ async def mfa_verify(payload: MfaVerifyRequest, current_user: TokenData = Depend
             if "Invalid TOTP code" in msg
             else msg
         )
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail)
-    except Exception:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unable to verify MFA code")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail) from exc
 
 
 @router.post("/mfa/disable")

@@ -11,6 +11,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 import uuid
 from typing import Any, Dict, List, Optional
 
+import httpx
 from fastapi import HTTPException
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from db_models import GrafanaDashboard, GrafanaFolder, Group
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardSearchResult, DashboardUpdate
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.folder_ops import check_folder_access, is_folder_accessible
+from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
 
 
 def _cap(limit: Optional[int], offset: int) -> tuple[int, int]:
@@ -32,12 +34,8 @@ def _normalize_title(title: Optional[str]) -> str:
     return str(title or "").strip().lower()
 
 
-def _group_id_strs(group_ids: List[str]) -> List[str]:
-    return [str(g) for g in (group_ids or [])]
-
-
 def _visible_scope_filter(user_id: str, group_ids: List[str]):
-    gids = _group_id_strs(group_ids)
+    gids = group_id_strs(group_ids)
     conds = [GrafanaDashboard.created_by == user_id, GrafanaDashboard.visibility == "tenant"]
     if gids:
         conds.append(
@@ -162,7 +160,7 @@ def check_dashboard_access(
     if dashboard.visibility == "tenant":
         return dashboard
     if dashboard.visibility == "group":
-        allowed = set(_group_id_strs(group_ids))
+        allowed = set(group_id_strs(group_ids))
         shared = {str(g.id) for g in (dashboard.shared_groups or [])}
         return dashboard if allowed.intersection(shared) else None
     return None
@@ -299,7 +297,7 @@ async def search_dashboards(
     exclude_foldered_dashboards: bool = False,
 ) -> List[DashboardSearchResult]:
     capped_limit, capped_offset = _cap(limit, offset)
-    gids = _group_id_strs(group_ids)
+    gids = group_id_strs(group_ids)
     team_id_s = str(team_id) if team_id is not None else None
     folder_id_set = {int(fid) for fid in (folder_ids or []) if fid is not None}
     folder_uid_set = {str(fu) for fu in (folder_uids or []) if fu}
@@ -345,8 +343,6 @@ async def search_dashboards(
         folder_uids=list(folder_uid_set) or None,
         dashboard_uids=list(dashboard_uid_set) or None,
     )
-    # Grafana search can occasionally return duplicated UIDs (e.g. transient folder indexing);
-    # keep a single entry per UID and prefer the one that carries folder context.
     deduped: Dict[str, Any] = {}
     for d in all_dashboards:
         uid_val = str(getattr(d, "uid", "") or "")
@@ -402,7 +398,6 @@ async def search_dashboards(
         )
         if _is_general_folder_id(folder_id):
             if db_dash and db_dash.folder_uid:
-                # Dashboard moved back to General; clear stale folder mapping.
                 db_dash.folder_uid = None
                 folder_updates.append(db_dash)
             folder_uid = None
@@ -422,7 +417,7 @@ async def search_dashboards(
                 .first()
             )
             folder_uid = getattr(folder_by_id, "grafana_uid", None)
-        # Fail closed: if Grafana says dashboard is in a folder but we cannot map folder scope, do not leak it.
+
         if not folder_uid and _is_non_general_folder_id(folder_id):
             continue
         if db_dash and folder_uid and db_dash.folder_uid != folder_uid:
@@ -444,11 +439,7 @@ async def search_dashboards(
         out.append(_to_search_result(d, db_dash=db_dash, user_id=user_id))
 
     if folder_updates:
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
+        commit_session(db)
 
     return out[capped_offset: capped_offset + capped_limit]
 
@@ -462,29 +453,21 @@ async def get_dashboard(
     group_ids: List[str],
     is_admin: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    gids = _group_id_strs(group_ids)
+    gids = group_id_strs(group_ids)
     db_dashboard = _db_dashboard_by_uid(db, tenant_id, uid)
     if not db_dashboard:
         return None
     result = await service.grafana_service.get_dashboard(uid)
     if not result:
-        try:
-            db.delete(db_dashboard)
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
+        db.delete(db_dashboard)
+        commit_session(db)
         return None
     meta = result.get("meta") or {}
     folder_uid = meta.get("folderUid") or db_dashboard.folder_uid
     folder_id = meta.get("folderId")
     if _is_general_folder_id(folder_id) and db_dashboard.folder_uid:
         db_dashboard.folder_uid = None
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
+        commit_session(db)
         folder_uid = None
     if not folder_uid and _is_non_general_folder_id(folder_id):
         folder_by_id = (
@@ -528,7 +511,7 @@ async def create_dashboard(
     actor_permissions: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     requested_title = str(getattr(getattr(dashboard_create, "dashboard", None), "title", "") or "").strip()
-    gids = _group_id_strs(group_ids)
+    gids = group_id_strs(group_ids)
     if actor_permissions is None:
         has_create_scope = True
     else:
@@ -585,15 +568,15 @@ async def create_dashboard(
 
     try:
         result = await service.grafana_service.create_dashboard(dashboard_create)
-    except Exception as exc:
-        if isinstance(exc, GrafanaAPIError) and exc.status in {409, 412} and getattr(dash_obj, "uid", None):
+    except GrafanaAPIError as exc:
+        if exc.status in {409, 412} and getattr(dash_obj, "uid", None):
             next_uid = f"{str(dash_obj.uid)}-{uuid.uuid4().hex[:6]}"
             retry_payload = dashboard_create.model_copy(
                 update={"dashboard": dash_obj.model_copy(update={"uid": next_uid})}
             )
             try:
                 result = await service.grafana_service.create_dashboard(retry_payload)
-            except Exception as retry_exc:
+            except GrafanaAPIError as retry_exc:
                 service._raise_http_from_grafana_error(retry_exc)
         else:
             service._raise_http_from_grafana_error(exc)
@@ -616,7 +599,7 @@ async def create_dashboard(
                     if f.id == folder_id:
                         folder_uid = f.uid
                         break
-            except Exception as e:
+            except (httpx.HTTPError, RuntimeError, ValueError) as e:
                 service.logger.debug("Unable to resolve folder uid for created dashboard: %s", e)
 
     db_dashboard = GrafanaDashboard(
@@ -633,12 +616,8 @@ async def create_dashboard(
     if visibility == "group" and shared_group_ids:
         db_dashboard.shared_groups.extend(groups)
 
-    try:
-        db.add(db_dashboard)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    db.add(db_dashboard)
+    commit_session(db)
 
     sgids = _shared_group_ids(db_dashboard)
     payload = dict(result)
@@ -664,7 +643,7 @@ async def update_dashboard(
     is_admin: bool = False,
     actor_permissions: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
-    gids = _group_id_strs(group_ids)
+    gids = group_id_strs(group_ids)
     if actor_permissions is None:
         has_update_scope = True
     else:
@@ -754,7 +733,7 @@ async def update_dashboard(
 
     try:
         result = await service.grafana_service.update_dashboard(uid, dashboard_update)
-    except Exception as exc:
+    except (GrafanaAPIError, httpx.HTTPError) as exc:
         service._raise_http_from_grafana_error(exc)
         return None
 
@@ -784,11 +763,7 @@ async def update_dashboard(
         elif visibility != "group":
             db_dashboard.shared_groups.clear()
 
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    commit_session(db)
 
     sgids = _shared_group_ids(db_dashboard)
     payload = dict(result)
@@ -815,12 +790,8 @@ async def delete_dashboard(
     ok = await service.grafana_service.delete_dashboard(uid)
     if not ok:
         return False
-    try:
-        db.delete(db_dashboard)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    db.delete(db_dashboard)
+    commit_session(db)
     return True
 
 
@@ -828,19 +799,8 @@ def toggle_dashboard_hidden(db: Session, uid: str, user_id: str, tenant_id: str,
     db_dash = _db_dashboard_by_uid(db, tenant_id, uid)
     if not db_dash:
         return False
-    hidden_list = list(db_dash.hidden_by or [])
-    if hidden:
-        if user_id not in hidden_list:
-            hidden_list.append(user_id)
-    else:
-        if user_id in hidden_list:
-            hidden_list.remove(user_id)
-    db_dash.hidden_by = hidden_list
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    db_dash.hidden_by = update_hidden_members(db_dash.hidden_by, user_id, hidden)
+    commit_session(db)
     return True
 
 

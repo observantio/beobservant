@@ -1,5 +1,5 @@
 """
-TTLCache implementation for Be Observant, with optional Redis backend support. 
+TTLCache implementation for Be Observant, with optional Redis backend support.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
@@ -20,7 +20,7 @@ _redis_asyncio = None
 try:
     import redis
     _redis_asyncio = getattr(redis, "asyncio", None)
-except Exception:
+except ImportError:
     _redis_asyncio = None
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ class TTLCache:
     def _serialize_value(self, value: Any) -> bytes:
         try:
             return b"j:" + json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-        except Exception as exc:
+        except (TypeError, ValueError) as exc:
             raise ValueError("TTL cache only supports JSON-serializable values") from exc
 
     def _deserialize_value(self, raw: Optional[bytes]) -> Optional[Any]:
@@ -51,7 +51,7 @@ class TTLCache:
         if raw.startswith(b"j:"):
             try:
                 return json.loads(raw[2:].decode("utf-8"))
-            except Exception:
+            except (TypeError, ValueError, json.JSONDecodeError):
                 logger.warning("TTL cache JSON payload is invalid; dropping cache value")
                 return None
         logger.warning("TTL cache encountered non-JSON legacy payload; dropping cache value")
@@ -66,10 +66,10 @@ class TTLCache:
             return
         try:
             await client.aclose()
-        except Exception:
+        except (AttributeError, OSError, RuntimeError):
             try:
                 await client.close()
-            except Exception:
+            except (AttributeError, OSError, RuntimeError):
                 pass
 
     async def _ensure_redis(self) -> bool:
@@ -88,7 +88,7 @@ class TTLCache:
                     socket_keepalive=True,
                 )
                 self._redis_loop_id = loop_id
-            except Exception as exc:
+            except (AttributeError, OSError, RuntimeError, ValueError) as exc:
                 logger.warning("Failed to initialize Redis client for TTLCache; using in-memory fallback: %s", exc)
                 self._redis_client = None
                 return False
@@ -103,7 +103,7 @@ class TTLCache:
                 logger.info("Connected to Redis for TTL cache: %s", self._redis_url)
                 await self._flush_memory_to_redis()
                 return True
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError) as exc:
             logger.warning("Redis TTL cache unreachable; falling back to in-memory cache: %s", exc)
             await self._close_redis_client()
             return False
@@ -123,7 +123,7 @@ class TTLCache:
                 continue
             try:
                 await self._redis_client.set(self._redis_key(k), self._serialize_value(v), ex=ttl)
-            except Exception:
+            except (OSError, RuntimeError, ValueError):
                 await self._close_redis_client()
                 return
 
@@ -140,7 +140,7 @@ class TTLCache:
             try:
                 raw = await self._redis_client.get(self._redis_key(key))
                 return self._deserialize_value(raw)
-            except Exception as exc:
+            except (OSError, RuntimeError, ValueError) as exc:
                 logger.warning("Redis TTL cache GET failed; falling back to memory: %s", exc)
                 await self._close_redis_client()
 
@@ -161,7 +161,7 @@ class TTLCache:
             try:
                 await self._redis_client.set(self._redis_key(key), self._serialize_value(value), ex=ttl)
                 return
-            except Exception as exc:
+            except (OSError, RuntimeError, ValueError) as exc:
                 logger.warning("Redis TTL cache SET failed; using in-memory fallback: %s", exc)
                 await self._close_redis_client()
 
@@ -188,7 +188,7 @@ class TTLCache:
                 keys = await self._redis_client.keys(f"{self._key_prefix}:*")
                 if keys:
                     await self._redis_client.delete(*keys)
-            except Exception as exc:
+            except (OSError, RuntimeError, ValueError) as exc:
                 logger.warning("Redis TTL cache CLEAR failed; clearing in-memory cache: %s", exc)
                 await self._close_redis_client()
 

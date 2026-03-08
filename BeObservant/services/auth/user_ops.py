@@ -10,7 +10,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 from datetime import datetime, timezone
 import secrets
-from typing import Optional, List, Set, Iterable
+from typing import List, Optional, Set
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func
@@ -21,6 +21,15 @@ from database import get_db_session
 from db_models import User, Group, Permission
 from models.access.user_models import UserCreate, UserUpdate, User as UserSchema
 from models.access.auth_models import Role, ROLE_PERMISSIONS
+from services.auth.delegation import (
+    is_admin_actor as _is_admin_actor,
+    is_admin_user as _is_admin_user,
+    normalize_permissions as _normalize_permissions,
+    permission_is_admin_only as _permission_is_admin_only,
+    resolve_actor_permissions as _resolve_actor_permissions,
+    role_rank as _shared_role_rank,
+    role_to_text as _role_to_text,
+)
 from services.auth.group_ops import _prune_removed_member_grafana_group_shares
 
 
@@ -43,50 +52,13 @@ ROLE_RANK = {
     Role.ADMIN.value: 3,
 }
 
-ADMIN_PERMISSION_PATTERNS = ("manage:",)
-ADMIN_ONLY_PERMISSION_EXACT = {"update:user_permissions", "update:group_permissions"}
-
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _role_to_text(value) -> str:
-    if isinstance(value, Role):
-        return value.value
-    normalized = str(value or "").strip().lower()
-    if normalized.startswith("role."):
-        normalized = normalized.split(".", 1)[1]
-    return normalized
-
-
 def _role_rank(value) -> int:
-    return ROLE_RANK.get(_role_to_text(value), 0)
-
-
-def _is_admin_actor(*, actor_role: Optional[str], actor_is_superuser: bool) -> bool:
-    return bool(actor_is_superuser or _role_to_text(actor_role) == Role.ADMIN.value)
-
-
-def _is_admin_user(user: Optional[User]) -> bool:
-    if not user:
-        return False
-    return _role_to_text(getattr(user, "role", None)) == Role.ADMIN.value
-
-
-def _permission_is_admin_only(name: str) -> bool:
-    perm = str(name or "").strip()
-    if not perm:
-        return False
-    if perm in ADMIN_ONLY_PERMISSION_EXACT:
-        return True
-    if any(perm.startswith(prefix) for prefix in ADMIN_PERMISSION_PATTERNS):
-        return True
-    return perm.startswith("update:") and perm.endswith("permissions")
-
-
-def _normalize_permissions(values: Optional[Iterable[str]]) -> Set[str]:
-    return {str(v).strip() for v in (values or []) if str(v).strip()}
+    return _shared_role_rank(value, ROLE_RANK)
 
 
 def _get_user(
@@ -109,34 +81,6 @@ def _get_user(
     if opts:
         q = q.options(*opts)
     return q.first()
-
-
-def _resolve_actor_permissions(
-    service,
-    *,
-    db,
-    actor_user_id: Optional[str],
-    tenant_id: str,
-    actor_permissions: Optional[List[str]],
-) -> Set[str]:
-    provided = _normalize_permissions(actor_permissions)
-    if provided:
-        return provided
-    if not actor_user_id:
-        return set()
-
-    actor = (
-        db.query(User)
-        .options(
-            joinedload(User.groups).joinedload(Group.permissions),
-            joinedload(User.permissions),
-        )
-        .filter_by(id=actor_user_id, tenant_id=tenant_id)
-        .first()
-    )
-    if not actor:
-        return set()
-    return set(service._collect_permissions(actor))
 
 
 def _enforce_permission_delegation(
@@ -206,7 +150,7 @@ def get_user_by_id(service, user_id: str,tenant_id: Optional[str] = None, db: Op
 
     if db is not None:
         return _query(db)
-    
+
     with get_db_session() as s:
         return _query(s)
 
@@ -318,7 +262,7 @@ def create_user(
 
         raw_password = user_create.password
         if is_external and not raw_password:
-           raw_password = secrets.token_urlsafe(24)
+            raw_password = secrets.token_urlsafe(24)
         if not raw_password:
             raise ValueError("Password is required when local authentication is enabled")
 
@@ -382,8 +326,8 @@ def list_users(service, tenant_id: str, *, limit: Optional[int] = None, offset: 
         max_limit = int(getattr(config, "MAX_QUERY_LIMIT", 5000))
         limit = max(1, min(requested_limit, max_limit))
         offset = max(0, int(offset))
-    except (TypeError, ValueError):
-        raise ValueError("limit and offset must be integers")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("limit and offset must be integers") from exc
 
     with get_db_session() as db:
         users = (

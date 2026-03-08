@@ -102,7 +102,7 @@ def normalize_label_dict(labels: Dict[str, Any]) -> Dict[str, str]:
     extra: Dict[str, str] = {}
     for key, value in list(labels.items()):
         _, parsed = normalize_label_value(key, value)
-        if parsed:
+        if isinstance(parsed, dict):
             for k, v in parsed.items():
                 if k not in labels:
                     extra[k] = v
@@ -116,9 +116,11 @@ def normalize_label_values(label: str, values: List[str]) -> List[str]:
             cleaned.append(value)
             continue
         parsed = parse_labelset_value(label, value)
-        if parsed and label in parsed:
-            cleaned.append(parsed[label])
-            continue
+        if isinstance(parsed, dict):
+            parsed_value = parsed.get(label)
+            if parsed_value is not None:
+                cleaned.append(parsed_value)
+                continue
         cut_index = value.find('",')
         cleaned.append(value[:cut_index] if cut_index > 0 else value)
     return cleaned

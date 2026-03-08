@@ -303,7 +303,7 @@ def validate_otlp_token(service, token: str, *, suppress_errors: bool = True) ->
         service.logger.warning("OTLP token validation failed due to database error")
         service.logger.debug("OTLP validation error detail: %s", exc)
         return None
-    except Exception as exc:
+    except RuntimeError as exc:
         if not suppress_errors:
             raise
         service.logger.warning("OTLP token validation failed due to internal error")

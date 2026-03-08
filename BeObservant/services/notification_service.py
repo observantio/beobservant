@@ -20,7 +20,7 @@ from services.common.http_client import create_async_client
 
 try:
     import aiosmtplib
-except Exception:
+except ImportError:
     aiosmtplib = None
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ class NotificationService:
         try:
             await self._send_smtp(message=msg, cfg=cfg)
             return True
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError) as exc:
             logger.warning("Failed to send email to %s: %s", recipient, exc)
             return False
 

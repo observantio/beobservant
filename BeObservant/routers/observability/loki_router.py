@@ -30,11 +30,11 @@ loki_service = LokiService()
 async def _handle_timeout(coro, detail: str):
     try:
         return await coro
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as exc:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=detail,
-        )
+        ) from exc
 
 @router.get("/query", response_model=LogResponse)
 async def query_logs(

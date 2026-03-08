@@ -14,7 +14,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 import logging
 import os
 import threading
-from contextlib import contextmanager
+from types import TracebackType
 from typing import Generator, Iterator, Optional
 
 from sqlalchemy import create_engine, text
@@ -27,7 +27,7 @@ from db_models import Base
 logger = logging.getLogger(__name__)
 
 _engine: Optional[Engine] = None
-_SessionLocal: Optional[sessionmaker] = None
+_session_local: Optional[sessionmaker] = None
 _init_lock = threading.Lock()
 
 
@@ -47,13 +47,13 @@ def init_database(
     echo: bool = False,
     pool_size: Optional[int] = None,
 ) -> None:
-    global _engine, _SessionLocal
+    global _engine, _session_local
 
-    if _engine is not None and _SessionLocal is not None:
+    if _engine is not None and _session_local is not None:
         return
 
     with _init_lock:
-        if _engine is not None and _SessionLocal is not None:
+        if _engine is not None and _session_local is not None:
             return
 
         resolved_pool_size = pool_size or _env_int("DB_POOL_SIZE", 10)
@@ -72,7 +72,7 @@ def init_database(
             future=True,
         )
 
-        _SessionLocal = sessionmaker(
+        _session_local = sessionmaker(
             bind=_engine,
             autocommit=False,
             autoflush=False,
@@ -82,9 +82,9 @@ def init_database(
 
 
 def _require_session_factory() -> sessionmaker:
-    if _SessionLocal is None:
+    if _session_local is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
-    return _SessionLocal
+    return _session_local
 
 
 def _session_scope() -> Iterator[Session]:
@@ -99,13 +99,40 @@ def _session_scope() -> Iterator[Session]:
         session.close()
 
 
-@contextmanager
-def get_db_session() -> Iterator[Session]:
-    yield from _session_scope()
+class _SessionContext:
+    def __init__(self) -> None:
+        self._session: Optional[Session] = None
+
+    def __enter__(self) -> Session:
+        self._session = _require_session_factory()()
+        return self._session
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        del exc_val, exc_tb
+        if self._session is None:
+            return
+        try:
+            if exc_type is None:
+                self._session.commit()
+            else:
+                self._session.rollback()
+        finally:
+            self._session.close()
+            self._session = None
+
+
+def get_db_session() -> _SessionContext:
+    return _SessionContext()
 
 
 def get_db() -> Generator[Session, None, None]:
-    yield from _session_scope()
+    with get_db_session() as session:
+        yield session
 
 
 def connection_test() -> bool:
@@ -121,9 +148,9 @@ def connection_test() -> bool:
 
 
 def dispose_database() -> None:
-    global _engine, _SessionLocal
+    global _engine, _session_local
     with _init_lock:
-        _SessionLocal = None
+        _session_local = None
         if _engine is not None:
             try:
                 _engine.dispose()

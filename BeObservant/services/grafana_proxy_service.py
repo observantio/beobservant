@@ -153,8 +153,8 @@ class GrafanaProxyService:
                 if user_id
                 else self._normalize_group_ids(group_ids)
             )
-            user_groups = set(effective_groups)
-            not_member = [gid for gid in shared_group_ids if gid not in user_groups]
+            user_group_set = set(effective_groups)
+            not_member = [gid for gid in shared_group_ids if gid not in user_group_set]
             if not_member:
                 raise HTTPException(status_code=403, detail="User is not a member of one or more specified groups")
         return groups

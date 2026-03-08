@@ -111,4 +111,3 @@ async def test_forward_preserves_scope_header_for_anonymous(monkeypatch):
     )
     assert isinstance(resp, Response)
     assert "x-scope-orgid" in {k.lower(): v for k, v in captured["headers"].items()}
-

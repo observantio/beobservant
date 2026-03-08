@@ -61,7 +61,7 @@ class GrafanaService:
     def _parse_error_body(exc: httpx.HTTPStatusError) -> Any:
         try:
             return exc.response.json()
-        except Exception:
+        except (TypeError, ValueError):
             return exc.response.text or None
 
     async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
@@ -96,7 +96,7 @@ class GrafanaService:
         except httpx.HTTPStatusError as e:
             parsed = self._parse_error_body(e)
             logger.error("Grafana %s %s HTTP %s: %s – %s", method, path, e.response.status_code, e, parsed)
-            raise GrafanaAPIError(e.response.status_code, parsed)
+            raise GrafanaAPIError(e.response.status_code, parsed) from e
 
     @with_retry()
     @with_timeout()

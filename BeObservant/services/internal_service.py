@@ -38,10 +38,10 @@ class InternalService:
     def validate_token_or_404(self, token: str):
         try:
             org_id = self._auth_service.validate_otlp_token(token, suppress_errors=False)
-        except SQLAlchemyError:
-            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Auth database unavailable")
-        except Exception:
-            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Auth database unavailable")
+        except SQLAlchemyError as exc:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Auth database unavailable") from exc
+        except RuntimeError as exc:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Auth database unavailable") from exc
 
         if not org_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND)

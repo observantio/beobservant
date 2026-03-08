@@ -32,7 +32,7 @@ from services.grafana.route_payloads import (
     validate_visibility,
 )
 
-from .shared import dashboard_payload, dashboard_uid, proxy, router, rtp, scope_context
+from .shared import dashboard_payload, dashboard_uid, hidden_toggle_context, proxy, router, rtp, scope_context
 
 
 @router.get("/dashboards/meta/filters")
@@ -240,12 +240,13 @@ async def hide_dashboard(
     ),
     db: Session = Depends(get_db),
 ):
+    user_id, tenant_id = hidden_toggle_context(current_user)
     ok = await rtp(
         proxy.toggle_dashboard_hidden,
         db=db,
         uid=uid,
-        user_id=current_user.user_id,
-        tenant_id=current_user.tenant_id,
+        user_id=user_id,
+        tenant_id=tenant_id,
         hidden=payload.hidden,
     )
     if not ok:
