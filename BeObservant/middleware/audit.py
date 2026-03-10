@@ -48,6 +48,7 @@ SENSITIVE_AUDIT_KEYS_EXACT = {
     "setup_token",
 }
 SENSITIVE_AUDIT_KEY_SUFFIXES = ("_token", "_secret", "_password", "_passcode", "_jwt")
+DOCS_UI_PATHS = {"/docs", "/redoc"}
 
 
 def _skip_resource_view_audit(path: str) -> bool:
@@ -92,6 +93,20 @@ def _extract_request_token(request: Request) -> str | None:
     return bearer or cookie_token
 
 
+def _content_security_policy_for_path(path: str) -> str:
+    directives = [
+        "default-src 'self'",
+        "connect-src 'self' https:",
+        "img-src 'self' data: https:",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
+    ]
+    if path in DOCS_UI_PATHS:
+        directives[3] += " https://cdn.jsdelivr.net"
+        directives.append("script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net")
+    return "; ".join(directives) + ";"
+
+
 def _write_resource_view_audit(
     *,
     tenant_id: str,
@@ -123,6 +138,7 @@ def _write_resource_view_audit(
 
 
 async def security_headers_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    path = request.url.path
     request_ip = client_ip(request)
     user_agent = request.headers.get("user-agent")
     context_tokens = set_request_audit_context(request_ip, user_agent)
@@ -132,7 +148,6 @@ async def security_headers_middleware(request: Request, call_next: Callable[[Req
         reset_request_audit_context(context_tokens)
 
     try:
-        path = request.url.path
         if request.method == "GET" and path.startswith("/api/") and not _skip_resource_view_audit(path):
             token = _extract_request_token(request)
             if token:
@@ -158,11 +173,7 @@ async def security_headers_middleware(request: Request, call_next: Callable[[Req
     _set_header_if_missing(
         response.headers,
         "Content-Security-Policy",
-        "default-src 'self'; "
-        "connect-src 'self' https:; "
-        "img-src 'self' data: https:; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com;",
+        _content_security_policy_for_path(path),
     )
 
     if _is_https_request(request):

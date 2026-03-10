@@ -112,6 +112,7 @@ async def test_audit_helpers_and_security_headers(monkeypatch):
     response = await audit_middleware.security_headers_middleware(request, call_next)
     assert response.headers["X-Frame-Options"] == "DENY"
     assert response.headers["Strict-Transport-Security"].startswith("max-age=")
+    assert "script-src" not in response.headers["Content-Security-Policy"]
     assert any(item[0] == "write" for item in writes)
     assert audit_middleware._extract_request_token(request) == "jwt-token"
 
@@ -120,6 +121,23 @@ async def test_audit_helpers_and_security_headers(monkeypatch):
     response = await audit_middleware.security_headers_middleware(request, call_next)
     assert response.status_code == 200
     assert all(item[0] != "write" for item in writes)
+
+
+@pytest.mark.asyncio
+async def test_docs_security_headers_allow_swagger_assets(monkeypatch):
+    request = _request("/docs")
+
+    monkeypatch.setattr(audit_middleware, "client_ip", lambda request: "203.0.113.10")
+    monkeypatch.setattr(audit_middleware, "set_request_audit_context", lambda ip, ua: ("ctx",))
+    monkeypatch.setattr(audit_middleware, "reset_request_audit_context", lambda token: None)
+
+    async def call_next(_request: Request) -> Response:
+        return PlainTextResponse("ok")
+
+    response = await audit_middleware.security_headers_middleware(request, call_next)
+    csp = response.headers["Content-Security-Policy"]
+    assert "https://cdn.jsdelivr.net" in csp
+    assert "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net" in csp
 
 
 @pytest.mark.asyncio

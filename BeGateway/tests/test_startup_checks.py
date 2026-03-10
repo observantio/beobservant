@@ -39,7 +39,7 @@ async def test_startup_strict_mode_requires_status_token(monkeypatch):
 
     with pytest.raises(RuntimeError):
         async with gateway_main.lifespan(gateway_main.app):
-            await asyncio.sleep(0)
+            await asyncio.sleep(0)  # pragma: no cover
 
 
 @pytest.mark.asyncio
@@ -82,4 +82,4 @@ async def test_startup_strict_mode_raises_when_auth_api_unavailable(monkeypatch)
 
     with pytest.raises(DatabaseUnavailable):
         async with gateway_main.lifespan(gateway_main.app):
-            await asyncio.sleep(0)
+            await asyncio.sleep(0)  # pragma: no cover

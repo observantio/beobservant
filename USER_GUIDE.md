@@ -11,7 +11,7 @@ When you run this project, you are not starting one server. You are starting a p
 ### Core application services
 
 | Service | Default Port | Why It Exists |
-| --- | --- | --- |
+|:---|:---|:---|
 | `BeObservant` | `4319` | Main API and control plane. Owns users, groups, API keys, auth, most UI-facing APIs, and secure proxying to the rest of the platform. |
 | `BeGateway` | `4321` | Validates OTLP tokens for telemetry ingestion and returns tenant scope. |
 | `BeNotified` | `4323` | Stores and serves alert rules, channels, silences, incidents, and Jira integrations. |
@@ -21,7 +21,7 @@ When you run this project, you are not starting one server. You are starting a p
 ### Supporting infrastructure
 
 | Service | Why It Exists |
-| --- | --- |
+|:---|:---|
 | `postgres` | Persistent storage for BeObservant, BeNotified, and BeCertain. |
 | `redis` | Rate limits, token caches, and shared fast state. |
 | `otlp-gateway` | Envoy edge for OTLP traffic. Calls BeGateway before forwarding telemetry. |

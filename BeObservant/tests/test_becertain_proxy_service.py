@@ -30,6 +30,46 @@ def _user() -> TokenData:
     )
 
 
+def test_becertain_proxy_helper_methods(monkeypatch):
+    service = BeCertainProxyService()
+    monkeypatch.setattr(config, "BECERTAIN_PROXY_CACHE_TTL_SECONDS", 15)
+
+    assert service._is_volatile_read("/api/v1/jobs/1") is True
+    assert service._is_volatile_read("/api/v1/reports/1") is True
+    assert service._is_volatile_read("/api/v1/weights") is False
+    assert service._resolve_cache_ttl(method="GET", upstream_path="/api/v1/jobs/1", cache_ttl_seconds=30) == 0
+    assert service._resolve_cache_ttl(method="POST", upstream_path="/api/v1/jobs/1", cache_ttl_seconds=30) == 30
+    assert service._cache_key(
+        method="get",
+        upstream_path="/x",
+        tenant_id="tenant-a",
+        params={"a": 1},
+        payload={"b": True},
+    ) == '{"b":{"b":true},"m":"GET","p":"/x","q":{"a":1},"t":"tenant-a"}'.replace('"b":{', '"b":{')
+
+    monkeypatch.setattr(config, "get_secret", lambda key: None)
+    with pytest.raises(HTTPException, match="Missing BeCertain signing key"):
+        service._sign_context_token(current_user=_user(), tenant_id="tenant-a")
+
+
+def test_becertain_proxy_inflight_error_resolution():
+    service = BeCertainProxyService()
+    future = service._client._transport = None  # keep the instance referenced without affecting behavior
+    loop = __import__("asyncio").new_event_loop()
+    try:
+        inflight = loop.create_future()
+        err = HTTPException(status_code=502, detail="bad")
+        service._resolve_inflight_error(True, inflight, err)
+        assert inflight.done() is True
+        assert inflight.exception() is err
+
+        inflight = loop.create_future()
+        service._resolve_inflight_error(False, inflight, err)
+        assert inflight.done() is False
+    finally:
+        loop.close()
+
+
 @pytest.mark.asyncio
 async def test_becertain_proxy_timeout_maps_to_504(monkeypatch):
     service = BeCertainProxyService()
@@ -61,6 +101,47 @@ async def test_becertain_proxy_timeout_maps_to_504(monkeypatch):
             tenant_id="tenant-a",
         )
     assert exc.value.status_code == 504
+
+
+@pytest.mark.asyncio
+async def test_becertain_proxy_missing_service_token_and_generic_error(monkeypatch):
+    service = BeCertainProxyService()
+    audits = []
+    monkeypatch.setattr(service, "write_audit", lambda **kwargs: audits.append(kwargs))
+    monkeypatch.setattr(config, "get_secret", lambda key: {"BECERTAIN_CONTEXT_SIGNING_KEY": "signing-key"}.get(key))
+
+    with pytest.raises(HTTPException, match="service token not configured"):
+        await service.request_json(
+            method="GET",
+            upstream_path="/api/v1/ml/weights",
+            current_user=_user(),
+            tenant_id="tenant-a",
+        )
+
+    monkeypatch.setattr(
+        config,
+        "get_secret",
+        lambda key: {
+            "BECERTAIN_SERVICE_TOKEN": "service-token",
+            "BECERTAIN_CONTEXT_SIGNING_KEY": "signing-key",
+        }.get(key),
+    )
+
+    class DummyClient:
+        async def request(self, **_kwargs):
+            raise RuntimeError("boom")
+
+    service._client = DummyClient()
+    with pytest.raises(HTTPException, match="Failed to contact BeCertain"):
+        await service.request_json(
+            method="POST",
+            upstream_path="/api/v1/ml/weights",
+            current_user=_user(),
+            tenant_id="tenant-a",
+            payload={"a": 1},
+            audit_action="becertain.proxy",
+        )
+    assert audits[-1]["action"] == "becertain.proxy.error"
 
 
 @pytest.mark.asyncio
@@ -164,3 +245,59 @@ async def test_becertain_proxy_does_not_cache_job_reads(monkeypatch):
 
     assert first == second
     assert calls["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_becertain_proxy_cache_hit_and_invalid_json(monkeypatch):
+    service = BeCertainProxyService()
+    monkeypatch.setattr(service, "write_audit", lambda **_kwargs: None)
+    monkeypatch.setattr(config, "BECERTAIN_CONTEXT_ALGORITHM", "HS256")
+    monkeypatch.setattr(config, "BECERTAIN_CONTEXT_ISSUER", "beobservant-main")
+    monkeypatch.setattr(config, "BECERTAIN_CONTEXT_AUDIENCE", "becertain")
+    monkeypatch.setattr(config, "BECERTAIN_CONTEXT_TTL_SECONDS", 120)
+    monkeypatch.setattr(
+        config,
+        "get_secret",
+        lambda key: {
+            "BECERTAIN_SERVICE_TOKEN": "service-token",
+            "BECERTAIN_CONTEXT_SIGNING_KEY": "signing-key",
+        }.get(key),
+    )
+
+    cache_key = service._cache_key(
+        method="GET",
+        upstream_path="/api/v1/ml/weights",
+        tenant_id="tenant-a",
+        params=None,
+        payload=None,
+    )
+    await service._read_cache.set(cache_key, {"cached": True}, 10)
+    assert await service.request_json(
+        method="GET",
+        upstream_path="/api/v1/ml/weights",
+        current_user=_user(),
+        tenant_id="tenant-a",
+    ) == {"cached": True}
+
+    class DummyResponse:
+        status_code = 200
+        reason_phrase = "OK"
+        text = "not-json"
+
+        def json(self):
+            return object()
+
+    class DummyClient:
+        async def request(self, **_kwargs):
+            return DummyResponse()
+
+    service = BeCertainProxyService()
+    monkeypatch.setattr(service, "write_audit", lambda **_kwargs: None)
+    service._client = DummyClient()
+    with pytest.raises(HTTPException, match="invalid JSON"):
+        await service.request_json(
+            method="GET",
+            upstream_path="/api/v1/ml/weights/fresh",
+            current_user=_user(),
+            tenant_id="tenant-a",
+        )

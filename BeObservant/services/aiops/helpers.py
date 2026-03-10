@@ -20,4 +20,4 @@ def inject_tenant(payload: Optional[JSONDict], tenant_id: str) -> JSONDict:
 
 
 def correlation_id(request: Request) -> Optional[str]:
-    return request.headers.get("x-correlation-id") or request.headers.get("X-Correlation-ID")
+    return request.headers.get("x-correlation-id")
