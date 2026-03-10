@@ -114,25 +114,27 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
     monkeypatch.setattr(dependencies.config, "ALLOWLIST_FAIL_OPEN", True)
     dependencies.enforce_ip_allowlist(_request(), "", scope="public")
     monkeypatch.setattr(dependencies.config, "ALLOWLIST_FAIL_OPEN", False)
-    with pytest.raises(HTTPException, match="source IP not allowed"):
+    with pytest.raises(HTTPException, match="Access denied"):
         dependencies.enforce_ip_allowlist(_request(), "", scope="public")
-    with pytest.raises(HTTPException, match="invalid client IP"):
+    with pytest.raises(HTTPException, match="Access denied"):
         monkeypatch.setattr(dependencies, "client_ip", lambda request: "bad-ip") or dependencies.enforce_ip_allowlist(_request(), "127.0.0.1", scope="public")
     monkeypatch.setattr(dependencies, "client_ip", lambda request: "127.0.0.1")
     dependencies.enforce_ip_allowlist(_request(), "127.0.0.1", scope="public")
     monkeypatch.setattr(dependencies, "client_ip", lambda request: "198.51.100.4")
-    with pytest.raises(HTTPException, match="source IP not allowed"):
+    with pytest.raises(HTTPException, match="Access denied"):
         dependencies.enforce_ip_allowlist(_request(client=("198.51.100.4", 1)), "127.0.0.1", scope="public")
 
     ip_rate_calls = []
     monkeypatch.setattr(dependencies, "enforce_ip_rate_limit", lambda *args, **kwargs: ip_rate_calls.append(kwargs))
     monkeypatch.setattr(dependencies, "client_ip", lambda request: "unknown")
     monkeypatch.setattr(dependencies.config, "REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS", True)
-    with pytest.raises(HTTPException, match="client IP resolution failed"):
+    with pytest.raises(HTTPException, match="Access denied"):
         dependencies.enforce_public_endpoint_security(_request(client=None), scope="public", limit=1, window_seconds=60)
     monkeypatch.setattr(dependencies, "client_ip", lambda request: "127.0.0.1")
     dependencies.enforce_public_endpoint_security(_request(), scope="public", limit=2, window_seconds=30, fallback_mode="allow")
     assert ip_rate_calls == [{"scope": "public", "limit": 2, "window_seconds": 30, "fallback_mode": "allow"}]
+    with pytest.raises(ValueError, match="fallback_mode"):
+        dependencies.enforce_public_endpoint_security(_request(), scope="public", limit=2, window_seconds=30, fallback_mode="bad")
 
     dependencies.enforce_header_token(_request(), header_name="x-test", expected_token=None, unauthorized_detail="bad")
     with pytest.raises(HTTPException) as unauthorized:
@@ -212,7 +214,7 @@ def test_current_user_and_permission_dependency_edges(monkeypatch):
     with pytest.raises(HTTPException, match="User not found or inactive"):
         dependencies.get_current_user(_request(), creds)
 
-    live_user = types.SimpleNamespace(is_active=True, org_id="org-live", group_ids=("g1", "", 2), session_invalid_before=None)
+    live_user = types.SimpleNamespace(is_active=True, org_id="org-live", group_ids=(" g1 ", "", 2), session_invalid_before=None)
     monkeypatch.setattr(auth_stub, "get_user_by_id", lambda user_id: live_user)
     monkeypatch.setattr(auth_stub, "get_user_permissions", lambda user: ["read:traces", "write:traces"])
     rate_limit_calls = []
@@ -240,9 +242,16 @@ def test_current_user_and_permission_dependency_edges(monkeypatch):
     with pytest.raises(HTTPException, match="MFA setup not permitted"):
         dependencies.get_current_user_or_mfa_setup(_request(), creds)
 
-    monkeypatch.setattr(auth_stub, "decode_token", lambda token: _token_data(is_mfa_setup=False))
-    monkeypatch.setattr(dependencies, "get_current_user", lambda request, credentials=None: _token_data(permissions=["read:traces"]))
-    assert dependencies.get_current_user_or_mfa_setup(_request(), creds).permissions == ["read:traces"]
+    decode_calls = []
+    user_calls = []
+    monkeypatch.setattr(auth_stub, "decode_token", lambda token: decode_calls.append(token) or _token_data(is_mfa_setup=False))
+    monkeypatch.setattr(auth_stub, "get_user_by_id", lambda user_id: user_calls.append(user_id) or live_user)
+    rate_limit_calls.clear()
+    resolved_non_mfa = dependencies.get_current_user_or_mfa_setup(_request(), creds)
+    assert resolved_non_mfa.permissions == ["read:traces", "write:traces"]
+    assert len(decode_calls) == 1
+    assert len(user_calls) == 1
+    assert len(rate_limit_calls) == 1
 
     allowed_user = _token_data(permissions=["read:traces"])
     with pytest.raises(HTTPException, match="READ:USERS"):

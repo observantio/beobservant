@@ -30,7 +30,11 @@ from services.auth.delegation import (
     role_rank as _shared_role_rank,
     role_to_text as _role_to_text,
 )
-from services.auth.group_ops import _prune_removed_member_grafana_group_shares
+from services.auth.group_ops import (
+    _load_usernames_for_ids,
+    _propagate_removed_member_group_shares,
+    _prune_removed_member_grafana_group_shares,
+)
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -132,8 +136,7 @@ def get_user_by_id(service: "DatabaseAuthService", user_id: str,tenant_id: Optio
     if not user_id:
         return None
 
-    if db is None:
-        service._lazy_init()
+    service._lazy_init()
 
     def _query(session: Session) -> Optional[UserSchema]:
         q = (
@@ -428,17 +431,21 @@ def update_user(
                 )
             update_data["username"] = normalized_username
 
-        for field, value in update_data.items():
-            if field == "group_ids" and value is not None:
-                existing_group_ids = {str(g.id) for g in (user.groups or [])}
-                groups = (
-                    db.query(Group)
-                    .filter(and_(Group.id.in_(value), Group.tenant_id == tenant_id))
-                    .all()
-                )
-                user.groups = groups
-                updated_group_ids = {str(g.id) for g in groups}
-                removed_group_ids = sorted(existing_group_ids - updated_group_ids)
+        removed_group_ids: list[str] = []
+        removed_usernames: list[str] = []
+        requested_group_ids = update_data.pop("group_ids", None) if "group_ids" in update_data else None
+        if requested_group_ids is not None:
+            existing_group_ids = {str(g.id) for g in (user.groups or [])}
+            groups = (
+                db.query(Group)
+                .filter(and_(Group.id.in_(requested_group_ids), Group.tenant_id == tenant_id))
+                .all()
+            )
+            user.groups = groups
+            updated_group_ids = {str(g.id) for g in groups}
+            removed_group_ids = sorted(existing_group_ids - updated_group_ids)
+            if removed_group_ids:
+                removed_usernames = _load_usernames_for_ids(db, tenant_id=tenant_id, user_ids=[user_id])
                 for removed_group_id in removed_group_ids:
                     _prune_removed_member_grafana_group_shares(
                         db,
@@ -446,18 +453,30 @@ def update_user(
                         group_id=removed_group_id,
                         removed_user_ids=[user_id],
                     )
-            else:
-                setattr(user, field, value)
+
+        for field, value in update_data.items():
+            setattr(user, field, value)
 
         user.updated_at = _now_utc()
 
         if "org_id" in update_data:
             service._ensure_default_api_key(db, user)
 
+        audit_data = dict(update_data)
+        if requested_group_ids is not None:
+            audit_data["group_ids"] = [str(group.id) for group in (user.groups or [])]
+
         if updater_id:
-            service._log_audit(db, tenant_id, updater_id, "update_user", "users", user_id, update_data)
+            service._log_audit(db, tenant_id, updater_id, "update_user", "users", user_id, audit_data)
 
         db.commit()
+        for removed_group_id in removed_group_ids:
+            _propagate_removed_member_group_shares(
+                tenant_id=tenant_id,
+                group_id=removed_group_id,
+                removed_user_ids=[user_id],
+                removed_usernames=removed_usernames,
+            )
         return UserSchema.model_validate(service._to_user_schema(user))
 
 

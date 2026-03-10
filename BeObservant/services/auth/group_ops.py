@@ -56,6 +56,44 @@ def _role_rank(value: object) -> int:
     return _shared_role_rank(value, ROLE_RANK)
 
 
+def _load_usernames_for_ids(db: Session, *, tenant_id: str, user_ids: list[str]) -> list[str]:
+    normalized_ids = [str(user_id).strip() for user_id in (user_ids or []) if str(user_id).strip()]
+    if not normalized_ids:
+        return []
+    return [
+        str(username).strip()
+        for (username,) in (
+            db.query(User.username)
+            .filter(User.tenant_id == tenant_id, User.id.in_(normalized_ids))
+            .all()
+        )
+        if str(username).strip()
+    ]
+
+
+def _propagate_removed_member_group_shares(
+    *,
+    tenant_id: str,
+    group_id: str,
+    removed_user_ids: list[str],
+    removed_usernames: list[str] | None = None,
+) -> None:
+    try:
+        _prune_removed_member_benotified_group_shares(
+            tenant_id=tenant_id,
+            group_id=group_id,
+            removed_user_ids=removed_user_ids,
+            removed_usernames=removed_usernames,
+        )
+    except HTTPException as exc:
+        logger.warning(
+            "Failed to propagate group-share revocation for tenant=%s group=%s: %s",
+            tenant_id,
+            group_id,
+            exc.detail,
+        )
+
+
 def _get_group(db: Session, *, group_id: str, tenant_id: str, load_members: bool = False) -> Optional[Group]:
     opts = [joinedload(Group.permissions)]
     if load_members:
@@ -164,7 +202,7 @@ def create_group(service: DatabaseAuthService, group_create: GroupCreate, tenant
 
         if creator_id:
             creator = db.query(User).filter_by(id=creator_id, tenant_id=tenant_id).first()
-            if creator and all(str(member.id) != str(creator.id) for member in (group.members or [])):
+            if creator:
                 group.members.append(creator)
 
         if creator_id:
@@ -325,6 +363,14 @@ def update_group_permissions(
         if not group:
             return False
 
+        if not _can_access_group(
+            group,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            actor_is_superuser=actor_is_superuser,
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to manage this group")
+
         _, role_text, is_superuser, perm_set = _get_actor_context(
             service,
             db=db,
@@ -344,14 +390,6 @@ def update_group_permissions(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Missing permission to modify group permissions",
             )
-
-        if not _can_access_group(
-            group,
-            actor_user_id=actor_user_id,
-            actor_role=role_text,
-            actor_is_superuser=is_superuser,
-        ):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to manage this group")
 
         requested = _normalize_permissions(permission_names)
         existing_permissions = {
@@ -501,6 +539,7 @@ def update_group_members(
 
         requested_member_ids = {str(u.id) for u in members}
         removed_member_ids = sorted(existing_member_ids - requested_member_ids)
+        removed_member_usernames = _load_usernames_for_ids(db, tenant_id=tenant_id, user_ids=removed_member_ids)
 
         group.members = members
 
@@ -524,6 +563,13 @@ def update_group_members(
             )
             db.delete(group)
             db.commit()
+            if removed_member_ids:
+                _propagate_removed_member_group_shares(
+                    tenant_id=tenant_id,
+                    group_id=group_id,
+                    removed_user_ids=removed_member_ids,
+                    removed_usernames=removed_member_usernames,
+                )
             return True
 
         service._log_audit(
@@ -537,6 +583,13 @@ def update_group_members(
         )
 
         db.commit()
+        if removed_member_ids:
+            _propagate_removed_member_group_shares(
+                tenant_id=tenant_id,
+                group_id=group_id,
+                removed_user_ids=removed_member_ids,
+                removed_usernames=removed_member_usernames,
+            )
         return True
 
 
@@ -599,21 +652,6 @@ def _prune_removed_member_grafana_group_shares(
         folder_row.shared_groups = [g for g in (folder_row.shared_groups or []) if str(getattr(g, "id", "")) != target_group_id]
         if not folder_row.shared_groups:
             folder_row.visibility = "private"
-    removed_usernames = [
-        str(username).strip()
-        for (username,) in (
-            db.query(User.username)
-            .filter(User.tenant_id == tenant_id, User.id.in_(removed_ids))
-            .all()
-        )
-        if str(username).strip()
-    ]
-    _prune_removed_member_benotified_group_shares(
-        tenant_id=tenant_id,
-        group_id=target_group_id,
-        removed_user_ids=removed_ids,
-        removed_usernames=removed_usernames,
-    )
 
 
 def _prune_removed_member_benotified_group_shares(

@@ -147,6 +147,11 @@ def test_jwt_helpers_create_and_decode_token(monkeypatch):
     assert decoded.permissions == ["read:users"]
     assert decoded.group_ids == ["g1"]
 
+    mfa_token = auth_mod.create_mfa_setup_token(SimpleNamespace(id="u1", username="alice", tenant_id="tenant"), minutes=999)
+    decoded_mfa = auth_mod.decode_token(_service(), mfa_token.access_token)
+    assert decoded_mfa and decoded_mfa.is_mfa_setup is True
+    assert mfa_token.expires_in == auth_mod.MAX_MFA_SETUP_TOKEN_MINUTES * 60
+
     assert auth_mod.decode_token(_service(), "bad.token") is None
     payload = auth_mod.decode_token(_service(), auth_mod.jwt.encode({"sub": "u1"}, auth_mod._jwt_signing_key(), algorithm=auth_mod.config.JWT_ALGORITHM))
     assert payload is None

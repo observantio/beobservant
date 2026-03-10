@@ -21,8 +21,8 @@ from models.access.auth_models import Role
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
 
-ADMIN_PERMISSION_PATTERNS = ("manage:",)
-ADMIN_ONLY_PERMISSION_EXACT = {"update:user_permissions", "update:group_permissions"}
+ADMIN_PERMISSION_PATTERNS: frozenset[str] = frozenset({"manage:"})
+ADMIN_ONLY_PERMISSION_EXACT: frozenset[str] = frozenset({"update:user_permissions", "update:group_permissions"})
 
 
 def role_to_text(value: object) -> str:
@@ -45,7 +45,10 @@ def is_admin_actor(*, actor_role: Optional[str], actor_is_superuser: bool) -> bo
 def is_admin_user(user: Optional[User]) -> bool:
     if not user:
         return False
-    return role_to_text(getattr(user, "role", None)) == Role.ADMIN.value
+    return bool(
+        getattr(user, "is_superuser", False)
+        or role_to_text(getattr(user, "role", None)) == Role.ADMIN.value
+    )
 
 
 def permission_is_admin_only(name: str) -> bool:

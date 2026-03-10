@@ -23,12 +23,13 @@ from config import config
 from models.access.auth_models import TokenData, Permission, Role, ROLE_PERMISSIONS
 from custom_types.json import JSONDict
 from services.common.cookies import cookie_secure
+from services.auth.delegation import is_admin_actor as _is_admin_actor, role_to_text as _role_to_text
 from middleware.dependencies import enforce_public_endpoint_security, require_permission_with_scope
 logger = logging.getLogger(__name__)
 
 AuditLogQueryRow: TypeAlias = tuple[AuditLog, str, str]
 
-AUDIT_SENSITIVE_KEYS = (
+AUDIT_SENSITIVE_SUBSTRINGS = (
     "token",
     "secret",
     "password",
@@ -36,12 +37,15 @@ AUDIT_SENSITIVE_KEYS = (
     "authorization",
     "bearer",
     "jwt",
+)
+
+AUDIT_SENSITIVE_EXACT_KEYS = {
     "mfa_code",
     "setup_token",
     "auth_code",
     "oauth_code",
     "code",
-)
+}
 
 def invalidate_grafana_proxy_auth_cache() -> None:
     try:
@@ -75,7 +79,9 @@ def audit_key_is_sensitive(key: str) -> bool:
     lowered = str(key or "").strip().lower()
     if lowered == "status_code":
         return False
-    return any(marker in lowered for marker in AUDIT_SENSITIVE_KEYS)
+    if lowered in AUDIT_SENSITIVE_EXACT_KEYS:
+        return True
+    return any(marker in lowered for marker in AUDIT_SENSITIVE_SUBSTRINGS)
 
 
 def redact_query_string(raw: str) -> str:
@@ -135,11 +141,10 @@ def build_audit_log_query(
         db.query(AuditLog, actor.username, actor.email)
         .outerjoin(actor, actor.id == AuditLog.user_id)
     )
-    scoped_tenant = tenant_id if (getattr(current_user, "is_superuser", False) and tenant_id) else current_user.tenant_id
     if not getattr(current_user, "is_superuser", False):
         query = query.filter(AuditLog.tenant_id == current_user.tenant_id)
-    elif scoped_tenant:
-        query = query.filter(AuditLog.tenant_id == scoped_tenant)
+    elif tenant_id:
+        query = query.filter(AuditLog.tenant_id == tenant_id)
     return query
 
 
@@ -154,11 +159,10 @@ def perms_check(user: TokenData) -> Set[str]:
 
 
 def is_admin_check(user: TokenData) -> bool:
-    role = getattr(user, "role", None)
-    role_text = str(getattr(role, "value", role) or "").strip().lower()
-    if role_text.startswith("role."):
-        role_text = role_text.split(".", 1)[1]
-    return bool(getattr(user, "is_superuser", False) or role_text == Role.ADMIN.value)
+    return _is_admin_actor(
+        actor_role=_role_to_text(getattr(user, "role", None)),
+        actor_is_superuser=bool(getattr(user, "is_superuser", False)),
+    )
 
 
 def apply_audit_filters_func(

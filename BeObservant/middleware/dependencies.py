@@ -10,10 +10,10 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """
 
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 from hmac import compare_digest
 from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
-from typing import Callable
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -32,6 +32,11 @@ logger = logging.getLogger(__name__)
 auth_service = DatabaseAuthService()
 security = HTTPBearer(auto_error=False)
 
+_ALLOWLIST_DISABLED = object()
+_GENERIC_ACCESS_DENIED_DETAIL = "Access denied"
+_GENERIC_SCOPE_DENIED_DETAIL = "Requested tenant scope is not permitted"
+_RATE_LIMIT_FALLBACK_MODES = {"memory", "deny", "allow"}
+
 
 def _extract_bearer_token(
     request: Request,
@@ -43,6 +48,110 @@ def _extract_bearer_token(
     if cookie_token:
         return cookie_token
     return None
+
+
+def _normalize_group_ids(group_ids: object) -> list[str]:
+    if isinstance(group_ids, list):
+        source_group_ids = group_ids
+    elif isinstance(group_ids, tuple):
+        source_group_ids = list(group_ids)
+    elif isinstance(group_ids, set):
+        source_group_ids = list(group_ids)
+    else:
+        source_group_ids = []
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for group_id in source_group_ids:
+        value = str(group_id).strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        normalized.append(value)
+    return normalized
+
+
+def _hydrate_authenticated_user(token_data: TokenData, user: object) -> TokenData:
+    token_data.org_id = getattr(user, "org_id", token_data.org_id)
+    token_data.permissions = auth_service.get_user_permissions(user)
+    token_data.group_ids = _normalize_group_ids(getattr(user, "group_ids", None))
+    return token_data
+
+
+def _authenticate_request(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+    *,
+    missing_detail: str,
+    allow_mfa_setup: bool = False,
+    apply_base_rate_limit: bool = True,
+) -> TokenData:
+    token = _extract_bearer_token(request, credentials)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=missing_detail,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token_data = auth_service.decode_token(token)
+    if token_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your session has expired or your token is invalid. Let's get you a new one.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if getattr(token_data, "is_mfa_setup", False) and not allow_mfa_setup:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="MFA setup token cannot be used for this endpoint",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = auth_service.get_user_by_id(token_data.user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    _enforce_session_revocation(user, token_data)
+
+    if getattr(token_data, "is_mfa_setup", False):
+        if getattr(user, "mfa_enabled", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="MFA setup not permitted for this user",
+            )
+        return token_data
+
+    token_data = _hydrate_authenticated_user(token_data, user)
+
+    if apply_base_rate_limit:
+        enforce_rate_limit(
+            key=f"user:{token_data.user_id}",
+            limit=config.RATE_LIMIT_USER_PER_MINUTE,
+            window_seconds=60,
+        )
+
+    return token_data
+
+
+def _resolve_allowlist_setting(allowlist: str | None) -> str | object:
+    if allowlist is None:
+        return _ALLOWLIST_DISABLED
+    return str(allowlist)
+
+
+def _validate_rate_limit_fallback_mode(fallback_mode: str | None) -> str | None:
+    if fallback_mode is None:
+        return None
+    normalized = str(fallback_mode).strip().lower()
+    if not normalized:
+        return None
+    if normalized not in _RATE_LIMIT_FALLBACK_MODES:
+        raise ValueError("fallback_mode must be one of: allow, deny, memory")
+    return normalized
 
 async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
     default_org_id = getattr(current_user, "org_id", config.DEFAULT_ORG_ID)
@@ -70,9 +179,15 @@ async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
         ) from exc
 
     if candidate_org_id not in allowed_org_ids:
+        logger.info(
+            "Rejected tenant scope for user=%s tenant=%s scope=%s: not in allowed set",
+            current_user.user_id,
+            current_user.tenant_id,
+            candidate_org_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant scope not permitted for this user",
+            detail=_GENERIC_SCOPE_DENIED_DETAIL,
         )
 
     try:
@@ -88,9 +203,15 @@ async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
         ) from exc
 
     if conflict:
+        logger.warning(
+            "Rejected ambiguous tenant scope for user=%s tenant=%s scope=%s",
+            current_user.user_id,
+            current_user.tenant_id,
+            candidate_org_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant scope is ambiguous across tenants",
+            detail=_GENERIC_SCOPE_DENIED_DETAIL,
         )
 
     return candidate_org_id
@@ -165,6 +286,8 @@ def _enforce_session_revocation(user: object, token_data: TokenData) -> None:
     invalid_before = getattr(user, "session_invalid_before", None)
     if invalid_before is None:
         return
+    # Legacy rows may still store naive UTC timestamps. Treat them as UTC
+    # consistently so revocation checks remain monotonic.
     if getattr(invalid_before, "tzinfo", None) is None:
         invalid_before = invalid_before.replace(tzinfo=timezone.utc)
     token_iat = getattr(token_data, "iat", None)
@@ -208,24 +331,32 @@ def _parse_ip_allowlist(allowlist: str | None) -> list[IPv4Network | IPv6Network
 
 
 def enforce_ip_allowlist(request: Request, allowlist: str | None, *, scope: str) -> None:
-    networks = _parse_ip_allowlist(allowlist)
+    resolved_allowlist = _resolve_allowlist_setting(allowlist)
+    if resolved_allowlist is _ALLOWLIST_DISABLED:
+        return
+
+    networks = _parse_ip_allowlist(str(resolved_allowlist))
     if not networks:
-        if allowlist is None:
-            return
+        logger.warning(
+            "Empty IP allowlist configured for scope=%s; fail_open=%s",
+            scope,
+            bool(config.ALLOWLIST_FAIL_OPEN),
+        )
         if config.ALLOWLIST_FAIL_OPEN:
             return
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Access denied for {scope}: source IP not allowed",
+            detail=_GENERIC_ACCESS_DENIED_DETAIL,
         )
 
     client = client_ip(request)
     try:
         client_addr = ip_address(client)
     except ValueError as exc:
+        logger.warning("Rejected request for scope=%s due to invalid client IP: %s", scope, client)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Access denied for {scope}: invalid client IP",
+            detail=_GENERIC_ACCESS_DENIED_DETAIL,
         ) from exc
 
     if any(client_addr in network for network in networks):
@@ -233,7 +364,7 @@ def enforce_ip_allowlist(request: Request, allowlist: str | None, *, scope: str)
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail=f"Access denied for {scope}: source IP not allowed",
+        detail=_GENERIC_ACCESS_DENIED_DETAIL,
     )
 
 
@@ -246,18 +377,20 @@ def enforce_public_endpoint_security(
     allowlist: str | None = None,
     fallback_mode: str | None = None,
 ) -> None:
+    resolved_fallback_mode = _validate_rate_limit_fallback_mode(fallback_mode)
     resolved_ip = client_ip(request)
     if config.REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS and resolved_ip == "unknown":
+        logger.warning("Rejected public request for scope=%s because client IP resolution failed", scope)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Access denied for {scope}: client IP resolution failed",
+            detail=_GENERIC_ACCESS_DENIED_DETAIL,
         )
     enforce_ip_rate_limit(
         request,
         scope=scope,
         limit=limit,
         window_seconds=window_seconds,
-        fallback_mode=fallback_mode,
+        fallback_mode=resolved_fallback_mode,
     )
     enforce_ip_allowlist(request, allowlist, scope=scope)
 
@@ -283,93 +416,26 @@ def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> TokenData:
-    token = _extract_bearer_token(request, credentials)
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token_data = auth_service.decode_token(token)
-
-    if token_data is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Your session has expired or your token is invalid. Let's get you a new one.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    if getattr(token_data, "is_mfa_setup", False):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="MFA setup token cannot be used for this endpoint",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user = auth_service.get_user_by_id(token_data.user_id)
-    if user is None or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
-        )
-    _enforce_session_revocation(user, token_data)
-
-    token_data.org_id = getattr(user, "org_id", token_data.org_id)
-    token_data.permissions = auth_service.get_user_permissions(user)
-
-    live_group_ids = getattr(user, "group_ids", None)
-    if isinstance(live_group_ids, list):
-        source_group_ids = live_group_ids
-    elif isinstance(live_group_ids, tuple):
-        source_group_ids = list(live_group_ids)
-    elif isinstance(live_group_ids, set):
-        source_group_ids = list(live_group_ids)
-    else:
-        source_group_ids = []
-    token_data.group_ids = [str(gid) for gid in source_group_ids if str(gid).strip()]
-
-    enforce_rate_limit(
-        key=f"user:{token_data.user_id}",
-        limit=config.RATE_LIMIT_USER_PER_MINUTE,
-        window_seconds=60,
+    return _authenticate_request(
+        request,
+        credentials,
+        missing_detail="Authentication required",
     )
-
-    return token_data
 
 
 def get_current_user_or_mfa_setup(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> TokenData:
-    token = _extract_bearer_token(request, credentials)
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="You need to log in to access this resource",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token_data = auth_service.decode_token(token)
-    if token_data is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Your session has expired or your token is invalid. Let's get you a new one.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if getattr(token_data, "is_mfa_setup", False):
-        user = auth_service.get_user_by_id(token_data.user_id)
-        if not user or not user.is_active:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
-        if getattr(user, "mfa_enabled", False):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="MFA setup not permitted for this user")
-        _enforce_session_revocation(user, token_data)
-        return token_data
-
-    return get_current_user(request, credentials)
+    return _authenticate_request(
+        request,
+        credentials,
+        missing_detail="You need to log in to access this resource",
+        allow_mfa_setup=True,
+    )
 
 
-def require_permission(permission: Permission | str) -> Callable[[TokenData], TokenData]:
+def require_permission(permission: Permission | str) -> Callable[..., TokenData]:
     perm_value = permission.value if hasattr(permission, "value") else str(permission)
 
     def permission_checker(current_user: TokenData = Depends(get_current_user)) -> TokenData:
@@ -386,7 +452,7 @@ def require_permission(permission: Permission | str) -> Callable[[TokenData], To
     return permission_checker
 
 
-def require_permission_with_scope(permission: Permission | str, scope: str) -> Callable[[TokenData], TokenData]:
+def require_permission_with_scope(permission: Permission | str, scope: str) -> Callable[..., TokenData]:
     perm_checker = require_permission(permission)
 
     def dependency(current_user: TokenData = Depends(perm_checker)) -> TokenData:
@@ -396,7 +462,7 @@ def require_permission_with_scope(permission: Permission | str, scope: str) -> C
     return dependency
 
 
-def require_any_permission(permissions: list[Permission | str]) -> Callable[[TokenData], TokenData]:
+def require_any_permission(permissions: list[Permission | str]) -> Callable[..., TokenData]:
     perm_values = [p.value if hasattr(p, "value") else str(p) for p in permissions]
 
     def permission_checker(current_user: TokenData = Depends(get_current_user)) -> TokenData:
@@ -415,7 +481,7 @@ def require_any_permission(permissions: list[Permission | str]) -> Callable[[Tok
     return permission_checker
 
 
-def require_any_permission_with_scope(permissions: list[Permission | str], scope: str) -> Callable[[TokenData], TokenData]:
+def require_any_permission_with_scope(permissions: list[Permission | str], scope: str) -> Callable[..., TokenData]:
     perm_checker = require_any_permission(permissions)
 
     def dependency(current_user: TokenData = Depends(perm_checker)) -> TokenData:
@@ -425,7 +491,7 @@ def require_any_permission_with_scope(permissions: list[Permission | str], scope
     return dependency
 
 
-def require_authenticated_with_scope(scope: str) -> Callable[[TokenData], TokenData]:
+def require_authenticated_with_scope(scope: str) -> Callable[..., TokenData]:
     def dependency(current_user: TokenData = Depends(get_current_user)) -> TokenData:
         apply_scoped_rate_limit(current_user, scope)
         return current_user

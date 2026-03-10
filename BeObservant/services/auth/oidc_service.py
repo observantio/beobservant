@@ -363,7 +363,7 @@ class OIDCService:
         if not isinstance(token_endpoint, str) or not token_endpoint:
             raise ValueError("OIDC token endpoint not available")
 
-        payload = {
+        request_data = {
             "grant_type": "password",
             "client_id": config.OIDC_CLIENT_ID,
             "username": username,
@@ -371,14 +371,14 @@ class OIDCService:
             "scope": config.OIDC_SCOPES,
         }
         if config.OIDC_CLIENT_SECRET:
-            payload["client_secret"] = config.OIDC_CLIENT_SECRET
+            request_data["client_secret"] = config.OIDC_CLIENT_SECRET
 
-        response = self._http.post(token_endpoint, data=payload)
+        response = self._http.post(token_endpoint, data=request_data)
         response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
+        response_body = response.json()
+        if not isinstance(response_body, dict):
             raise ValueError("OIDC token endpoint returned invalid payload")
-        return {str(key): value for key, value in payload.items()}
+        return {str(key): value for key, value in response_body.items()}
 
     def exchange_authorization_code(
         self,
@@ -392,23 +392,23 @@ class OIDCService:
         if not isinstance(token_endpoint, str) or not token_endpoint:
             raise ValueError("OIDC token endpoint not available")
 
-        payload = {
+        request_data = {
             "grant_type": "authorization_code",
             "client_id": config.OIDC_CLIENT_ID,
             "code": code,
             "redirect_uri": redirect_uri,
         }
         if config.OIDC_CLIENT_SECRET:
-            payload["client_secret"] = config.OIDC_CLIENT_SECRET
+            request_data["client_secret"] = config.OIDC_CLIENT_SECRET
         if code_verifier:
-            payload["code_verifier"] = code_verifier
+            request_data["code_verifier"] = code_verifier
 
-        response = self._http.post(token_endpoint, data=payload)
+        response = self._http.post(token_endpoint, data=request_data)
         response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
+        response_body = response.json()
+        if not isinstance(response_body, dict):
             raise ValueError("OIDC token endpoint returned invalid payload")
-        return {str(key): value for key, value in payload.items()}
+        return {str(key): value for key, value in response_body.items()}
 
     def build_authorization_url(
         self,
@@ -591,7 +591,7 @@ class OIDCService:
                 if self._pkce_s256(code_verifier) != challenge:
                     raise ValueError("Invalid PKCE code_verifier")
             elif method == "plain":
-                if str(code_verifier) != challenge:
+                if not secrets.compare_digest(str(code_verifier), challenge):
                     raise ValueError("Invalid PKCE code_verifier")
             else:
                 raise ValueError("Unsupported PKCE method")

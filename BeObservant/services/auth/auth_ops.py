@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 SigningKey = rsa.RSAPrivateKey | ec.EllipticCurvePrivateKey
 VerificationKey = rsa.RSAPublicKey | ec.EllipticCurvePublicKey
+MAX_MFA_SETUP_TOKEN_MINUTES = 15
 
 
 def _utcnow() -> datetime:
@@ -87,7 +88,7 @@ def _jwt_verification_key() -> VerificationKey:
     return _jwt_key_objects()[1]
 
 
-def _normalize_username(username: str) -> str:
+def _normalize_username(username: str | None) -> str:
     return (username or "").strip().lower()
 
 
@@ -135,7 +136,8 @@ def create_access_token(service: DatabaseAuthService, user: User) -> Token:
 
 def create_mfa_setup_token(user: User, minutes: int = 10) -> Token:
     now = _utcnow()
-    expires_seconds = int(minutes) * 60
+    bounded_minutes = max(1, min(int(minutes), MAX_MFA_SETUP_TOKEN_MINUTES))
+    expires_seconds = bounded_minutes * 60
     exp_ts = int((now + timedelta(seconds=expires_seconds)).timestamp())
 
     to_encode = {
@@ -189,8 +191,8 @@ def decode_token(service: DatabaseAuthService, token: str) -> Optional[TokenData
         permissions=permission_values,
         group_ids=group_id_values,
         iat=payload.get("iat"),
+        is_mfa_setup=bool(payload.get("mfa_setup", False)),
     )
-    setattr(td, "is_mfa_setup", bool(payload.get("mfa_setup", False)))
     return td
 
 
@@ -215,7 +217,7 @@ def authenticate_user(service: DatabaseAuthService, username: str, password: str
             user.password_changed_at = now
             changed_at = now
 
-        if interval_days > 0 and changed_at is not None:
+        if interval_days > 0:
             if getattr(changed_at, "tzinfo", None) is None:
                 changed_at = changed_at.replace(tzinfo=timezone.utc)
             expiry_cutoff = now - timedelta(days=interval_days)

@@ -325,3 +325,35 @@ def test_switching_between_owned_enabled_keys_preserves_unique_enabled_constrain
     key_b_after_b = next(k for k in after_b if k.id == key_b.id)
     assert key_a_after_b.is_enabled is False
     assert key_b_after_b.is_enabled is True
+
+
+@pytest.mark.skipif(not database.connection_test(), reason="DB not available")
+def test_disabling_owned_non_default_key_falls_back_to_default_key():
+    svc = DatabaseAuthService()
+    svc._lazy_init()
+
+    with get_db_session() as db:
+        tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+        tenant_id = tenant.id
+
+    owner = svc.create_user(
+        UserCreate(username='owner-disable', email='owner-disable@example.com', password='pw', full_name='Owner'),
+        tenant_id,
+    )
+
+    default_key = next(key for key in svc.list_api_keys(owner.id) if key.is_default)
+    extra_key = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name='extra-key', key='org-disable-extra'))
+
+    updated = svc.update_api_key(owner.id, extra_key.id, ApiKeyUpdate(is_enabled=False))
+    assert updated.is_enabled is False
+
+    listed = svc.list_api_keys(owner.id)
+    default_after = next(key for key in listed if key.id == default_key.id)
+    extra_after = next(key for key in listed if key.id == extra_key.id)
+    assert default_after.is_enabled is True
+    assert extra_after.is_enabled is False
+
+    with get_db_session() as db:
+        db_user = db.query(User).filter_by(id=owner.id).first()
+        assert db_user is not None
+        assert db_user.org_id == default_key.key
