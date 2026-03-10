@@ -61,11 +61,9 @@ class AuditComplianceFeatureTests(unittest.TestCase):
         mock_db.assert_not_called()
 
     def test_internal_otlp_validate_endpoint(self):
-        # make sure importing the app doesn't attempt to reach real postgres
         import os
         import sys
         os.environ["DATABASE_URL"] = "sqlite:///:memory:"
-        # stub out database helpers before importing main
         import database
         from services import database_auth_service as das_mod
         with patch.object(database, "init_database", lambda *args, **kwargs: None), patch.object(

@@ -1,3 +1,11 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -76,17 +84,17 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
         return fn(*args, **kwargs)
 
     monkeypatch.setattr(dependencies, "run_in_threadpool", run_sync)
-    monkeypatch.setattr(dependencies, "_load_allowed_org_ids_for_user", lambda **kwargs: {"org-a"})
+    monkeypatch.setattr(dependencies, "_load_allowed_scope_ids_for_user", lambda **kwargs: {"org-a"})
     with pytest.raises(HTTPException) as not_allowed:
         await dependencies.resolve_tenant_id(_request(headers=[(b"x-scope-orgid", b"org-b")]), current_user)
     assert not_allowed.value.status_code == 403
 
-    monkeypatch.setattr(dependencies, "_load_allowed_org_ids_for_user", lambda **kwargs: (_ for _ in ()).throw(SQLAlchemyError("db")))
+    monkeypatch.setattr(dependencies, "_load_allowed_scope_ids_for_user", lambda **kwargs: (_ for _ in ()).throw(SQLAlchemyError("db")))
     with pytest.raises(HTTPException) as load_error:
         await dependencies.resolve_tenant_id(_request(headers=[(b"x-scope-orgid", b"org-b")]), current_user)
     assert load_error.value.status_code == 500
 
-    monkeypatch.setattr(dependencies, "_load_allowed_org_ids_for_user", lambda **kwargs: {"org-a", "org-b"})
+    monkeypatch.setattr(dependencies, "_load_allowed_scope_ids_for_user", lambda **kwargs: {"org-a", "org-b"})
     monkeypatch.setattr(dependencies, "_scope_exists_in_other_tenants", lambda **kwargs: (_ for _ in ()).throw(SQLAlchemyError("db")))
     with pytest.raises(HTTPException) as scope_error:
         await dependencies.resolve_tenant_id(_request(headers=[(b"x-scope-orgid", b"org-b")]), current_user)
@@ -276,3 +284,28 @@ def test_current_user_and_permission_dependency_edges(monkeypatch):
     authenticated = dependencies.require_authenticated_with_scope("loki")
     assert authenticated(_token_data())
     assert scoped_calls[-1] == ("u1", "loki")
+
+
+def test_scope_aware_current_user_skips_base_rate_limit(monkeypatch):
+    auth_stub = types.SimpleNamespace(
+        decode_token=lambda token: _token_data(),
+        get_user_by_id=lambda user_id: types.SimpleNamespace(
+            is_active=True,
+            org_id="org-live",
+            group_ids=[],
+            session_invalid_before=None,
+        ),
+        get_user_permissions=lambda user: ["read:traces"],
+    )
+    monkeypatch.setattr(dependencies, "auth_service", auth_stub)
+    rate_limit_calls = []
+    monkeypatch.setattr(dependencies, "enforce_rate_limit", lambda **kwargs: rate_limit_calls.append(kwargs))
+
+    resolved = dependencies._scope_aware_current_user(
+        _request(),
+        HTTPAuthorizationCredentials(scheme="Bearer", credentials="token"),
+    )
+
+    assert resolved.org_id == "org-live"
+    assert resolved.permissions == ["read:traces"]
+    assert rate_limit_calls == []

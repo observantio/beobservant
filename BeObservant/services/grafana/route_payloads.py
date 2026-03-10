@@ -15,6 +15,7 @@ from typing import List, Optional
 from models.access.auth_models import Role, TokenData
 from models.grafana.grafana_dashboard_models import Dashboard, DashboardCreate, DashboardUpdate
 from custom_types.json import JSONDict
+from services.auth.delegation import role_to_text as _role_to_text
 
 VALID_VISIBILITIES = {"private", "group", "tenant"}
 
@@ -24,7 +25,10 @@ def user_group_ids(current_user: TokenData) -> List[str]:
 
 
 def is_admin_user(token_data: TokenData) -> bool:
-    return bool(getattr(token_data, "is_superuser", False) or token_data.role == Role.ADMIN)
+    return bool(
+        getattr(token_data, "is_superuser", False)
+        or _role_to_text(getattr(token_data, "role", None)) == Role.ADMIN.value
+    )
 
 
 def validate_visibility(visibility: Optional[str]) -> None:

@@ -1,3 +1,11 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -51,18 +59,24 @@ def test_database_lifecycle_and_session_paths(monkeypatch):
             self.disposed = True
 
     fake_engine = FakeEngine()
+    create_engine_calls = []
     session_events: list[str] = []
     fake_session = SimpleNamespace(
         commit=lambda: session_events.append("commit"),
         rollback=lambda: session_events.append("rollback"),
         close=lambda: session_events.append("close"),
     )
-    monkeypatch.setattr(database_module, "create_engine", lambda *args, **kwargs: fake_engine)
+    monkeypatch.setattr(
+        database_module,
+        "create_engine",
+        lambda *args, **kwargs: create_engine_calls.append((args, kwargs)) or fake_engine,
+    )
     monkeypatch.setattr(database_module, "sessionmaker", lambda **kwargs: (lambda: fake_session))
     monkeypatch.setattr(database_module.Base.metadata, "create_all", lambda bind: created.append(("create_all", bind)))
 
     database_module.init_database("sqlite:///tmp.db", echo=True, pool_size=5)
     database_module.init_database("sqlite:///tmp.db")
+    assert create_engine_calls[0][1] == {"pool_pre_ping": True, "echo": True, "future": True}
     if database_module._engine is None:
         database_module._engine = fake_engine
     if database_module._session_local is None:
@@ -76,6 +90,20 @@ def test_database_lifecycle_and_session_paths(monkeypatch):
         with database_module.get_db_session():
             raise RuntimeError("boom")
     assert session_events[-2:] == ["rollback", "close"]
+
+    failed_commit_events = []
+    failing_commit_session = SimpleNamespace(
+        commit=lambda: (_ for _ in ()).throw(RuntimeError("commit failed")),
+        rollback=lambda: failed_commit_events.append("rollback"),
+        close=lambda: failed_commit_events.append("close"),
+    )
+    database_module._session_local = lambda: failing_commit_session
+    with pytest.raises(RuntimeError, match="commit failed"):
+        with database_module.get_db_session() as session:
+            assert session is failing_commit_session
+    assert failed_commit_events == ["rollback", "close"]
+
+    database_module._session_local = lambda: fake_session
 
     yielded = next(database_module.get_db())
     assert yielded is fake_session

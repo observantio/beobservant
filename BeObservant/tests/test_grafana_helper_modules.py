@@ -1,3 +1,11 @@
+"""
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -37,6 +45,7 @@ def test_route_payload_helpers_cover_coercion_and_validation():
     assert route_payloads.user_group_ids(current_user) == ["g1", "g2"]
     assert route_payloads.is_admin_user(current_user) is False
     assert route_payloads.is_admin_user(_user(role=Role.ADMIN)) is True
+    assert route_payloads.is_admin_user(_user(role="admin")) is True
     assert route_payloads.is_admin_user(_user(is_superuser=True)) is True
 
     route_payloads.validate_visibility(None)

@@ -32,10 +32,10 @@ logger = logging.getLogger(__name__)
 auth_service = DatabaseAuthService()
 security = HTTPBearer(auto_error=False)
 
-_ALLOWLIST_DISABLED = object()
-_GENERIC_ACCESS_DENIED_DETAIL = "Access denied"
-_GENERIC_SCOPE_DENIED_DETAIL = "Requested tenant scope is not permitted"
-_RATE_LIMIT_FALLBACK_MODES = {"memory", "deny", "allow"}
+ALLOWLIST_DISABLED = object()
+GENERIC_ACCESS_DENIED_DETAIL = "Access denied"
+GENERIC_SCOPE_DENIED_DETAIL = "Requested tenant scope is not permitted"
+RATE_LIMIT_FALLBACK_MODES = {"memory", "deny", "allow"}
 
 
 def _extract_bearer_token(
@@ -139,7 +139,7 @@ def _authenticate_request(
 
 def _resolve_allowlist_setting(allowlist: str | None) -> str | object:
     if allowlist is None:
-        return _ALLOWLIST_DISABLED
+        return ALLOWLIST_DISABLED
     return str(allowlist)
 
 
@@ -149,28 +149,28 @@ def _validate_rate_limit_fallback_mode(fallback_mode: str | None) -> str | None:
     normalized = str(fallback_mode).strip().lower()
     if not normalized:
         return None
-    if normalized not in _RATE_LIMIT_FALLBACK_MODES:
+    if normalized not in RATE_LIMIT_FALLBACK_MODES:
         raise ValueError("fallback_mode must be one of: allow, deny, memory")
     return normalized
 
 async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
-    default_org_id = getattr(current_user, "org_id", config.DEFAULT_ORG_ID)
+    default_scope_id = getattr(current_user, "org_id", config.DEFAULT_ORG_ID)
     header_value = request.headers.get("x-scope-orgid")
     if not header_value:
-        return default_org_id
+        return default_scope_id
 
-    candidate_org_id = header_value.strip()
-    if not candidate_org_id or candidate_org_id == default_org_id:
-        return default_org_id
+    candidate_scope_id = header_value.strip()
+    if not candidate_scope_id or candidate_scope_id == default_scope_id:
+        return default_scope_id
 
     if getattr(current_user, "is_superuser", False):
-        return candidate_org_id
+        return candidate_scope_id
 
     try:
-        allowed_org_ids = await run_in_threadpool(
-            _load_allowed_org_ids_for_user,
+        allowed_scope_ids = await run_in_threadpool(
+            _load_allowed_scope_ids_for_user,
             current_user=current_user,
-            default_org_id=default_org_id,
+            default_scope_id=default_scope_id,
         )
     except SQLAlchemyError as exc:
         raise HTTPException(
@@ -178,22 +178,22 @@ async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
             detail="Unable to resolve tenant scope",
         ) from exc
 
-    if candidate_org_id not in allowed_org_ids:
+    if candidate_scope_id not in allowed_scope_ids:
         logger.info(
             "Rejected tenant scope for user=%s tenant=%s scope=%s: not in allowed set",
             current_user.user_id,
             current_user.tenant_id,
-            candidate_org_id,
+            candidate_scope_id,
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=_GENERIC_SCOPE_DENIED_DETAIL,
+            detail=GENERIC_SCOPE_DENIED_DETAIL,
         )
 
     try:
         conflict = await run_in_threadpool(
             _scope_exists_in_other_tenants,
-            org_id=candidate_org_id,
+            scope_id=candidate_scope_id,
             tenant_id=current_user.tenant_id,
         )
     except SQLAlchemyError as exc:
@@ -207,17 +207,17 @@ async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
             "Rejected ambiguous tenant scope for user=%s tenant=%s scope=%s",
             current_user.user_id,
             current_user.tenant_id,
-            candidate_org_id,
+            candidate_scope_id,
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=_GENERIC_SCOPE_DENIED_DETAIL,
+            detail=GENERIC_SCOPE_DENIED_DETAIL,
         )
 
-    return candidate_org_id
+    return candidate_scope_id
 
-def _load_allowed_org_ids_for_user(*, current_user: TokenData, default_org_id: str) -> set[str]:
-    allowed_org_ids: set[str] = set()
+def _load_allowed_scope_ids_for_user(*, current_user: TokenData, default_scope_id: str) -> set[str]:
+    allowed_scope_ids: set[str] = set()
 
     with get_db_session() as db:
         user = (
@@ -226,11 +226,11 @@ def _load_allowed_org_ids_for_user(*, current_user: TokenData, default_org_id: s
             .first()
         )
         if not user or not getattr(user, "is_active", False):
-            return {default_org_id}
+            return {default_scope_id}
 
-        active_org_id = str(getattr(user, "org_id", "") or default_org_id)
-        if active_org_id:
-            allowed_org_ids.add(active_org_id)
+        active_scope_id = str(getattr(user, "org_id", "") or default_scope_id)
+        if active_scope_id:
+            allowed_scope_ids.add(active_scope_id)
 
         own_enabled_rows = (
             db.query(UserApiKey.key)
@@ -241,7 +241,7 @@ def _load_allowed_org_ids_for_user(*, current_user: TokenData, default_org_id: s
             )
             .all()
         )
-        allowed_org_ids.update(str(row[0]) for row in own_enabled_rows if row and row[0])
+        allowed_scope_ids.update(str(row[0]) for row in own_enabled_rows if row and row[0])
 
         shared_rows = (
             db.query(UserApiKey.key)
@@ -255,23 +255,42 @@ def _load_allowed_org_ids_for_user(*, current_user: TokenData, default_org_id: s
             )
             .all()
         )
-        allowed_org_ids.update(str(row[0]) for row in shared_rows if row and row[0])
+        allowed_scope_ids.update(str(row[0]) for row in shared_rows if row and row[0])
 
-    allowed_org_ids.add(str(default_org_id))
-    return {org_id for org_id in allowed_org_ids if org_id}
+    allowed_scope_ids.add(str(default_scope_id))
+    return {scope_id for scope_id in allowed_scope_ids if scope_id}
 
 
-def _scope_exists_in_other_tenants(*, org_id: str, tenant_id: str) -> bool:
+def _load_allowed_org_ids_for_user(*, current_user: TokenData, default_org_id: str) -> set[str]:
+    return _load_allowed_scope_ids_for_user(current_user=current_user, default_scope_id=default_org_id)
+
+
+def _scope_exists_in_other_tenants(*, scope_id: str | None = None, tenant_id: str, org_id: str | None = None) -> bool:
+    resolved_scope_id = str(scope_id or org_id or "").strip()
+    if not resolved_scope_id:
+        return False
     with get_db_session() as db:
         conflict = (
             db.query(UserApiKey.id)
             .filter(
-                UserApiKey.key == org_id,
+                UserApiKey.key == resolved_scope_id,
                 UserApiKey.tenant_id != tenant_id,
             )
             .first()
         )
         return conflict is not None
+
+
+def _scope_aware_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> TokenData:
+    return _authenticate_request(
+        request,
+        credentials,
+        missing_detail="Authentication required",
+        apply_base_rate_limit=False,
+    )
 
 
 def apply_scoped_rate_limit(current_user: TokenData, scope: str) -> None:
@@ -332,7 +351,7 @@ def _parse_ip_allowlist(allowlist: str | None) -> list[IPv4Network | IPv6Network
 
 def enforce_ip_allowlist(request: Request, allowlist: str | None, *, scope: str) -> None:
     resolved_allowlist = _resolve_allowlist_setting(allowlist)
-    if resolved_allowlist is _ALLOWLIST_DISABLED:
+    if resolved_allowlist is ALLOWLIST_DISABLED:
         return
 
     networks = _parse_ip_allowlist(str(resolved_allowlist))
@@ -346,7 +365,7 @@ def enforce_ip_allowlist(request: Request, allowlist: str | None, *, scope: str)
             return
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=_GENERIC_ACCESS_DENIED_DETAIL,
+            detail=GENERIC_ACCESS_DENIED_DETAIL,
         )
 
     client = client_ip(request)
@@ -356,7 +375,7 @@ def enforce_ip_allowlist(request: Request, allowlist: str | None, *, scope: str)
         logger.warning("Rejected request for scope=%s due to invalid client IP: %s", scope, client)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=_GENERIC_ACCESS_DENIED_DETAIL,
+            detail=GENERIC_ACCESS_DENIED_DETAIL,
         ) from exc
 
     if any(client_addr in network for network in networks):
@@ -364,7 +383,7 @@ def enforce_ip_allowlist(request: Request, allowlist: str | None, *, scope: str)
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail=_GENERIC_ACCESS_DENIED_DETAIL,
+        detail=GENERIC_ACCESS_DENIED_DETAIL,
     )
 
 
@@ -383,7 +402,7 @@ def enforce_public_endpoint_security(
         logger.warning("Rejected public request for scope=%s because client IP resolution failed", scope)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=_GENERIC_ACCESS_DENIED_DETAIL,
+            detail=GENERIC_ACCESS_DENIED_DETAIL,
         )
     enforce_ip_rate_limit(
         request,
@@ -453,9 +472,20 @@ def require_permission(permission: Permission | str) -> Callable[..., TokenData]
 
 
 def require_permission_with_scope(permission: Permission | str, scope: str) -> Callable[..., TokenData]:
-    perm_checker = require_permission(permission)
+    perm_value = permission.value if hasattr(permission, "value") else str(permission)
 
-    def dependency(current_user: TokenData = Depends(perm_checker)) -> TokenData:
+    def permission_checker(current_user: TokenData = Depends(_scope_aware_current_user)) -> TokenData:
+        if perm_value not in current_user.permissions and not current_user.is_superuser:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"You don't have the permission to {perm_value.upper()}, "
+                    "please contact your administrator if you think this is a mistake."
+                ),
+            )
+        return current_user
+
+    def dependency(current_user: TokenData = Depends(permission_checker)) -> TokenData:
         apply_scoped_rate_limit(current_user, scope)
         return current_user
 
@@ -482,9 +512,22 @@ def require_any_permission(permissions: list[Permission | str]) -> Callable[...,
 
 
 def require_any_permission_with_scope(permissions: list[Permission | str], scope: str) -> Callable[..., TokenData]:
-    perm_checker = require_any_permission(permissions)
+    perm_values = [p.value if hasattr(p, "value") else str(p) for p in permissions]
 
-    def dependency(current_user: TokenData = Depends(perm_checker)) -> TokenData:
+    def permission_checker(current_user: TokenData = Depends(_scope_aware_current_user)) -> TokenData:
+        if current_user.is_superuser:
+            return current_user
+        if any(pv in current_user.permissions for pv in perm_values):
+            return current_user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You don't have any of the required permissions: "
+                f"{', '.join(p.upper() for p in perm_values)}"
+            ),
+        )
+
+    def dependency(current_user: TokenData = Depends(permission_checker)) -> TokenData:
         apply_scoped_rate_limit(current_user, scope)
         return current_user
 
@@ -492,7 +535,7 @@ def require_any_permission_with_scope(permissions: list[Permission | str], scope
 
 
 def require_authenticated_with_scope(scope: str) -> Callable[..., TokenData]:
-    def dependency(current_user: TokenData = Depends(get_current_user)) -> TokenData:
+    def dependency(current_user: TokenData = Depends(_scope_aware_current_user)) -> TokenData:
         apply_scoped_rate_limit(current_user, scope)
         return current_user
 

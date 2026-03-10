@@ -14,11 +14,12 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 import logging
 import os
 import threading
+from contextlib import contextmanager
 from types import TracebackType
 from typing import Callable, Generator, Iterator, Optional
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -60,16 +61,24 @@ def init_database(
         resolved_max_overflow = _env_int("DB_MAX_OVERFLOW", 20)
         resolved_pool_timeout = _env_int("DB_POOL_TIMEOUT", 30)
         resolved_pool_recycle = _env_int("DB_POOL_RECYCLE", 1800)
+        engine_kwargs = {
+            "pool_pre_ping": True,
+            "echo": echo,
+            "future": True,
+        }
+        if make_url(database_url).get_backend_name() != "sqlite":
+            engine_kwargs.update(
+                {
+                    "pool_size": resolved_pool_size,
+                    "max_overflow": resolved_max_overflow,
+                    "pool_timeout": resolved_pool_timeout,
+                    "pool_recycle": resolved_pool_recycle,
+                }
+            )
 
         _engine = create_engine(
             database_url,
-            pool_pre_ping=True,
-            pool_size=resolved_pool_size,
-            max_overflow=resolved_max_overflow,
-            pool_timeout=resolved_pool_timeout,
-            pool_recycle=resolved_pool_recycle,
-            echo=echo,
-            future=True,
+            **engine_kwargs,
         )
 
         _session_local = sessionmaker(
@@ -87,6 +96,7 @@ def _require_session_factory() -> Callable[[], Session]:
     return _session_local
 
 
+@contextmanager
 def _session_scope() -> Iterator[Session]:
     session = _require_session_factory()()
     try:
@@ -118,7 +128,11 @@ class _SessionContext:
             return
         try:
             if exc_type is None:
-                self._session.commit()
+                try:
+                    self._session.commit()
+                except Exception:
+                    self._session.rollback()
+                    raise
             else:
                 self._session.rollback()
         finally:
