@@ -218,6 +218,8 @@ cd Observantio
 cp .env.example .env
 ```
 
+For local developer tooling, the workspace root and the BeCertain and BeNotified service folders now each include a `pyproject.toml` with the canonical pytest, coverage, and mypy defaults for that scope.
+
 Then edit `.env` and set, at minimum:
 
 - Strong Postgres password values.

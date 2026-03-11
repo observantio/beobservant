@@ -184,8 +184,8 @@ def decode_token(service: DatabaseAuthService, token: str) -> Optional[TokenData
     td = TokenData(
         user_id=str(user_id),
         username=str(username),
-        tenant_id=payload.get("tenant_id"),
-        org_id=payload.get("org_id", config.DEFAULT_ORG_ID),
+        tenant_id=str(payload.get("tenant_id") or ""),
+        org_id=str(payload.get("org_id", config.DEFAULT_ORG_ID) or config.DEFAULT_ORG_ID),
         role=role,
         is_superuser=bool(payload.get("is_superuser", False)),
         permissions=permission_values,

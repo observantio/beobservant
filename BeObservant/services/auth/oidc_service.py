@@ -19,7 +19,7 @@ import logging
 import secrets
 import threading
 import time
-from typing import Optional, Set, Tuple, Coroutine, TypeVar
+from typing import Optional, Set, Tuple, Coroutine, TypeVar, cast
 from urllib.parse import urlencode
 
 import httpx
@@ -312,9 +312,6 @@ class OIDCService:
                 issuer=issuer or None,
                 audience=audience or None,
             )
-            if not isinstance(claims, dict):
-                return None
-
             token_nonce = str(claims.get("nonce") or "")
             if require_nonce and not nonce:
                 logger.warning("OIDC token rejected: nonce required but missing")
@@ -326,7 +323,7 @@ class OIDCService:
                 logger.warning("OIDC token rejected: nonce missing in token")
                 return None
 
-            return claims
+            return cast(JSONDict, claims)
 
         except jwt.PyJWTError:
             logger.warning("OIDC token validation failed")

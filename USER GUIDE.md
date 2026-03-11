@@ -239,6 +239,8 @@ docker compose ps
 
 Initial startup can take a while because multiple images are being built and the application services wait on databases and observability backends.
 
+For local development outside Docker, use the service-level `pyproject.toml` files in `BeCertain` and `BeNotified` as the canonical entry points for pytest, coverage, and mypy-aware editor tooling.
+
 ## 7. Verify The Stack Cleanly
 
 Run these checks:
