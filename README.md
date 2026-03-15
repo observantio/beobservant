@@ -2,6 +2,8 @@
 
 Be Observant is a self-hosted observability control plane built around Grafana, Loki, Tempo, Mimir, Alertmanager, and a set of application services that add tenancy, access control, alert workflows, and AI-assisted root cause analysis.
 
+![Observantio Quick Demo](assets/Observant.gif)
+
 If you are new to the project, the simplest way to think about it is this: the Grafana stack is the storage and query layer, and Be Observant is the application layer that makes it practical for a team and enterprise to use that stack together.
 
 In plain terms, this workspace gives you:
