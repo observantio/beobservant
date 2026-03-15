@@ -54,7 +54,7 @@ Be Observant adds the pieces those components do not provide as a single opinion
 ## Repo Links
 
 - **Be Observant (main control plane)**: https://github.com/observantio/beobservant
-- **Be Ojo (opentelemtry agent)**: https://github.com/observantio/ojo
+- **Ojo (opentelemtry agent)**: https://github.com/observantio/ojo
 - **Be Notified (alerting & incidents)**: https://github.com/observantio/benotified
 - **Be Certain (RCA / AIops engine)**: https://github.com/observantio/becertain
 
@@ -89,7 +89,7 @@ From the code, it does all of the following:
 - Provides `/health` and `/ready` checks and a `/api/system/metrics` endpoint for internal UI metrics.
 - Sets security headers, request-size limits, concurrency limits, and CORS.
 
-#### Be Gateway | Secure Gate Keeper
+#### Gateway | Secure Gate Keeper
 
 This service is the telemetry gatekeeper.
 
@@ -137,7 +137,7 @@ Its responsibilities include:
 - Storing RCA jobs and reports in its own database.
 - Enforcing internal service-to-service auth and tenant-aware permission context.
 
-#### ui | Interface for Users
+#### React UI | Interface for Users
 
 The frontend is not a demo shell. It is the main operator experience.
 
