@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Watchdog
+        working-directory: watchdog
     steps:
       - uses: actions/checkout@v4
 
@@ -91,7 +91,7 @@ jobs:
             extra_packages: ""
             run_pylint: "false"
           - name: Watchdog
-            service: Watchdog
+            service: watchdog
             requirements: watchdog/requirements.txt
             mypy_config: mypy.ini
             pylint_config: .pylintrc
