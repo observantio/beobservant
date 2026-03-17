@@ -92,7 +92,7 @@ jobs:
             run_pylint: "false"
           - name: Watchdog
             service: Watchdog
-            requirements: Watchdog/requirements.txt
+            requirements: watchdog/requirements.txt
             mypy_config: mypy.ini
             pylint_config: .pylintrc
             extra_packages: "types-psutil"

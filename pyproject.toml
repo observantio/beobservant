@@ -156,7 +156,7 @@ explicit_package_bases = true
 exclude_gitignore = true
 ignore_missing_imports = true
 exclude = [
-  "^(ui/|showcase/|configs/|tests/|build/|dist/|venv/|\\.venv/|__pycache__/|watchdog/tests/|gatekeeper/tests/|Notifier/tests/|resolver/tests/)",
+  "^(ui/|showcase/|configs/|tests/|build/|dist/|venv/|\\.venv/|__pycache__/|watchdog/tests/|gatekeeper/tests/|notifier/tests/|resolver/tests/)",
 ]
 
 [tool.pylint.main]
@@ -165,7 +165,7 @@ ignore = [".git", "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", 
 ignore-paths = [
   "^\\./?resolver/tests/.*$",
   "^\\./?gatekeepery/tests/.*$",
-  "^\\./?Notifier/tests/.*$",
+  "^\\./?notifier/tests/.*$",
   "^\\./?watchdog/tests/.*$",
   "^\\./?tests/.*$",
   "^\\./?ui/.*$",
