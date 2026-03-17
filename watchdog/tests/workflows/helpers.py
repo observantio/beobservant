@@ -265,7 +265,7 @@ class WorkflowState:
             raise ValueError("user not found")
         return {
             "secret": "ABC123",
-            "otpauth_url": "otpauth://totp/Watchdog:admin?secret=ABC123",
+            "otpauth_url": "otpauth://totp/watchdog:admin?secret=ABC123",
         }
 
     def verify_enable_totp(self, user_id: str, code: str) -> list[str]:
