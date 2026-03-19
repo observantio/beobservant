@@ -158,17 +158,20 @@ The included `docker-compose.yml` brings up the full local stack:
 - `ui` on port `5173`.
 - `otel-agent` as a local telemetry generator/test harness.
 
-### Important Runtime Ports
+### Important Runtime Endpoints
 
-| Port | Service | Purpose |
+| Endpoint | Service | Purpose |
 | --- | --- | --- |
-| `5173` | `ui` | Web UI |
-| `4319` | `watchdog` | Main API and docs |
-| `4320` | `otlp-gateway` | OTLP ingress through Envoy |
-| `4321` | `gateway-auth` | OTLP auth service |
-| `4322` | `resolver` | RCA engine |
-| `4323` | `notifier` | Alerting service |
-| `8080` | `grafana-proxy` | Browser access to Grafana |
+| `http://localhost:5173` | `ui` | Web UI |
+| `http://localhost:4319` | `watchdog` | Main API and docs |
+| `http://localhost:4320` | `otlp-gateway` | OTLP ingress through Envoy |
+| `http://localhost:4323` | `notifier` | Alerting service |
+| `http://localhost:8080` | `grafana-proxy` | Browser access to Grafana |
+
+Internal-only services in the default compose layout:
+
+- `gateway-auth` (`4321`) is reachable on the Docker network, not via host `localhost`.
+- `resolver` (`4322`) is reachable on the Docker network, not via host `localhost`.
 
 ## Environment File Overview
 
@@ -199,7 +202,7 @@ The included installer is meant for evaluation and local testing.
 It will:
 
 - Check for required commands.
-- Clone missing repos for `resolver` and `Notifier`.
+- Clone missing repos for `resolver` and `notifier`.
 - Create or update `.env`.
 - Generate secrets and a bootstrap admin account.
 - Start the compose stack.
@@ -216,7 +219,7 @@ cd Observantio
 cp .env.example .env
 ```
 
-For local developer tooling, the workspace root and the  `resolver` and Notifier service folders now each include a `pyproject.toml` with the canonical pytest, coverage, and mypy defaults for that scope.
+For local developer tooling, the workspace root and the `resolver` and `notifier` service folders now each include a `pyproject.toml` with the canonical pytest, coverage, and mypy defaults for that scope.
 
 Then edit `.env` and set, at minimum:
 
@@ -245,8 +248,9 @@ docker compose ps
 curl http://localhost:4319/health
 curl http://localhost:4319/ready
 curl http://localhost:4323/health
-curl http://localhost:4321/api/gateway/health
 ```
+
+For internal services that are not published to host ports (`gateway-auth`, `resolver`), use `docker compose logs` or container-internal checks.
 
 ## First-Run User Journey
 
@@ -400,7 +404,7 @@ There are three different security boundaries in this stack:
 
 ## Documentation
 
-- Detailed walkthrough: [User Guide](USER_GUIDE.md)
+- Detailed walkthrough: [User Guide](USER%20GUIDE.md)
 - Environment reference: [Example Environment File](.env.example)
 
 ## License And Notices
