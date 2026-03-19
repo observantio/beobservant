@@ -634,7 +634,7 @@
       },
       "targets": [
         {
-          "expr": "100 * (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"user\"}[5m])) / clamp_min(sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\"}[5m])), 1e-9))",
+          "expr": "100 * ((((sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"user\"}[5m]))) or (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",cpu_mode=\"user\"}[5m]))))) / clamp_min(sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\"}[5m])), 1e-9))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -721,7 +721,7 @@
       },
       "targets": [
         {
-          "expr": "100 * (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"system\"}[5m])) / clamp_min(sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\"}[5m])), 1e-9))",
+          "expr": "100 * ((((sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"system\"}[5m]))) or (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",cpu_mode=\"system\"}[5m]))))) / clamp_min(sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\"}[5m])), 1e-9))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -808,7 +808,7 @@
       },
       "targets": [
         {
-          "expr": "100 * (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"irq\"}[5m])) / clamp_min(sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\"}[5m])), 1e-9))",
+          "expr": "100 * ((((sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"irq\"}[5m]))) or (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",cpu_mode=\"irq\"}[5m]))))) / clamp_min(sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\"}[5m])), 1e-9))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -896,7 +896,7 @@
       },
       "targets": [
         {
-          "expr": "100 * (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"softirq\"}[5m])) / clamp_min(sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\"}[5m])), 1e-9))",
+          "expr": "100 * ((((sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"softirq\"}[5m]))) or (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",cpu_mode=\"softirq\"}[5m]))))) / clamp_min(sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\"}[5m])), 1e-9))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -984,7 +984,7 @@
       },
       "targets": [
         {
-          "expr": "100 * (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"idle\"}[5m])) / clamp_min(sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\"}[5m])), 1e-9))",
+          "expr": "100 * ((((sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"idle\"}[5m]))) or (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",cpu_mode=\"idle\"}[5m]))))) / clamp_min(sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\"}[5m])), 1e-9))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -2851,7 +2851,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"irq\"}[5m]))",
+          "expr": "((sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"irq\"}[5m]))) or (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",cpu_mode=\"irq\"}[5m]))))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -2936,7 +2936,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"softirq\"}[5m]))",
+          "expr": "((sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"softirq\"}[5m]))) or (sum by (instance) (rate(system_cpu_time_seconds_total{instance=~\"$instance\",cpu_mode=\"softirq\"}[5m]))))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
@@ -3202,8 +3202,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (rate(system_disk_io_bytes_total{instance=~\"$instance\",device=~\"$disk\",direction=\"read\"}[5m]))",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (system_device) (rate(system_disk_io_bytes_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"read\"}[5m]))",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -3286,8 +3286,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (rate(system_disk_io_bytes_total{instance=~\"$instance\",device=~\"$disk\",direction=\"write\"}[5m]))",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (system_device) (rate(system_disk_io_bytes_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"write\"}[5m]))",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -3370,8 +3370,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (rate(system_disk_operations_total{instance=~\"$instance\",device=~\"$disk\",direction=\"read\"}[5m]))",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (system_device) (rate(system_disk_operations_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"read\"}[5m]))",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -3454,8 +3454,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (rate(system_disk_operations_total{instance=~\"$instance\",device=~\"$disk\",direction=\"write\"}[5m]))",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (system_device) (rate(system_disk_operations_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"write\"}[5m]))",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -3539,8 +3539,8 @@
       },
       "targets": [
         {
-          "expr": "1e3 * sum by (device) (rate(system_disk_operation_time_seconds_total{instance=~\"$instance\",device=~\"$disk\",direction=\"read\"}[5m])) / clamp_min(sum by (device) (rate(system_disk_operations_total{instance=~\"$instance\",device=~\"$disk\",direction=\"read\"}[5m])), 1e-9)",
-          "legendFormat": "{{device}}",
+          "expr": "1e3 * sum by (system_device) (rate(system_disk_operation_time_seconds_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"read\"}[5m])) / clamp_min(sum by (system_device) (rate(system_disk_operations_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"read\"}[5m])), 1e-9)",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -3624,8 +3624,8 @@
       },
       "targets": [
         {
-          "expr": "1e3 * sum by (device) (rate(system_disk_operation_time_seconds_total{instance=~\"$instance\",device=~\"$disk\",direction=\"write\"}[5m])) / clamp_min(sum by (device) (rate(system_disk_operations_total{instance=~\"$instance\",device=~\"$disk\",direction=\"write\"}[5m])), 1e-9)",
-          "legendFormat": "{{device}}",
+          "expr": "1e3 * sum by (system_device) (rate(system_disk_operation_time_seconds_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"write\"}[5m])) / clamp_min(sum by (system_device) (rate(system_disk_operations_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"write\"}[5m])), 1e-9)",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -3711,8 +3711,8 @@
       },
       "targets": [
         {
-          "expr": "100 * system_disk_utilization{instance=~\"$instance\",device=~\"$disk\"}",
-          "legendFormat": "{{device}}",
+          "expr": "100 * system_disk_utilization{instance=~\"$instance\",system_device=~\"$disk\"}",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -3795,8 +3795,8 @@
       },
       "targets": [
         {
-          "expr": "system_disk_queue_depth{instance=~\"$instance\",device=~\"$disk\"} or system_disk_io_in_progress{instance=~\"$instance\",device=~\"$disk\"} or sum by (device) (rate(system_disk_operation_time_seconds_total{instance=~\"$instance\",device=~\"$disk\"}[5m]))",
-          "legendFormat": "{{device}}",
+          "expr": "system_disk_queue_depth{instance=~\"$instance\",system_device=~\"$disk\"} or system_disk_io_in_progress{instance=~\"$instance\",system_device=~\"$disk\"} or sum by (system_device) (rate(system_disk_operation_time_seconds_total{instance=~\"$instance\",system_device=~\"$disk\"}[5m]))",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -3879,8 +3879,8 @@
       },
       "targets": [
         {
-          "expr": "rate(system_disk_sectors_total{instance=~\"$instance\",device=~\"$disk\",direction=\"read\"}[5m]) or (rate(system_disk_io_bytes_total{instance=~\"$instance\",device=~\"$disk\",direction=\"read\"}[5m]) / 512)",
-          "legendFormat": "{{device}}",
+          "expr": "rate(system_disk_sectors_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"read\"}[5m]) or (rate(system_disk_io_bytes_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"read\"}[5m]) / 512)",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ],
@@ -3964,8 +3964,8 @@
       },
       "targets": [
         {
-          "expr": "rate(system_disk_sectors_total{instance=~\"$instance\",device=~\"$disk\",direction=\"write\"}[5m]) or (rate(system_disk_io_bytes_total{instance=~\"$instance\",device=~\"$disk\",direction=\"write\"}[5m]) / 512)",
-          "legendFormat": "{{device}}",
+          "expr": "rate(system_disk_sectors_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"write\"}[5m]) or (rate(system_disk_io_bytes_total{instance=~\"$instance\",system_device=~\"$disk\",disk_io_direction=\"write\"}[5m]) / 512)",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ],
@@ -4230,8 +4230,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (system_network_rx_bytes_per_sec{instance=~\"$instance\",device=~\"$interface\"})",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (network_interface_name) (system_network_rx_bytes_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -4314,8 +4314,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (system_network_tx_bytes_per_sec{instance=~\"$instance\",device=~\"$interface\"})",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (network_interface_name) (system_network_tx_bytes_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -4398,8 +4398,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (system_network_rx_packets_per_sec{instance=~\"$instance\",device=~\"$interface\"})",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (network_interface_name) (system_network_rx_packets_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -4482,8 +4482,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (system_network_tx_packets_per_sec{instance=~\"$instance\",device=~\"$interface\"})",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (network_interface_name) (system_network_tx_packets_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -4566,8 +4566,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (system_network_rx_errors_per_sec{instance=~\"$instance\",device=~\"$interface\"})",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (network_interface_name) (system_network_rx_errors_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -4650,8 +4650,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (system_network_tx_errors_per_sec{instance=~\"$instance\",device=~\"$interface\"})",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (network_interface_name) (system_network_tx_errors_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -4734,8 +4734,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (system_network_rx_drops_per_sec{instance=~\"$instance\",device=~\"$interface\"})",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (network_interface_name) (system_network_rx_drops_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -4818,8 +4818,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (device) (system_network_tx_drops_per_sec{instance=~\"$instance\",device=~\"$interface\"})",
-          "legendFormat": "{{device}}",
+          "expr": "sum by (network_interface_name) (system_network_tx_drops_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
+          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
           "refId": "A"
         }
       ]
@@ -5251,8 +5251,8 @@
       },
       "targets": [
         {
-          "expr": "100 * topk(10, max by (comm, pid) (process_cpu_utilization{instance=~\"$instance\"}))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "100 * topk(10, max by (process_command, process_pid) (process_cpu_utilization{instance=~\"$instance\"}))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -5335,8 +5335,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, max by (comm, pid) (process_memory_rss_bytes{instance=~\"$instance\"}))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, max by (process_command, process_pid) (process_memory_rss_bytes{instance=~\"$instance\"}))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -5419,8 +5419,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, max by (comm, pid) ((process_memory_usage_bytes{instance=~\"$instance\",type=\"working_set\"}) or (process_memory_working_set_bytes{instance=~\"$instance\"}) or (process_memory_working_set{instance=~\"$instance\"})))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, max by (process_command, process_pid) ((process_memory_usage_bytes{instance=~\"$instance\",type=\"working_set\"}) or (process_memory_working_set_bytes{instance=~\"$instance\"}) or (process_memory_working_set{instance=~\"$instance\"})))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -5503,8 +5503,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, max by (comm, pid) ((process_memory_usage_bytes{instance=~\"$instance\",type=\"private_bytes\"}) or (process_memory_private_bytes{instance=~\"$instance\"}) or (process_memory_private{instance=~\"$instance\"})))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, max by (process_command, process_pid) ((process_memory_usage_bytes{instance=~\"$instance\",type=\"private_bytes\"}) or (process_memory_private_bytes{instance=~\"$instance\"}) or (process_memory_private{instance=~\"$instance\"})))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -5587,8 +5587,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (comm, pid) (rate(process_disk_io_bytes_total{instance=~\"$instance\",direction=\"read\"}[5m])))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, sum by (process_command, process_pid) (rate(process_disk_io_bytes_total{instance=~\"$instance\",disk_io_direction=\"read\"}[5m])))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -5671,8 +5671,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (comm, pid) (rate(process_disk_io_bytes_total{instance=~\"$instance\",direction=\"write\"}[5m])))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, sum by (process_command, process_pid) (rate(process_disk_io_bytes_total{instance=~\"$instance\",disk_io_direction=\"write\"}[5m])))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -5755,8 +5755,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, (sum by (comm, pid) (rate(process_io_chars_total{instance=~\"$instance\",direction=\"read\"}[5m]))) or (sum by (comm, pid) (rate(process_disk_io_bytes_total{instance=~\"$instance\",direction=\"read\"}[5m]))))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, (sum by (process_command, process_pid) (rate(process_io_chars_total{instance=~\"$instance\",disk_io_direction=\"read\"}[5m]))) or (sum by (process_command, process_pid) (rate(process_disk_io_bytes_total{instance=~\"$instance\",disk_io_direction=\"read\"}[5m]))))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ],
@@ -5840,8 +5840,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, (sum by (comm, pid) (rate(process_io_chars_total{instance=~\"$instance\",direction=\"write\"}[5m]))) or (sum by (comm, pid) (rate(process_disk_io_bytes_total{instance=~\"$instance\",direction=\"write\"}[5m]))))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, (sum by (process_command, process_pid) (rate(process_io_chars_total{instance=~\"$instance\",disk_io_direction=\"write\"}[5m]))) or (sum by (process_command, process_pid) (rate(process_disk_io_bytes_total{instance=~\"$instance\",disk_io_direction=\"write\"}[5m]))))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ],
@@ -5925,8 +5925,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (comm, pid) (rate(process_io_syscalls_total{instance=~\"$instance\",direction=\"read\"}[5m])))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, sum by (process_command, process_pid) (rate(process_io_syscalls_total{instance=~\"$instance\",disk_io_direction=\"read\"}[5m])))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -6009,8 +6009,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (comm, pid) (rate(process_io_syscalls_total{instance=~\"$instance\",direction=\"write\"}[5m])))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, sum by (process_command, process_pid) (rate(process_io_syscalls_total{instance=~\"$instance\",disk_io_direction=\"write\"}[5m])))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -6093,8 +6093,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, max by (comm, pid) (process_thread_count{instance=~\"$instance\"}))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, max by (process_command, process_pid) (process_thread_count{instance=~\"$instance\"}))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -6177,8 +6177,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, max by (comm, pid) (process_open_file_descriptors{instance=~\"$instance\"}))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, max by (process_command, process_pid) (process_unix_file_descriptor_count{instance=~\"$instance\"}))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ],
@@ -6262,8 +6262,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (comm, pid) (rate(process_paging_faults_total{instance=~\"$instance\",type=\"major\"}[5m])))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, sum by (process_command, process_pid) (rate(process_paging_faults_total{instance=~\"$instance\",type=\"major\"}[5m])))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -6346,8 +6346,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (comm, pid) (rate(process_paging_faults_total{instance=~\"$instance\",type=\"minor\"}[5m])))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, sum by (process_command, process_pid) (rate(process_paging_faults_total{instance=~\"$instance\",type=\"minor\"}[5m])))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -6430,8 +6430,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, max by (comm, pid) (process_memory_vm_size_bytes{instance=~\"$instance\"}))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, max by (process_command, process_pid) (process_memory_vm_size_bytes{instance=~\"$instance\"}))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -6514,8 +6514,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, max by (comm, pid) ((process_memory_usage_bytes{instance=~\"$instance\",type=\"pagefile_usage\"}) or (process_memory_pagefile_usage_bytes{instance=~\"$instance\"}) or (process_memory_pagefile_usage{instance=~\"$instance\"}) or (process_memory_usage_bytes{instance=~\"$instance\",type=\"commit_charge\"}) or (process_memory_commit_charge_bytes{instance=~\"$instance\"}) or (process_memory_commit_charge{instance=~\"$instance\"})))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, max by (process_command, process_pid) ((process_memory_usage_bytes{instance=~\"$instance\",type=\"pagefile_usage\"}) or (process_memory_pagefile_usage_bytes{instance=~\"$instance\"}) or (process_memory_pagefile_usage{instance=~\"$instance\"}) or (process_memory_usage_bytes{instance=~\"$instance\",type=\"commit_charge\"}) or (process_memory_commit_charge_bytes{instance=~\"$instance\"}) or (process_memory_commit_charge{instance=~\"$instance\"})))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -6598,8 +6598,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, max by (comm, pid) ((process_memory_usage_bytes{instance=~\"$instance\",type=\"commit_charge\"}) or (process_memory_commit_charge_bytes{instance=~\"$instance\"}) or (process_memory_commit_charge{instance=~\"$instance\"})))",
-          "legendFormat": "{{comm}} ({{pid}})",
+          "expr": "topk(10, max by (process_command, process_pid) ((process_memory_usage_bytes{instance=~\"$instance\",type=\"commit_charge\"}) or (process_memory_commit_charge_bytes{instance=~\"$instance\"}) or (process_memory_commit_charge{instance=~\"$instance\"})))",
+          "legendFormat": "{{process_command}} ({{process_pid}})",
           "refId": "A"
         }
       ]
@@ -7115,7 +7115,7 @@
       },
       "targets": [
         {
-          "expr": "rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"irq\",cpu=~\"$cpu\"}[5m]) or label_replace(rate(system_windows_interrupts{instance=~\"$instance\",key=~\"isr_time_100ns\\\\|.*\"}[5m]),\"cpu\",\"$1\",\"key\",\"isr_time_100ns\\\\|(.*)\")",
+          "expr": "(rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"irq\",cpu=~\"$cpu\"}[5m]) or rate(system_cpu_time_seconds_total{instance=~\"$instance\",cpu_mode=\"irq\",cpu=~\"$cpu\"}[5m])) or label_replace(rate(system_windows_interrupts{instance=~\"$instance\",key=~\"isr_time_100ns\\\\|.*\"}[5m]),\"cpu\",\"$1\",\"key\",\"isr_time_100ns\\\\|(.*)\")",
           "legendFormat": "Cpu {{cpu}}",
           "refId": "A"
         }
@@ -7199,7 +7199,7 @@
       },
       "targets": [
         {
-          "expr": "rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"softirq\",cpu=~\"$cpu\"}[5m]) or label_replace(rate(system_windows_dpc{instance=~\"$instance\",key=~\"dpc_time_100ns\\\\|.*\"}[5m]),\"cpu\",\"$1\",\"key\",\"dpc_time_100ns\\\\|(.*)\")",
+          "expr": "(rate(system_cpu_time_seconds_total{instance=~\"$instance\",state=\"softirq\",cpu=~\"$cpu\"}[5m]) or rate(system_cpu_time_seconds_total{instance=~\"$instance\",cpu_mode=\"softirq\",cpu=~\"$cpu\"}[5m])) or label_replace(rate(system_windows_dpc{instance=~\"$instance\",key=~\"dpc_time_100ns\\\\|.*\"}[5m]),\"cpu\",\"$1\",\"key\",\"dpc_time_100ns\\\\|(.*)\")",
           "legendFormat": "Cpu {{cpu}}",
           "refId": "A"
         }
@@ -8046,7 +8046,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(system_cpu_utilization, instance)",
+        "definition": "label_values(system_cpu_time_seconds_total, instance)",
         "hide": 0,
         "includeAll": true,
         "label": "Instance",
@@ -8055,7 +8055,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(system_cpu_utilization, instance)",
+          "query": "label_values(system_cpu_time_seconds_total, instance)",
           "refId": "Prometheus-instance-Variable-Query"
         },
         "refresh": 2,
@@ -8074,7 +8074,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(system_disk_io_bytes_total{instance=~\"$instance\"}, device)",
+        "definition": "label_values(system_disk_io_bytes_total{instance=~\"$instance\"}, system_device)",
         "hide": 0,
         "includeAll": true,
         "label": "Disk",
@@ -8083,7 +8083,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(system_disk_io_bytes_total{instance=~\"$instance\"}, device)",
+          "query": "label_values(system_disk_io_bytes_total{instance=~\"$instance\"}, system_device)",
           "refId": "Prometheus-disk-Variable-Query"
         },
         "refresh": 2,
@@ -8102,7 +8102,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(system_network_rx_bytes_per_sec{instance=~\"$instance\"}, device)",
+        "definition": "label_values(system_network_rx_bytes_per_sec{instance=~\"$instance\"}, network_interface_name)",
         "hide": 0,
         "includeAll": true,
         "label": "Interface",
@@ -8111,7 +8111,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(system_network_rx_bytes_per_sec{instance=~\"$instance\"}, device)",
+          "query": "label_values(system_network_rx_bytes_per_sec{instance=~\"$instance\"}, network_interface_name)",
           "refId": "Prometheus-interface-Variable-Query"
         },
         "refresh": 2,
