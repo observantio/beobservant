@@ -59,7 +59,10 @@ def err(msg: str) -> None:
 
 def require_cmd(cmd: str) -> None:
     if shutil.which(cmd) is None:
-        raise SystemExit(f"Required command not found: {cmd}")
+        raise SystemExit(
+            f"Required command not found: {cmd}.\n"
+            f"Please install {cmd} and ensure it is on your PATH before running this installer."
+        )
 
 
 def run(cmd: Sequence[str], *, cwd: Path | None = None) -> None:
@@ -83,6 +86,38 @@ def detect_compose() -> List[str]:
     if shutil.which("docker-compose"):
         return ["docker-compose"]
     raise SystemExit("Docker Compose not found. Install Docker Desktop or docker compose plugin.")
+
+
+def require_docker_compose() -> List[str]:
+    cmd = detect_compose()
+    ok(f"Detected Docker Compose command: {' '.join(cmd)}")
+    return cmd
+
+
+def require_buildx(required_version: str = "0.17.0") -> None:
+    try:
+        p = subprocess.run(
+            ["docker", "buildx", "version"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except Exception as e:
+        raise SystemExit(
+            "Docker Buildx not found. Install Docker Buildx plugin and ensure it is available with `docker buildx`."
+        ) from e
+
+    m = re.search(r"(\d+\.\d+\.\d+)", p.stdout or "")
+    if not m:
+        raise SystemExit(
+            f"Could not parse docker buildx version from: {p.stdout.strip()!r}."
+        )
+    found = m.group(1)
+    if found != required_version:
+        raise SystemExit(
+            f"Docker Buildx version {required_version} required, found {found}."
+        )
+    ok(f"Detected Docker Buildx version: {found}")
 
 
 def ask_line(prompt: str) -> str:
@@ -450,7 +485,10 @@ def main() -> int:
     say()
 
     require_cmd("docker")
-    compose_cmd = detect_compose()
+    require_cmd("node")
+    require_cmd("git")
+    require_buildx("0.17.0")
+    compose_cmd = require_docker_compose()
 
     while True:
         mode = choose_mode_or_quit()
