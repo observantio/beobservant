@@ -94,6 +94,13 @@ def require_docker_compose() -> List[str]:
     return cmd
 
 
+def _parse_version(version: str) -> tuple[int, int, int]:
+    parts = version.split(".")
+    if len(parts) < 3:
+        raise ValueError(f"Invalid version format: {version}")
+    return tuple(int(p) for p in parts[:3])
+
+
 def require_buildx(required_version: str = "0.17.0") -> None:
     try:
         p = subprocess.run(
@@ -113,9 +120,16 @@ def require_buildx(required_version: str = "0.17.0") -> None:
             f"Could not parse docker buildx version from: {p.stdout.strip()!r}."
         )
     found = m.group(1)
-    if found != required_version:
+
+    try:
+        found_ver = _parse_version(found)
+        required_ver = _parse_version(required_version)
+    except ValueError as exc:
+        raise SystemExit(f"Version parsing error: {exc}") from exc
+
+    if found_ver < required_ver:
         raise SystemExit(
-            f"Docker Buildx version {required_version} required, found {found}."
+            f"Docker Buildx version {required_version} or newer required, found {found}."
         )
     ok(f"Detected Docker Buildx version: {found}")
 
