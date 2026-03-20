@@ -1,80 +1,87 @@
-name: Publish WATCHDOG Image
+name: Publish Images And Release Bundle
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  push:
+    tags:
+      - "v*"
 
 jobs:
-  publish:
-    name: Build and publish GHCR image
+  resolve-versions:
+    name: Resolve release versions
     runs-on: ubuntu-latest
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main'
+    outputs:
+      bundle_version: ${{ steps.versions.outputs.bundle_version }}
+      watchdog_version: ${{ steps.versions.outputs.watchdog_version }}
+      gatekeeper_version: ${{ steps.versions.outputs.gatekeeper_version }}
+      ui_version: ${{ steps.versions.outputs.ui_version }}
+      otel_agent_version: ${{ steps.versions.outputs.otel_agent_version }}
+      notifier_version: ${{ steps.versions.outputs.notifier_version }}
+      resolver_version: ${{ steps.versions.outputs.resolver_version }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Read versions manifest
+        id: versions
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          manifest = json.loads(Path('release/versions.json').read_text(encoding='utf-8'))
+          required = [
+              'bundle_version',
+              'watchdog',
+              'gatekeeper',
+              'ui',
+              'otel_agent',
+              'notifier',
+              'resolver',
+          ]
+          missing = [k for k in required if not manifest.get(k)]
+          if missing:
+              raise SystemExit(f"release/versions.json missing keys or values: {', '.join(missing)}")
+
+          if manifest['bundle_version'] != os.environ['GITHUB_REF_NAME']:
+              raise SystemExit(
+                  f"bundle_version ({manifest['bundle_version']}) must match pushed tag ({os.environ['GITHUB_REF_NAME']})"
+              )
+
+          out = Path(os.environ['GITHUB_OUTPUT'])
+          with out.open('a', encoding='utf-8') as f:
+              f.write(f"bundle_version={manifest['bundle_version']}\n")
+              f.write(f"watchdog_version={manifest['watchdog']}\n")
+              f.write(f"gatekeeper_version={manifest['gatekeeper']}\n")
+              f.write(f"ui_version={manifest['ui']}\n")
+              f.write(f"otel_agent_version={manifest['otel_agent']}\n")
+              f.write(f"notifier_version={manifest['notifier']}\n")
+              f.write(f"resolver_version={manifest['resolver']}\n")
+          PY
+
+  publish-local-images:
+    name: Publish local GHCR images
+    runs-on: ubuntu-latest
+    needs: resolve-versions
     permissions:
       contents: read
       packages: write
-    environment: docker-public
     steps:
-      - name: Debug workflow_run payload
-        run: |
-          echo "conclusion=${{ github.event.workflow_run.conclusion }}"
-          echo "event=${{ github.event.workflow_run.event }}"
-          echo "head_branch=${{ github.event.workflow_run.head_branch }}"
-          echo "actor=${{ github.event.workflow_run.actor.login }}"
-          echo "head_sha=${{ github.event.workflow_run.head_sha }}"
-          echo "repo=${{ github.repository }}"
-          echo "owner=${{ github.repository_owner }}"
-
-      - name: Checkout workflow commit
+      - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 2
+          ref: ${{ github.ref_name }}
 
-      - name: Detect changed Python files
-        id: py_changes
-        run: |
-          set -euo pipefail
-          sha="${{ github.event.workflow_run.head_sha }}"
-          parent="$(git rev-parse "${sha}^" 2>/dev/null || true)"
-          if [ -z "${parent}" ]; then
-            echo "watchdog=false" >> "$GITHUB_OUTPUT"
-            echo "gatekeeper=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          files="$(git diff --name-only "${parent}" "${sha}")"
-          echo "Changed files:"
-          echo "${files}"
-          if echo "${files}" | grep -Eq '^watchdog/.*\.py$'; then
-            echo "watchdog=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "watchdog=false" >> "$GITHUB_OUTPUT"
-          fi
-          if echo "${files}" | grep -Eq '^gatekeeper/.*\.py$'; then
-            echo "gatekeeper=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "gatekeeper=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Ensure trigger actor has maintainer-level access
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const owner = context.payload.workflow_run.repository.owner.login;
-            const repo = context.payload.workflow_run.repository.name;
-            const username = context.payload.workflow_run.actor.login;
-            const allowed = new Set(["admin", "maintain", "write"]);
-            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
-            core.info(`Actor ${username} permission: ${data.permission}`);
-            if (!allowed.has(data.permission)) core.setFailed(`Publishing blocked: actor ${username} must have admin/maintain/write permission.`);
+      - name: Normalize owner for GHCR
+        id: owner
+        run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -82,23 +89,111 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push watchdog
-        if: steps.py_changes.outputs.watchdog == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./watchdog
           file: ./watchdog/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/watchdog:stable
-            ghcr.io/${{ github.repository_owner }}/watchdog:${{ github.event.workflow_run.id }}
+          tags: ghcr.io/${{ steps.owner.outputs.owner_lc }}/watchdog:${{ needs.resolve-versions.outputs.watchdog_version }}
 
-      - name: Build and push Gatekeeper
-        if: steps.py_changes.outputs.gatekeeper == 'true'
+      - name: Build and push gatekeeper
         uses: docker/build-push-action@v6
         with:
           context: ./gatekeeper
           file: ./gatekeeper/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/gatekeeper:stable
-            ghcr.io/${{ github.repository_owner }}/gatekeeper:${{ github.event.workflow_run.id }}
+          tags: ghcr.io/${{ steps.owner.outputs.owner_lc }}/gatekeeper:${{ needs.resolve-versions.outputs.gatekeeper_version }}
+
+      - name: Build and push ui
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ui
+          file: ./ui/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ steps.owner.outputs.owner_lc }}/ui:${{ needs.resolve-versions.outputs.ui_version }}
+
+      - name: Build and push otel-agent
+        uses: docker/build-push-action@v6
+        with:
+          context: ./tests
+          file: ./tests/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ steps.owner.outputs.owner_lc }}/otel-agent:${{ needs.resolve-versions.outputs.otel_agent_version }}
+
+  create-release:
+    name: Create or update GitHub release
+    runs-on: ubuntu-latest
+    needs: [resolve-versions, publish-local-images]
+    permissions:
+      contents: write
+    steps:
+      - name: Create release from tag
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve-versions.outputs.bundle_version }}
+          name: ${{ needs.resolve-versions.outputs.bundle_version }}
+          generate_release_notes: true
+
+  release-bundle:
+    name: Upload release config bundles
+    runs-on: ubuntu-latest
+    needs: [resolve-versions, create-release]
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        arch: [amd64, arm64, multi]
+    env:
+      BUNDLE_VERSION: ${{ needs.resolve-versions.outputs.bundle_version }}
+      WATCHDOG_VERSION: ${{ needs.resolve-versions.outputs.watchdog_version }}
+      GATEKEEPER_VERSION: ${{ needs.resolve-versions.outputs.gatekeeper_version }}
+      UI_VERSION: ${{ needs.resolve-versions.outputs.ui_version }}
+      OTEL_AGENT_VERSION: ${{ needs.resolve-versions.outputs.otel_agent_version }}
+      NOTIFIER_VERSION: ${{ needs.resolve-versions.outputs.notifier_version }}
+      RESOLVER_VERSION: ${{ needs.resolve-versions.outputs.resolver_version }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Build bundle directory
+        run: |
+          mkdir -p bundle
+          cp -r configs bundle/
+          cp docker-compose.prod.yml bundle/
+          cp release/install.sh bundle/install.sh
+          cp .env.example bundle/.env.example
+          cp release/versions.json bundle/versions.json
+
+      - name: Pin bundle env metadata
+        run: |
+          sed -i "s/^OBSERVANTIO_BUNDLE_VERSION=.*/OBSERVANTIO_BUNDLE_VERSION=${BUNDLE_VERSION}/" bundle/.env.example
+          sed -i "s/^IMAGE_TAG_WATCHDOG=.*/IMAGE_TAG_WATCHDOG=${WATCHDOG_VERSION}/" bundle/.env.example
+          sed -i "s/^IMAGE_TAG_GATEKEEPER=.*/IMAGE_TAG_GATEKEEPER=${GATEKEEPER_VERSION}/" bundle/.env.example
+          sed -i "s/^IMAGE_TAG_UI=.*/IMAGE_TAG_UI=${UI_VERSION}/" bundle/.env.example
+          sed -i "s/^IMAGE_TAG_OTEL_AGENT=.*/IMAGE_TAG_OTEL_AGENT=${OTEL_AGENT_VERSION}/" bundle/.env.example
+          sed -i "s/^IMAGE_TAG_NOTIFIER=.*/IMAGE_TAG_NOTIFIER=${NOTIFIER_VERSION}/" bundle/.env.example
+          sed -i "s/^IMAGE_TAG_RESOLVER=.*/IMAGE_TAG_RESOLVER=${RESOLVER_VERSION}/" bundle/.env.example
+          if grep -q '^RELEASE_ARCH=' bundle/.env.example; then
+            sed -i "s/^RELEASE_ARCH=.*/RELEASE_ARCH=${ARCH}/" bundle/.env.example
+          else
+            printf '\nRELEASE_ARCH=%s\n' "${ARCH}" >> bundle/.env.example
+          fi
+
+      - name: Build release tarball
+        run: |
+          tar -czf "observantio-configs-${BUNDLE_VERSION}-linux-${ARCH}.tar.gz" -C bundle .
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.BUNDLE_VERSION }}
+          overwrite_files: true
+          files: observantio-configs-${{ env.BUNDLE_VERSION }}-linux-${{ env.ARCH }}.tar.gz
+          fail_on_unmatched_files: true
