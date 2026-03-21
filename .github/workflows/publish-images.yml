@@ -139,51 +139,31 @@ jobs:
       - name: Extract changelog entry for this version
         env:
           VERSION: ${{ needs.resolve-versions.outputs.bundle_version }}
-          NOTIFIER_VERSION: ${{ needs.resolve-versions.outputs.notifier_version }}
-          RESOLVER_VERSION: ${{ needs.resolve-versions.outputs.resolver_version }}
         run: |
           set -euo pipefail
-          extract_section() {
-            local file="$1"
-            local version="$2"
-            local label="$3"
-            if [ ! -f "$file" ]; then
-              echo "Missing changelog file: $file" >&2
-              return 1
-            fi
-            if ! awk -v version="$version" '
-              BEGIN { in_section=0; found=0 }
-              /^## \[/ {
-                if ($0 ~ "^## \\[" version "\\]") {
-                  in_section=1
-                  found=1
-                  print
-                  next
-                }
-                if (in_section==1) exit
+          if [ ! -f CHANGELOG.md ]; then
+            echo "CHANGELOG.md not found at repository root." >&2
+            exit 1
+          fi
+          awk -v version="$VERSION" '
+            BEGIN { in_section=0; found=0 }
+            /^## \[/ {
+              if ($0 ~ "^## \\[" version "\\]") {
+                in_section=1
+                found=1
+                print
+                next
               }
-              in_section==1 { print }
-              END { exit(found ? 0 : 1) }
-            ' "$file" > "/tmp/changelog-${label}.md"; then
-              echo "No changelog entry found for ${label} version ${version} in ${file}" >&2
-              return 1
-            fi
-          }
-
-          extract_section "CHANGELOG.md" "${VERSION}" "bundle"
-          extract_section "notifier/CHANGELOG.md" "${NOTIFIER_VERSION}" "notifier"
-          extract_section "resolver/CHANGELOG.md" "${RESOLVER_VERSION}" "resolver"
-
-          {
-            echo "# Bundle ${VERSION}"
-            cat /tmp/changelog-bundle.md
-            echo
-            echo "# Notifier ${NOTIFIER_VERSION}"
-            cat /tmp/changelog-notifier.md
-            echo
-            echo "# Resolver ${RESOLVER_VERSION}"
-            cat /tmp/changelog-resolver.md
-          } > release-notes.md
+              if (in_section==1) exit
+            }
+            in_section==1 { print }
+            END {
+              if (!found) {
+                print "No changelog entry found for " version > "/dev/stderr"
+                exit 1
+              }
+            }
+          ' CHANGELOG.md > release-notes.md
 
       - name: Create release from tag
         uses: softprops/action-gh-release@v2
