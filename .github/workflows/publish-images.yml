@@ -203,7 +203,10 @@ jobs:
           cp -r configs "bundle/${BUNDLE_DIR}/"
           cp docker-compose.prod.yml "bundle/${BUNDLE_DIR}/"
           cp release/install.sh "bundle/${BUNDLE_DIR}/install.sh"
+          cp release/restart.sh "bundle/${BUNDLE_DIR}/restart.sh"
+          cp release/uninstall.sh "bundle/${BUNDLE_DIR}/uninstall.sh"
           cp .env.example "bundle/${BUNDLE_DIR}/.env.example"
+          cp DEPLOYMENT.md "bundle/${BUNDLE_DIR}/DEPLOYMENT.md"
           cp release/versions.json "bundle/${BUNDLE_DIR}/versions.json"
 
       - name: Pin bundle env metadata

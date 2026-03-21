@@ -10,6 +10,37 @@ This guide explains how to deploy Observantio from the release tarball, what to 
 
 ## Install From Release Tarball
 
+Quick install script:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+VERSION="${1:-v0.0.1}"
+ARCH="${2:-multi}" # amd64 | arm64 | multi
+REPO="observantio/watchdog"
+ASSET="observantio-${VERSION}-linux-${ARCH}.tar.gz"
+URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
+
+mkdir -p "$HOME/observantio" && cd "$HOME/observantio"
+
+if command -v curl >/dev/null 2>&1; then
+  curl -fL -o "${ASSET}" "${URL}"
+elif command -v wget >/dev/null 2>&1; then
+  wget -O "${ASSET}" "${URL}"
+else
+  echo "Need curl or wget to download release asset." >&2
+  exit 1
+fi
+
+tar -xzf "${ASSET}"
+cd "observantio-${VERSION}-linux-${ARCH}"
+chmod +x install.sh restart.sh uninstall.sh
+./install.sh
+```
+
+Manual install steps:
+
 1. Download the release asset, for example:
    `observantio-vX.Y.Z-linux-amd64.tar.gz`
 2. Extract it:
@@ -29,8 +60,6 @@ The installer will:
 
 - Restart:
   `./restart.sh`
-- Update images and apply:
-  `./update.sh`
 - Stop/uninstall:
   `./uninstall.sh`
 - Uninstall and remove named volumes:
