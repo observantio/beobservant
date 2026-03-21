@@ -28,6 +28,8 @@ This changelog follows a simple human-first format and keeps entries focused on 
   - `IMAGE_TAG_RESOLVER`
 - Updated root release workflow to read versions from `release/versions.json`, publish local service images, and build release bundles pinned to the manifest values.
 
+Please use the development guide at `DEPLOYMENT.md` on how to deploy this on cloud service or local node
+
 ### Notes
 
 - `notifier` and `resolver` are expected to publish their own images from their own repositories using matching version tags.
