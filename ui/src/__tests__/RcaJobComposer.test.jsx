@@ -52,6 +52,14 @@ describe("RcaJobComposer", () => {
     const onDownloadTemplate = vi.fn().mockResolvedValue({
       template_yaml: "version: 1\nrequest:\n  step: 15s\n",
       file_name: "resolver-rca-defaults.yaml",
+      defaults: {
+        version: 1,
+        request: { step: "15s" },
+        constants: {
+          default_metric_queries: ["sum(rate(http_requests_total[5m]))"],
+        },
+        settings: {},
+      },
     });
     const originalCreateElement = document.createElement.bind(document);
     const createObjectURL = vi.fn(() => "blob:template");
@@ -87,6 +95,8 @@ describe("RcaJobComposer", () => {
 
     await waitFor(() => expect(onDownloadTemplate).toHaveBeenCalledTimes(1));
     expect(createObjectURL).toHaveBeenCalledTimes(1);
+    const generatedBlob = createObjectURL.mock.calls[0][0];
+    expect(generatedBlob.size).toBeGreaterThan(500);
     expect(click).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:template");
 

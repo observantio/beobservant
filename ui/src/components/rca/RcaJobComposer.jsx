@@ -1,7 +1,12 @@
 import { useRef, useState } from "react";
 import PropTypes from "prop-types";
+import YAML from "yaml";
 import { Card, Button, Input, Select } from "../ui";
 import { TIME_RANGES } from "../../utils/constants";
+import {
+  mergeMetricQueries,
+  RCA_DEFAULT_METRIC_QUERIES_FROM_DASHBOARDS,
+} from "../grafana/dashboardTemplates/metricCatalog";
 
 export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating }) {
   const [timeRangeMinutes, setTimeRangeMinutes] = useState(60);
@@ -30,7 +35,25 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
     setDownloadingTemplate(true);
     try {
       const response = await onDownloadTemplate();
-      const templateYaml = String(response?.template_yaml || "");
+      const defaults =
+        response?.defaults && typeof response.defaults === "object"
+          ? JSON.parse(JSON.stringify(response.defaults))
+          : null;
+      if (defaults) {
+        const existingQueries = Array.isArray(
+          defaults?.constants?.default_metric_queries,
+        )
+          ? defaults.constants.default_metric_queries
+          : [];
+        defaults.constants = defaults.constants || {};
+        defaults.constants.default_metric_queries = mergeMetricQueries(
+          existingQueries,
+          RCA_DEFAULT_METRIC_QUERIES_FROM_DASHBOARDS,
+        );
+      }
+      const templateYaml = defaults
+        ? YAML.stringify(defaults)
+        : String(response?.template_yaml || "");
       if (!templateYaml) return;
       const blob = new Blob([templateYaml], { type: "application/x-yaml" });
       const url = window.URL.createObjectURL(blob);
