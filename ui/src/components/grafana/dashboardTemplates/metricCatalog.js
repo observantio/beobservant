@@ -1,8 +1,24 @@
 import native from "./native.json";
 import linux from "./linux.json";
 import windows from "./windows.json";
+import docker from "./docker.json";
+import postgres from "./postgres.json";
+import mysql from "./mysql.json";
+import gpu from "./gpu.json";
+import sensors from "./sensors.json";
+import nfsClient from "./nfs-client.json";
 
-const DASHBOARDS = [native, linux, windows];
+const DASHBOARDS = [
+  native,
+  linux,
+  windows,
+  docker,
+  postgres,
+  mysql,
+  gpu,
+  sensors,
+  nfsClient,
+];
 
 const PROMQL_KEYWORDS = new Set([
   "and",

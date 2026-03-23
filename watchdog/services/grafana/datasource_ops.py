@@ -504,6 +504,7 @@ async def create_datasource(
         json_data = dict(getattr(datasource_create, "json_data", None) or {})
         secure_json_data = dict(getattr(datasource_create, "secure_json_data", None) or {})
         json_data.setdefault("httpHeaderName1", "X-Scope-OrgID")
+        json_data["watchdogScopeKey"] = org_id
         secure_json_data.setdefault("httpHeaderValue1", org_id)
         datasource_create = datasource_create.model_copy(
             update={"org_id": org_id, "json_data": json_data, "secure_json_data": secure_json_data}
@@ -596,6 +597,7 @@ async def update_datasource(
             json_data = dict(getattr(datasource_update, "json_data", None) or {})
             secure_json_data = dict(getattr(datasource_update, "secure_json_data", None) or {})
             json_data.setdefault("httpHeaderName1", "X-Scope-OrgID")
+            json_data["watchdogScopeKey"] = validated_org_id
             secure_json_data["httpHeaderValue1"] = validated_org_id
             datasource_update = datasource_update.model_copy(
                 update={"org_id": validated_org_id, "json_data": json_data, "secure_json_data": secure_json_data}

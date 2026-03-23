@@ -615,7 +615,16 @@ export default function GrafanaPage() {
 
   function openDatasourceEditor(datasource = null) {
     if (datasource) {
+      const jsonData =
+        datasource && typeof datasource.jsonData === "object"
+          ? datasource.jsonData
+          : {};
+      const selectedApiKeyId = String(jsonData.watchdogApiKeyId || "").trim();
+      const selectedScopeKey = String(jsonData.watchdogScopeKey || "").trim();
       const currentOrg = datasource.orgId || datasource.org_id || "";
+      const byScopeKey = (user?.api_keys || []).find(
+        (k) => String(k.key || "") === selectedScopeKey,
+      );
       const matchedKey = (user?.api_keys || []).find(
         (k) => String(k.key) === String(currentOrg),
       );
@@ -632,7 +641,8 @@ export default function GrafanaPage() {
         visibility: datasource.visibility || datasource.visibility || "private",
         sharedGroupIds:
           datasource.sharedGroupIds || datasource.shared_group_ids || [],
-        apiKeyId: matchedKey?.id || defaultKey?.id || "",
+        apiKeyId:
+          selectedApiKeyId || byScopeKey?.id || matchedKey?.id || defaultKey?.id || "",
       });
     } else {
       const dk =
@@ -679,6 +689,11 @@ export default function GrafanaPage() {
           (k) => k.id === datasourceForm.apiKeyId,
         );
         payload.org_id = selectedKey?.key || user?.org_id || "default";
+        payload.jsonData = {
+          ...payload.jsonData,
+          watchdogApiKeyId: datasourceForm.apiKeyId,
+          watchdogScopeKey: payload.org_id,
+        };
       }
 
       const params = new URLSearchParams({
@@ -792,17 +807,38 @@ export default function GrafanaPage() {
     const rawOrg = String(datasource?.orgId || datasource?.org_id || "").trim();
     const datasourceName = String(datasource?.name || "Datasource");
     const apiKeys = Array.isArray(user?.api_keys) ? user.api_keys : [];
+    const jsonData =
+      datasource && typeof datasource.jsonData === "object"
+        ? datasource.jsonData
+        : {};
+    const selectedApiKeyId = String(jsonData.watchdogApiKeyId || "").trim();
+    const selectedScopeKey = String(jsonData.watchdogScopeKey || "").trim();
+    const bySelectedId = apiKeys.find(
+      (k) => String(k?.id || "") === selectedApiKeyId,
+    );
     const byId = apiKeys.find((k) => String(k?.id || "") === rawOrg);
     const byKey = apiKeys.find((k) => String(k?.key || "") === rawOrg);
+    const byScopeKey = apiKeys.find((k) => String(k?.key || "") === selectedScopeKey);
     const activeKey =
       apiKeys.find((k) => k?.is_enabled) ||
       apiKeys.find((k) => k?.is_default) ||
       apiKeys[0];
     const resolvedKey = String(
-      byId?.key || byKey?.key || activeKey?.key || "",
+      bySelectedId?.key ||
+        byScopeKey?.key ||
+        byId?.key ||
+        byKey?.key ||
+        selectedScopeKey ||
+        activeKey?.key ||
+        "",
     ).trim();
     const resolvedKeyName =
-      byId?.name || byKey?.name || activeKey?.name || "Default";
+      bySelectedId?.name ||
+      byScopeKey?.name ||
+      byId?.name ||
+      byKey?.name ||
+      activeKey?.name ||
+      "Default";
 
     setDatasourceMetricsDialog({
       isOpen: true,

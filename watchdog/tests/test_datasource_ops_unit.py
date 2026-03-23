@@ -254,7 +254,9 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
     assert created.name == "Metrics"
     assert created.visibility == "group"
     assert created.shared_group_ids == [group.id]
+    assert created.json_data.get("watchdogScopeKey") == "scope-shared"
     assert stub.create_calls[-1].name.startswith("Metrics__bo_")
+    assert stub.create_calls[-1].json_data.get("watchdogScopeKey") == "scope-shared"
 
     db_owned = db.query(GrafanaDatasource).filter_by(grafana_uid="uid-created").first()
     assert db_owned is not None
@@ -280,7 +282,9 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
     )
     assert updated.name == "Renamed"
     assert updated.visibility == "tenant"
+    assert updated.json_data.get("watchdogScopeKey") == "scope-shared"
     assert db.query(GrafanaDatasource).filter_by(grafana_uid="uid-created").first().visibility == "tenant"
+    assert stub.update_calls[-1][1].json_data.get("watchdogScopeKey") == "scope-shared"
 
     assert asyncio.run(datasource_ops.delete_datasource(service, db, "missing", viewer.id, "t1", [group.id])) is False
     stub.items["uid-created"].readOnly = True
