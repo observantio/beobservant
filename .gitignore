@@ -31,3 +31,5 @@ coverage/
 resolver/
 notifier/
 showcase/
+.pre-commit-cache/
+.pylint-cache/
