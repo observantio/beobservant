@@ -26,7 +26,7 @@ export default function LogQuickFilters({
                       className="w-full flex items-center justify-between px-3 py-2 bg-sre-surface border border-sre-border rounded-lg hover:border-sre-primary transition-colors text-left group"
                     >
                       <span className="text-sm text-sre-text flex items-center">
-                        <span className="material-icons text-base mr-2 text-blue-500">
+                        <span className="material-icons text-base mr-2 text-sre-primary">
                           label
                         </span>
                         {value}

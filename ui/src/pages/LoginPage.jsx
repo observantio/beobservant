@@ -192,10 +192,11 @@ export default function LoginPage() {
   };
 
   const providerLabel = hasOIDC ? OIDC_PROVIDER_LABEL : "Single Sign-On";
+  const panelShadow = mfaRequired || showMfaSetup ? "shadow-xl" : "shadow-none";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white/90 p-6 shadow-xl backdrop-blur-sm dark:bg-transparent dark:p-0 dark:shadow-none dark:backdrop-blur-none">
+      <div className={`w-full max-w-md rounded-2xl bg-white/90 p-6 ${panelShadow} backdrop-blur-sm dark:bg-transparent dark:p-0 dark:shadow-none dark:backdrop-blur-none`}>
         <div className="text-center mb-8">
           {showLoginLogo && (
             <img

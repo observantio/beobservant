@@ -221,9 +221,15 @@ export default function LogResults({
                       </span>
                     ))}
                 </div>
-                <Badge variant="default" className="text-[10px]">
-                  {filteredValues.length} log
-                  {filteredValues.length === 1 ? "" : "s"}
+                <Badge
+                  variant="info"
+                  className="shrink-0 whitespace-nowrap px-2.5 py-1 text-[11px] font-semibold"
+                >
+                  <span className="material-icons mr-1 text-[12px]" aria-hidden>
+                    description
+                  </span>
+                  {filteredValues.length}{" "}
+                  {filteredValues.length === 1 ? "log" : "logs"}
                 </Badge>
               </div>
             </div>

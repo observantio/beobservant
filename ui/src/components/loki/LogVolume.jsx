@@ -13,9 +13,9 @@ export default function LogVolume({ volume, embedded = false }) {
           data={data}
           width={280}
           height={100}
-          stroke="#60a5fa"
+          stroke="rgb(var(--sre-primary-light-rgb))"
           strokeWidth={2}
-          fill="rgba(96, 165, 250, 0.2)"
+          fill="rgb(var(--sre-primary-light-rgb) / 0.24)"
           className="w-full h-[100px]"
         />
       </div>

@@ -28,6 +28,8 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
     --sre-text: #0f172a;
     --sre-text-muted: #475569;
     --sre-text-subtle: #64748b;
+    --sre-primary-rgb: 59 130 246;
+    --sre-primary-light-rgb: 96 165 250;
     color-scheme: light;
   }
 
@@ -44,6 +46,8 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
     --sre-text: #f3f7ff;
     --sre-text-muted: #bdc8db;
     --sre-text-subtle: #8a98ad;
+    --sre-primary-rgb: 16 185 129;
+    --sre-primary-light-rgb: 52 211 153;
     color-scheme: dark;
   }
 
@@ -244,7 +248,7 @@ select.text-xs {
 
 .react-flow__edge.selected .react-flow__edge-path {
   stroke-width: 3px !important;
-  filter: drop-shadow(0 0 6px rgba(14, 165, 233, 0.5)) !important;
+  filter: drop-shadow(0 0 6px rgb(var(--sre-primary-rgb) / 0.5)) !important;
 }
 
 .react-flow__node.selected {
@@ -263,14 +267,14 @@ body[data-theme='dark'] *:focus-visible,
 body[data-theme='dark'],
 .dark body {
   background:
-    radial-gradient(1200px circle at 85% -10%, rgba(59, 130, 246, 0.14), transparent 45%),
+    radial-gradient(1200px circle at 85% -10%, rgb(var(--sre-primary-rgb) / 0.14), transparent 45%),
     linear-gradient(to bottom, var(--sre-bg), var(--sre-bg-alt), var(--sre-bg));
 }
 
 :root[data-theme='dark'] ::selection,
 body[data-theme='dark'] ::selection,
 .dark ::selection {
-  background: rgba(96, 165, 250, 0.38);
+  background: rgb(var(--sre-primary-light-rgb) / 0.38);
   color: #f8fbff;
 }
 
@@ -457,4 +461,3 @@ body[data-theme='light'] .grafana-page .grafana-main-tabs.border-sre-border {
   border: 1px solid var(--sre-border);
   box-shadow: 0 0 0 2px var(--sre-surface);
 }
-

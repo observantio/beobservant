@@ -22,9 +22,27 @@ import ConfirmModal from "../components/ConfirmModal";
 import ChannelEditor from "../components/alertmanager/ChannelEditor";
 
 const VISIBILITY_TABS = [
-  { key: "private", label: "Private", icon: "lock" },
-  { key: "tenant", label: "Shared By Organization", icon: "public" },
-  { key: "group", label: "Shared By Groups", icon: "groups" },
+  {
+    key: "private",
+    label: "Private",
+    icon: "lock",
+    workspaceLabel: "Personal Workspace",
+    scopeTag: "Private",
+  },
+  {
+    key: "tenant",
+    label: "Shared By Organization",
+    icon: "public",
+    workspaceLabel: "Tenant Public Workspace",
+    scopeTag: "Public",
+  },
+  {
+    key: "group",
+    label: "Shared By Groups",
+    icon: "groups",
+    workspaceLabel: "Group Shared Workspace",
+    scopeTag: "Groups",
+  },
 ];
 
 function JiraIntegrationForm({ value, onChange, canUseSso = false }) {
@@ -290,6 +308,10 @@ export default function IntegrationsPage() {
   const visibleJiraIntegrations = useMemo(
     () => jiraIntegrations.filter((item) => item.visibility === activeTab),
     [jiraIntegrations, activeTab]
+  );
+  const activeVisibilityMeta = useMemo(
+    () => VISIBILITY_TABS.find((tab) => tab.key === activeTab) || VISIBILITY_TABS[0],
+    [activeTab]
   );
 
   const channelIconForType = (type) => {
@@ -767,8 +789,18 @@ export default function IntegrationsPage() {
             onChange={(e) => setShowHidden(e.target.checked)}
             className="rounded border-sre-border"
           />
-          Show hidden
+          Unhide
         </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-sre-border bg-sre-surface/70 px-3 py-1 text-xs font-medium text-sre-text">
+          <span className="material-icons text-sm leading-none">{activeVisibilityMeta.icon}</span>
+          {activeVisibilityMeta.workspaceLabel}
+        </span>
+        <span className="inline-flex items-center rounded-full border border-sre-border/80 bg-sre-bg-alt px-2.5 py-1 text-xs text-sre-text-muted">
+          {activeVisibilityMeta.scopeTag}
+        </span>
       </div>
 
       <div className="space-y-6">
@@ -781,6 +813,12 @@ export default function IntegrationsPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-sre-border bg-sre-surface/70 px-2.5 py-1 text-xs text-sre-text-muted">
+                <span className="material-icons text-sm leading-none">
+                  {activeVisibilityMeta.icon}
+                </span>
+                {activeVisibilityMeta.label}
+              </span>
               <Button
                 onClick={openCreateChannel}
                 aria-label="Add channel"
@@ -833,6 +871,12 @@ export default function IntegrationsPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-sre-border bg-sre-surface/70 px-2.5 py-1 text-xs text-sre-text-muted">
+                <span className="material-icons text-sm leading-none">
+                  {activeVisibilityMeta.icon}
+                </span>
+                {activeVisibilityMeta.label}
+              </span>
               <Button
                 onClick={openCreateJira}
                 aria-label="Add Jira integration"
@@ -848,7 +892,7 @@ export default function IntegrationsPage() {
           <div className="space-y-4">
             {visibleJiraIntegrations.length === 0 ? (
               <div className="text-center py-12">
-                <div className="mx-auto w-32 h-32 rounded-full border-2 border-sre-border bg-sre-surface/60 flex items-center justify-center mb-4">
+                <div className="mx-auto w-36 h-36 rounded-full border-2 border-sre-border bg-gradient-to-br from-sre-surface/50 to-sre-surface/30 flex items-center justify-center mb-4 shadow-inner">
                   <span className="material-icons text-4xl text-sre-text-muted">
                     integration_instructions
                   </span>
