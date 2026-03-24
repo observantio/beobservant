@@ -7,23 +7,39 @@ import { Badge } from "./ui";
 import ChangePasswordModal from "./ChangePasswordModal";
 import * as api from "../api";
 import { NAV_ITEMS } from "../utils/constants";
+import { useLayoutMode } from "../contexts/LayoutModeContext";
+import { useSharedIncidentSummary } from "../contexts/IncidentSummaryContext";
 
 const NAV_ITEM_LIST = Object.values(NAV_ITEMS);
 
-function NavItem({ item, isMobile = false, incidentSummary = null }) {
-  const baseClasses = isMobile
-    ? "rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-2 transition-all px-3 py-1.5 border border-transparent"
-    : "px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 border-b-2 border-transparent";
+export function NavItem({
+  item,
+  isMobile = false,
+  incidentSummary = null,
+  variant = "top",
+}) {
+  const baseClasses =
+    variant === "sidebar"
+      ? "w-full rounded-lg text-[15px] font-medium flex items-center gap-3 transition-colors px-3 py-3"
+      : isMobile
+        ? "rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-2 transition-all px-3 py-1.5 border border-transparent"
+        : "px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 border-b-2 border-transparent";
   const incidentsWithBadges = item.path === "/incidents" && incidentSummary;
   const classesWithBadges = incidentsWithBadges
     ? `${baseClasses} relative`
     : baseClasses;
-  const activeClasses = isMobile
-    ? "text-sre-primary bg-sre-primary/10 border-sre-primary/50"
-    : "text-sre-primary border-sre-primary bg-sre-primary/5";
-  const inactiveClasses = isMobile
-    ? "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light hover:border-sre-border/70"
-    : "text-sre-text-muted hover:text-sre-text hover:border-sre-border";
+  const activeClasses =
+    variant === "sidebar"
+      ? "text-sre-primary bg-sre-primary/10 dark:text-sre-success dark:bg-sre-success/10"
+      : isMobile
+        ? "text-sre-primary bg-sre-primary/10 border-sre-primary/50"
+        : "text-sre-primary border-sre-primary bg-sre-primary/5";
+  const inactiveClasses =
+    variant === "sidebar"
+      ? "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light/60"
+      : isMobile
+        ? "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light hover:border-sre-border/70"
+        : "text-sre-text-muted hover:text-sre-text hover:border-sre-border";
 
   return (
     <NavLink
@@ -34,7 +50,12 @@ function NavItem({ item, isMobile = false, incidentSummary = null }) {
         }`
       }
     >
-      <span className="material-icons text-sm leading-none" aria-hidden>
+      <span
+        className={`material-icons leading-none ${
+          variant === "sidebar" ? "text-[18px]" : "text-sm"
+        }`}
+        aria-hidden
+      >
         {item.icon}
       </span>{" "}
       {item.label}
@@ -61,6 +82,7 @@ NavItem.propTypes = {
     path: PropTypes.string.isRequired,
   }).isRequired,
   isMobile: PropTypes.bool,
+  variant: PropTypes.oneOf(["top", "sidebar"]),
   incidentSummary: PropTypes.shape({
     open_total: PropTypes.number,
     unassigned_open: PropTypes.number,
@@ -156,10 +178,11 @@ ApiKeyDropdown.propTypes = {
 
 export default function Header() {
   const { user, logout, hasPermission, refreshUser } = useAuth();
+  const { sidebarMode, toggleSidebarMode } = useLayoutMode();
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [activeKeyId, setActiveKeyId] = useState("");
   const [switchingKey, setSwitchingKey] = useState(false);
-  const [incidentSummary, setIncidentSummary] = useState(null);
+  const incidentSummary = useSharedIncidentSummary();
 
   const visibleApiKeys = (user?.api_keys || []).filter(
     (k) => (!k.is_shared || k.can_use) && !k.is_hidden,
@@ -195,82 +218,120 @@ export default function Header() {
     (item) => !item.permission || hasPermission(item.permission),
   );
 
-  useEffect(() => {
-    let alive = true;
-    if (!hasPermission("read:incidents")) {
-      setIncidentSummary(null);
-      return () => {
-        alive = false;
-      };
-    }
-    const loadSummary = async () => {
-      try {
-        const data = await api.getIncidentsSummary();
-        if (!alive) return;
-        setIncidentSummary(data || null);
-      } catch {
-        if (!alive) return;
-        setIncidentSummary(null);
-      }
-    };
-    loadSummary();
-    const timer = setInterval(loadSummary, 30000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [hasPermission]);
+  const headerBarClass = sidebarMode
+    ? "sticky top-0 z-50 border-b-0 shadow-none bg-transparent"
+    : "sticky top-0 z-50 border-b-2 border-dashed border-sre-border shadow-none bg-sre-surface/80 backdrop-blur-xl";
+
+  const mobileNavClass = sidebarMode
+    ? "md:hidden border-t-0 bg-transparent px-3 py-2 flex gap-2 overflow-x-auto"
+    : "md:hidden border-t border-sre-border px-4 py-2 flex gap-2 overflow-x-auto";
+
+  const actionsCluster = (
+    <div
+      className={`flex items-center justify-end ${sidebarMode ? "gap-1.5" : "gap-3"}`}
+    >
+      <ThemeToggle
+        className={
+          sidebarMode
+            ? "rounded-lg border border-sre-border p-1.5 hover:bg-sre-surface-light/70"
+            : ""
+        }
+      />
+
+      {visibleApiKeys.length > 0 && (
+        <div className="hidden sm:flex items-center gap-2">
+          <ApiKeyDropdown
+            apiKeys={visibleApiKeys}
+            activeKeyId={activeKeyId}
+            onSelect={handleActiveKeyChange}
+            disabled={switchingKey}
+          />
+        </div>
+      )}
+
+      <div className="relative">
+        <UserMenu
+          user={user}
+          logout={logout}
+          hasPermission={hasPermission}
+          openChangePassword={() => setShowChangePassword(true)}
+          compact={sidebarMode}
+        />
+        <ChangePasswordModal
+          isOpen={showChangePassword}
+          onClose={() => setShowChangePassword(false)}
+          userId={user?.id}
+        />
+      </div>
+    </div>
+  );
 
   return (
-    <header className="sticky top-0 z-50 bg-sre-surface/80 backdrop-blur-xl border-b border-sre-border shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <nav
-            className="hidden md:flex items-center gap-1"
-            aria-label="Main navigation"
+    <header className={headerBarClass}>
+      {sidebarMode ? (
+        <div className="flex h-16 w-full items-center justify-between gap-2 pr-3 sm:pr-5 lg:pr-8 md:justify-end">
+          <button
+            type="button"
+            onClick={toggleSidebarMode}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sre-text-muted transition-colors hover:bg-sre-surface-light/80 hover:text-sre-text md:hidden"
+            aria-pressed={sidebarMode}
+            aria-label="Use top navigation layout"
+            title="Top navigation"
           >
-            {visibleNavItems.map((item) => (
-              <NavItem
-                key={item.path}
-                item={item}
-                incidentSummary={incidentSummary}
-              />
-            ))}
-          </nav>
-
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-
-            {visibleApiKeys.length > 0 && (
-              <div className="hidden sm:flex items-center gap-2">
-                <ApiKeyDropdown
-                  apiKeys={visibleApiKeys}
-                  activeKeyId={activeKeyId}
-                  onSelect={handleActiveKeyChange}
-                  disabled={switchingKey}
-                />
-              </div>
-            )}
-
-            <div className="relative">
-              <UserMenu
-                user={user}
-                logout={logout}
-                hasPermission={hasPermission}
-                openChangePassword={() => setShowChangePassword(true)}
-              />
-              <ChangePasswordModal
-                isOpen={showChangePassword}
-                onClose={() => setShowChangePassword(false)}
-                userId={user?.id}
-              />
+            <span className="material-icons text-[22px] leading-none" aria-hidden>
+              view_headline
+            </span>
+          </button>
+          {actionsCluster}
+        </div>
+      ) : (
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 min-h-16 items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleSidebarMode}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sre-text-muted transition-colors hover:bg-sre-surface-light/80 hover:text-sre-text md:hidden"
+              aria-pressed={sidebarMode}
+              aria-label="Use sidebar navigation layout"
+              title="Sidebar navigation & dashboard grid"
+            >
+              <span className="material-icons text-[22px] leading-none" aria-hidden>
+                dock_to_left
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={toggleSidebarMode}
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sre-text-muted transition-colors hover:bg-sre-surface-light/80 hover:text-sre-text md:flex"
+              aria-pressed={sidebarMode}
+              aria-label="Use sidebar navigation layout"
+              title="Sidebar navigation & dashboard grid"
+            >
+              <span className="material-icons text-[22px] leading-none" aria-hidden>
+                dock_to_left
+              </span>
+            </button>
+            <div className="flex min-h-16 min-w-0 flex-1 items-center justify-end gap-4 md:justify-between">
+              <nav
+                className="hidden min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto md:flex"
+                aria-label="Main navigation"
+              >
+                {visibleNavItems.map((item) => (
+                  <NavItem
+                    key={item.path}
+                    item={item}
+                    incidentSummary={incidentSummary}
+                  />
+                ))}
+              </nav>
+              {actionsCluster}
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Mobile Navigation */}
-      <div className="md:hidden border-t border-sre-border px-4 py-2 flex gap-2 overflow-x-auto">
+      <div className={mobileNavClass}>
         {visibleNavItems.map((item) => (
           <NavItem
             key={item.path}
@@ -295,11 +356,39 @@ export default function Header() {
   );
 }
 
-function UserMenu({ user, logout, hasPermission, openChangePassword }) {
+function UserMenu({
+  user,
+  logout,
+  hasPermission,
+  openChangePassword,
+  compact = false,
+}) {
   const [open, setOpen] = useState(false);
+  const [mdUp, setMdUp] = useState(false);
   const ref = useRef(null);
   const menuRef = useRef(null);
   const navigate = useNavigate();
+
+  /** Sidebar rail is md+ only; keep account links in this menu on small screens. */
+  const hideAccountLinksInMenu = compact && mdUp;
+
+  const username = user?.username || "";
+  const role = user?.role || "user";
+  const roleRedundant =
+    username &&
+    role &&
+    username.toLowerCase() === role.toLowerCase();
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const mq = window.matchMedia("(min-width: 768px)");
+    const sync = () => setMdUp(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     const onClick = (e) => {
@@ -326,23 +415,38 @@ function UserMenu({ user, logout, hasPermission, openChangePassword }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-sre-surface-light"
+        className={`flex items-center text-sre-text transition-colors ${
+          compact
+            ? "gap-1.5 rounded-xl border border-sre-border bg-sre-surface/55 px-2 py-1.5 backdrop-blur-xl hover:bg-sre-surface-light/70 dark:bg-sre-surface/45"
+            : "gap-2 rounded-lg px-2.5 py-1.5 hover:bg-sre-surface-light/80 sm:px-3"
+        }`}
         aria-haspopup="true"
         aria-expanded={open}
-        aria-label={`User menu for ${user?.username || "user"}`}
+        aria-label={`User menu for ${username || "user"}`}
       >
-        <Badge variant={user?.role === "admin" ? "error" : "info"}>
-          {user?.role || "user"}
-        </Badge>
-        <span className="hidden sm:block text-sre-text text-sm">
-          {user?.username
-            ? user.username.length > 6
-              ? user.username.slice(0, 6) + "..."
-              : user.username
-            : ""}
+        <span
+          className={`material-icons shrink-0 text-sre-text-muted ${compact ? "text-lg" : "text-xl"}`}
+          aria-hidden
+        >
+          account_circle
         </span>
+        <span
+          className={`hidden max-w-[10rem] truncate text-left text-sm font-medium text-sre-text sm:block ${
+            compact ? "max-w-[8rem] text-[13px]" : ""
+          }`}
+        >
+          {username || "Account"}
+        </span>
+        {!roleRedundant && (
+          <Badge
+            variant={user?.role === "admin" ? "error" : "info"}
+            className="hidden shrink-0 text-[10px] font-semibold uppercase tracking-wide sm:inline-flex"
+          >
+            {role}
+          </Badge>
+        )}
         <svg
-          className="w-4 h-4 text-sre-text-muted"
+          className="h-4 w-4 shrink-0 text-sre-text-muted"
           viewBox="0 0 20 20"
           fill="currentColor"
         >
@@ -362,111 +466,121 @@ function UserMenu({ user, logout, hasPermission, openChangePassword }) {
             if (e.key === "Escape") setOpen(false);
           }}
           role="menu"
-          className="absolute right-0 mt-2 w-44 bg-sre-bg-card border border-sre-border rounded shadow-lg z-50 py-1"
+          className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-sre-border bg-sre-bg-card py-1 shadow-lg"
         >
-          {hasPermission("manage:users") && (
-            <NavLink
-              to="/users"
-              role="menuitem"
-              tabIndex={0}
-              className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
-              onClick={() => setOpen(false)}
-            >
-              <span
-                className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
-                aria-hidden
+          <div className="border-b border-sre-border/80 px-3 py-2">
+            <p className="truncate text-sm font-medium text-sre-text">
+              {username || "Signed in"}
+            </p>
+            <p className="text-xs capitalize text-sre-text-muted">{role}</p>
+          </div>
+          {!hideAccountLinksInMenu && (
+            <>
+              {hasPermission("manage:users") && (
+                <NavLink
+                  to="/users"
+                  role="menuitem"
+                  tabIndex={0}
+                  className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
+                  onClick={() => setOpen(false)}
+                >
+                  <span
+                    className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
+                    aria-hidden
+                  >
+                    people
+                  </span>{" "}
+                  Users
+                </NavLink>
+              )}
+              {hasPermission("manage:groups") && (
+                <NavLink
+                  to="/groups"
+                  role="menuitem"
+                  tabIndex={0}
+                  className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
+                  onClick={() => setOpen(false)}
+                >
+                  <span
+                    className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
+                    aria-hidden
+                  >
+                    groups
+                  </span>{" "}
+                  Groups
+                </NavLink>
+              )}
+
+              <div className="border-t border-sre-border my-1" />
+
+              <NavLink
+                to="/apikey"
+                role="menuitem"
+                tabIndex={0}
+                className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
+                onClick={() => setOpen(false)}
               >
-                people
-              </span>{" "}
-              Users
-            </NavLink>
-          )}
-          {hasPermission("manage:groups") && (
-            <NavLink
-              to="/groups"
-              role="menuitem"
-              tabIndex={0}
-              className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
-              onClick={() => setOpen(false)}
-            >
-              <span
-                className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
-                aria-hidden
+                <span
+                  className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
+                  aria-hidden
+                >
+                  key
+                </span>{" "}
+                API Key
+              </NavLink>
+
+              <NavLink
+                to="/integrations"
+                role="menuitem"
+                tabIndex={0}
+                className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
+                onClick={() => setOpen(false)}
               >
-                groups
-              </span>{" "}
-              Groups
-            </NavLink>
-          )}
+                <span
+                  className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
+                  aria-hidden
+                >
+                  integration_instructions
+                </span>{" "}
+                Integrations
+              </NavLink>
 
-          <div className="border-t border-sre-border my-1" />
+              {hasPermission("read:audit_logs") && user?.role === "admin" && (
+                <NavLink
+                  to="/audit-compliance"
+                  role="menuitem"
+                  tabIndex={0}
+                  className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
+                  onClick={() => setOpen(false)}
+                >
+                  <span
+                    className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
+                    aria-hidden
+                  >
+                    policy
+                  </span>{" "}
+                  Audit
+                </NavLink>
+              )}
 
-          <NavLink
-            to="/apikey"
-            role="menuitem"
-            tabIndex={0}
-            className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
-            onClick={() => setOpen(false)}
-          >
-            <span
-              className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
-              aria-hidden
-            >
-              key
-            </span>{" "}
-            API Key
-          </NavLink>
-
-          <NavLink
-            to="/integrations"
-            role="menuitem"
-            tabIndex={0}
-            className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
-            onClick={() => setOpen(false)}
-          >
-            <span
-              className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
-              aria-hidden
-            >
-              integration_instructions
-            </span>{" "}
-            Integrations
-          </NavLink>
-
-          {hasPermission("read:audit_logs") && user?.role === "admin" && (
-            <NavLink
-              to="/audit-compliance"
-              role="menuitem"
-              tabIndex={0}
-              className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
-              onClick={() => setOpen(false)}
-            >
-              <span
-                className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
-                aria-hidden
-              >
-                policy
-              </span>{" "}
-              Audit
-            </NavLink>
-          )}
-
-          {hasPermission("read:agents") && (
-            <NavLink
-              to="/quotas"
-              role="menuitem"
-              tabIndex={0}
-              className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
-              onClick={() => setOpen(false)}
-            >
-              <span
-                className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
-                aria-hidden
-              >
-                data_thresholding
-              </span>{" "}
-              Quotas
-            </NavLink>
+              {hasPermission("read:agents") && (
+                <NavLink
+                  to="/quotas"
+                  role="menuitem"
+                  tabIndex={0}
+                  className="block px-3 py-2 text-sm text-sre-text hover:bg-sre-surface/50"
+                  onClick={() => setOpen(false)}
+                >
+                  <span
+                    className="material-icons text-sm leading-none align-middle mr-2 text-sre-text-muted"
+                    aria-hidden
+                  >
+                    data_thresholding
+                  </span>{" "}
+                  Quotas
+                </NavLink>
+              )}
+            </>
           )}
 
           <button
@@ -512,4 +626,5 @@ UserMenu.propTypes = {
   logout: PropTypes.func.isRequired,
   hasPermission: PropTypes.func.isRequired,
   openChangePassword: PropTypes.func,
+  compact: PropTypes.bool,
 };

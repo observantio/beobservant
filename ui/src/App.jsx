@@ -8,9 +8,12 @@ import {
   useLocation,
 } from "react-router-dom";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { LayoutModeProvider, useLayoutMode } from "./contexts/LayoutModeContext";
+import { IncidentSummaryProvider } from "./contexts/IncidentSummaryContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import Header from "./components/Header";
+import AppSidebar from "./components/AppSidebar";
 import Dashboard from "./components/Dashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ChangePasswordModal from "./components/ChangePasswordModal";
@@ -83,6 +86,7 @@ ProtectedPermissionRoute.propTypes = {
 function AppContent() {
   const [info, setInfo] = useState(null);
   const { isAuthenticated, user, refreshUser } = useAuth();
+  const { sidebarMode } = useLayoutMode();
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const location = useLocation();
 
@@ -157,61 +161,104 @@ function AppContent() {
     },
   ];
 
-  return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-sre-bg via-sre-bg-alt to-sre-bg">
-      {isAuthenticated && <Header />}
+  const mainRoutes = (
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<OIDCCallbackPage />} />
 
-      {user?.needs_password_change && (
-        <ChangePasswordModal
-          isOpen={showPasswordChange}
-          onClose={handlePasswordChangeClose}
-          userId={user.id}
-          authProvider={user.auth_provider}
-          isForced
+        {protectedRoutes.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path}
+            element={
+              <ProtectedPermissionRoute permissions={route.permissions}>
+                {route.element}
+              </ProtectedPermissionRoute>
+            }
+          />
+        ))}
+
+        <Route
+          path="*"
+          element={
+            <Navigate to={isAuthenticated ? "/" : "/login"} replace />
+          }
         />
+      </Routes>
+    </Suspense>
+  );
+
+  const showFooter = location.pathname !== "/login";
+
+  const footerBlock = (
+    <footer className="container mt-8 mb-8 text-center text-xs text-sre-text-muted">
+      © Watchdog v0.0.2 — Apache 2.0 License —{" "}
+      <a
+        href="https://github.com/observantio/watchdog"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sre-primary hover:underline"
+      >
+        GitHub
+      </a>
+    </footer>
+  );
+
+  return (
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-sre-bg via-sre-bg-alt to-sre-bg">
+      {isAuthenticated ? (
+        <IncidentSummaryProvider>
+          <div className="flex min-h-0 flex-1 flex-col">
+            {sidebarMode ? (
+              <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+                <AppSidebar />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-56">
+                  <Header />
+
+                  {user?.needs_password_change && (
+                    <ChangePasswordModal
+                      isOpen={showPasswordChange}
+                      onClose={handlePasswordChangeClose}
+                      userId={user.id}
+                      authProvider={user.auth_provider}
+                      isForced
+                    />
+                  )}
+
+                  <main className="flex-1 min-w-0 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
+                    <div className="grid w-full max-w-none grid-cols-1 gap-6 auto-rows-min">
+                      {mainRoutes}
+                    </div>
+                  </main>
+
+                  {showFooter && footerBlock}
+                </div>
+              </div>
+            ) : (
+              <>
+                <Header />
+
+                {user?.needs_password_change && (
+                  <ChangePasswordModal
+                    isOpen={showPasswordChange}
+                    onClose={handlePasswordChangeClose}
+                    userId={user.id}
+                    authProvider={user.auth_provider}
+                    isForced
+                  />
+                )}
+
+                <main className="container mt-4 flex-1">{mainRoutes}</main>
+              </>
+            )}
+          </div>
+        </IncidentSummaryProvider>
+      ) : (
+        <main className="flex-1">{mainRoutes}</main>
       )}
 
-      <main className={isAuthenticated ? "container flex-1 mt-4" : "flex-1"}>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/auth/callback" element={<OIDCCallbackPage />} />
-
-            {protectedRoutes.map((route) => (
-              <Route
-                key={route.path}
-                path={route.path}
-                element={
-                  <ProtectedPermissionRoute permissions={route.permissions}>
-                    {route.element}
-                  </ProtectedPermissionRoute>
-                }
-              />
-            ))}
-
-            <Route
-              path="*"
-              element={
-                <Navigate to={isAuthenticated ? "/" : "/login"} replace />
-              }
-            />
-          </Routes>
-        </Suspense>
-      </main>
-
-      {location.pathname !== "/login" && (
-        <footer className="container text-center text-xs text-sre-text-muted mt-8 mb-8">
-          © Watchdog v0.0.2 — Apache 2.0 License —{" "}
-          <a
-            href="https://github.com/observantio/watchdog"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sre-primary hover:underline"
-          >
-            GitHub
-          </a>
-        </footer>
-      )}
+      {showFooter && !(isAuthenticated && sidebarMode) && footerBlock}
     </div>
   );
 }
@@ -219,15 +266,17 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <ErrorBoundary>
-        <Router>
-          <AuthProvider>
-            <ToastProvider>
-              <AppContent />
-            </ToastProvider>
-          </AuthProvider>
-        </Router>
-      </ErrorBoundary>
+      <LayoutModeProvider>
+        <ErrorBoundary>
+          <Router>
+            <AuthProvider>
+              <ToastProvider>
+                <AppContent />
+              </ToastProvider>
+            </AuthProvider>
+          </Router>
+        </ErrorBoundary>
+      </LayoutModeProvider>
     </ThemeProvider>
   );
 }

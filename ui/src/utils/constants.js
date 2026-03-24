@@ -165,11 +165,52 @@ export const NAV_ITEMS = {
   },
   GRAFANA: {
     label: "Grafana",
-    icon: "analytics",
+    icon: "stacked_bar_chart",
     path: "/grafana",
     permission: "read:dashboards",
   },
 };
+
+/** Shown in the left rail (sidebar layout); same targets as former user-menu links. */
+export const SIDEBAR_EXTRA_NAV = [
+  {
+    label: "Users",
+    icon: "people",
+    path: "/users",
+    permission: "manage:users",
+  },
+  {
+    label: "Groups",
+    icon: "groups",
+    path: "/groups",
+    permission: "manage:groups",
+  },
+  {
+    label: "API Key",
+    icon: "key",
+    path: "/apikey",
+    permission: null,
+  },
+  {
+    label: "Integrations",
+    icon: "integration_instructions",
+    path: "/integrations",
+    permission: null,
+  },
+  {
+    label: "Audit",
+    icon: "policy",
+    path: "/audit-compliance",
+    permission: "read:audit_logs",
+    adminOnly: true,
+  },
+  {
+    label: "Quotas",
+    icon: "data_thresholding",
+    path: "/quotas",
+    permission: "read:agents",
+  },
+];
 
 export const LOG_VIEW_MODES = ["table", "compact", "raw"];
 
