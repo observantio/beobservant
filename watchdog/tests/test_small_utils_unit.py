@@ -51,6 +51,14 @@ def test_normalize_grafana_next_path_variants():
     assert normalize_grafana_next_path("explore") == "/explore"
     assert normalize_grafana_next_path("/grafana") == "/dashboards"
     assert normalize_grafana_next_path("/grafana/explore") == "/explore"
+    assert (
+        normalize_grafana_next_path("/grafana/?org-key=observantio-default&orgId=1")
+        == "/?org-key=observantio-default"
+    )
+    assert (
+        normalize_grafana_next_path("/grafana/d/abc?var-service=api&orgId=1#panel-3")
+        == "/d/abc?var-service=api#panel-3"
+    )
 
 
 def test_loki_http_client_success_and_error_paths():
