@@ -255,6 +255,24 @@ select.text-xs {
   box-shadow: 0 0 0 2px var(--sre-primary) !important;
 }
 
+.thin-scrollbar {
+  scrollbar-width: thin;
+}
+
+.thin-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(var(--sre-primary-rgb) / 0.35);
+  border-radius: 999px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* Dark mode polish: stronger contrast, cleaner controls, subtle depth */
 :root[data-theme='dark'] *:focus-visible,
 body[data-theme='dark'] *:focus-visible,
@@ -297,6 +315,28 @@ body[data-theme='dark'] ::-webkit-scrollbar-thumb,
 body[data-theme='dark'] ::-webkit-scrollbar-track,
 .dark ::-webkit-scrollbar-track {
   background: rgba(16, 23, 36, 0.75);
+}
+
+/* Keep explicitly-marked thin scroll areas compact even in dark mode */
+:root[data-theme='dark'] .thin-scrollbar,
+body[data-theme='dark'] .thin-scrollbar,
+.dark .thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--sre-primary-rgb) / 0.35) transparent;
+}
+
+:root[data-theme='dark'] .thin-scrollbar::-webkit-scrollbar,
+body[data-theme='dark'] .thin-scrollbar::-webkit-scrollbar,
+.dark .thin-scrollbar::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+:root[data-theme='dark'] .thin-scrollbar::-webkit-scrollbar-thumb,
+body[data-theme='dark'] .thin-scrollbar::-webkit-scrollbar-thumb,
+.dark .thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(var(--sre-primary-rgb) / 0.35) !important;
+  border: 0 !important;
 }
 
 /* Dark theme contrast pass for card and panel borders */

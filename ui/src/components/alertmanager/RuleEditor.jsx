@@ -22,6 +22,8 @@ export default function RuleEditor({
   onCancel,
 }) {
   const MAX_CORRELATION_ID_LENGTH = 10;
+  const CONDITION_OPERATORS = [">", ">=", "<", "<=", "==", "!="];
+  const CONDITION_JOIN_OPERATORS = ["and", "or"];
   const { hasPermission, user } = useAuth();
   const canReadChannels = hasPermission("read:channels");
   const AUTO_SCOPE = "__auto__";
@@ -48,6 +50,18 @@ export default function RuleEditor({
   const totalSteps = 4;
   const [issuesCollapsed, setIssuesCollapsed] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [queryMode, setQueryMode] = useState("promql");
+  const [builderUseRate, setBuilderUseRate] = useState(false);
+  const [builderRateWindow, setBuilderRateWindow] = useState("5m");
+  const [builderConditions, setBuilderConditions] = useState([
+    {
+      id: Math.random().toString(36).slice(2, 9),
+      joinWithPrev: "and",
+      metric: "",
+      operator: ">",
+      value: "",
+    },
+  ]);
   const [correlationMode, setCorrelationMode] = useState("existing");
   // helper to generate random correlation IDs (uses crypto.randomUUID when available)
   const generateCorrelationId = () => {
@@ -129,6 +143,51 @@ export default function RuleEditor({
         : [];
     setSelectedGroups(new Set(incomingGroups));
   }, [rule]);
+
+  const buildCompositeExprFromBuilder = (
+    conditions = [],
+    useRate = false,
+    rateWindow = "5m",
+  ) => {
+    const normalized = (conditions || [])
+      .map((row) => ({
+        ...row,
+        metric: String(row?.metric || "").trim(),
+        operator: String(row?.operator || ">").trim(),
+        value: String(row?.value || "").trim(),
+        joinWithPrev: String(row?.joinWithPrev || "and").trim().toLowerCase(),
+      }))
+      .filter((row) => row.metric && row.operator && row.value);
+
+    if (!normalized.length) return "";
+
+    const safeWindow = String(rateWindow || "").trim() || "5m";
+
+    return normalized
+      .map((row, index) => {
+        const metricExpr = useRate
+          ? `rate(${row.metric}[${safeWindow}])`
+          : row.metric;
+        const exprPart = `(${metricExpr} ${row.operator} ${row.value})`;
+        if (index === 0) return exprPart;
+        const joiner = CONDITION_JOIN_OPERATORS.includes(row.joinWithPrev)
+          ? row.joinWithPrev.toUpperCase()
+          : "AND";
+        return `${joiner} ${exprPart}`;
+      })
+      .join(" ");
+  };
+
+  useEffect(() => {
+    if (queryMode !== "builder") return;
+    const nextExpr = buildCompositeExprFromBuilder(
+      builderConditions,
+      builderUseRate,
+      builderRateWindow,
+    );
+    if (!nextExpr) return;
+    setFormData((prev) => (prev.expr === nextExpr ? prev : { ...prev, expr: nextExpr }));
+  }, [queryMode, builderConditions, builderUseRate, builderRateWindow]);
 
   useEffect(() => {
     const rawOrg = String((rule || DEFAULT_FORM)?.orgId || "").trim();
@@ -301,7 +360,44 @@ export default function RuleEditor({
         description: template.description,
       },
     }));
+    setQueryMode("promql");
     setSelectedTemplate(template.id);
+  };
+
+  const addBuilderCondition = () => {
+    setBuilderConditions((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(36).slice(2, 9),
+        joinWithPrev: "and",
+        metric: "",
+        operator: ">",
+        value: "",
+      },
+    ]);
+  };
+
+  const updateBuilderCondition = (id, field, value) => {
+    setBuilderConditions((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)),
+    );
+  };
+
+  const removeBuilderCondition = (id) => {
+    setBuilderConditions((prev) => {
+      if (prev.length <= 1) {
+        return [
+          {
+            id: Math.random().toString(36).slice(2, 9),
+            joinWithPrev: "and",
+            metric: "",
+            operator: ">",
+            value: "",
+          },
+        ];
+      }
+      return prev.filter((row) => row.id !== id);
+    });
   };
 
   const handleTestRule = async () => {
@@ -378,8 +474,8 @@ export default function RuleEditor({
   const hasErrors = Object.keys(validationErrors).length > 0;
 
   return (
-    <div className="max-w-6xl mx-auto overflow-hidden">
-      <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
+    <div className="max-w-5xl mx-auto overflow-hidden">
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
         <RuleEditorWizard
           currentStep={currentStep}
           totalSteps={totalSteps}
@@ -392,20 +488,20 @@ export default function RuleEditor({
           hasErrors={hasErrors}
           showButtons={false}
         />
-        <div className="min-h-[500px] py-3 overflow-hidden">
+        <div className="min-h-[420px] py-1 overflow-hidden">
           {currentStep === 0 && (
             <>
-              <div className="space-y-8 p-2">
-                <div className="text-left mb-6">
-                  <h2 className="text-xl font-bold text-sre-text mb-2">
+              <div className="space-y-5 p-1">
+                <div className="text-left mb-3">
+                  <h2 className="text-lg font-bold text-sre-text mb-1">
                     Basic Setup
                   </h2>
-                  <p className="text-sm text-sre-text-muted">
+                  <p className="text-xs text-sre-text-muted">
                     Configure the fundamental properties of your alert rule
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-sre-text">
                       Rule Name{" "}
@@ -418,7 +514,7 @@ export default function RuleEditor({
                       }
                       required
                       placeholder="CPU Alert"
-                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                      className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                     />
                     {validationErrors.name && (
                       <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
@@ -437,7 +533,7 @@ export default function RuleEditor({
                       onChange={(e) =>
                         setFormData({ ...formData, severity: e.target.value })
                       }
-                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                      className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                     >
                       <option value="info">Info</option>
                       <option value="warning">Warning</option>
@@ -458,11 +554,11 @@ export default function RuleEditor({
                       Product / API Key{" "}
                       <HelpTooltip text="Select one or more API keys to target specific products. Auto scope selects all visible API keys." />
                     </label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                       <button
                         type="button"
                         onClick={() => toggleApiScope(AUTO_SCOPE)}
-                        className={`text-left p-3 rounded-lg border transition-colors ${
+                          className={`text-left p-2.5 rounded-lg border transition-colors ${
                           selectedApiScopes.includes(AUTO_SCOPE)
                             ? "border-sre-primary bg-sre-primary/10"
                             : "border-sre-border bg-sre-surface hover:border-sre-primary/50"
@@ -494,7 +590,7 @@ export default function RuleEditor({
                             type="button"
                             onClick={() => toggleApiScope(String(k.key || ""))}
                             disabled={isAuto}
-                            className={`text-left p-3 rounded-lg border transition-colors ${
+                            className={`text-left p-2.5 rounded-lg border transition-colors ${
                               isSelected
                                 ? "border-sre-primary bg-sre-primary/10"
                                 : "border-sre-border bg-sre-surface hover:border-sre-primary/50"
@@ -527,21 +623,21 @@ export default function RuleEditor({
 
                 {/* Quick Templates */}
                 <div>
-                  <div className="mb-4">
+                  <div className="mb-3">
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="material-icons text-2xl text-sre-primary">
+                      <span className="material-icons text-xl text-sre-primary">
                         auto_awesome
                       </span>
-                      <h4 className="text-base font-semibold text-sre-text">
+                      <h4 className="text-sm font-semibold text-sre-text">
                         Quick Templates
                       </h4>
                     </div>
-                    <p className="text-sm text-sre-text-muted">
+                    <p className="text-xs text-sre-text-muted">
                       Start from a known-good template, then tune the expression
                       and thresholds for your environment.
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-80 scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-sre-bg-alt scrollbar-thumb-rounded overflow-y-auto pr-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-sre-bg-alt scrollbar-thumb-rounded overflow-y-auto pr-1">
                     {RULE_TEMPLATES.map((template) => {
                       const isSelected = selectedTemplate === template.id;
                       return (
@@ -549,7 +645,7 @@ export default function RuleEditor({
                           key={template.id}
                           type="button"
                           onClick={() => applyTemplate(template)}
-                          className={`text-left p-4 rounded-lg border-2 transition-all duration-200 group shadow-sm hover:shadow-md h-auto relative ${
+                          className={`text-left p-3 rounded-lg border transition-all duration-200 group shadow-sm hover:shadow-md h-auto relative ${
                             isSelected
                               ? "border-sre-primary bg-sre-primary/10 shadow-md"
                               : "border-sre-border bg-sre-surface hover:border-sre-primary hover:bg-sre-primary/5"
@@ -557,13 +653,13 @@ export default function RuleEditor({
                         >
                           {isSelected && (
                             <div className="absolute top-2 right-2">
-                              <span className="material-icons text-lg text-sre-primary">
+                              <span className="material-icons text-base text-sre-primary">
                                 auto_awesome
                               </span>
                             </div>
                           )}
                           <div
-                            className={`text-base font-semibold transition-colors mb-2 text-left ${
+                            className={`text-sm font-semibold transition-colors mb-1.5 text-left ${
                               isSelected
                                 ? "text-sre-primary"
                                 : "text-sre-text group-hover:text-sre-primary"
@@ -571,10 +667,10 @@ export default function RuleEditor({
                           >
                             {template.name}
                           </div>
-                          <div className="text-sm text-sre-text-muted mb-3 line-clamp-2 text-left">
+                          <div className="text-xs text-sre-text-muted mb-2 line-clamp-2 text-left">
                             {template.summary}
                           </div>
-                          <div className="text-xs font-mono text-sre-text-muted bg-sre-bg-alt p-3 rounded border text-left whitespace-pre-wrap break-words leading-relaxed min-h-[80px] overflow-hidden">
+                          <div className="text-[11px] font-mono text-sre-text-muted bg-sre-bg-alt p-2.5 rounded border text-left whitespace-pre-wrap break-words leading-relaxed min-h-[70px] overflow-hidden">
                             {template.expr}
                           </div>
                         </button>
@@ -589,148 +685,19 @@ export default function RuleEditor({
           {currentStep === 1 && (
             <>
               {/* Alert Condition */}
-              <div className="space-y-8 p-2">
-                <div className="text-left mb-6">
-                  <h2 className="text-xl font-bold text-sre-text mb-2">
+              <div className="space-y-5 p-1">
+                <div className="text-left mb-3">
+                  <h2 className="text-lg font-bold text-sre-text mb-1">
                     Alert Condition
                   </h2>
-                  <p className="text-sre-text-muted">
+                  <p className="text-xs text-sre-text-muted">
                     Define when this alert should trigger
                   </p>
                 </div>
 
-                <div className="space-y-6">
-                  <div className="space-y-3">
-                    <label className="block text-sm font-semibold text-sre-text">
-                      PromQL Expression{" "}
-                      <HelpTooltip text="Write a PromQL query that defines when this alert should fire. Use the metric explorer below to help build your query." />
-                    </label>
-                    <Textarea
-                      value={formData.expr}
-                      onChange={(e) =>
-                        setFormData({ ...formData, expr: e.target.value })
-                      }
-                      required
-                      placeholder="rate(requests_total[5m]) > 100"
-                      rows={6}
-                      className="w-full font-mono text-base py-3 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors whitespace-pre leading-relaxed"
-                    />
-                    {validationErrors.expr && (
-                      <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
-                        <span className="material-icons text-sm">error</span>
-                        {validationErrors.expr}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-3">
-                      <label className="block text-sm font-semibold text-sre-text">
-                        Duration{" "}
-                        <HelpTooltip text="How long the condition must be true before the alert fires. Use Prometheus duration format (5m, 1h)." />
-                      </label>
-                      <Input
-                        value={formData.duration}
-                        onChange={(e) =>
-                          setFormData({ ...formData, duration: e.target.value })
-                        }
-                        placeholder="5m, 1h"
-                        className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
-                      />
-                      {validationErrors.duration && (
-                        <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
-                          <span className="material-icons text-sm">error</span>
-                          {validationErrors.duration}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-3">
-                      <label className="block text-sm font-semibold text-sre-text">
-                        Correlation ID{" "}
-                        <HelpTooltip text="Correlation ID groups related rules/alerts together. Select an existing one or type a new ID." />
-                      </label>
-                      <div className="space-y-2">
-                        <Select
-                          value={correlationMode}
-                          onChange={(e) => {
-                            const mode = e.target.value;
-                            setCorrelationMode(mode);
-                            if (mode === "existing") {
-                              setFormData((prev) => ({
-                                ...prev,
-                                group:
-                                  correlationIdOptions[0] ||
-                                  String(prev.group || "").trim() ||
-                                  "default",
-                              }));
-                            }
-                          }}
-                          className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
-                        >
-                          <option value="existing">Select existing</option>
-                          <option value="custom">Create new</option>
-                        </Select>
-
-                        {correlationMode === "existing" ? (
-                          <Select
-                            value={
-                              correlationIdOptions.includes(formData.group)
-                                ? formData.group
-                                : correlationIdOptions[0] || formData.group || "default"
-                            }
-                            onChange={(e) =>
-                              setFormData({ ...formData, group: e.target.value })
-                            }
-                            className="w-full text-lg px-4 border-2 border-sre-border focus:border-sre-primary transition-colors"
-                          >
-                            {correlationIdOptions.length === 0 ? (
-                              <option value={formData.group || "default"}>
-                                {formData.group || "default"}
-                              </option>
-                            ) : (
-                              correlationIdOptions.map((value) => (
-                                <option key={value} value={value}>
-                                  {value}
-                                </option>
-                              ))
-                            )}
-                          </Select>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              value={formData.group}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  group: e.target.value.slice(
-                                    0,
-                                    MAX_CORRELATION_ID_LENGTH,
-                                  ),
-                                })
-                              }
-                              placeholder="default"
-                              maxLength={MAX_CORRELATION_ID_LENGTH}
-                              className="w-full text-lg px-4 border-2 border-sre-border focus:border-sre-primary transition-colors"
-                            />
-                            <Button
-                              size="xs"
-                              variant="ghost"
-                              title="Generate random ID"
-                              onClick={generateCorrelationId}
-                            >
-                              <span className="material-icons text-base">
-                                shuffle
-                              </span>
-                              <span className="sr-only">Generate ID</span>
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
+                <div className="space-y-4">
                   {/* Metric Explorer */}
-                  <div className="bg-gradient-to-r from-sre-surface to-sre-surface/80 rounded-xl p-6 border border-sre-border">
+                  <div className="bg-gradient-to-r from-sre-surface to-sre-surface/80 rounded-lg p-4 border border-sre-border">
                     <div className="flex items-start justify-between gap-4 mb-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2">
@@ -742,8 +709,10 @@ export default function RuleEditor({
                           </h4>
                         </div>
                         <p className="text-sm text-sre-text-muted leading-relaxed">
-                          Load metric names from Mimir for the selected product
-                          and click to insert them into your PromQL expression.
+                          Load metric names from Mimir for the selected product.
+                          Click a metric to {queryMode === "builder"
+                            ? "fill the latest builder row"
+                            : "insert it into PromQL"}.
                         </p>
                         <div className="mt-2">
                           <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-400/45 bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-300">
@@ -802,14 +771,38 @@ export default function RuleEditor({
                                   key={name}
                                   type="button"
                                   onClick={() => {
+                                    if (queryMode === "builder") {
+                                      setBuilderConditions((prev) => {
+                                        if (!prev.length) {
+                                          return [
+                                            {
+                                              id: Math.random().toString(36).slice(2, 9),
+                                              joinWithPrev: "and",
+                                              metric: name,
+                                              operator: ">",
+                                              value: "",
+                                            },
+                                          ];
+                                        }
+                                        const next = [...prev];
+                                        let targetIndex = 0;
+                                        for (let i = next.length - 1; i >= 0; i -= 1) {
+                                          if (!String(next[i]?.metric || "").trim()) {
+                                            targetIndex = i;
+                                            break;
+                                          }
+                                        }
+                                        next[targetIndex] = {
+                                          ...next[targetIndex],
+                                          metric: name,
+                                        };
+                                        return next;
+                                      });
+                                      return;
+                                    }
                                     const base = formData.expr || "";
-                                    const template = base
-                                      ? `${base}\n${name}`
-                                      : name;
-                                    setFormData({
-                                      ...formData,
-                                      expr: template,
-                                    });
+                                    const template = base ? `${base}\n${name}` : name;
+                                    setFormData({ ...formData, expr: template });
                                   }}
                                   className="px-3 py-2 text-sm rounded-full border border-sre-border bg-sre-bg-card hover:bg-sre-primary/10 hover:border-sre-primary text-sre-text transition-all duration-200 break-words max-w-full shadow-sm hover:shadow-md text-left"
                                   title={name}
@@ -827,6 +820,286 @@ export default function RuleEditor({
                       </>
                     )}
                   </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="block text-sm font-semibold text-sre-text">
+                        Alert Query{" "}
+                        <HelpTooltip text="Use PromQL mode for direct query input, or Builder mode to compose conditions with AND/OR logic." />
+                      </label>
+                      <div className="inline-flex rounded-lg border border-sre-border bg-sre-bg-alt p-1">
+                        <button
+                          type="button"
+                          onClick={() => setQueryMode("promql")}
+                          className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                            queryMode === "promql"
+                              ? "bg-sre-primary text-white"
+                              : "text-sre-text-muted hover:text-sre-text"
+                          }`}
+                        >
+                          PromQL
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQueryMode("builder")}
+                          className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                            queryMode === "builder"
+                              ? "bg-sre-primary text-white"
+                              : "text-sre-text-muted hover:text-sre-text"
+                          }`}
+                        >
+                          Builder
+                        </button>
+                      </div>
+                    </div>
+
+                    {queryMode === "promql" ? (
+                      <Textarea
+                        value={formData.expr}
+                        onChange={(e) =>
+                          setFormData({ ...formData, expr: e.target.value })
+                        }
+                        required
+                        placeholder="rate(requests_total[5m]) > 100"
+                        rows={6}
+                        className="w-full font-mono text-sm py-2.5 px-3 border border-sre-border focus:border-sre-primary transition-colors whitespace-pre leading-relaxed"
+                      />
+                    ) : (
+                      <div className="space-y-2.5 rounded-lg border border-sre-border bg-sre-surface p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-sre-border/70 bg-sre-bg-alt/60 px-2.5 py-2">
+                          <label className="inline-flex items-center gap-2 text-xs text-sre-text">
+                            <input
+                              type="checkbox"
+                              checked={builderUseRate}
+                              onChange={(e) => setBuilderUseRate(e.target.checked)}
+                              className="rounded border-sre-border bg-sre-surface"
+                            />
+                            Apply <span className="font-mono">rate()</span> to metrics
+                          </label>
+                          {builderUseRate && (
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-sre-text-muted">
+                                Window
+                              </label>
+                              <Input
+                                value={builderRateWindow}
+                                onChange={(e) => setBuilderRateWindow(e.target.value)}
+                                placeholder="5m"
+                                className="w-20 text-xs py-1.5 px-2 border border-sre-border"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        {builderConditions.map((row, index) => (
+                          <div
+                            key={row.id}
+                            className="grid grid-cols-1 md:grid-cols-[auto_1.8fr_auto_1fr_auto] gap-2 items-center"
+                          >
+                            {index === 0 ? (
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted px-2">
+                                Start
+                              </span>
+                            ) : (
+                              <Select
+                                value={row.joinWithPrev}
+                                onChange={(e) =>
+                                  updateBuilderCondition(
+                                    row.id,
+                                    "joinWithPrev",
+                                    e.target.value,
+                                  )
+                                }
+                                className="text-xs px-2 py-1 border border-sre-border"
+                              >
+                                <option value="and">AND</option>
+                                <option value="or">OR</option>
+                              </Select>
+                            )}
+
+                            <Input
+                              value={row.metric}
+                              onChange={(e) =>
+                                updateBuilderCondition(
+                                  row.id,
+                                  "metric",
+                                  e.target.value,
+                                )
+                              }
+                              placeholder="Metric name"
+                              list="rule-metric-suggestions"
+                              className="w-full text-sm py-2 px-3 border border-sre-border"
+                            />
+                            <Select
+                              value={row.operator}
+                              onChange={(e) =>
+                                updateBuilderCondition(
+                                  row.id,
+                                  "operator",
+                                  e.target.value,
+                                )
+                              }
+                              className="text-sm px-2 py-2 border border-sre-border"
+                            >
+                              {CONDITION_OPERATORS.map((op) => (
+                                <option key={op} value={op}>
+                                  {op}
+                                </option>
+                              ))}
+                            </Select>
+                            <Input
+                              value={row.value}
+                              onChange={(e) =>
+                                updateBuilderCondition(row.id, "value", e.target.value)
+                              }
+                              placeholder="Value"
+                              className="w-full text-sm py-2 px-3 border border-sre-border"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeBuilderCondition(row.id)}
+                              className="h-9 w-9 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              title="Remove condition"
+                            >
+                              <span className="material-icons text-base">close</span>
+                            </Button>
+                          </div>
+                        ))}
+
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={addBuilderCondition}
+                          >
+                            <span className="material-icons text-sm mr-1.5">add</span>
+                            Add Rule
+                          </Button>
+                        </div>
+                        <datalist id="rule-metric-suggestions">
+                          {filteredMetricNames.map((metric) => (
+                            <option key={metric} value={metric} />
+                          ))}
+                        </datalist>
+                      </div>
+                    )}
+
+                    {validationErrors.expr && (
+                      <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
+                        <span className="material-icons text-sm">error</span>
+                        {validationErrors.expr}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-sre-text">
+                        Duration{" "}
+                        <HelpTooltip text="How long the condition must be true before the alert fires. Use Prometheus duration format (5m, 1h)." />
+                      </label>
+                      <Input
+                        value={formData.duration}
+                        onChange={(e) =>
+                          setFormData({ ...formData, duration: e.target.value })
+                        }
+                        placeholder="5m, 1h"
+                        className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
+                      />
+                      {validationErrors.duration && (
+                        <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
+                          <span className="material-icons text-sm">error</span>
+                          {validationErrors.duration}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-sre-text">
+                        Correlation ID{" "}
+                        <HelpTooltip text="Correlation ID groups related rules/alerts together. Select an existing one or type a new ID." />
+                      </label>
+                      <div className="space-y-2">
+                        <Select
+                          value={correlationMode}
+                          onChange={(e) => {
+                            const mode = e.target.value;
+                            setCorrelationMode(mode);
+                            if (mode === "existing") {
+                              setFormData((prev) => ({
+                                ...prev,
+                                group:
+                                  correlationIdOptions[0] ||
+                                  String(prev.group || "").trim() ||
+                                  "default",
+                              }));
+                            }
+                          }}
+                          className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
+                        >
+                          <option value="existing">Select existing</option>
+                          <option value="custom">Create new</option>
+                        </Select>
+
+                        {correlationMode === "existing" ? (
+                          <Select
+                            value={
+                              correlationIdOptions.includes(formData.group)
+                                ? formData.group
+                                : correlationIdOptions[0] || formData.group || "default"
+                            }
+                            onChange={(e) =>
+                              setFormData({ ...formData, group: e.target.value })
+                            }
+                            className="w-full text-sm px-3 border border-sre-border focus:border-sre-primary transition-colors"
+                          >
+                            {correlationIdOptions.length === 0 ? (
+                              <option value={formData.group || "default"}>
+                                {formData.group || "default"}
+                              </option>
+                            ) : (
+                              correlationIdOptions.map((value) => (
+                                <option key={value} value={value}>
+                                  {value}
+                                </option>
+                              ))
+                            )}
+                          </Select>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              value={formData.group}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  group: e.target.value.slice(
+                                    0,
+                                    MAX_CORRELATION_ID_LENGTH,
+                                  ),
+                                })
+                              }
+                              placeholder="default"
+                              maxLength={MAX_CORRELATION_ID_LENGTH}
+                              className="w-full text-sm px-3 border border-sre-border focus:border-sre-primary transition-colors"
+                            />
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              title="Generate random ID"
+                              onClick={generateCorrelationId}
+                            >
+                              <span className="material-icons text-base">
+                                shuffle
+                              </span>
+                              <span className="sr-only">Generate ID</span>
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
             </>
@@ -835,17 +1108,17 @@ export default function RuleEditor({
           {currentStep === 2 && (
             <>
               {/* Alert Details */}
-              <div className="space-y-8 p-2">
-                <div className="text-left mb-6">
-                  <h2 className="text-xl font-bold text-sre-text mb-2">
+              <div className="space-y-5 p-1">
+                <div className="text-left mb-3">
+                  <h2 className="text-lg font-bold text-sre-text mb-1">
                     Alert Details
                   </h2>
-                  <p className="text-sre-text-muted">
+                  <p className="text-xs text-sre-text-muted">
                     Add context and labels to make your alerts more informative
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-3">
                     <label className="block text-sm font-semibold text-sre-text">
                       Summary{" "}
@@ -863,7 +1136,7 @@ export default function RuleEditor({
                         })
                       }
                       placeholder="Brief alert summary"
-                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                      className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                     />
                   </div>
                   <div className="space-y-3">
@@ -883,14 +1156,14 @@ export default function RuleEditor({
                         })
                       }
                       placeholder="Detailed description"
-                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                      className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                     />
                   </div>
                 </div>
 
                 {/* Alert Labels */}
-                <div className="pt-4">
-                  <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="pt-2">
+                  <div className="flex items-center justify-between gap-3 mb-3">
                     <div>
                       <h4 className="text-base font-semibold text-sre-text">
                         Alert Labels
@@ -925,11 +1198,11 @@ export default function RuleEditor({
                       No labels added yet.
                     </p>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-2.5">
                       {labelPairs.map((pair, idx) => (
                         <div
                           key={pair.id}
-                          className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-center"
+                          className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-center"
                         >
                           <Input
                             value={pair.key}
@@ -983,26 +1256,26 @@ export default function RuleEditor({
 
                 {/* Rule Preview */}
                 <div>
-                  <h4 className="text-lg font-semibold text-sre-text mb-4 flex items-center gap-2">
+                  <h4 className="text-base font-semibold text-sre-text mb-2 flex items-center gap-2">
                     Rule Preview
                   </h4>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <div className="space-y-2">
                       <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">
                         Expression
                       </div>
-                      <div className="text-sm font-mono text-sre-text break-words bg-sre-surface p-4 rounded-lg border border-sre-border shadow-inner max-h-24 overflow-y-auto">
+                      <div className="text-xs font-mono text-sre-text break-words bg-sre-surface p-3 rounded-lg border border-sre-border shadow-inner max-h-24 overflow-y-auto">
                         {formData.expr || "No expression set"}
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                       <div className="space-y-2">
                         <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">
                           Duration
                         </div>
-                        <div className="text-base text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border">
+                        <div className="text-sm text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border">
                           {formData.duration || "1m"}
                         </div>
                       </div>
@@ -1010,7 +1283,7 @@ export default function RuleEditor({
                         <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">
                           Group
                         </div>
-                        <div className="text-base text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border">
+                        <div className="text-sm text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border">
                           {formData.group || "default"}
                         </div>
                       </div>
@@ -1018,7 +1291,7 @@ export default function RuleEditor({
                         <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">
                           Target Org
                         </div>
-                        <div className="text-base text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border break-words">
+                        <div className="text-sm text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border break-words">
                           {formData.orgId || "default org"}
                         </div>
                       </div>
@@ -1028,15 +1301,19 @@ export default function RuleEditor({
                       <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">
                         Labels
                       </div>
-                      <div className="flex flex-wrap gap-2 min-h-[3rem]">
+                      <div className="flex flex-wrap items-center gap-2 min-h-[3rem]">
                         {Object.entries(effectiveLabels).length > 0 ? (
                           Object.entries(effectiveLabels).map(
                             ([key, value]) => (
                               <span
                                 key={key}
-                                className="text-sm px-5 py-3 bg-sre-primary/10  rounded-full text-sre-text break-words text-left"
+                                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-sre-primary/25 bg-sre-primary/10 text-sre-text break-all leading-none"
                               >
-                                {key}={value}
+                                <span className="font-semibold text-sre-primary">
+                                  {key}
+                                </span>
+                                <span className="text-sre-text-muted">=</span>
+                                <span className="font-medium">{value}</span>
                               </span>
                             ),
                           )
@@ -1056,18 +1333,18 @@ export default function RuleEditor({
           {currentStep === 3 && (
             <>
               {/* Advanced Settings */}
-              <div className="space-y-8 p-2">
-                <div className="text-left mb-6">
-                  <h2 className="text-xl font-bold text-sre-text mb-2">
+              <div className="space-y-5 p-1">
+                <div className="text-left mb-3">
+                  <h2 className="text-lg font-bold text-sre-text mb-1">
                     Advanced Settings
                   </h2>
-                  <p className="text-sre-text-muted">
+                  <p className="text-xs text-sre-text-muted">
                     Configure notifications and rule visibility
                   </p>
                 </div>
 
                 {/* Notification Channels */}
-                <div className="space-y-6">
+                <div className="space-y-4">
                   <div className="flex items-center gap-3">
                     <span className="material-icons text-xl text-sre-primary">
                       notifications
@@ -1084,7 +1361,7 @@ export default function RuleEditor({
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {channels?.length > 0 ? (
                       <>
                         {/* All Channels Option */}
@@ -1104,7 +1381,7 @@ export default function RuleEditor({
                               notificationChannels: newChannels,
                             });
                           }}
-                          className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                          className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
                             !formData.notificationChannels ||
                             formData.notificationChannels.length === 0
                               ? "border-sre-primary bg-sre-primary/5 shadow-md"
@@ -1139,7 +1416,7 @@ export default function RuleEditor({
                         </div>
 
                         {/* Individual Channels */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           {channels.map((channel) => {
                             const isSelected =
                               formData.notificationChannels?.includes(
@@ -1159,7 +1436,7 @@ export default function RuleEditor({
                                     notificationChannels: newChannels,
                                   });
                                 }}
-                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                                className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
                                   isSelected
                                     ? "border-sre-primary bg-sre-primary/5 shadow-md"
                                     : "border-sre-border bg-sre-surface hover:border-sre-primary/50 hover:bg-sre-primary/5"
@@ -1278,7 +1555,7 @@ export default function RuleEditor({
                 </div>
 
                 {/* Enable Rule */}
-                <div className="flex items-center gap-8">
+                <div className="flex items-center gap-4">
                   <input
                     type="checkbox"
                     id="enabled"
@@ -1286,11 +1563,11 @@ export default function RuleEditor({
                     onChange={(e) =>
                       setFormData({ ...formData, enabled: e.target.checked })
                     }
-                    className="w-5 h-5 text-sre-primary border-2 border-sre-border rounded focus:ring-sre-primary"
+                    className="w-4 h-4 text-sre-primary border border-sre-border rounded focus:ring-sre-primary"
                   />
                   <label
                     htmlFor="enabled"
-                    className="text-base text-sre-text cursor-pointer"
+                    className="text-sm text-sre-text cursor-pointer"
                   >
                     <span className="font-semibold">Enable this rule</span>{" "}
                     <HelpTooltip text="Only enabled rules will trigger alerts. Disabled rules are saved but won't fire." />
@@ -1298,7 +1575,7 @@ export default function RuleEditor({
                 </div>
 
                 {/* Visibility Settings */}
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <label
                     htmlFor="rule-visibility"
                     className="block text-sm font-semibold text-sre-text"
@@ -1319,7 +1596,7 @@ export default function RuleEditor({
                         setSelectedGroups(new Set());
                       }
                     }}
-                    className="w-full max-w-md text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                    className="w-full max-w-md text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                   >
                     <option value="private">
                       Private - Only visible to me
@@ -1331,7 +1608,7 @@ export default function RuleEditor({
                       Tenant - Visible to all users in tenant
                     </option>
                   </Select>
-                  <p className="text-sm text-sre-text-muted leading-relaxed">
+                  <p className="text-xs text-sre-text-muted leading-relaxed">
                     {formData.visibility === "private" &&
                       "Only you can view and edit this rule"}
                     {formData.visibility === "group" &&
@@ -1343,7 +1620,7 @@ export default function RuleEditor({
 
                 {/* Group Sharing */}
                 {formData.visibility === "group" && groups?.length > 0 && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <label
                       htmlFor="rule-groups"
                       className="block text-sm font-semibold text-sre-text"
@@ -1353,25 +1630,25 @@ export default function RuleEditor({
                     </label>
                     <div
                       id="rule-groups"
-                      className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto"
+                      className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto"
                     >
                       {groups.map((group) => (
                         <label
                           key={group.id}
-                          className="flex items-center gap-4 p-4 bg-sre-surface border border-sre-border rounded-lg cursor-pointer hover:bg-sre-primary/5 hover:border-sre-primary transition-all duration-200 shadow-sm hover:shadow-md"
+                          className="flex items-center gap-3 p-2.5 bg-sre-surface border border-sre-border rounded-lg cursor-pointer hover:bg-sre-primary/5 hover:border-sre-primary transition-all duration-200"
                         >
                           <input
                             type="checkbox"
                             checked={selectedGroups.has(group.id)}
                             onChange={() => toggleGroup(group.id)}
-                            className="w-5 h-5 text-sre-primary border-2 border-sre-border rounded focus:ring-sre-primary"
+                            className="w-4 h-4 text-sre-primary border border-sre-border rounded focus:ring-sre-primary"
                           />
                           <div className="flex-1 min-w-0">
                             <div className="font-semibold text-sre-text truncate">
                               {group.name}
                             </div>
                             {group.description && (
-                              <div className="text-sm text-sre-text-muted truncate">
+                              <div className="text-xs text-sre-text-muted truncate">
                                 {group.description}
                               </div>
                             )}
@@ -1379,7 +1656,7 @@ export default function RuleEditor({
                         </label>
                       ))}
                     </div>
-                    <p className="text-sm text-sre-text-muted">
+                    <p className="text-xs text-sre-text-muted">
                       {selectedGroups.size} group
                       {selectedGroups.size === 1 ? "" : "s"} selected
                     </p>

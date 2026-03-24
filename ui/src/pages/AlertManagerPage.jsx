@@ -843,7 +843,7 @@ export default function AlertManagerPage() {
                 </div>
 
                 {filteredAlerts.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {filteredAlerts.map((a, idx) => {
                       const labels = a.labels || {};
                       const alertName = String(labels.alertname || "").trim();
@@ -859,7 +859,7 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={a.fingerprint || a.id || a.starts_at || idx}
-                          className="p-6 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
+                          className="h-full p-4 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
                         >
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
@@ -908,7 +908,7 @@ export default function AlertManagerPage() {
                                   </span>
                                   {correlationId && (
                                     <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200">
-                                      Correlation ID: {correlationId}
+                                      {correlationId}
                                     </span>
                                   )}
                                 </div>
@@ -1166,7 +1166,7 @@ export default function AlertManagerPage() {
                     </div>
 
                     {filteredRules.length > 0 ? (
-                      <div className="grid gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {filteredRules.map((rule) => {
                       const ownerId = String(rule.createdBy || rule.created_by || "");
                       const isOwnRule = ownerId && ownerId === String(user?.id || "");
@@ -1174,190 +1174,167 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={rule.id}
-                          className={`p-6 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+                          className={`h-full p-4 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
                             rule.isHidden || rule.is_hidden
                               ? "border-amber-400/60 opacity-90"
                               : "border-sre-border"
                           }`}
                         >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-3 mb-3">
-                                <div
-                                  className={`p-2 rounded-lg ${
-                                    rule.severity === "critical"
-                                      ? "bg-red-100 dark:bg-red-900/30"
-                                      : rule.severity === "warning"
-                                        ? "bg-yellow-100 dark:bg-yellow-900/30"
-                                        : "bg-blue-100 dark:bg-blue-900/30"
-                                  }`}
-                                >
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <h3 className="font-semibold uppercase tracking-wide text-sre-text text-xl leading-tight break-words">
+                                  {rule.name}
+                                </h3>
+                                <div className="flex flex-wrap items-center gap-2">
                                   <span
-                                    className={`material-icons text-xl ${
+                                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
                                       rule.severity === "critical"
-                                        ? "text-red-600 dark:text-red-400"
+                                        ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200"
                                         : rule.severity === "warning"
-                                          ? "text-yellow-600 dark:text-yellow-400"
-                                          : "text-blue-600 dark:text-blue-400"
+                                          ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200"
+                                          : "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200"
                                     }`}
                                   >
-                                    {rule.severity === "critical"
-                                      ? "error"
-                                      : rule.severity === "warning"
-                                        ? "warning"
-                                        : "info"}
+                                    {rule.severity || "info"}
                                   </span>
-                                </div>
-                                <div>
-                                  <h3 className="font-semibold text-sre-text text-lg">
-                                    {rule.name}
-                                  </h3>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <span
-                                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                        rule.severity === "critical"
-                                          ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200"
-                                          : rule.severity === "warning"
-                                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200"
-                                            : "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200"
-                                      }`}
-                                    >
-                                      {rule.severity}
+                                  <span
+                                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                      rule.enabled
+                                        ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200"
+                                        : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200"
+                                    }`}
+                                  >
+                                    {rule.enabled ? "Enabled" : "Disabled"}
+                                  </span>
+                                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200">
+                                    {rule.group || "default"}
+                                  </span>
+                                  {rule.orgId ? (
+                                    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium bg-sre-primary/10 text-sre-primary">
+                                      Key:{" "}
+                                      {orgIdToName[rule.orgId] ||
+                                        `${rule.orgId.slice(0, 8)}...`}
                                     </span>
-                                    <span
-                                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                        rule.enabled
-                                          ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200"
-                                          : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200"
-                                      }`}
-                                    >
-                                      {rule.enabled ? "Enabled" : "Disabled"}
+                                  ) : (
+                                    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                                      Key: Default
                                     </span>
-                                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200">
-                                      Correlation ID: {rule.group}
+                                  )}
+                                  {(rule.isHidden || rule.is_hidden) && (
+                                    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                                      Hidden
                                     </span>
-                                    {(rule.isHidden || rule.is_hidden) && (
-                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
-                                        Hidden
-                                      </span>
-                                    )}
-                                    {rule.orgId ? (
-                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200">
-                                        {orgIdToName[rule.orgId] ||
-                                          `${rule.orgId.slice(0, 8)}...`}
-                                      </span>
-                                    ) : (
-                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
-                                        All products
-                                      </span>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
                               </div>
 
-                              <div className="space-y-2 text-sm text-sre-text-muted p-4">
-                                <div className="flex items-center gap-2">
-                                  <span className="material-icons text-sm">
-                                    functions
-                                  </span>
-                                  <span className="font-mono text-xs bg-sre-bg-alt px-2 py-1 rounded border">
-                                    {rule.expr}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="material-icons text-sm">
-                                    schedule
-                                  </span>
-                                  <span>Duration: {rule.duration}</span>
-                                </div>
-                                {rule.annotations?.summary && (
-                                  <div className="flex items-start gap-2">
-                                    <span className="material-icons text-sm mt-0.5">
-                                      description
+                              <div className="flex items-center gap-1 rounded-xl border border-sre-border bg-sre-bg-alt/70 p-1.5 shrink-0">
+                                {canHideRule && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleToggleRuleHidden(
+                                        rule,
+                                        !(rule.isHidden || rule.is_hidden),
+                                      )
+                                    }
+                                    className="h-9 w-9 p-0"
+                                    title={
+                                      rule.isHidden || rule.is_hidden
+                                        ? "Unhide Rule"
+                                        : "Hide Rule"
+                                    }
+                                  >
+                                    <span className="material-icons text-[18px]">
+                                      {rule.isHidden || rule.is_hidden
+                                        ? "visibility"
+                                        : "visibility_off"}
                                     </span>
-                                    <span>{rule.annotations.summary}</span>
-                                  </div>
+                                  </Button>
                                 )}
-                              </div>
-                            </div>
-
-                            <div className="flex gap-1 ml-4">
-                              {canHideRule && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() =>
-                                    handleToggleRuleHidden(
-                                      rule,
-                                      !(rule.isHidden || rule.is_hidden),
-                                    )
-                                  }
-                                  className="p-2"
-                                  title={
-                                    rule.isHidden || rule.is_hidden
-                                      ? "Unhide Rule"
-                                      : "Hide Rule"
-                                  }
+                                  onClick={() => handleTestRule(rule.id)}
+                                  className="h-9 w-9 p-0"
+                                  title="Test Rule"
                                 >
-                                  <span className="material-icons text-base">
-                                    {rule.isHidden || rule.is_hidden
-                                      ? "visibility"
-                                      : "visibility_off"}
+                                  <span className="material-icons text-[18px]">
+                                    science
                                   </span>
                                 </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleTestRule(rule.id)}
-                                className="p-2"
-                                title="Test Rule"
-                              >
-                                <span className="material-icons text-base">
-                                  science
-                                </span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingRule(null);
-                                  setRuleSeed(buildRuleSeedFromExisting(rule));
-                                  setShowRuleEditor(true);
-                                }}
-                                className="p-2"
-                                title="Create from this rule"
-                              >
-                                <span className="material-icons text-base">
-                                  content_copy
-                                </span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setRuleSeed(null);
-                                  setEditingRule(rule);
-                                  setShowRuleEditor(true);
-                                }}
-                                className="p-2"
-                                title="Edit Rule"
-                              >
-                                <span className="material-icons text-base">
-                                  edit
-                                </span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteRule(rule.id)}
-                                className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
-                                title="Delete Rule"
-                              >
-                                <span className="material-icons text-base">
-                                  delete
-                                </span>
-                              </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingRule(null);
+                                    setRuleSeed(buildRuleSeedFromExisting(rule));
+                                    setShowRuleEditor(true);
+                                  }}
+                                  className="h-9 w-9 p-0"
+                                  title="Create from this rule"
+                                >
+                                  <span className="material-icons text-[18px]">
+                                    content_copy
+                                  </span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setRuleSeed(null);
+                                    setEditingRule(rule);
+                                    setShowRuleEditor(true);
+                                  }}
+                                  className="h-9 w-9 p-0"
+                                  title="Edit Rule"
+                                >
+                                  <span className="material-icons text-[18px]">
+                                    edit
+                                  </span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteRule(rule.id)}
+                                  className="h-9 w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                                  title="Delete Rule"
+                                >
+                                  <span className="material-icons text-[18px]">
+                                    delete
+                                  </span>
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="">
+                              <div className="text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted mb-2">
+                                Query
+                              </div>
+                              <div className="thin-scrollbar w-full text-xs leading-relaxed text-sre-text font-mono bg-sre-surface/50 p-2.5 rounded-md overflow-auto whitespace-pre max-h-28">
+                                {rule.expr || "No query specified"}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 w-full">
+                              <div className="rounded-lg border border-sre-border bg-sre-surface px-3 py-2.5 w-full">
+                                <div className="text-[11px] uppercase tracking-wide text-sre-text-muted">
+                                  Duration
+                                </div>
+                                <div className="text-base font-semibold text-sre-text">
+                                  {rule.duration || "1m"}
+                                </div>
+                              </div>
+                              <div className="rounded-lg border border-sre-border bg-sre-surface px-3 py-2.5 w-full">
+                                <div className="text-[11px] uppercase tracking-wide text-sre-text-muted">
+                                  Summary
+                                </div>
+                                <div className="text-sm text-sre-text line-clamp-2">
+                                  {rule.annotations?.summary || "No summary"}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1443,7 +1420,7 @@ export default function AlertManagerPage() {
                 </div>
 
                 {silences.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {silences.map((s) => {
                       const silenceOwner = String(s.createdBy || s.created_by || "");
                       const isOwnSilence =
@@ -1460,7 +1437,7 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={s.id}
-                          className={`p-6 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+                          className={`h-full p-4 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
                             s.isHidden || s.is_hidden
                               ? "border-amber-400/60 opacity-90"
                               : "border-sre-border"
