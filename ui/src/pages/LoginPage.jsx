@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import * as api from "../api";
-import { Card, Spinner } from "../components/ui";
+import { Spinner } from "../components/ui";
 import PasswordLoginForm from "../components/auth/PasswordLoginForm";
 import OIDCLoginButton from "../components/auth/OIDCLoginButton";
 import { OIDC_PROVIDER_LABEL } from "../utils/constants";
@@ -195,7 +195,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4">
-      <Card className="w-full max-w-md !border-0 hover:!border-0">
+      <div className="w-full max-w-md rounded-2xl bg-white/90 p-6 shadow-xl backdrop-blur-sm dark:bg-transparent dark:p-0 dark:shadow-none dark:backdrop-blur-none">
         <div className="text-center mb-8">
           {showLoginLogo && (
             <img
@@ -302,7 +302,7 @@ export default function LoginPage() {
                         type="text"
                         value={setupSecret}
                         readOnly
-                        className="w-full px-3 py-2 bg-sre-bg border border-sre-border rounded text-sre-text"
+                        className="w-full px-3 py-2 bg-sre-bg border border-sre-border rounded text-sre-text dark:bg-transparent"
                       />
                     </div>
                   )}
@@ -319,7 +319,7 @@ export default function LoginPage() {
                       value={setupCode}
                       onChange={(e) => setSetupCode(e.target.value)}
                       placeholder="Enter 6-digit code"
-                      className="w-full px-3 py-2 bg-sre-bg border border-sre-border rounded text-sre-text"
+                      className="w-full px-3 py-2 bg-sre-bg border border-sre-border rounded text-sre-text dark:bg-transparent"
                       autoFocus
                     />
                   </div>
@@ -350,12 +350,12 @@ export default function LoginPage() {
                     them and store them securely.
                   </p>
 
-                  <div className="p-3 bg-sre-bg border border-sre-border rounded">
+                  <div className="p-3 bg-sre-bg border border-sre-border rounded dark:bg-transparent">
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {setupRecoveryCodes.map((code) => (
                         <div
                           key={code}
-                          className="p-2 bg-sre-surface border border-sre-border rounded font-mono text-xs text-sre-text text-center"
+                          className="p-2 bg-sre-surface border border-sre-border rounded font-mono text-xs text-sre-text text-center dark:bg-transparent"
                         >
                           {code}
                         </div>
@@ -366,7 +366,7 @@ export default function LoginPage() {
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      className="px-3 py-2 bg-sre-surface border rounded"
+                      className="px-3 py-2 bg-sre-surface border rounded dark:bg-transparent"
                       onClick={async () => {
                         const txt = setupRecoveryCodes.join("\n");
                         const ok = await clipboardCopy(txt);
@@ -379,7 +379,7 @@ export default function LoginPage() {
 
                     <button
                       type="button"
-                      className="px-3 py-2 bg-sre-surface border rounded"
+                      className="px-3 py-2 bg-sre-surface border rounded dark:bg-transparent"
                       onClick={() => {
                         (async () => {
                           const { downloadFile } =
@@ -463,7 +463,7 @@ export default function LoginPage() {
                       ? "Enter recovery code"
                       : "Enter 6-digit code"
                   }
-                  className="w-full px-3 py-2 bg-sre-bg border border-sre-border rounded text-sre-text"
+                  className="w-full px-3 py-2 bg-sre-bg border border-sre-border rounded text-sre-text dark:bg-transparent"
                   autoFocus
                 />
                 <p className="text-xs text-sre-text-muted mt-2">
@@ -495,7 +495,7 @@ export default function LoginPage() {
                 </button>
                 <button
                   type="button"
-                  className="px-4 py-2 bg-sre-surface border rounded"
+                  className="px-4 py-2 bg-sre-surface border rounded dark:bg-transparent"
                   onClick={() => {
                     setMfaRequired(false);
                     setUseRecoveryCode(false);
@@ -528,7 +528,7 @@ export default function LoginPage() {
           Contact your administrator if you need access or have forgotten your
           credentials.
         </p>
-      </Card>
+      </div>
     </div>
   );
 }

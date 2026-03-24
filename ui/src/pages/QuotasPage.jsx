@@ -4,6 +4,7 @@ import { Card, Button, Spinner, Badge, Select } from "../components/ui";
 import { getSystemQuotas } from "../api";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useLayoutMode } from "../contexts/LayoutModeContext";
 
 function formatNumber(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
@@ -79,6 +80,7 @@ function QuotaRow({ label, quota }) {
 
 export default function QuotasPage() {
   const { user } = useAuth();
+  const { sidebarMode } = useLayoutMode();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [quotas, setQuotas] = useState(null);
@@ -147,7 +149,13 @@ export default function QuotasPage() {
   );
 
   return (
-    <div className="animate-fade-in max-w-7xl mx-auto">
+    <div
+      className={
+        sidebarMode
+          ? "animate-fade-in w-full min-w-0"
+          : "animate-fade-in mx-auto max-w-7xl"
+      }
+    >
       <PageHeader
         icon="data_thresholding"
         title="Quotas"

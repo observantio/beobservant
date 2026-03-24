@@ -4,6 +4,7 @@ import { Card, Input, Button, Select, Spinner, Badge } from "../components/ui";
 import { getAuditLogs, exportAuditLogs, getUsers } from "../api";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useLayoutMode } from "../contexts/LayoutModeContext";
 import { copyToClipboard } from "../utils/helpers";
 
 const DEFAULT_LIMIT = 100;
@@ -57,6 +58,7 @@ function highlight(text = "", q = "") {
 
 export default function AuditCompliancePage() {
   const { hasPermission } = useAuth();
+  const { sidebarMode } = useLayoutMode();
   const toast = useToast();
   const [items, setItems] = useState([]);
   const [users, setUsers] = useState([]);
@@ -360,7 +362,13 @@ export default function AuditCompliancePage() {
   }
 
   return (
-    <div className="animate-fade-in max-w-7xl mx-auto">
+    <div
+      className={
+        sidebarMode
+          ? "animate-fade-in w-full min-w-0"
+          : "animate-fade-in mx-auto max-w-7xl"
+      }
+    >
       <PageHeader
         icon="policy"
         title="Audit & Compliance"
@@ -619,7 +627,7 @@ export default function AuditCompliancePage() {
 
       {selected && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center"
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-xl dark:bg-black/50"
           onClick={() => setSelected(null)}
         >
           <div

@@ -110,6 +110,7 @@ export default function DatasourcesTab({
   onToggleHidden,
   onViewMetrics,
   getDatasourceIcon,
+  getDatasourceKeyName,
 }) {
   const [query, setQuery] = useState("");
 
@@ -225,6 +226,14 @@ export default function DatasourcesTab({
                         )}
                       </h3>
                       <div className="flex items-center gap-2 mt-1">
+                        {getDatasourceKeyName?.(ds) ? (
+                          <span className="inline-flex items-center gap-1 whitespace-nowrap px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200">
+                            <span className="material-icons text-[13px] leading-none">
+                              vpn_key
+                            </span>
+                            <span>{getDatasourceKeyName(ds)}</span>
+                          </span>
+                        ) : null}
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${
                             ds.type === "prometheus"
@@ -391,4 +400,5 @@ DatasourcesTab.propTypes = {
   onViewMetrics: PropTypes.func,
   onEditLabels: PropTypes.func,
   getDatasourceIcon: PropTypes.func.isRequired,
+  getDatasourceKeyName: PropTypes.func,
 };

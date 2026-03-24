@@ -132,6 +132,7 @@ export default function DashboardsTab({
   onOpenGrafana,
   onDeleteDashboard,
   onToggleHidden,
+  dashboardKeyNamesByUid,
 }) {
   const [copiedDashboardUid, setCopiedDashboardUid] = useState("");
 
@@ -300,6 +301,18 @@ export default function DashboardsTab({
                   </div>
 
                   <div className="flex flex-wrap gap-2 mb-3">
+                    {(dashboardKeyNamesByUid?.[d.uid] || []).map((keyName) => (
+                      <Badge
+                        key={`key-${d.uid}-${keyName}`}
+                        variant="info"
+                        className="inline-flex items-center gap-1 whitespace-nowrap"
+                      >
+                        <span className="material-icons text-[13px] leading-none">
+                          vpn_key
+                        </span>
+                        <span>{keyName}</span>
+                      </Badge>
+                    ))}
                     {d.tags?.map((tag) => (
                       <Badge key={tag} variant="info">
                         {tag}
@@ -494,5 +507,6 @@ DashboardsTab.propTypes = {
   onOpenGrafana: PropTypes.func.isRequired,
   onDeleteDashboard: PropTypes.func.isRequired,
   onToggleHidden: PropTypes.func,
+  dashboardKeyNamesByUid: PropTypes.object,
   onEditLabels: PropTypes.func,
 };

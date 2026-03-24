@@ -194,6 +194,7 @@ export default function GrafanaPage() {
     error: "",
     metrics: [],
   });
+  const [dashboardKeyNamesByUid, setDashboardKeyNamesByUid] = useState({});
 
   function openInGrafana(path) {
     setGrafanaConfirmDialog({
@@ -237,6 +238,105 @@ export default function GrafanaPage() {
       /* silent */
     }
   }, []);
+
+  const resolveDatasourceKeyMeta = useCallback(
+    (datasource) => {
+      if (!datasource) return { key: "", keyName: "" };
+
+      const rawOrg = String(datasource?.orgId || datasource?.org_id || "").trim();
+      const apiKeys = Array.isArray(user?.api_keys) ? user.api_keys : [];
+      const jsonData =
+        datasource && typeof datasource.jsonData === "object"
+          ? datasource.jsonData
+          : {};
+      const selectedApiKeyId = String(jsonData.watchdogApiKeyId || "").trim();
+      const selectedScopeKey = String(jsonData.watchdogScopeKey || "").trim();
+      const bySelectedId = apiKeys.find(
+        (k) => String(k?.id || "") === selectedApiKeyId,
+      );
+      const byId = apiKeys.find((k) => String(k?.id || "") === rawOrg);
+      const byKey = apiKeys.find((k) => String(k?.key || "") === rawOrg);
+      const byScopeKey = apiKeys.find(
+        (k) => String(k?.key || "") === selectedScopeKey,
+      );
+      const activeKey =
+        apiKeys.find((k) => k?.is_enabled) ||
+        apiKeys.find((k) => k?.is_default) ||
+        apiKeys[0];
+
+      return {
+        key: String(
+          bySelectedId?.key ||
+            byScopeKey?.key ||
+            byId?.key ||
+            byKey?.key ||
+            selectedScopeKey ||
+            activeKey?.key ||
+            "",
+        ).trim(),
+        keyName: String(
+          bySelectedId?.name ||
+            byScopeKey?.name ||
+            byId?.name ||
+            byKey?.name ||
+            activeKey?.name ||
+            "",
+        ).trim(),
+      };
+    },
+    [user?.api_keys],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboardKeyNames() {
+      if (activeTab !== "dashboards" || dashboards.length === 0) {
+        setDashboardKeyNamesByUid((prev) => {
+          if (prev && Object.keys(prev).length === 0) {
+            return prev;
+          }
+          return {};
+        });
+        return;
+      }
+
+      const entries = await Promise.all(
+        dashboards.map(async (dashboard) => {
+          try {
+            const payload = await getDashboard(dashboard.uid);
+            const refs = new Set();
+            collectDatasourceReferences(payload?.dashboard || payload || {}, refs);
+
+            const keyNames = Array.from(refs)
+              .map((ref) => resolveToUid(ref, datasources) || String(ref))
+              .map((uid) =>
+                datasources.find(
+                  (datasource) => String(datasource?.uid || "") === String(uid),
+                ),
+              )
+              .filter(Boolean)
+              .map((datasource) => resolveDatasourceKeyMeta(datasource).keyName)
+              .filter(Boolean);
+
+            return [dashboard.uid, Array.from(new Set(keyNames)).sort()];
+          } catch {
+            return [dashboard.uid, []];
+          }
+        }),
+      );
+
+      if (!cancelled) {
+        setDashboardKeyNamesByUid(Object.fromEntries(entries));
+      }
+    }
+
+    loadDashboardKeyNames();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, dashboards, datasources, resolveDatasourceKeyMeta]);
 
   const loadData = useCallback(async () => {
     const currentQuery = queryRef.current;
@@ -804,41 +904,9 @@ export default function GrafanaPage() {
   }
 
   async function handleViewDatasourceMetrics(datasource) {
-    const rawOrg = String(datasource?.orgId || datasource?.org_id || "").trim();
     const datasourceName = String(datasource?.name || "Datasource");
-    const apiKeys = Array.isArray(user?.api_keys) ? user.api_keys : [];
-    const jsonData =
-      datasource && typeof datasource.jsonData === "object"
-        ? datasource.jsonData
-        : {};
-    const selectedApiKeyId = String(jsonData.watchdogApiKeyId || "").trim();
-    const selectedScopeKey = String(jsonData.watchdogScopeKey || "").trim();
-    const bySelectedId = apiKeys.find(
-      (k) => String(k?.id || "") === selectedApiKeyId,
-    );
-    const byId = apiKeys.find((k) => String(k?.id || "") === rawOrg);
-    const byKey = apiKeys.find((k) => String(k?.key || "") === rawOrg);
-    const byScopeKey = apiKeys.find((k) => String(k?.key || "") === selectedScopeKey);
-    const activeKey =
-      apiKeys.find((k) => k?.is_enabled) ||
-      apiKeys.find((k) => k?.is_default) ||
-      apiKeys[0];
-    const resolvedKey = String(
-      bySelectedId?.key ||
-        byScopeKey?.key ||
-        byId?.key ||
-        byKey?.key ||
-        selectedScopeKey ||
-        activeKey?.key ||
-        "",
-    ).trim();
-    const resolvedKeyName =
-      bySelectedId?.name ||
-      byScopeKey?.name ||
-      byId?.name ||
-      byKey?.name ||
-      activeKey?.name ||
-      "Default";
+    const { key: resolvedKey, keyName } = resolveDatasourceKeyMeta(datasource);
+    const resolvedKeyName = keyName || "Default";
 
     setDatasourceMetricsDialog({
       isOpen: true,
@@ -983,7 +1051,7 @@ export default function GrafanaPage() {
   return (
     <div className="animate-fade-in grafana-page">
       <PageHeader
-        icon="dashboard"
+        icon="stacked_bar_chart"
         title="Grafana"
         subtitle="Create and manage dashboards, datasources, and folders"
       >
@@ -1023,6 +1091,10 @@ export default function GrafanaPage() {
         onToggleDatasourceHidden={handleToggleDatasourceHidden}
         onViewDatasourceMetrics={handleViewDatasourceMetrics}
         getDatasourceIcon={getDatasourceIcon}
+        getDatasourceKeyName={(datasource) =>
+          resolveDatasourceKeyMeta(datasource).keyName
+        }
+        dashboardKeyNamesByUid={dashboardKeyNamesByUid}
         onCreateFolder={() => openFolderEditor(null)}
         onEditFolder={openFolderEditor}
         onDeleteFolder={handleDeleteFolder}

@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { usePermissions } from "../hooks/usePermissions";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useLayoutMode } from "../contexts/LayoutModeContext";
 import HelpTooltip from "../components/HelpTooltip";
 import MemberList from "../components/groups/MemberList";
 import RuleEditorWizard from "../components/alertmanager/RuleEditorWizard";
@@ -27,6 +28,7 @@ import * as api from "../api";
 export default function GroupsPage() {
   const { canManageGroups } = usePermissions();
   const { user } = useAuth();
+  const { sidebarMode } = useLayoutMode();
   const toast = useToast();
   const navigate = useNavigate();
   const [groups, setGroups] = useState([]);
@@ -272,7 +274,13 @@ export default function GroupsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div
+      className={
+        sidebarMode
+          ? "w-full min-w-0 space-y-6"
+          : "mx-auto max-w-7xl space-y-6"
+      }
+    >
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

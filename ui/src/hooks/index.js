@@ -259,3 +259,4 @@ export { useAgentActivity } from "./useAgentActivity";
 export { usePersistentOrder } from "./usePersistentOrder";
 export { useIncidentsData } from "./useIncidentsData";
 export { useAlertManagerData } from "./useAlertManagerData";
+export { useIncidentSummary } from "./useIncidentSummary";

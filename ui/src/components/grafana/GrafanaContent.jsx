@@ -27,6 +27,8 @@ export default function GrafanaContent({
   onToggleDatasourceHidden,
   onViewDatasourceMetrics,
   getDatasourceIcon,
+  getDatasourceKeyName,
+  dashboardKeyNamesByUid,
   onCreateFolder,
   onEditFolder,
   onDeleteFolder,
@@ -57,6 +59,7 @@ export default function GrafanaContent({
         onOpenGrafana={onOpenGrafana}
         onDeleteDashboard={onDeleteDashboard}
         onToggleHidden={onToggleDashboardHidden}
+        dashboardKeyNamesByUid={dashboardKeyNamesByUid}
       />
     );
   }
@@ -76,6 +79,7 @@ export default function GrafanaContent({
         onToggleHidden={onToggleDatasourceHidden}
         onViewMetrics={onViewDatasourceMetrics}
         getDatasourceIcon={getDatasourceIcon}
+        getDatasourceKeyName={getDatasourceKeyName}
       />
     );
   }
@@ -120,6 +124,8 @@ GrafanaContent.propTypes = {
   onViewDatasourceMetrics: PropTypes.func,
   onEditDatasourceLabels: PropTypes.func,
   getDatasourceIcon: PropTypes.func.isRequired,
+  getDatasourceKeyName: PropTypes.func,
+  dashboardKeyNamesByUid: PropTypes.object,
   onCreateFolder: PropTypes.func.isRequired,
   onEditFolder: PropTypes.func.isRequired,
   onDeleteFolder: PropTypes.func.isRequired,

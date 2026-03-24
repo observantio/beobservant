@@ -4,6 +4,7 @@ import PageHeader from "../components/ui/PageHeader";
 import { Card, Input, Button, Select, Modal, Checkbox } from "../components/ui";
 import ConfirmModal from "../components/ConfirmModal";
 import { useAuth } from "../contexts/AuthContext";
+import { useLayoutMode } from "../contexts/LayoutModeContext";
 import { useToast } from "../contexts/ToastContext";
 import HelpTooltip from "../components/HelpTooltip";
 import * as api from "../api";
@@ -12,6 +13,7 @@ import { buildOtelYaml } from "../utils/otelConfig";
 
 export default function ApiKeyPage() {
   const { user, updateUser } = useAuth();
+  const { sidebarMode } = useLayoutMode();
   const toast = useToast();
   const [orgId, setOrgId] = useState("");
   const [apiKeys, setApiKeys] = useState([]);
@@ -490,7 +492,13 @@ export default function ApiKeyPage() {
   }
 
   return (
-    <div className="animate-fade-in max-w-7xl mx-auto">
+    <div
+      className={
+        sidebarMode
+          ? "animate-fade-in w-full min-w-0"
+          : "animate-fade-in mx-auto max-w-7xl"
+      }
+    >
       <PageHeader
         icon="key"
         title="API Keys"

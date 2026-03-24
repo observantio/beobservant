@@ -1,5 +1,19 @@
 import PropTypes from "prop-types";
+import { useMemo } from "react";
 import Section from "./Section";
+
+/** Lower = earlier in table (Metric Anomalies). */
+const METRIC_SEVERITY_RANK = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+function metricSeverityRank(severity) {
+  const key = String(severity || "").toLowerCase();
+  return key in METRIC_SEVERITY_RANK ? METRIC_SEVERITY_RANK[key] : 99;
+}
 
 function severityClass(severity) {
   if (severity === "critical" || severity === "high") return "text-red-300";
@@ -11,6 +25,18 @@ function asTime(timestamp) {
   const value = Number(timestamp || 0);
   if (!Number.isFinite(value) || value <= 0) return "-";
   return new Date(value * 1000).toLocaleTimeString();
+}
+
+function formatTukeyClass(t) {
+  const key = String(t || "none").toLowerCase();
+  const labels = {
+    none: "—",
+    extreme_high: "extreme ↑",
+    mild_high: "mild ↑",
+    extreme_low: "extreme ↓",
+    mild_low: "mild ↓",
+  };
+  return labels[key] || key;
 }
 
 function DataSection({
@@ -70,7 +96,15 @@ DataSection.propTypes = {
 };
 
 export default function RcaAnomalyPanels({ report, compact = false }) {
-  const metricAnomalies = (report?.metric_anomalies || []).slice(0, 250);
+  const metricAnomalies = useMemo(() => {
+    const raw = report?.metric_anomalies || [];
+    return [...raw]
+      .sort(
+        (a, b) =>
+          metricSeverityRank(a.severity) - metricSeverityRank(b.severity),
+      )
+      .slice(0, 250);
+  }, [report?.metric_anomalies]);
   const logBursts = (report?.log_bursts || []).slice(0, 250);
   const logPatterns = (report?.log_patterns || []).slice(0, 250);
   const serviceLatency = (report?.service_latency || []).slice(0, 250);
@@ -91,7 +125,16 @@ export default function RcaAnomalyPanels({ report, compact = false }) {
         <DataSection
           title="Metric Anomalies"
           count={metricAnomalies.length}
-          columns={["Metric", "Time", "Value", "Z-Score", "Severity"]}
+          columns={[
+            "Metric",
+            "Time",
+            "Value",
+            "Z",
+            "Mod Z (MAD)",
+            "IQR",
+            "Tukey",
+            "Severity",
+          ]}
           rows={metricAnomalies}
           rowKey={(row, index) =>
             `${row.metric_name}-${row.timestamp}-${index}`
@@ -112,6 +155,18 @@ export default function RcaAnomalyPanels({ report, compact = false }) {
               </td>
               <td className="px-3 py-2 text-sre-text-muted font-mono">
                 {Number(row.z_score || 0).toFixed(2)}
+              </td>
+              <td className="px-3 py-2 text-sre-text-muted font-mono">
+                {Number(row.mad_score ?? 0).toFixed(2)}
+              </td>
+              <td className="px-3 py-2 text-sre-text-muted font-mono">
+                {Number(row.iqr_score ?? 0).toFixed(2)}
+              </td>
+              <td
+                className="px-3 py-2 text-sre-text-muted font-mono text-[11px]"
+                title={row.tukey_outlier_class || "none"}
+              >
+                {formatTukeyClass(row.tukey_outlier_class)}
               </td>
               <td
                 className={`px-3 py-2 uppercase ${severityClass(row.severity)}`}

@@ -43,7 +43,7 @@ describe("GrafanaPage state persistence", () => {
     const { getByRole } = render(<GrafanaPage />);
     
     const dsBtn = await waitFor(() =>
-      getByRole("button", { name: /Datasources/i }),
+      getByRole("tab", { name: /Datasources/i }),
     );
     expect(dsBtn).toHaveClass("text-sre-primary");
   });
@@ -54,7 +54,7 @@ describe("GrafanaPage state persistence", () => {
     const init = JSON.parse(localStorage.getItem("grafana-active-tab"));
     expect([null, "dashboards"]).toContain(init);
     
-    const foldersBtn = getByRole("button", { name: /Folders/i });
+    const foldersBtn = getByRole("tab", { name: /Folders/i });
     fireEvent.click(foldersBtn);
     expect(JSON.parse(localStorage.getItem("grafana-active-tab"))).toBe(
       "folders",

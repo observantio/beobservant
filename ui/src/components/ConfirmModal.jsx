@@ -59,7 +59,7 @@ export default function ConfirmModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-xl animate-fade-in dark:bg-black/50"
       onMouseDown={safeCancel}
       onClick={safeCancel}
       role="button"
