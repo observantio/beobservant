@@ -300,6 +300,10 @@ export async function getSystemQuotas(orgId = null) {
   return request(`/api/system/quotas${qs}`);
 }
 
+export async function getOjoReleases(opts = {}) {
+  return request("/api/system/ojo/releases", opts);
+}
+
 export async function login(username, password, mfa_code) {
   const payload = { username, password };
   if (mfa_code) payload.mfa_code = mfa_code;
@@ -579,6 +583,10 @@ export async function updateUserPassword(userId, passwords) {
 
 export async function getActiveAgents(opts = {}) {
   return request("/api/agents/active", opts);
+}
+
+export async function getAgents(opts = {}) {
+  return request("/api/agents/", opts);
 }
 
 export const updatePassword = updateUserPassword;

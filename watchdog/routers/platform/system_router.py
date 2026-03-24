@@ -9,6 +9,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """
 
 from typing import Optional
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -22,6 +23,8 @@ from services.quota_service import quota_service
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 system_service = SystemService()
+GITHUB_OJO_LATEST_RELEASE_URL = "https://api.github.com/repos/observantio/ojo/releases/latest"
+GITHUB_OJO_RELEASES_URL = "https://api.github.com/repos/observantio/ojo/releases"
 
 
 @router.get("/metrics", response_model=JSONDict)
@@ -57,3 +60,30 @@ async def get_system_quotas(
             )
 
     return await quota_service.get_quotas(current_user, tenant_scope=selected_org)
+
+
+@router.get("/ojo/releases", response_model=JSONDict)
+@handle_route_errors(internal_detail="Failed to retrieve Ojo release metadata")
+async def get_ojo_releases(
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
+) -> JSONDict:
+    timeout = httpx.Timeout(8.0)
+    headers = {"Accept": "application/vnd.github+json"}
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        latest_res, list_res = await client.get(
+            GITHUB_OJO_LATEST_RELEASE_URL,
+            headers=headers,
+        ), await client.get(
+            GITHUB_OJO_RELEASES_URL,
+            params={"per_page": 8},
+            headers=headers,
+        )
+
+    latest_payload = latest_res.json() if latest_res.is_success else {}
+    list_payload = list_res.json() if list_res.is_success else []
+    return {
+        "latest": latest_payload if isinstance(latest_payload, dict) else {},
+        "releases": list_payload if isinstance(list_payload, list) else [],
+        "latest_ok": latest_res.is_success,
+        "releases_ok": list_res.is_success,
+    }
