@@ -33,3 +33,4 @@ notifier/
 showcase/
 .pre-commit-cache/
 .pylint-cache/
+configs/generated/*.yaml
