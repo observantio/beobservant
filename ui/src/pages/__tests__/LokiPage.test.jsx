@@ -25,17 +25,15 @@ vi.mock("../../hooks", () => ({ useAutoRefresh: () => {} }));
 import LokiPage from "../LokiPage";
 import * as api from "../../api";
 
-const STORAGE_KEY = "lokiPageState";
-
-describe("LokiPage persistence", () => {
+describe("LokiPage localStorage behavior", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
   });
 
-  it("clears saved selectedLabel when it no longer exists", async () => {
+  it("does not mutate legacy saved state during initial load", async () => {
     localStorage.setItem(
-      STORAGE_KEY,
+      "lokiPageState",
       JSON.stringify({
         selectedLabel: "foo",
         selectedValue: "bar",
@@ -47,9 +45,9 @@ describe("LokiPage persistence", () => {
     render(<LokiPage />);
 
     await waitFor(() => {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      expect(stored.selectedLabel).toBeUndefined();
-      expect(stored.selectedValue).toBeUndefined();
+      const stored = JSON.parse(localStorage.getItem("lokiPageState") || "{}");
+      expect(stored.selectedLabel).toBe("foo");
+      expect(stored.selectedValue).toBe("bar");
     });
   });
 });

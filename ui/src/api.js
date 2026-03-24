@@ -285,12 +285,12 @@ function requestJson(
 export async function fetchInfo() {
   return request(`/`);
 }
-export async function fetchHealth() {
-  return request(`/health`);
+export async function fetchHealth(opts = {}) {
+  return request(`/health`, opts);
 }
 
-export async function fetchSystemMetrics() {
-  return request("/api/system/metrics");
+export async function fetchSystemMetrics(opts = {}) {
+  return request("/api/system/metrics", opts);
 }
 
 export async function getSystemQuotas(orgId = null) {
@@ -577,8 +577,8 @@ export async function updateUserPassword(userId, passwords) {
   });
 }
 
-export async function getActiveAgents() {
-  return request("/api/agents/active");
+export async function getActiveAgents(opts = {}) {
+  return request("/api/agents/active", opts);
 }
 
 export const updatePassword = updateUserPassword;
@@ -588,6 +588,8 @@ export async function getAlerts({
   severity,
   correlationId,
   label,
+  signal,
+  maxRetries,
 } = {}) {
   const params = new URLSearchParams();
   if (showHidden) params.set("show_hidden", "true");
@@ -597,7 +599,7 @@ export async function getAlerts({
   }
   if (String(label || "").trim()) params.set("label", String(label).trim());
   const qs = params.toString() ? `?${params.toString()}` : "";
-  return request(`/api/alertmanager/alerts${qs}`);
+  return request(`/api/alertmanager/alerts${qs}`, { signal, maxRetries });
 }
 
 export async function getAlertsByFilter(filter = {}, active = true) {
@@ -613,11 +615,15 @@ export async function getAlertsByFilter(filter = {}, active = true) {
 export async function getAlertGroups() {
   return request("/api/alertmanager/alerts/groups");
 }
-export async function getSilences({ showHidden = false } = {}) {
+export async function getSilences({
+  showHidden = false,
+  signal,
+  maxRetries,
+} = {}) {
   const params = new URLSearchParams();
   if (showHidden) params.set("show_hidden", "true");
   const qs = params.toString() ? `?${params.toString()}` : "";
-  return request(`/api/alertmanager/silences${qs}`);
+  return request(`/api/alertmanager/silences${qs}`, { signal, maxRetries });
 }
 export async function createSilence(payload) {
   return requestJson("/api/alertmanager/silences", { payload });
@@ -684,8 +690,8 @@ export async function getIncidents(status, visibility, groupId) {
   const qs = params.toString() ? `?${params.toString()}` : "";
   return request(`/api/alertmanager/incidents${qs}`);
 }
-export async function getIncidentsSummary() {
-  return request("/api/alertmanager/incidents/summary");
+export async function getIncidentsSummary({ signal, maxRetries } = {}) {
+  return request("/api/alertmanager/incidents/summary", { signal, maxRetries });
 }
 export async function updateIncident(incidentId, payload) {
   return requestJson(
@@ -1072,6 +1078,8 @@ export async function searchDashboards({
   showHidden = false,
   tag,
   starred,
+  signal,
+  maxRetries,
 } = {}) {
   const params = new URLSearchParams();
   if (query) params.append("query", query);
@@ -1091,6 +1099,7 @@ export async function searchDashboards({
     qs
       ? `/api/grafana/dashboards/search?${qs}`
       : "/api/grafana/dashboards/search",
+    { signal, maxRetries },
   );
 }
 export async function getDashboard(uid) {
@@ -1136,6 +1145,8 @@ export async function getDatasources({
   labelValue,
   teamId,
   showHidden = false,
+  signal,
+  maxRetries,
 } = {}) {
   const params = new URLSearchParams();
   if (uid) params.append("uid", uid);
@@ -1144,9 +1155,10 @@ export async function getDatasources({
   if (teamId) params.append("team_id", teamId);
   if (showHidden) params.append("show_hidden", "true");
   const qs = params.toString();
-  return request(
-    qs ? `/api/grafana/datasources?${qs}` : "/api/grafana/datasources",
-  );
+  return request(qs ? `/api/grafana/datasources?${qs}` : "/api/grafana/datasources", {
+    signal,
+    maxRetries,
+  });
 }
 export async function getDatasource(uid) {
   return request(`/api/grafana/datasources/uid/${encodeURIComponent(uid)}`);

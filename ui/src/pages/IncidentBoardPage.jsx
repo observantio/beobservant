@@ -99,7 +99,6 @@ import {
   listJiraIssueTypes,
   listIncidentJiraComments,
   listJiraIntegrations,
-  getIncidentsSummary,
   getAlertsByFilter,
 } from "../api";
 import {
@@ -114,6 +113,7 @@ import {
 } from "../components/ui";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useSharedIncidentSummary } from "../contexts/IncidentSummaryContext";
 import HelpTooltip from "../components/HelpTooltip";
 import { useIncidentsData, useLocalStorage } from "../hooks";
 
@@ -633,7 +633,7 @@ export default function IncidentBoardPage() {
   const [jiraIssueTypes, setJiraIssueTypes] = useState([]);
   const [jiraComments, setJiraComments] = useState([]);
   const [jiraCommentsLoading, setJiraCommentsLoading] = useState(false);
-  const [incidentSummary, setIncidentSummary] = useState(null);
+  const incidentSummary = useSharedIncidentSummary();
   const toast = useToast();
 
   const canReadUsers =
@@ -703,21 +703,6 @@ export default function IncidentBoardPage() {
   useEffect(() => {
     loadJiraIntegrations();
   }, []);
-
-  const loadIncidentSummary = useCallback(async () => {
-    try {
-      const summary = await getIncidentsSummary();
-      setIncidentSummary(summary || null);
-    } catch {
-      setIncidentSummary(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadIncidentSummary();
-    const timer = setInterval(loadIncidentSummary, 30000);
-    return () => clearInterval(timer);
-  }, [loadIncidentSummary]);
 
   async function loadJiraIntegrations() {
     try {
@@ -1469,10 +1454,7 @@ export default function IncidentBoardPage() {
             <div className="flex flex-col gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-sre-text">
-                  <span className="material-icons text-3xl text-sre-text">
-                    assignment
-                  </span>{" "}
-                  InOps
+                  Incident Board
                 </h1>
                 <p className="text-sre-text-muted mt-1">
                   Manage and track incident response workflows
@@ -1610,7 +1592,7 @@ export default function IncidentBoardPage() {
                       setShowHiddenResolved(e.target.checked);
                     }}
                   />
-                  <span>Show hidden</span>
+                  <span>Unhide</span>
                 </label>
               </div>
             </div>

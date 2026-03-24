@@ -27,44 +27,27 @@ const LABEL_PREFETCH_LIMIT = 12;
 const LABEL_PREFETCH_BATCH = 4;
 
 export default function LokiPage() {
-  const STORAGE_KEY = "lokiPageState";
-  const loadSaved = () => {
-    try {
-      if (typeof localStorage === "undefined") return {};
-      const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      return s && typeof s === "object" && !Array.isArray(s) ? s : {};
-    } catch {
-      return {};
-    }
-  };
-  const saved = useMemo(() => loadSaved(), []);
-  const savedSelectedFilters = useMemo(
-    () => saved.selectedFilters || [],
-    [saved.selectedFilters],
-  );
-  const savedSelectedLabel = saved.selectedLabel || "";
-
   const [labels, setLabels] = useState([]);
   const [labelValuesCache, setLabelValuesCache] = useState({});
   const [loadingValues, setLoadingValues] = useState({});
-  const [selectedFilters, setSelectedFilters] = useState(savedSelectedFilters);
-  const [selectedLabel, setSelectedLabel] = useState(savedSelectedLabel);
-  const [selectedValue, setSelectedValue] = useState(saved.selectedValue || "");
-  const [pattern, setPattern] = useState(saved.pattern || "");
-  const [rangeMinutes, setRangeMinutes] = useState(saved.rangeMinutes || 60);
+  const [selectedFilters, setSelectedFilters] = useState([]);
+  const [selectedLabel, setSelectedLabel] = useState("");
+  const [selectedValue, setSelectedValue] = useState("");
+  const [pattern, setPattern] = useState("");
+  const [rangeMinutes, setRangeMinutes] = useState(60);
   const [searchLimit, setSearchLimit] = useState(
-    saved.searchLimit || DEFAULT_QUERY_LIMITS.logs || 100,
+    DEFAULT_QUERY_LIMITS.logs || 100,
   );
   const [pageSize, setPageSize] = useState(
-    saved.pageSize || Math.min(...MAX_LOG_OPTIONS) || 20,
+    Math.min(...MAX_LOG_OPTIONS) || 20,
   );
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(30);
-  const [viewMode, setViewMode] = useState(saved.viewMode || "table");
-  const [expandedLogs, setExpandedLogs] = useState(saved.expandedLogs || {});
-  const [searchText, setSearchText] = useState(saved.searchText || "");
-  const [queryMode, setQueryMode] = useState(saved.queryMode || "builder");
-  const [customLogQL, setCustomLogQL] = useState(saved.customLogQL || "");
+  const [viewMode, setViewMode] = useState("table");
+  const [expandedLogs, setExpandedLogs] = useState({});
+  const [searchText, setSearchText] = useState("");
+  const [queryMode, setQueryMode] = useState("builder");
+  const [customLogQL, setCustomLogQL] = useState("");
 
   const [queryResult, setQueryResult] = useState(null);
   const [volume, setVolume] = useState([]);
@@ -113,54 +96,6 @@ export default function LokiPage() {
 
   const toast = useToast();
   useAutoRefresh(() => executeQuery(), refreshInterval * 1000, autoRefresh);
-  // Run once on mount to restore a saved query snapshot, without retriggering on later state updates.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    try {
-      const toSave = {
-        selectedFilters,
-        rangeMinutes,
-        searchLimit,
-        pageSize,
-        viewMode,
-        expandedLogs,
-        searchText,
-        queryMode,
-        ...(selectedLabel ? { selectedLabel } : {}),
-        ...(selectedValue ? { selectedValue } : {}),
-        ...(pattern ? { pattern } : {}),
-        ...(customLogQL ? { customLogQL } : {}),
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-    } catch {
-      // ignore
-    }
-  }, [
-    selectedFilters,
-    selectedLabel,
-    selectedValue,
-    pattern,
-    rangeMinutes,
-    searchLimit,
-    pageSize,
-    viewMode,
-    expandedLogs,
-    searchText,
-    queryMode,
-    customLogQL,
-  ]);
-
-  useEffect(() => {
-    if (
-      saved.selectedFilters?.length ||
-      saved.pattern ||
-      saved.customLogQL ||
-      saved.selectedLabel ||
-      saved.selectedValue
-    ) {
-      executeQuery();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadInitialData = useCallback(async () => {
     try {
@@ -199,54 +134,10 @@ export default function LokiPage() {
           });
         }
       }
-      if (
-        savedSelectedLabel &&
-        labelsArray &&
-        !labelsArray.includes(savedSelectedLabel)
-      ) {
-        setSelectedLabel("");
-        setSelectedValue("");
-        try {
-          const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-          let changed = false;
-          if (
-            s.selectedLabel === savedSelectedLabel ||
-            Object.prototype.hasOwnProperty.call(s, "selectedLabel")
-          ) {
-            delete s.selectedLabel;
-            changed = true;
-          }
-          if (Object.prototype.hasOwnProperty.call(s, "selectedValue")) {
-            delete s.selectedValue;
-            changed = true;
-          }
-          if (changed) {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-          }
-        } catch {
-          // ignore malformed storage
-        }
-      }
-
-      if (Array.isArray(savedSelectedFilters) && savedSelectedFilters.length) {
-        const validFilters = savedSelectedFilters.filter((filter) =>
-          labelsArray.includes(filter.label),
-        );
-        if (validFilters.length !== savedSelectedFilters.length) {
-          setSelectedFilters(validFilters);
-          try {
-            const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-            s.selectedFilters = validFilters;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-          } catch {
-            // ignore malformed storage
-          }
-        }
-      }
     } catch {
       setLabels([]);
     }
-  }, [savedSelectedFilters, savedSelectedLabel]);
+  }, []);
 
   useEffect(() => {
     loadInitialData();

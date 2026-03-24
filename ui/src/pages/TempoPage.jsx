@@ -33,43 +33,27 @@ import { discoverServices, computeTraceStats } from "../utils/tempoTraceUtils";
 const TRACE_PAGE_SIZE = 20;
 
 export default function TempoPage() {
-  const STORAGE_KEY = "tempoPageState";
-  const loadSaved = () => {
-    try {
-      if (typeof localStorage === "undefined") return {};
-      const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      return s;
-    } catch {
-      return {};
-    }
-  };
-  const saved = loadSaved();
-
   const [services, setServices] = useState([]);
-  const [service, setService] = useState(saved.service || "");
-  const [operation, setOperation] = useState(saved.operation || "");
-  const [traceIdSearch, setTraceIdSearch] = useState(saved.traceIdSearch || "");
-  const [durationRange, setDurationRange] = useState(
-    saved.durationRange || [
-      DEFAULT_DURATION_RANGE.min,
-      DEFAULT_DURATION_RANGE.max,
-    ],
-  );
-  const [statusFilter, setStatusFilter] = useState(saved.statusFilter || "all");
-  const [timeRange, setTimeRange] = useState(saved.timeRange || 60);
+  const [service, setService] = useState("");
+  const [operation, setOperation] = useState("");
+  const [traceIdSearch, setTraceIdSearch] = useState("");
+  const [durationRange, setDurationRange] = useState([
+    DEFAULT_DURATION_RANGE.min,
+    DEFAULT_DURATION_RANGE.max,
+  ]);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [timeRange, setTimeRange] = useState(60);
   const [traces, setTraces] = useState(null);
   const [selectedTrace, setSelectedTrace] = useState(null);
-  const [selectedTraceIds, setSelectedTraceIds] = useState(
-    new Set(saved.selectedTraceIds || []),
-  );
+  const [selectedTraceIds, setSelectedTraceIds] = useState(new Set());
   const [graphTraces, setGraphTraces] = useState([]);
   const [graphLoading, setGraphLoading] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState(saved.viewMode || "list");
-  const [tracePage, setTracePage] = useState(saved.tracePage || 1);
-  const [pageSize, setPageSize] = useState(saved.pageSize || TRACE_PAGE_SIZE);
+  const [viewMode, setViewMode] = useState("list");
+  const [tracePage, setTracePage] = useState(1);
+  const [pageSize, setPageSize] = useState(TRACE_PAGE_SIZE);
   const [searchLimit, setSearchLimit] = useState(
-    saved.searchLimit || DEFAULT_QUERY_LIMITS.traces || TRACE_PAGE_SIZE,
+    DEFAULT_QUERY_LIMITS.traces || TRACE_PAGE_SIZE,
   );
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(30);
@@ -79,19 +63,7 @@ export default function TempoPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const toast = useToast();
 
-  const removePersistedSelectedTrace = useCallback((traceId) => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      if (stored.selectedTrace === traceId) {
-        delete stored.selectedTrace;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-      }
-    } catch {
-      // ignore malformed local storage payloads
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const prunePersistedSelectedTraceIds = useCallback((invalidIds) => {
+  const pruneSelectedTraceIds = useCallback((invalidIds) => {
     if (!invalidIds || invalidIds.size === 0) return;
 
     setSelectedTraceIds((prev) => {
@@ -99,21 +71,6 @@ export default function TempoPage() {
       invalidIds.forEach((id) => next.delete(id));
       return next;
     });
-
-    try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      if (Array.isArray(stored.selectedTraceIds)) {
-        stored.selectedTraceIds = stored.selectedTraceIds.filter(
-          (id) => !invalidIds.has(id),
-        );
-      }
-      if (stored.selectedTrace && invalidIds.has(stored.selectedTrace)) {
-        delete stored.selectedTrace;
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-    } catch {
-      // ignore malformed local storage payloads
-    }
   }, []);
 
   const loadServices = useCallback(async () => {
@@ -128,8 +85,7 @@ export default function TempoPage() {
     }
   }, []);
 
-  // Run once on mount to restore persisted view/search state and initial graph hydration.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Load services on mount for authenticated users.
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
       loadServices();
@@ -137,65 +93,6 @@ export default function TempoPage() {
   }, [isAuthenticated, authLoading, loadServices]);
 
   useAutoRefresh(() => onSearch(), refreshInterval * 1000, autoRefresh);
-  useEffect(() => {
-    try {
-      const toSave = {
-        service,
-        operation,
-        traceIdSearch,
-        durationRange,
-        statusFilter,
-        timeRange,
-        searchLimit,
-        pageSize,
-        tracePage,
-        viewMode,
-        selectedTraceIds: Array.from(selectedTraceIds),
-        selectedTrace: selectedTrace
-          ? selectedTrace.traceId || selectedTrace.traceID || selectedTrace.id
-          : null,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-    } catch {
-      // ignore
-    }
-  }, [
-    service,
-    operation,
-    traceIdSearch,
-    durationRange,
-    statusFilter,
-    timeRange,
-    searchLimit,
-    pageSize,
-    tracePage,
-    viewMode,
-    selectedTraceIds,
-    selectedTrace,
-  ]);
-
-  useEffect(() => {
-    if (saved.selectedTrace && !selectedTrace) {
-      void handleTraceClick(saved.selectedTrace, { silent: true });
-    }
-    if (
-      viewMode === "graph" &&
-      selectedTraceIds.size > 0 &&
-      graphTraces.length === 0
-    ) {
-      showSelectedOnMap();
-    }
-    if (
-      saved.traceIdSearch ||
-      saved.service ||
-      saved.operation ||
-      saved.durationRange ||
-      saved.statusFilter ||
-      saved.timeRange
-    ) {
-      onSearch();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(
     () => () => {
@@ -238,8 +135,7 @@ export default function TempoPage() {
           return false;
         }
         if (e.status === 404) {
-          removePersistedSelectedTrace(traceId);
-          prunePersistedSelectedTraceIds(new Set([traceId]));
+          pruneSelectedTraceIds(new Set([traceId]));
           setSelectedTrace(null);
           if (!silent) {
             toast.error(`Trace not found: ${traceId}`);
@@ -250,7 +146,7 @@ export default function TempoPage() {
         return false;
       }
     },
-    [prunePersistedSelectedTraceIds, removePersistedSelectedTrace, toast, viewMode],
+    [pruneSelectedTraceIds, toast, viewMode],
   );
 
   function toggleSelectTrace(traceId, checked) {
@@ -300,7 +196,7 @@ export default function TempoPage() {
       await Promise.all(
         Array.from({ length: concurrency }).map(() => worker()),
       );
-      prunePersistedSelectedTraceIds(invalidIds);
+      pruneSelectedTraceIds(invalidIds);
       if (results.length === 0) {
         setGraphTraces([]);
         return;
@@ -390,14 +286,13 @@ export default function TempoPage() {
           .map((t) => t?.traceID || t?.traceId || t?.id)
           .filter(Boolean),
       );
-      prunePersistedSelectedTraceIds(
+      pruneSelectedTraceIds(
         new Set([...selectedTraceIds].filter((id) => !resultIds.has(id))),
       );
       const selectedId =
         selectedTrace?.traceId || selectedTrace?.traceID || selectedTrace?.id;
       if (selectedId && !resultIds.has(selectedId)) {
         setSelectedTrace(null);
-        removePersistedSelectedTrace(selectedId);
       }
 
       if (!services.length && res?.data?.length) {

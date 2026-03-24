@@ -142,19 +142,24 @@ describe("LokiPage performance behavior", () => {
     expect(queryByText(/Top Terms/i)).toBeNull();
   });
 
-  it("restores filters from localStorage and triggers a query on mount", async () => {
-    const saved = {
-      selectedFilters: [{ label: "foo", value: "bar" }],
-      searchLimit: 10,
-    };
-    localStorage.setItem("lokiPageState", JSON.stringify(saved));
+  it("does not restore saved filters or auto-run query on mount", async () => {
+    localStorage.setItem(
+      "lokiPageState",
+      JSON.stringify({
+        selectedFilters: [{ label: "foo", value: "bar" }],
+        searchLimit: 10,
+      }),
+    );
     api.getLabels.mockResolvedValue({ data: [] });
     api.queryLogs.mockResolvedValue({ data: { result: [] } });
 
-    render(<LokiPage />);
+    const { getByText } = render(<LokiPage />);
+    await waitFor(() => expect(api.getLabels).toHaveBeenCalledTimes(1));
+    expect(api.queryLogs).not.toHaveBeenCalled();
 
-    await waitFor(() => expect(api.queryLogs).toHaveBeenCalled());
+    fireEvent.click(getByText(/Run Query/i));
+    await waitFor(() => expect(api.queryLogs).toHaveBeenCalledTimes(1));
     const call = api.queryLogs.mock.calls[0][0];
-    expect(call.limit).toBe(10);
+    expect(call.limit).toBe(100);
   });
 });

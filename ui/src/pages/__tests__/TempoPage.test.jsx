@@ -77,47 +77,36 @@ describe("TempoPage — fetch limit and pagination", () => {
     });
   });
 
-  it("restores filters and triggers search from localStorage on mount", async () => {
-    
-    const saved = {
-      service: "svc",
-      viewMode: "list",
-    };
-    localStorage.setItem("tempoPageState", JSON.stringify(saved));
-
+  it("does not restore filters or auto-search from localStorage on mount", async () => {
+    localStorage.setItem(
+      "tempoPageState",
+      JSON.stringify({
+        service: "svc",
+        viewMode: "list",
+      }),
+    );
     api.fetchTempoServices.mockResolvedValue([]);
     api.searchTraces.mockResolvedValue({ data: [] });
 
-    render(<TempoPage />);
+    const { getByText } = render(<TempoPage />);
+    expect(api.searchTraces).not.toHaveBeenCalled();
 
-    
-    await waitFor(() => expect(api.searchTraces).toHaveBeenCalled());
+    fireEvent.click(getByText(/Search Traces/i));
+    await waitFor(() => expect(api.searchTraces).toHaveBeenCalledTimes(1));
     const call = api.searchTraces.mock.calls[0][0];
-    expect(call.service).toBe("svc");
+    expect(call.service).toBe("");
   });
 
-  it("silently clears a saved trace id if the trace no longer exists", async () => {
-    
-    const saved = { selectedTrace: "missing" };
-    localStorage.setItem("tempoPageState", JSON.stringify(saved));
-
+  it("does not auto-lookup saved trace ids from localStorage", async () => {
+    localStorage.setItem(
+      "tempoPageState",
+      JSON.stringify({ selectedTrace: "missing" }),
+    );
     api.fetchTempoServices.mockResolvedValue([]);
     api.searchTraces.mockResolvedValue({ data: [] });
-    const err = new Error("not found");
-    err.status = 404;
-    api.getTrace.mockRejectedValue(err);
+    api.getTrace.mockResolvedValue({ traceID: "missing", spans: [] });
 
-    const { queryByText } = render(<TempoPage />);
-    
-    await waitFor(() =>
-      expect(api.getTrace).toHaveBeenCalledWith(
-        "missing",
-        expect.any(Object),
-      ),
-    );
-    expect(queryByText(/Failed to load trace/)).not.toBeInTheDocument();
-
-    const stored = JSON.parse(localStorage.getItem("tempoPageState") || "{}");
-    expect(stored.selectedTrace).toBeFalsy();
+    render(<TempoPage />);
+    expect(api.getTrace).not.toHaveBeenCalled();
   });
 });

@@ -7,11 +7,15 @@ export function useAgentActivity() {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
 
     (async () => {
       try {
         if (active) setLoadingAgents(true);
-        const res = await getActiveAgents();
+        const res = await getActiveAgents({
+          signal: controller.signal,
+          maxRetries: 0,
+        });
         if (active) setAgentActivity(Array.isArray(res) ? res : []);
       } catch (e) {
         void e;
@@ -23,6 +27,7 @@ export function useAgentActivity() {
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, []);
 
