@@ -473,7 +473,7 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
     setReleaseData(null);
     setReleasesList([]);
     setSelectedAssetUrl("");
-    setInstanceIdSuffix(Math.random().toString(36).slice(2, 8));
+    setInstanceIdSuffix((prev) => prev || Math.random().toString(36).slice(2, 8));
     setNewApiKeyName("");
     setCreatingApiKey(false);
     setApiKeyCreateMessage("");
@@ -736,8 +736,8 @@ chmod +x ojo
           ? activeRes.filter((a) => Boolean(a?.active))
           : [];
         const scopedActivity = activeAgents.find((entry) => {
-          const entryName = String(entry?.name || "").trim();
-          if (selectedApiName && entryName === selectedApiName) return true;
+          const entryName = String(entry?.name || "").trim().toLowerCase();
+          if (selectedApiName && entryName === selectedApiName.toLowerCase()) return true;
           return Boolean(entry?.is_enabled);
         });
         const scopedInstanceIds = Array.isArray(scopedActivity?.instance_ids)
@@ -767,9 +767,13 @@ chmod +x ojo
           return;
         }
         if (!waitUntilConnected && scopedActivity) {
+          const visibleIds =
+            scopedInstanceIds.length > 0
+              ? ` Detected instance_id values for this API key: ${scopedInstanceIds.join(", ")}.`
+              : "";
           setConnectStatus("connected");
           setConnectMessage(
-            `Metrics are active for the selected API key, but instance_id ${generatedInstanceId} is not visible yet in agent heartbeat registry.`,
+            `Metrics are active for the selected API key, but instance_id ${generatedInstanceId} is not visible yet in agent heartbeat registry.${visibleIds}`,
           );
           return;
         }

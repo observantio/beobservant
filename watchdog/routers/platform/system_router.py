@@ -8,6 +8,8 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
+import asyncio
+import time
 from typing import Optional
 import httpx
 
@@ -25,6 +27,10 @@ router = APIRouter(prefix="/api/system", tags=["system"])
 system_service = SystemService()
 GITHUB_OJO_LATEST_RELEASE_URL = "https://api.github.com/repos/observantio/ojo/releases/latest"
 GITHUB_OJO_RELEASES_URL = "https://api.github.com/repos/observantio/ojo/releases"
+OJO_RELEASE_CACHE_TTL_SECONDS = 3600
+ojo_release_cache_payload: Optional[JSONDict] = None
+ojo_release_cache_expires_at: float = 0.0
+ojo_release_cache_lock = asyncio.Lock()
 
 
 @router.get("/metrics", response_model=JSONDict)
@@ -67,23 +73,36 @@ async def get_system_quotas(
 async def get_ojo_releases(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
 ) -> JSONDict:
-    timeout = httpx.Timeout(8.0)
-    headers = {"Accept": "application/vnd.github+json"}
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        latest_res, list_res = await client.get(
-            GITHUB_OJO_LATEST_RELEASE_URL,
-            headers=headers,
-        ), await client.get(
-            GITHUB_OJO_RELEASES_URL,
-            params={"per_page": 8},
-            headers=headers,
-        )
+    global ojo_release_cache_payload, ojo_release_cache_expires_at
+    now = time.monotonic()
+    if ojo_release_cache_payload is not None and now < ojo_release_cache_expires_at:
+        return ojo_release_cache_payload
 
-    latest_payload = latest_res.json() if latest_res.is_success else {}
-    list_payload = list_res.json() if list_res.is_success else []
-    return {
-        "latest": latest_payload if isinstance(latest_payload, dict) else {},
-        "releases": list_payload if isinstance(list_payload, list) else [],
-        "latest_ok": latest_res.is_success,
-        "releases_ok": list_res.is_success,
-    }
+    async with ojo_release_cache_lock:
+        now = time.monotonic()
+        if ojo_release_cache_payload is not None and now < ojo_release_cache_expires_at:
+            return ojo_release_cache_payload
+
+        timeout = httpx.Timeout(8.0)
+        headers = {"Accept": "application/vnd.github+json"}
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            latest_res, list_res = await client.get(
+                GITHUB_OJO_LATEST_RELEASE_URL,
+                headers=headers,
+            ), await client.get(
+                GITHUB_OJO_RELEASES_URL,
+                params={"per_page": 8},
+                headers=headers,
+            )
+
+        latest_payload = latest_res.json() if latest_res.is_success else {}
+        list_payload = list_res.json() if list_res.is_success else []
+        payload: JSONDict = {
+            "latest": latest_payload if isinstance(latest_payload, dict) else {},
+            "releases": list_payload if isinstance(list_payload, list) else [],
+            "latest_ok": latest_res.is_success,
+            "releases_ok": list_res.is_success,
+        }
+        ojo_release_cache_payload = payload
+        ojo_release_cache_expires_at = now + OJO_RELEASE_CACHE_TTL_SECONDS
+        return payload

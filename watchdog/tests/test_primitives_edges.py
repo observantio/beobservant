@@ -539,6 +539,43 @@ async def test_internal_and_system_router_edges(monkeypatch):
     monkeypatch.setattr(system_router, "system_service", types.SimpleNamespace(get_all_metrics=lambda: {"ok": True}))
     assert await system_router.get_system_metrics() == {"ok": True}
 
+    class _FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+            self.is_success = True
+
+        def json(self):
+            return self._payload
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            self.calls = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params=None, headers=None):
+            self.calls.append((url, params))
+            if "latest" in url:
+                return _FakeResponse({"tag_name": "v0.0.1"})
+            return _FakeResponse([{"tag_name": "v0.0.1"}])
+
+    fake_client = _FakeAsyncClient()
+    monkeypatch.setattr(system_router.httpx, "AsyncClient", lambda *args, **kwargs: fake_client)
+    base_time = 1_000_000.0
+    monkeypatch.setattr(system_router.time, "monotonic", lambda: base_time)
+    monkeypatch.setattr(system_router, "ojo_release_cache_payload", None)
+    monkeypatch.setattr(system_router, "ojo_release_cache_expires_at", 0.0)
+
+    first = await system_router.get_ojo_releases(current_user=types.SimpleNamespace())
+    second = await system_router.get_ojo_releases(current_user=types.SimpleNamespace())
+    assert first["latest"]["tag_name"] == "v0.0.1"
+    assert second["latest"]["tag_name"] == "v0.0.1"
+    assert len(fake_client.calls) == 2
+
 
 def test_encryption_edges(monkeypatch):
     encryption_module._get_fernet.cache_clear()
