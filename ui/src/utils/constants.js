@@ -206,6 +206,12 @@ export const SIDEBAR_EXTRA_NAV = [
     permission: null,
   },
   {
+    label: "Why Ojo Is Better",
+    icon: "speed",
+    path: "/docs/why-ojo",
+    permission: null,
+  },
+  {
     label: "How to Accept Data",
     icon: "input",
     path: "/docs/accept-data",

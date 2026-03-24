@@ -3,6 +3,26 @@ import PageHeader from "../components/ui/PageHeader";
 import { Card } from "../components/ui";
 
 const TOPICS = {
+  "why-ojo": {
+    title: "Why Ojo Is Better",
+    icon: "speed",
+    intro:
+      "Ojo is a low-level, lightweight Rust host metrics agent built for predictable system/process telemetry and direct OTLP export paths.",
+    steps: [
+      "Ojo is a lightweight host metrics agent written in Rust that collects system and process metrics and exports them via OpenTelemetry OTLP.",
+      "Demo: use the Ojo Agent Setup Wizard from the header to choose OS, download binaries, and generate config templates.",
+      "Supported platforms today: Linux and Windows. Solaris is in progress and platform-constrained.",
+      "Ojo polls host metrics on a fixed interval for consistent, low-overhead collection behavior.",
+      "It can optionally collect per-process metrics and compute deltas/rates where applicable.",
+      "You can export directly to any OTLP-compatible backend or route through an OpenTelemetry Collector.",
+      "Optional extension services run as separate binaries (sidecars) for Docker, GPU, sensors, MySQL, Postgres, and NFS client stats.",
+      "Extension binaries are separate workspace crates under services/<name>/ and each service reads its own YAML config and exports OTLP to the same endpoint as the main Ojo agent.",
+      "Build extensions from repo root with cargo build -p <package> --release or run directly with cargo run -p <package>.",
+      "Extension mapping: ojo-docker (services/docker/docker.yaml, system.docker.*), ojo-gpu (services/gpu/gpu.yaml, system.gpu.*), ojo-sensors (services/sensors/sensors.yaml, system.sensor.*), ojo-mysql (services/mysql/mysql.yaml, system.mysql.*), ojo-postgres (services/postgres/postgres.yaml, system.postgres.*), ojo-nfs-client (services/nfs-client/nfs-client.yaml, system.nfs_client.*).",
+      "Shared OTLP/filtering helpers live in crates/host-collectors and Grafana extension dashboards are under grafana/ (docker.json, gpu.json, sensors.json, mysql.json, postgres.json, nfs-client.json).",
+      "Release archives for the main Ojo agent include only the core binary. To run extensions, build them from source or include each crate in your release pipeline.",
+    ],
+  },
   "accept-data": {
     title: "How to Accept Data",
     icon: "input",
@@ -351,6 +371,13 @@ const PERMISSION_REFERENCE = [
 ];
 
 const TOPIC_ACCESS = {
+  "why-ojo": [
+    {
+      task: "Read Ojo architecture and setup guidance",
+      permissions: "Documentation access (no additional permission required)",
+      roles: "All authenticated roles",
+    },
+  ],
   "accept-data": [
     {
       task: "View API keys and endpoint details",

@@ -1,4 +1,5 @@
-import { NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useLayoutMode } from "../contexts/LayoutModeContext";
 import { NAV_ITEMS, SIDEBAR_EXTRA_NAV } from "../utils/constants";
@@ -11,9 +12,11 @@ const NAV_ITEM_LIST = Object.values(NAV_ITEMS);
  * Full-viewport-height left rail (md+): layout toggle + nav. Dashed rule on the right only.
  */
 export default function AppSidebar() {
+  const location = useLocation();
   const { toggleSidebarMode } = useLayoutMode();
   const { hasPermission, user } = useAuth();
   const incidentSummary = useSharedIncidentSummary();
+  const [docsExpanded, setDocsExpanded] = useState(true);
 
   const visibleNavItems = NAV_ITEM_LIST.filter(
     (item) => !item.permission || hasPermission(item.permission),
@@ -33,6 +36,12 @@ export default function AppSidebar() {
     (item) => !item.path.startsWith("/docs"),
   );
 
+  useEffect(() => {
+    if (location.pathname.startsWith("/docs")) {
+      setDocsExpanded(true);
+    }
+  }, [location.pathname]);
+
   return (
     <aside
       className="fixed left-0 top-0 z-30 hidden h-screen w-60 shrink-0 flex-col overflow-hidden border-r-2 border-dashed border-sre-border bg-gradient-to-b from-sre-bg via-sre-bg-alt to-sre-bg md:flex"
@@ -51,7 +60,7 @@ export default function AppSidebar() {
             view_headline
           </span>
           <span className="text-xs font-semibold tracking-wide uppercase">
-            Switch to Top Nav
+            Switch Mode
           </span>
         </button>
       </div>
@@ -104,9 +113,18 @@ export default function AppSidebar() {
                   className="my-3 border-t border-dashed border-sre-border/80"
                   role="presentation"
                 />
-                <div className="px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted/80">
-                  Documentation
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setDocsExpanded((v) => !v)}
+                  className="flex w-full items-center justify-between px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted/80 hover:text-sre-text"
+                  aria-expanded={docsExpanded}
+                  aria-controls="docs-sidebar-section"
+                >
+                  <span>Documentation</span>
+                  <span className="material-icons text-sm leading-none" aria-hidden>
+                    {docsExpanded ? "expand_less" : "expand_more"}
+                  </span>
+                </button>
                 {docsRootItem && (
                   <NavItem
                     key={docsRootItem.path}
@@ -115,8 +133,8 @@ export default function AppSidebar() {
                     incidentSummary={incidentSummary}
                   />
                 )}
-                {docsTopicNav.length > 0 && (
-                  <div className="mt-0.5 space-y-0.5 pl-3">
+                {docsExpanded && docsTopicNav.length > 0 && (
+                  <div id="docs-sidebar-section" className="mt-0.5 space-y-0.5 pl-3">
                     {docsTopicNav.map((item) => (
                       <NavLink
                         key={item.path}
