@@ -15,6 +15,9 @@ This changelog follows a simple human-first format and keeps entries focused on 
 - Added request ID propagation (`X-Request-ID`) across backend middleware/proxy error paths for improved incident traceability.
 - Added a centered dotted-dropzone upload UI for RCA YAML overrides, with clearer file-state feedback and one-click clear behavior.
 - Added a final wave of focused backend coverage tests across auth, bootstrap, Grafana dashboard/service flows, and TTL cache concurrency/error branches.
+- Added a new in-app **Documentation** section with topic routes, sidebar mini-links, and focused coverage tests.
+- Added environment/plumbing support for stable Grafana launch scoping via `APP_ORG_KEY` / `VITE_APP_ORG_KEY`.
+- Added `processes` and `load` hostmetric scrapers to the OTel test agent configuration for broader host telemetry collection.
 
 ### Changed
 
@@ -35,6 +38,10 @@ This changelog follows a simple human-first format and keeps entries focused on 
 - Improved API Keys table readability with stronger container borders, row/column separators, and expanded cell padding for clearer icon-labeled columns and actions.
 - Removed border styling from auth entry cards (`Login` and OIDC callback) to match the cleaner sign-in visual direction.
 - Updated OIDC callback success handling to perform a hard redirect refresh (`location.replace("/")`) after token completion.
+- Switched layout defaults to sidebar navigation, with clearer section grouping, smaller nav links, and dedicated documentation topic links.
+- Updated header chrome in sidebar mode to show release/build context (`wolfmegasaur v0.0.2`) plus quick GitHub/Ojo links.
+- Refined “OTel Collector Overview” template panels by removing empty-prone CPU/network breakdowns and adding resilient process-disk throughput coverage.
+- Updated Grafana launch URL normalization to strip internal `orgId` query params and forward only `org-key`.
 
 ### Fixed
 
@@ -42,6 +49,8 @@ This changelog follows a simple human-first format and keeps entries focused on 
 - Fixed datasource metric lookup to send the tenant key (`orgId`) expected by the backend API.
 - Fixed several edge cases where API requests could hang indefinitely or race each other during rapid query/filter changes.
 - Fixed residual auth-page card border visibility by explicitly overriding base card borders on sign-in screens.
+- Fixed toast visibility when forced password-change modal is open by ensuring toast stack renders above modal overlays.
+- Fixed duplicate incident-summary polling pressure by reusing shared summary context in Incident Board.
 
 ## [v0.0.1] - 2026-03-20
 
