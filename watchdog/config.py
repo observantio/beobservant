@@ -88,6 +88,15 @@ def _is_production_env() -> bool:
     return _env_name() in {"prod", "production"}
 
 
+def _slug_token(value: Optional[str], default: str) -> str:
+    raw = str(value or "").strip().lower()
+    chars = [ch if ch.isalnum() else "-" for ch in raw]
+    collapsed = "".join(chars).strip("-")
+    while "--" in collapsed:
+        collapsed = collapsed.replace("--", "-")
+    return collapsed or default
+
+
 class Config:
     ALLOWED_JWT_ALGORITHMS = {"RS256", "ES256"}
     ALLOWED_CONTEXT_ALGORITHMS = {"HS256", "HS384", "HS512"}
@@ -279,6 +288,8 @@ class Config:
         self.DEFAULT_ADMIN_TENANT: str = os.getenv("DEFAULT_ADMIN_TENANT", "default")
 
         self.DEFAULT_ORG_ID: str = os.getenv("DEFAULT_ORG_ID", "default")
+        app_org_key_default = f"{_slug_token(os.getenv('APP_NAME', 'observantio'), 'observantio')}-{_slug_token(self.DEFAULT_ORG_ID, 'default')}"
+        self.APP_ORG_KEY: str = os.getenv("APP_ORG_KEY", app_org_key_default).strip()
         self.OTLP_GATEWAY_URL: str = os.getenv("OTLP_GATEWAY_URL", "http://otlp-gateway:4320")
         self.DEFAULT_OTLP_TOKEN: Optional[str] = os.getenv("DEFAULT_OTLP_TOKEN")
 

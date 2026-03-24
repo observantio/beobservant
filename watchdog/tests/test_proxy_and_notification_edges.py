@@ -218,7 +218,8 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
         token_data,
     )
     assert response.status_code == 200
-    assert response.body == b'{"launch_url":"/grafana/explore"}'
+    assert b'"launch_url":"/grafana/explore?org-key=' in response.body
+    assert b'"org_key":"' in response.body
 
     response = await proxy_router.bootstrap_grafana_session(
         _request(cookies={"watchdog_token": "jwt-2"}),

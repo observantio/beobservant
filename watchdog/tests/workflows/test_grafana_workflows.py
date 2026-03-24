@@ -62,7 +62,10 @@ def test_grafana_proxy_folder_and_dashboard_workflows(client, monkeypatch: pytes
 
     bootstrap_response = client.post("/api/grafana/bootstrap-session", headers=admin_headers, json={"next": "/d/overview"})
     assert bootstrap_response.status_code == 200
-    assert bootstrap_response.json() == {"launch_url": "/grafana/d/overview"}
+    assert bootstrap_response.json() == {
+        "launch_url": "/grafana/d/overview?org-key=observantio-default",
+        "org_key": "observantio-default",
+    }
 
     private_folder = client.post("/api/grafana/folders?visibility=private", headers=admin_headers, json={"title": "Private Folder", "allowDashboardWrites": False})
     group_folder = client.post(f"/api/grafana/folders?visibility=group&shared_group_ids={group_id}", headers=admin_headers, json={"title": "Group Folder", "allowDashboardWrites": True})

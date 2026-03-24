@@ -30,7 +30,7 @@ import { useToast } from "../contexts/ToastContext";
 import GrafanaTabs from "../components/grafana/GrafanaTabs";
 import GrafanaContent from "../components/grafana/GrafanaContent";
 import { useAuth } from "../contexts/AuthContext";
-import { MIMIR_PROMETHEUS_URL } from "../utils/constants";
+import { APP_ORG_KEY, MIMIR_PROMETHEUS_URL } from "../utils/constants";
 import {
   GRAFANA_DATASOURCE_TYPES as DATASOURCE_TYPES,
   overrideDashboardDatasource,
@@ -1053,7 +1053,7 @@ export default function GrafanaPage() {
       <PageHeader
         icon="stacked_bar_chart"
         title="Grafana"
-        subtitle="Create and manage dashboards, datasources, and folders"
+        subtitle={`Create and manage dashboards, datasources, and folders.`}
       >
         <Button
           onClick={() => openInGrafana("/")}

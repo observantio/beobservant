@@ -11,6 +11,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 from __future__ import annotations
 
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, Response
@@ -65,7 +66,9 @@ async def bootstrap_grafana_session(
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication token unavailable")
 
-    response = JSONResponse({"launch_url": f"/grafana{next_path}"})
+    separator = "&" if "?" in next_path else "?"
+    launch_url = f"/grafana{next_path}{separator}org-key={quote(config.APP_ORG_KEY, safe='')}"
+    response = JSONResponse({"launch_url": launch_url, "org_key": config.APP_ORG_KEY})
     response.set_cookie(
         key="watchdog_token",
         value=token,

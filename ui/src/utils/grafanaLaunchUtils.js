@@ -1,3 +1,18 @@
+function stripGrafanaInternalOrgId(pathnameWithQueryAndHash) {
+  const [beforeHash, hash = ""] = String(pathnameWithQueryAndHash || "").split("#", 2);
+  const [pathname, query = ""] = beforeHash.split("?", 2);
+  if (!query) {
+    return hash ? `${pathname}#${hash}` : pathname;
+  }
+
+  const params = new URLSearchParams(query);
+  params.delete("orgId");
+  const nextQuery = params.toString();
+  const querySuffix = nextQuery ? `?${nextQuery}` : "";
+  const hashSuffix = hash ? `#${hash}` : "";
+  return `${pathname}${querySuffix}${hashSuffix}`;
+}
+
 export function normalizeGrafanaPath(path) {
   let rawPath = "/dashboards";
 
@@ -23,10 +38,10 @@ export function normalizeGrafanaPath(path) {
   if (!normalizedPath.startsWith("/")) {
     normalizedPath = `/${normalizedPath}`;
   }
-  return normalizedPath;
+  return stripGrafanaInternalOrgId(normalizedPath);
 }
 
-import { GRAFANA_URL } from "./constants";
+import { APP_ORG_KEY, GRAFANA_URL } from "./constants";
 
 export function buildGrafanaLaunchUrl({ path, protocol, hostname }) {
   const normalizedPath = normalizeGrafanaPath(path);
@@ -38,7 +53,8 @@ export function buildGrafanaLaunchUrl({ path, protocol, hostname }) {
     grafanaBase = "/grafana";
   }
   const proxyOrigin = `${protocol}//${hostname}:8080`;
-  return `${proxyOrigin}${grafanaBase}${normalizedPath}`;
+  const separator = normalizedPath.includes("?") ? "&" : "?";
+  return `${proxyOrigin}${grafanaBase}${normalizedPath}${separator}org-key=${encodeURIComponent(APP_ORG_KEY)}`;
 }
 
 export function buildGrafanaBootstrapUrl({ path, protocol, hostname }) {
