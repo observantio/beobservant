@@ -22,6 +22,8 @@ if [[ ! -f ".env" ]]; then
   cp .env.example .env
 fi
 
+chmod +x ./scripts/render-observability-config.sh
+
 randomized_keys=()
 
 set_env_key() {
@@ -303,6 +305,8 @@ if [[ -n "${release_arch}" && "${release_arch}" != "multi" ]]; then
     echo "Warning: bundle architecture is ${release_arch} but host appears to be ${host_arch}." >&2
   fi
 fi
+echo ""
+./scripts/render-observability-config.sh
 echo ""
 echo "Pulling images for OBSERVANTIO_BUNDLE_VERSION=$(get_env_key OBSERVANTIO_BUNDLE_VERSION)..."
 "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml pull

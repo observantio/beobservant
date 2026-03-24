@@ -54,16 +54,21 @@ The installer will:
 - Create `.env` from `.env.example` if missing
 - Randomize important secrets if defaults/placeholders are detected
 - Ask for UI host and admin bootstrap values
+- Detect host CPU/RAM and render Loki/Tempo/Mimir limits plus generated config files
 - Pull images and optionally start the stack
 
 ## Day-2 Operations
 
 - Restart:
   `./restart.sh`
+- Re-render adaptive observability sizing without restarting:
+  `./scripts/render-observability-config.sh`
 - Stop/uninstall:
   `./uninstall.sh`
 - Uninstall and remove named volumes:
   `./uninstall.sh --purge`
+
+Set `OBS_RESOURCE_PROFILE=manual` in `.env` if you want to keep hand-tuned `LOKI_*`, `TEMPO_*`, and `MIMIR_*` sizing values instead of auto-detecting from the host.
 
 ## Required Network Ports
 

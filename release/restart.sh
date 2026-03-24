@@ -26,6 +26,8 @@ else
 fi
 
 cd "${ROOT_DIR}"
+chmod +x ./scripts/render-observability-config.sh
+./scripts/render-observability-config.sh
 echo ""
 "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml down
 echo ""
