@@ -202,7 +202,7 @@ export default function LoginPage() {
             <img
               src="/favicon.png"
               alt="Watchdog logo"
-              className="mx-auto  w-40 h-40 dark:filter dark:invert"
+              className="mx-auto w-40 h-40 dark:invert dark:sepia dark:hue-rotate-90"
             />
           )}
           <h1 className="text-3xl font-bold text-sre-text mb-2">

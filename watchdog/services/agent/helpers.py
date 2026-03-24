@@ -24,7 +24,6 @@ from custom_types.json import JSONDict
 class KeyActivity(TypedDict):
     metrics_active: bool
     metrics_count: int
-    instance_ids: list[str]
 
 ATTR_HOST_NAME = "host.name"
 ATTR_HOST_HOSTNAME = "host.hostname"
@@ -85,7 +84,6 @@ async def query_key_activity(key_value: str, mimir_client: httpx.AsyncClient) ->
 
     metrics_active = False
     metrics_count = 0
-    instance_ids: list[str] = []
 
     try:
         response = await mimir_client.get(
@@ -103,29 +101,7 @@ async def query_key_activity(key_value: str, mimir_client: httpx.AsyncClient) ->
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
         metrics_active = False
 
-    for label_name in ("service_instance_id", "instance_id"):
-        try:
-            values_response = await mimir_client.get(
-                f"{config.MIMIR_URL.rstrip('/')}/prometheus/api/v1/label/{label_name}/values",
-                params={"start": start_ns, "end": end_ns},
-                headers={"X-Scope-OrgID": key_value},
-            )
-            values_response.raise_for_status()
-            values_payload_raw = values_response.json()
-            if not isinstance(values_payload_raw, dict):
-                continue
-            values = values_payload_raw.get("data")
-            if not isinstance(values, list):
-                continue
-            for raw_value in values:
-                normalized = str(raw_value or "").strip()
-                if normalized and normalized not in instance_ids:
-                    instance_ids.append(normalized)
-        except (httpx.HTTPError, ValueError, KeyError, TypeError):
-            continue
-
     return {
         "metrics_active": metrics_active,
         "metrics_count": metrics_count,
-        "instance_ids": instance_ids,
     }
