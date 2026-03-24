@@ -1,5 +1,5 @@
 """
-Utility functions for alert-related operations, including permission checks, silence handling, and proxying to Be Notified.
+Utility functions for alert-related operations, including permission checks, silence handling, and proxying to Notifier.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
@@ -87,7 +87,7 @@ def check_permissions(current_user: TokenData, required: Set[str]) -> None:
     if not set(current_user.permissions or []).intersection(required):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"You do not have permission to communicate with Be Notified. Required permissions: {', '.join(required)}",
+            detail=f"You do not have permission to communicate with Notifier. Required permissions: {', '.join(required)}",
         )
 
 

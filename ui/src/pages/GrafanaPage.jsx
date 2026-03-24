@@ -178,8 +178,10 @@ export default function GrafanaPage() {
     message: "",
     messageTone: "default",
     onConfirm: null,
+    onCancel: null,
     variant: "danger",
     confirmText: "Delete",
+    cancelText: "Cancel",
   });
 
   const [grafanaConfirmDialog, setGrafanaConfirmDialog] = useState({
@@ -518,9 +520,68 @@ export default function GrafanaPage() {
     setShowDashboardEditor(true);
   }
 
-  async function saveDashboard(jsonOverride = null) {
+  async function saveDashboard(jsonOverride = null, options = {}) {
+    const selectedDatasource = datasources.find(
+      (ds) => ds.uid === dashboardForm.datasourceUid,
+    );
+    const normalizeGroupIds = (ids) =>
+      Array.from(
+        new Set((Array.isArray(ids) ? ids : []).map((id) => String(id).trim()).filter(Boolean)),
+      ).sort();
+    const dashboardGroupIds = normalizeGroupIds(dashboardForm.sharedGroupIds);
+    const datasourceVisibility = String(
+      selectedDatasource?.visibility || "private",
+    ).trim();
+    const datasourceGroupIds = normalizeGroupIds(
+      selectedDatasource?.sharedGroupIds || selectedDatasource?.shared_group_ids,
+    );
+    const visibilityNeedsSync =
+      Boolean(selectedDatasource) &&
+      (dashboardForm.visibility !== datasourceVisibility ||
+        (dashboardForm.visibility === "group" &&
+          JSON.stringify(dashboardGroupIds) !== JSON.stringify(datasourceGroupIds)));
+
+    const {
+      syncDatasourceVisibility = false,
+      skipVisibilitySyncPrompt = false,
+    } = options;
+
     if (!dashboardForm.datasourceUid) {
       toast.error("Select a default datasource before saving the dashboard");
+      return;
+    }
+
+    if (!skipVisibilitySyncPrompt && visibilityNeedsSync) {
+      const visibilityLabel = (visibility) =>
+        visibility === "group"
+          ? "Group Shared Workspace"
+          : visibility === "tenant"
+            ? "Tenant Public Workspace"
+            : "Personal Workspace";
+      setConfirmDialog({
+        isOpen: true,
+        title: "Sync Datasource Visibility?",
+        message: `Dashboard visibility is set to "${visibilityLabel(
+          dashboardForm.visibility,
+        )}". Do you want to apply the same visibility to datasource "${
+          selectedDatasource?.name || "selected datasource"
+        }" as well?`,
+        variant: "primary",
+        confirmText: "Yes, sync datasource",
+        cancelText: "No, dashboard only",
+        onConfirm: async () => {
+          await saveDashboard(jsonOverride, {
+            syncDatasourceVisibility: true,
+            skipVisibilitySyncPrompt: true,
+          });
+        },
+        onCancel: async () => {
+          await saveDashboard(jsonOverride, {
+            syncDatasourceVisibility: false,
+            skipVisibilitySyncPrompt: true,
+          });
+        },
+      });
       return;
     }
 
@@ -599,10 +660,6 @@ export default function GrafanaPage() {
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean);
-
-        const selectedDatasource = datasources.find(
-          (ds) => ds.uid === dashboardForm.datasourceUid,
-        );
 
         payload = {
           dashboard: {
@@ -686,6 +743,29 @@ export default function GrafanaPage() {
 
         await createDashboard(payload, params.toString());
         toast.success("Dashboard created successfully");
+      }
+
+      if (syncDatasourceVisibility && selectedDatasource?.uid) {
+        const dsParams = new URLSearchParams({
+          visibility: dashboardForm.visibility,
+        });
+        if (
+          dashboardForm.visibility === "group" &&
+          dashboardForm.sharedGroupIds?.length > 0
+        ) {
+          dashboardForm.sharedGroupIds.forEach((gid) =>
+            dsParams.append("shared_group_ids", gid),
+          );
+        }
+        try {
+          await updateDatasource(selectedDatasource.uid, {}, dsParams.toString());
+          toast.success("Datasource visibility synced with dashboard");
+        } catch (syncErr) {
+          toast.error(
+            "Dashboard saved, but datasource visibility sync did not complete.",
+          );
+          handleApiError(syncErr);
+        }
       }
 
       setShowDashboardEditor(false);
@@ -1157,14 +1237,25 @@ export default function GrafanaPage() {
 
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
-        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onClose={() => {
+          const onCancel = confirmDialog.onCancel;
+          setConfirmDialog((prev) => ({
+            ...prev,
+            isOpen: false,
+            onConfirm: null,
+            onCancel: null,
+          }));
+          if (typeof onCancel === "function") {
+            void onCancel();
+          }
+        }}
         onConfirm={confirmDialog.onConfirm || (() => {})}
         title={confirmDialog.title}
         message={confirmDialog.message}
         messageTone={confirmDialog.messageTone || "default"}
         variant={confirmDialog.variant || "danger"}
         confirmText={confirmDialog.confirmText || "Delete"}
-        cancelText="Cancel"
+        cancelText={confirmDialog.cancelText || "Cancel"}
       />
 
       <ConfirmDialog

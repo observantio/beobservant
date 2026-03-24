@@ -60,10 +60,23 @@ async def list_active_agents(current_user: TokenData = Depends(require_permissio
 
     recent_agents = agent_service.list_agents()
     host_names_by_tenant: dict[str, set[str]] = {}
+    instance_ids_by_tenant: dict[str, set[str]] = {}
     for agent in recent_agents:
         if not agent.host_name:
-            continue
-        host_names_by_tenant.setdefault(agent.tenant_id, set()).add(agent.host_name)
+            pass
+        else:
+            host_names_by_tenant.setdefault(agent.tenant_id, set()).add(agent.host_name)
+        raw_attributes = getattr(agent, "attributes", {})
+        attributes = raw_attributes if isinstance(raw_attributes, dict) else {}
+        candidate_ids = [
+            attributes.get("service.instance.id"),
+            attributes.get("service.instance_id"),
+            attributes.get("instance_id"),
+        ]
+        for candidate in candidate_ids:
+            value = str(candidate or "").strip()
+            if value:
+                instance_ids_by_tenant.setdefault(agent.tenant_id, set()).add(value)
 
     activity: list[dict[str, object]] = []
     for key, result in zip(api_keys, results):
@@ -77,11 +90,19 @@ async def list_active_agents(current_user: TokenData = Depends(require_permissio
                 "host_names": [],
                 "metrics_active": False,
                 "metrics_count": 0,
+                "instance_ids": [],
             })
             continue
 
         active = bool(result.get("metrics_active"))
         host_names = sorted(host_names_by_tenant.get(key.key, set()))
+        result_instance_ids = result.get("instance_ids")
+        combined_instance_ids = {
+            str(v).strip()
+            for v in (result_instance_ids if isinstance(result_instance_ids, list) else [])
+            if str(v).strip()
+        }
+        combined_instance_ids.update(instance_ids_by_tenant.get(key.key, set()))
         activity.append({
             **result,
             "name": key.name,
@@ -90,6 +111,7 @@ async def list_active_agents(current_user: TokenData = Depends(require_permissio
             "success": True,
             "clean": active,
             "host_names": host_names,
+            "instance_ids": sorted(combined_instance_ids),
         })
 
     return activity

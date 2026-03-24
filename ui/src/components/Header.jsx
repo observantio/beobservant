@@ -689,7 +689,41 @@ chmod +x ojo
         ? "Waiting for agent to appear..."
         : "Checking agent connectivity...",
     );
+    const targetInstanceId = String(generatedInstanceId || "").trim().toLowerCase();
+    const selectedApiScope = String(selectedApiKey?.key || "").trim();
+    const selectedApiName = String(selectedApiKey?.name || "").trim();
+    const collectAgentIdentifiers = (agent) => {
+      const directValues = [
+        agent?.id,
+        agent?.name,
+        agent?.host_name,
+        agent?.instance_id,
+      ];
+      const attributes =
+        agent?.attributes && typeof agent.attributes === "object"
+          ? agent.attributes
+          : {};
+      const resourceAttributes =
+        agent?.resource?.attributes && typeof agent.resource.attributes === "object"
+          ? agent.resource.attributes
+          : {};
+      const attributeValues = [
+        attributes["service.instance.id"],
+        attributes["service.instance_id"],
+        attributes["service.instance"],
+        attributes["host.id"],
+        attributes["host.name"],
+        attributes["host.hostname"],
+        attributes["agent.instance.id"],
+        resourceAttributes["service.instance.id"],
+        resourceAttributes["service.instance_id"],
+      ];
+      return [...directValues, ...attributeValues]
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean);
+    };
     let attempts = 0;
+    let sawScopedMetricsActivity = false;
     while (attempts < (waitUntilConnected ? 12 : 1)) {
       attempts += 1;
       try {
@@ -701,15 +735,41 @@ chmod +x ojo
         const activeAgents = Array.isArray(activeRes)
           ? activeRes.filter((a) => Boolean(a?.active))
           : [];
-        const matchedAgent = knownAgents.find((agent) =>
-          [agent?.id, agent?.name, agent?.host_name]
-            .map((v) => String(v || "").trim())
-            .includes(generatedInstanceId),
+        const scopedActivity = activeAgents.find((entry) => {
+          const entryName = String(entry?.name || "").trim();
+          if (selectedApiName && entryName === selectedApiName) return true;
+          return Boolean(entry?.is_enabled);
+        });
+        const scopedInstanceIds = Array.isArray(scopedActivity?.instance_ids)
+          ? scopedActivity.instance_ids
+              .map((value) => String(value || "").trim().toLowerCase())
+              .filter(Boolean)
+          : [];
+        if (scopedActivity) sawScopedMetricsActivity = true;
+        if (scopedInstanceIds.includes(targetInstanceId)) {
+          setConnectStatus("connected");
+          setConnectMessage(`Connected: ${generatedInstanceId}`);
+          return;
+        }
+        const scopedAgents = selectedApiScope
+          ? knownAgents.filter(
+              (agent) => String(agent?.tenant_id || "").trim() === selectedApiScope,
+            )
+          : knownAgents;
+        const matchedAgent = scopedAgents.find((agent) =>
+          collectAgentIdentifiers(agent).includes(targetInstanceId),
         );
         if (matchedAgent) {
           setConnectStatus("connected");
           setConnectMessage(
             `Connected: ${generatedInstanceId}`,
+          );
+          return;
+        }
+        if (!waitUntilConnected && scopedActivity) {
+          setConnectStatus("connected");
+          setConnectMessage(
+            `Metrics are active for the selected API key, but instance_id ${generatedInstanceId} is not visible yet in agent heartbeat registry.`,
           );
           return;
         }
@@ -731,8 +791,12 @@ chmod +x ojo
     setConnectStatus(waitUntilConnected ? "timeout" : "idle");
     setConnectMessage(
       waitUntilConnected
-        ? `No matching instance_id yet (${generatedInstanceId}). You can keep running and check again later.`
-        : `No matching instance_id found (${generatedInstanceId}).`,
+        ? sawScopedMetricsActivity
+          ? `Metrics are active for the selected API key, but instance_id ${generatedInstanceId} was not seen in heartbeat registry yet. You can continue and re-check later.`
+          : `No matching instance_id yet (${generatedInstanceId}). You can keep running and check again later.`
+        : sawScopedMetricsActivity
+          ? `Metrics are active for the selected API key, but instance_id ${generatedInstanceId} was not seen in heartbeat registry.`
+          : `No matching instance_id found (${generatedInstanceId}).`,
     );
   };
 

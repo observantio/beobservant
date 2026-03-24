@@ -508,7 +508,7 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
             return BadResponse()
 
     result = await agent_helpers.query_key_activity("tenant-a", BadClient())
-    assert result == {"metrics_active": False, "metrics_count": 0}
+    assert result == {"metrics_active": False, "metrics_count": 0, "instance_ids": []}
 
     class BadPayloadResponse:
         def raise_for_status(self):
@@ -522,7 +522,7 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
             return BadPayloadResponse()
 
     bad_payload_result = await agent_helpers.query_key_activity("tenant-a", BadPayloadClient())
-    assert bad_payload_result == {"metrics_active": False, "metrics_count": 0}
+    assert bad_payload_result == {"metrics_active": False, "metrics_count": 0, "instance_ids": []}
 
     tokens = audit_context_service.set_request_audit_context("203.0.113.10", "pytest")
     assert audit_context_service.get_request_audit_context() == ("203.0.113.10", "pytest")

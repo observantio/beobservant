@@ -136,25 +136,25 @@ export const NAV_ITEMS = {
     permission: null,
   },
   TEMPO: {
-    label: "Tempo",
+    label: "Distributed Traces",
     icon: "timeline",
     path: "/tempo",
     permission: "read:traces",
   },
   LOKI: {
-    label: "Loki",
+    label: "Log Feed",
     icon: "view_stream",
     path: "/loki",
     permission: "read:logs",
   },
   RCA: {
-    label: "RCA",
+    label: "Resolver Engine",
     icon: "psychology",
     path: "/rca",
     permission: "read:rca",
   },
   ALERTMANAGER: {
-    label: "AlertManager",
+    label: "Notifier",
     icon: "notifications",
     path: "/alertmanager",
     permission: "read:alerts",
@@ -166,14 +166,13 @@ export const NAV_ITEMS = {
     permission: "read:alerts",
   },
   GRAFANA: {
-    label: "Grafana",
+    label: "Visualizations",
     icon: "stacked_bar_chart",
     path: "/grafana",
     permission: "read:dashboards",
   },
 };
 
-/** Shown in the left rail (sidebar layout); same targets as former user-menu links. */
 export const SIDEBAR_EXTRA_NAV = [
   {
     label: "Users",
