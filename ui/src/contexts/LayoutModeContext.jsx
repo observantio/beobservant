@@ -15,9 +15,12 @@ const LayoutModeContext = createContext(null);
 export function LayoutModeProvider({ children }) {
   const [sidebarMode, setSidebarMode] = useState(() => {
     try {
-      return globalThis.localStorage?.getItem(STORAGE_KEY) === "1";
+      const saved = globalThis.localStorage?.getItem(STORAGE_KEY);
+      if (saved === "1") return true;
+      if (saved === "0") return false;
+      return true;
     } catch {
-      return false;
+      return true;
     }
   });
 
@@ -51,7 +54,7 @@ export function useLayoutMode() {
   const ctx = useContext(LayoutModeContext);
   return (
     ctx ?? {
-      sidebarMode: false,
+      sidebarMode: true,
       toggleSidebarMode: () => {},
     }
   );

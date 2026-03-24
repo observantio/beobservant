@@ -10,6 +10,8 @@ function resolveDefaultApiBase() {
 export const API_BASE = import.meta.env.VITE_API_URL || resolveDefaultApiBase();
 export const GRAFANA_URL =
   import.meta.env.VITE_GRAFANA_URL || "http://localhost:8080/grafana";
+export const APP_ORG_KEY =
+  import.meta.env.VITE_APP_ORG_KEY || "observantio-default";
 export const OIDC_PROVIDER_LABEL =
   import.meta.env.VITE_OIDC_PROVIDER_LABEL || "SSO";
 
@@ -198,6 +200,114 @@ export const SIDEBAR_EXTRA_NAV = [
     permission: null,
   },
   {
+    label: "Documentation",
+    icon: "menu_book",
+    path: "/docs",
+    permission: null,
+  },
+  {
+    label: "How to Accept Data",
+    icon: "input",
+    path: "/docs/accept-data",
+    permission: null,
+  },
+  {
+    label: "How to Share Dashboards",
+    icon: "share",
+    path: "/docs/share-dashboards",
+    permission: null,
+  },
+  {
+    label: "Datasources & Dashboard Rules",
+    icon: "storage",
+    path: "/docs/datasources-dashboards",
+    permission: null,
+  },
+  {
+    label: "Folder Visibility",
+    icon: "folder_shared",
+    path: "/docs/folder-visibility",
+    permission: null,
+  },
+  {
+    label: "OIDC Local Sync",
+    icon: "verified_user",
+    path: "/docs/oidc-local-sync",
+    permission: null,
+  },
+  {
+    label: "Group Permissions",
+    icon: "groups",
+    path: "/docs/group-permissions",
+    permission: null,
+  },
+  {
+    label: "Permission Guardrails",
+    icon: "admin_panel_settings",
+    path: "/docs/permission-guardrails",
+    permission: null,
+  },
+  {
+    label: "Roles & Permissions",
+    icon: "admin_panel_settings",
+    path: "/docs/roles-permissions",
+    permission: null,
+  },
+  {
+    label: "How to Query Tempo",
+    icon: "timeline",
+    path: "/docs/query-tempo",
+    permission: null,
+  },
+  {
+    label: "How to Query Loki",
+    icon: "view_stream",
+    path: "/docs/query-loki",
+    permission: null,
+  },
+  {
+    label: "How to Use Incident Board",
+    icon: "assignment",
+    path: "/docs/incident-board",
+    permission: null,
+  },
+  {
+    label: "How Integrations Work",
+    icon: "integration_instructions",
+    path: "/docs/integrations",
+    permission: null,
+  },
+  {
+    label: "How API Key Sharing Works",
+    icon: "vpn_key",
+    path: "/docs/api-key-sharing",
+    permission: null,
+  },
+  {
+    label: "How Auditing Works",
+    icon: "policy",
+    path: "/docs/auditing",
+    permission: null,
+  },
+  {
+    label: "How Quotas Work",
+    icon: "data_thresholding",
+    path: "/docs/quotas-guide",
+    permission: null,
+  },
+  {
+    label: "How to Set Alert Rules",
+    icon: "notification_important",
+    path: "/docs/alert-rules",
+    permission: null,
+  },
+  {
+    label: "How to Use RCA Engine",
+    icon: "psychology_alt",
+    path: "/docs/rca-engine",
+    permission: null,
+  },
+  {
     label: "Audit",
     icon: "policy",
     path: "/audit-compliance",
@@ -253,9 +363,9 @@ export const TRACE_STATUS_OPTIONS = [
 ];
 
 export const VISIBILITY_OPTIONS = [
-  { value: "private", label: "Private (Only me)" },
-  { value: "group", label: "Shared with Groups" },
-  { value: "tenant", label: "Tenant-wide (Everyone in organization)" },
+  { value: "private", label: "Personal Workspace" },
+  { value: "group", label: "Group Shared Workspace" },
+  { value: "tenant", label: "Tenant Public Workspace" },
 ];
 
 export const GRAFANA_REFRESH_INTERVALS = [

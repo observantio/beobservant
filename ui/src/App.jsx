@@ -32,6 +32,7 @@ const UsersPage = lazy(() => import("./pages/UsersPage"));
 const GroupsPage = lazy(() => import("./pages/GroupsPage"));
 const ApiKeyPage = lazy(() => import("./pages/ApiKeyPage"));
 const IntegrationsPage = lazy(() => import("./pages/IntegrationsPage"));
+const DocumentationPage = lazy(() => import("./pages/DocumentationPage"));
 const AuditCompliancePage = lazy(() => import("./pages/AuditCompliancePage"));
 const RCAPage = lazy(() => import("./pages/RCAPage"));
 const QuotasPage = lazy(() => import("./pages/QuotasPage"));
@@ -150,6 +151,14 @@ function AppContent() {
       permissions: ["read:channels"],
     },
     {
+      path: "/docs",
+      element: <DocumentationPage />,
+    },
+    {
+      path: "/docs/:topic",
+      element: <DocumentationPage />,
+    },
+    {
       path: "/audit-compliance",
       element: <AuditCompliancePage />,
       permissions: ["read:audit_logs"],
@@ -213,7 +222,7 @@ function AppContent() {
             {sidebarMode ? (
               <div className="flex min-h-0 flex-1 flex-col md:flex-row">
                 <AppSidebar />
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-56">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-60">
                   <Header />
 
                   {user?.needs_password_change && (

@@ -11,6 +11,9 @@ import { useLayoutMode } from "../contexts/LayoutModeContext";
 import { useSharedIncidentSummary } from "../contexts/IncidentSummaryContext";
 
 const NAV_ITEM_LIST = Object.values(NAV_ITEMS);
+const RELEASE_LABEL = "wolfmegasaur v0.0.2";
+const WATCHDOG_GITHUB_URL = "https://github.com/observantio/watchdog";
+const OJO_DOWNLOAD_URL = "https://github.com/observantio/ojo/releases/latest";
 
 export function NavItem({
   item,
@@ -20,7 +23,7 @@ export function NavItem({
 }) {
   const baseClasses =
     variant === "sidebar"
-      ? "w-full rounded-lg text-[15px] font-medium flex items-center gap-3 transition-colors px-3 py-3"
+      ? "w-full rounded-lg text-[14px] font-medium flex items-center gap-2.5 transition-colors px-3 py-2.5"
       : isMobile
         ? "rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-2 transition-all px-3 py-1.5 border border-transparent"
         : "px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 border-b-2 border-transparent";
@@ -52,7 +55,7 @@ export function NavItem({
     >
       <span
         className={`material-icons leading-none ${
-          variant === "sidebar" ? "text-[18px]" : "text-sm"
+          variant === "sidebar" ? "text-[17px]" : "text-sm"
         }`}
         aria-hidden
       >
@@ -230,6 +233,30 @@ export default function Header() {
     <div
       className={`flex items-center justify-end ${sidebarMode ? "gap-1.5" : "gap-3"}`}
     >
+      {sidebarMode && (
+        <div className="hidden lg:flex items-center gap-2">
+          <span className="inline-flex items-center rounded-md border border-sre-border bg-sre-surface px-2 py-1 text-[11px] font-semibold text-sre-text-muted">
+            {RELEASE_LABEL}
+          </span>
+          <a
+            href={WATCHDOG_GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-md border border-sre-border bg-sre-surface px-2 py-1 text-[11px] font-semibold text-sre-text-muted transition-colors hover:border-sre-primary/50 hover:text-sre-text"
+          >
+            GitHub
+          </a>
+          <a
+            href={OJO_DOWNLOAD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-md border border-sre-border bg-sre-surface px-2 py-1 text-[11px] font-semibold text-sre-text-muted transition-colors hover:border-sre-primary/50 hover:text-sre-text"
+          >
+            Download Ojo Agent
+          </a>
+        </div>
+      )}
+
       <ThemeToggle
         className={
           sidebarMode

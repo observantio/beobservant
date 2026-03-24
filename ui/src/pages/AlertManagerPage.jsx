@@ -618,12 +618,7 @@ export default function AlertManagerPage() {
   return (
     <div className="animate-fade-in">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-sre-text mb-2 flex items-center gap-2">
-          <span className="material-icons text-3xl text-sre-text">
-            notifications_active
-          </span>{" "}
-          Alerts &amp; Rules
-        </h1>
+        <h1 className="text-3xl font-bold text-sre-text mb-2">Alerts &amp; Rules</h1>
         <p className="text-sre-text-muted">
           Comprehensive alerting system with rules, channels, and silences
         </p>
