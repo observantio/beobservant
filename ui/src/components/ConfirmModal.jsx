@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
+import { createPortal } from "react-dom";
 import { Button } from "./ui";
 
 export default function ConfirmModal({
@@ -57,9 +58,9 @@ export default function ConfirmModal({
 
   if (!isOpen) return null;
 
-  return (
+  const content = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-xl animate-fade-in dark:bg-black/50"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/35 p-4 backdrop-blur-xl animate-fade-in dark:bg-black/50"
       onMouseDown={safeCancel}
       onClick={safeCancel}
       role="button"
@@ -94,6 +95,8 @@ export default function ConfirmModal({
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 }
 
 ConfirmModal.propTypes = {

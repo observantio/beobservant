@@ -120,7 +120,7 @@ export default function AppSidebar() {
                   aria-expanded={docsExpanded}
                   aria-controls="docs-sidebar-section"
                 >
-                  <span>Documentation</span>
+                  <span>Guide</span>
                   <span className="material-icons text-sm leading-none" aria-hidden>
                     {docsExpanded ? "expand_less" : "expand_more"}
                   </span>

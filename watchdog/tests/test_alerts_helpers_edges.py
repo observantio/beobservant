@@ -117,6 +117,24 @@ def test_required_permissions_maps_routes():
         Permission.UPDATE_RULES.value,
         Permission.WRITE_ALERTS.value,
     }
+    assert helpers_mod.required_permissions("metrics/query", "GET") == {
+        Permission.READ_METRICS.value,
+        Permission.CREATE_RULES.value,
+        Permission.UPDATE_RULES.value,
+        Permission.WRITE_ALERTS.value,
+    }
+    assert helpers_mod.required_permissions("metrics/labels", "GET") == {
+        Permission.READ_METRICS.value,
+        Permission.CREATE_RULES.value,
+        Permission.UPDATE_RULES.value,
+        Permission.WRITE_ALERTS.value,
+    }
+    assert helpers_mod.required_permissions("metrics/label-values/cpu_mode", "GET") == {
+        Permission.READ_METRICS.value,
+        Permission.CREATE_RULES.value,
+        Permission.UPDATE_RULES.value,
+        Permission.WRITE_ALERTS.value,
+    }
     assert helpers_mod.required_permissions("public/rules", "GET") == set()
     assert helpers_mod.required_permissions("unknown", "GET") is None
 

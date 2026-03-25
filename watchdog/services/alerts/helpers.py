@@ -72,7 +72,7 @@ def required_permissions(path: str, method: str) -> Optional[Set[str]]:
             return {Permission.READ_INCIDENTS.value, Permission.UPDATE_INCIDENTS.value, Permission.READ_CHANNELS.value}
         return {Permission.UPDATE_INCIDENTS.value}
 
-    if p == "/metrics/names":
+    if p in {"/metrics/names", "/metrics/query", "/metrics/labels"} or p.startswith("/metrics/label-values/"):
         return {Permission.READ_METRICS.value, Permission.CREATE_RULES.value, Permission.UPDATE_RULES.value, Permission.WRITE_ALERTS.value}
 
     if p == "/public/rules":

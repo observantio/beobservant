@@ -737,25 +737,25 @@ export default function AlertManagerPage() {
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border border-sre-border/50 shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between p-4 hover:bg-sre-surface/50 transition-colors duration-200">
+                <div className="bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-lg border border-sre-border/50 shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2.5 hover:bg-sre-surface/50 transition-colors duration-200">
                     <button
                       type="button"
                       onClick={() => setAlertsFiltersExpanded((prev) => !prev)}
                       className="flex-1 flex items-center justify-between"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="material-icons text-sre-primary">
+                      <div className="flex items-center gap-2">
+                        <span className="material-icons text-sre-primary text-[18px]">
                           {alertsFiltersExpanded ? "expand_less" : "expand_more"}
                         </span>
-                        <span className="text-sm font-semibold text-sre-text">Filters</span>
+                        <span className="text-xs font-semibold text-sre-text">Filters</span>
                         {hasActiveAlertFilters && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-sre-primary/15 text-sre-primary">
                             Active
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-sre-text-muted">
+                      <div className="text-[11px] text-sre-text-muted">
                         {hasActiveAlertFilters ? "Filters applied" : "Click to filter"}
                       </div>
                     </button>
@@ -764,23 +764,24 @@ export default function AlertManagerPage() {
                     </div>
                   </div>
                   {alertsFiltersExpanded && (
-                    <div className="px-4 pb-4 border-t border-sre-border/30">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end pt-4">
+                    <div className="px-3 pb-3 border-t border-sre-border/30">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end pt-2.5">
                         <div>
-                          <label className="block text-xs text-sre-text-muted mb-1">Label</label>
+                          <label className="block text-[11px] text-sre-text-muted mb-1">Label</label>
                           <input
                             type="text"
                             value={filterLabel}
                             onChange={(e) => setFilterLabel(e.target.value)}
                             placeholder="instance=node-1"
-                            className="w-full text-sm px-3 py-2 rounded border border-sre-border bg-sre-surface text-sre-text"
+                            className="w-full text-xs px-2.5 py-1.5 rounded border border-sre-border bg-sre-surface text-sre-text"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-sre-text-muted mb-1">Severity</label>
+                          <label className="block text-[11px] text-sre-text-muted mb-1">Severity</label>
                           <Select
                             value={filterSeverity}
                             onChange={(e) => setFilterSeverity(e.target.value)}
+                            className="text-xs py-1.5 px-2.5"
                           >
                             {ALERT_SEVERITY_OPTIONS.map((opt) => (
                               <option key={opt.value} value={opt.value}>
@@ -790,12 +791,13 @@ export default function AlertManagerPage() {
                           </Select>
                         </div>
                         <div>
-                          <label className="block text-xs text-sre-text-muted mb-1">
+                          <label className="block text-[11px] text-sre-text-muted mb-1">
                             Correlation ID
                           </label>
                           <Select
                             value={filterCorrelationId}
                             onChange={(e) => setFilterCorrelationId(e.target.value)}
+                            className="text-xs py-1.5 px-2.5"
                           >
                             <option value="all">All correlation IDs</option>
                             {correlationIdOptions.map((id) => (
@@ -819,6 +821,7 @@ export default function AlertManagerPage() {
                                   label: "",
                                 });
                               }}
+                              size="sm"
                             >
                               Clear
                             </Button>
@@ -833,6 +836,7 @@ export default function AlertManagerPage() {
                               });
                               setAlertsFiltersExpanded(false);
                             }}
+                            size="sm"
                           >
                             Apply
                           </Button>
@@ -1035,35 +1039,36 @@ export default function AlertManagerPage() {
 
                 {rules.length > 0 ? (
                   <>
-                    <div className="bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border border-sre-border/50 shadow-sm overflow-hidden">
+                    <div className="bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-lg border border-sre-border/50 shadow-sm overflow-hidden">
                       <button
                         type="button"
                         onClick={() => setRulesFiltersExpanded((prev) => !prev)}
-                        className="w-full flex items-center justify-between p-4 hover:bg-sre-surface/50 transition-colors duration-200"
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-sre-surface/50 transition-colors duration-200"
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="material-icons text-sre-primary">
+                        <div className="flex items-center gap-2">
+                          <span className="material-icons text-sre-primary text-[18px]">
                             {rulesFiltersExpanded ? "expand_less" : "expand_more"}
                           </span>
-                          <span className="text-sm font-semibold text-sre-text">Filters</span>
+                          <span className="text-xs font-semibold text-sre-text">Filters</span>
                           {isRulesFilterActive && (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-sre-primary/15 text-sre-primary">
                               Active
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-sre-text-muted">
+                        <div className="text-[11px] text-sre-text-muted">
                           {isRulesFilterActive ? "Filters applied" : "Click to filter"}
                         </div>
                       </button>
                       {rulesFiltersExpanded && (
-                        <div className="px-4 pb-4 border-t border-sre-border/30">
-                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end pt-4">
+                        <div className="px-3 pb-3 border-t border-sre-border/30">
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end pt-2.5">
                             <div>
-                              <label className="block text-xs text-sre-text-muted mb-1">Owner</label>
+                              <label className="block text-[11px] text-sre-text-muted mb-1">Owner</label>
                               <Select
                                 value={rulesOwnerFilter}
                                 onChange={(e) => setRulesOwnerFilter(e.target.value)}
+                                className="text-xs py-1.5 px-2.5"
                               >
                                 <option value="all">All</option>
                                 <option value="owned">Owned</option>
@@ -1071,10 +1076,11 @@ export default function AlertManagerPage() {
                               </Select>
                             </div>
                             <div>
-                              <label className="block text-xs text-sre-text-muted mb-1">Status</label>
+                              <label className="block text-[11px] text-sre-text-muted mb-1">Status</label>
                               <Select
                                 value={rulesStatusFilter}
                                 onChange={(e) => setRulesStatusFilter(e.target.value)}
+                                className="text-xs py-1.5 px-2.5"
                               >
                                 <option value="all">All</option>
                                 <option value="enabled">Enabled</option>
@@ -1082,10 +1088,11 @@ export default function AlertManagerPage() {
                               </Select>
                             </div>
                             <div>
-                              <label className="block text-xs text-sre-text-muted mb-1">Severity</label>
+                              <label className="block text-[11px] text-sre-text-muted mb-1">Severity</label>
                               <Select
                                 value={rulesSeverityFilter}
                                 onChange={(e) => setRulesSeverityFilter(e.target.value)}
+                                className="text-xs py-1.5 px-2.5"
                               >
                                 <option value="all">All</option>
                                 {ALERT_SEVERITY_OPTIONS.map((opt) => (
@@ -1096,10 +1103,11 @@ export default function AlertManagerPage() {
                               </Select>
                             </div>
                             <div>
-                              <label className="block text-xs text-sre-text-muted mb-1">API Key</label>
+                              <label className="block text-[11px] text-sre-text-muted mb-1">API Key</label>
                               <Select
                                 value={rulesApiKeyFilter}
                                 onChange={(e) => setRulesApiKeyFilter(e.target.value)}
+                                className="text-xs py-1.5 px-2.5"
                               >
                                 <option value="all">All API keys</option>
                                 <option value="__all_products__">All products</option>
@@ -1111,7 +1119,7 @@ export default function AlertManagerPage() {
                               </Select>
                             </div>
                             <div>
-                              <label className="block text-xs text-sre-text-muted mb-1">
+                              <label className="block text-[11px] text-sre-text-muted mb-1">
                                 Correlation ID
                               </label>
                               <input
@@ -1119,11 +1127,11 @@ export default function AlertManagerPage() {
                                 value={rulesCorrelationSearch}
                                 onChange={(e) => setRulesCorrelationSearch(e.target.value)}
                                 placeholder="Search correlation ID"
-                                className="w-full px-3 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text"
+                                className="w-full text-xs px-2.5 py-1.5 bg-sre-surface border border-sre-border rounded-lg text-sre-text"
                               />
                             </div>
                           </div>
-                          <div className="flex justify-end gap-2 pt-3">
+                          <div className="flex justify-end gap-2 pt-2">
                             {isRulesFilterActive && (
                               <Button
                                 variant="secondary"
@@ -1141,6 +1149,7 @@ export default function AlertManagerPage() {
                                     correlationId: "",
                                   });
                                 }}
+                                size="sm"
                               >
                                 Clear
                               </Button>
@@ -1157,6 +1166,7 @@ export default function AlertManagerPage() {
                                 });
                                 setRulesFiltersExpanded(false);
                               }}
+                              size="sm"
                             >
                               Apply
                             </Button>
@@ -1399,10 +1409,11 @@ export default function AlertManagerPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <label className="inline-flex items-center gap-2 text-xs text-sre-text-muted">
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 text-xs text-sre-text-muted">
                       <input
                         type="checkbox"
+                        className="h-3.5 w-3.5"
                         checked={!!showHiddenSilences}
                         onChange={(e) =>
                           setShowHiddenSilences(e.target.checked)
@@ -1411,8 +1422,8 @@ export default function AlertManagerPage() {
                       Show hidden
                     </label>
                     {silences.length > 0 && (
-                      <Button onClick={() => setShowSilenceForm(true)} size="sm">
-                        <span className="material-icons text-sm mr-2">add</span>
+                      <Button onClick={() => setShowSilenceForm(true)} size="sm" className="h-8 px-3 text-xs">
+                        <span className="material-icons text-sm mr-1.5">add</span>
                         Create Silence
                       </Button>
                     )}

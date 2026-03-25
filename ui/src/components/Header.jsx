@@ -15,6 +15,33 @@ const RELEASE_LABEL = "Wolfmegasaur v0.0.2";
 const WATCHDOG_GITHUB_URL = "https://github.com/observantio/watchdog";
 const OJO_RELEASES_URL = "https://github.com/observantio/ojo/releases/latest";
 const RELEASE_FETCH_TIMEOUT_MS = 8000;
+
+function getApiKeyColor(apiKeyId) {
+  if (!apiKeyId) return "hsl(220, 25%, 65%)";
+  let hash = 0;
+  for (let i = 0; i < apiKeyId.length; i += 1) {
+    hash = apiKeyId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash) % 360;
+
+  let lightness = 52;
+  let saturation = 62;
+  if (typeof document !== "undefined") {
+    const theme =
+      document.documentElement.getAttribute("data-theme") ||
+      document.body.getAttribute("data-theme") ||
+      "light";
+    if (theme === "dark") {
+      lightness = 72;
+      saturation = 60;
+    } else {
+      lightness = 42;
+      saturation = 70;
+    }
+  }
+
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+}
 const OJO_OS_OPTIONS = [
   { key: "linux", label: "Linux", icon: "terminal" },
   { key: "windows", label: "Windows", icon: "desktop_windows" },
@@ -71,10 +98,10 @@ export function NavItem({
       ? "w-full rounded-lg text-[14px] font-medium flex items-center gap-2.5 transition-colors px-3 py-2.5"
       : isMobile
         ? "rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-2 transition-all px-3 py-1.5 border border-transparent"
-        : "px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 border-b-2 border-transparent";
+        : "px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 border-b-2 border-transparent min-w-0";
   const incidentsWithBadges = item.path === "/incidents" && incidentSummary;
   const classesWithBadges = incidentsWithBadges
-    ? `${baseClasses} relative`
+    ? `${baseClasses} relative pr-7`
     : baseClasses;
   const activeClasses =
     variant === "sidebar"
@@ -98,17 +125,28 @@ export function NavItem({
         }`
       }
     >
+      {variant === "sidebar" && (
+        <span
+          className="material-icons leading-none text-[17px]"
+          aria-hidden
+        >
+          {item.icon}
+        </span>
+      )}
+      {variant === "sidebar" && " "}
       <span
-        className={`material-icons leading-none ${
-          variant === "sidebar" ? "text-[17px]" : "text-sm"
-        }`}
-        aria-hidden
+        className={
+          variant === "sidebar"
+            ? "truncate"
+            : "truncate whitespace-nowrap text-left"
+        }
+        style={{ maxWidth: "11rem" }}
+        title={item.label}
       >
-        {item.icon}
-      </span>{" "}
-      {item.label}
+        {item.label}
+      </span>
       {incidentsWithBadges && (
-        <span className="pointer-events-none absolute -top-2 -right-3 flex items-center gap-1">
+        <span className="pointer-events-none absolute right-0 top-0 flex items-center gap-1">
           {(incidentSummary.assigned_to_me_open || 0) > 0 && (
             <span
               className="inline-flex h-6 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-emerald-400 text-[10px] font-semibold px-1 shadow-sm"
@@ -174,7 +212,13 @@ function ApiKeyDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="truncate" style={{ maxWidth: "70px" }}>
+        <span
+          className="truncate"
+          style={{
+            maxWidth: "70px",
+            color: getApiKeyColor(selectedKey?.id),
+          }}
+        >
           {selectedKey?.name || (compact ? "Select" : "Select API Key")}
         </span>
         <svg
@@ -202,11 +246,21 @@ function ApiKeyDropdown({
                   onSelect(k.id);
                   setOpen(false);
                 }}
-                className={`w-full text-left ${compact ? "px-2 py-1" : "px-3 py-2"} text-xs text-sre-text hover:bg-sre-surface/50`}
+                className={`w-full text-left ${compact ? "px-2 py-1" : "px-3 py-2"} text-xs ${
+                  k.id === activeKeyId ? "font-semibold" : ""
+                } text-sre-text hover:bg-sre-surface/50`}
               >
-                <span className="truncate block" style={{ maxWidth: "70px" }}>
-                  {k.name}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="truncate block"
+                    style={{
+                      maxWidth: "70px",
+                      color: getApiKeyColor(k.id),
+                    }}
+                  >
+                    {k.name}
+                  </span>
+                </div>
               </button>
             </li>
           ))}

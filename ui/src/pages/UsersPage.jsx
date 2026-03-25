@@ -333,47 +333,47 @@ export default function UsersPage() {
                   key={u.id}
                   className={`p-0 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border border-sre-border hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm rounded-lg group`}
                 >
-                  <div className="p-6">
-                    <div className="flex items-start gap-4 mb-4">
-                      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-sre-primary/20 to-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold border border-sre-border/50 flex-shrink-0">
+                  <div className="p-4">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sre-primary/20 to-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold border border-sre-border/50 flex-shrink-0">
                         {initials}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-xl font-bold text-sre-text truncate mb-1">
+                        <h3 className="text-lg font-bold text-sre-text truncate">
                           {u.username}
                         </h3>
-                        <p className="text-sm text-sre-text-muted line-clamp-2">
+                        <p className="text-xs text-sre-text-muted truncate">
                           {u.email}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex flex-wrap items-center gap-3">
+                    <div className="mb-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <Badge
                           variant={roleVariant}
-                          className="whitespace-nowrap text-xs px-3 py-1 font-medium"
+                          className="whitespace-nowrap text-xs px-2.5 py-0.5 font-medium"
                         >
                           {u.role}
                         </Badge>
                         {!u.is_active && (
                           <Badge
                             variant="warning"
-                            className="whitespace-nowrap text-xs px-3 py-1 font-medium"
+                            className="whitespace-nowrap text-xs px-2.5 py-0.5 font-medium"
                           >
                             Inactive
                           </Badge>
                         )}
                         <Badge
                           variant="success"
-                          className="whitespace-nowrap text-xs px-3 py-1 font-medium"
+                          className="whitespace-nowrap text-xs px-2.5 py-0.5 font-medium"
                         >
                           {u.group_ids?.length || 0} group
                           {(u.group_ids?.length || 0) !== 1 ? "s" : ""}
                         </Badge>
                         <Badge
                           variant="info"
-                          className="whitespace-nowrap text-xs px-3 py-1 font-medium"
+                          className="whitespace-nowrap text-xs px-2.5 py-0.5 font-medium"
                         >
                           {u.permissions?.length || 0} permission
                           {(u.permissions?.length || 0) !== 1 ? "s" : ""}
@@ -381,7 +381,7 @@ export default function UsersPage() {
                         {u.must_setup_mfa && (
                           <Badge
                             variant="danger"
-                            className="whitespace-nowrap text-xs px-3 py-1 font-medium"
+                            className="whitespace-nowrap text-xs px-2.5 py-0.5 font-medium"
                           >
                             MFA required
                           </Badge>
@@ -389,11 +389,11 @@ export default function UsersPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 items-center pt-2 border-t border-sre-border/30">
+                    <div className="flex flex-wrap gap-1.5 items-center pt-2 border-t border-sre-border/30">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="flex items-center gap-1.5 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors"
+                        className="h-8 px-2.5 text-xs flex items-center gap-1.5 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors"
                         onClick={() => openEditUser(u)}
                         aria-label={`Edit ${u.username}`}
                       >
@@ -406,7 +406,7 @@ export default function UsersPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="flex items-center gap-1.5 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors"
+                          className="h-8 px-2.5 text-xs flex items-center gap-1.5 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors"
                           onClick={() => handleEditPermissions(u)}
                           aria-label={`Edit permissions for ${u.username}`}
                         >
@@ -422,7 +422,7 @@ export default function UsersPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="flex items-center gap-1.5 hover:bg-yellow-500/10 hover:text-yellow-600 transition-colors"
+                            className="h-8 px-2.5 text-xs flex items-center gap-1.5 hover:bg-yellow-500/10 hover:text-yellow-600 transition-colors"
                             onClick={() => handleResetPasswordTemp(u)}
                             aria-label={`Reset password for ${u.username}`}
                           >
@@ -441,7 +441,7 @@ export default function UsersPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="flex items-center gap-1.5 hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                            className="h-8 px-2.5 text-xs flex items-center gap-1.5 hover:bg-red-500/10 hover:text-red-500 transition-colors"
                             onClick={() => handleDeleteUser(u.id)}
                             aria-label={`Delete ${u.username}`}
                           >

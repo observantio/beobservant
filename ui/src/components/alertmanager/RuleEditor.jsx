@@ -1,10 +1,17 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import PropTypes from "prop-types";
 import { Button, Input, Select, Textarea } from "../ui";
 import RuleEditorWizard from "./RuleEditorWizard";
 import HelpTooltip from "../HelpTooltip";
 import { useAuth } from "../../contexts/AuthContext";
-import { getGroups, listMetricNames, testAlertRule } from "../../api";
+import {
+  evaluatePromql,
+  getGroups,
+  listMetricLabelValues,
+  listMetricLabels,
+  listMetricNames,
+  testAlertRule,
+} from "../../api";
 import {
   DEFAULT_FORM,
   RULE_TEMPLATES,
@@ -12,6 +19,9 @@ import {
   createLabelPairsFromRule,
 } from "./ruleEditorUtils";
 import { normalizeRuleOrgId } from "../../utils/alertmanagerRuleUtils";
+
+const CONDITION_OPERATORS = [">", ">=", "<", "<=", "==", "!="];
+const CONDITION_JOIN_OPERATORS = ["and", "or"];
 
 export default function RuleEditor({
   rule,
@@ -22,8 +32,6 @@ export default function RuleEditor({
   onCancel,
 }) {
   const MAX_CORRELATION_ID_LENGTH = 10;
-  const CONDITION_OPERATORS = [">", ">=", "<", "<=", "==", "!="];
-  const CONDITION_JOIN_OPERATORS = ["and", "or"];
   const { hasPermission, user } = useAuth();
   const canReadChannels = hasPermission("read:channels");
   const AUTO_SCOPE = "__auto__";
@@ -34,9 +42,20 @@ export default function RuleEditor({
     new Set(rule?.sharedGroupIds || rule?.shared_group_ids || []),
   );
   const [metricNames, setMetricNames] = useState([]);
+  const [metricLabels, setMetricLabels] = useState([]);
   const [metricFilter, setMetricFilter] = useState("");
   const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [metricsError, setMetricsError] = useState(null);
+  const [promqlPreview, setPromqlPreview] = useState({
+    loading: false,
+    valid: null,
+    error: "",
+    currentValue: null,
+    sampleCount: 0,
+    resultType: null,
+  });
+  const [promqlSuggestions, setPromqlSuggestions] = useState([]);
+  const [labelValuesCache, setLabelValuesCache] = useState({});
   const [labelPairs, setLabelPairs] = useState(() =>
     createLabelPairsFromRule(rule),
   );
@@ -128,6 +147,99 @@ export default function RuleEditor({
     );
     return matched?.name || `${String(metricsOrgScope).slice(0, 8)}...`;
   }, [metricsOrgScope, apiKeys]);
+  const promqlFunctionHints = useMemo(
+    () => [
+      "rate(",
+      "irate(",
+      "increase(",
+      "sum(",
+      "sum by (",
+      "avg(",
+      "avg by (",
+      "max(",
+      "min(",
+      "topk(",
+      "bottomk(",
+      "histogram_quantile(",
+      "clamp_min(",
+      "absent_over_time(",
+    ],
+    [],
+  );
+  const promqlAutocompleteContext = useMemo(() => {
+    const expr = String(formData.expr || "");
+    const cursor = expr.length;
+    const beforeCursor = expr.slice(0, cursor);
+    const tokenMatch = beforeCursor.match(/([a-zA-Z_:][a-zA-Z0-9_:]*)$/);
+    const defaultToken = String(tokenMatch?.[1] || "");
+    const openBraceIndex = beforeCursor.lastIndexOf("{");
+    const closeBraceIndex = beforeCursor.lastIndexOf("}");
+
+    if (openBraceIndex <= closeBraceIndex) {
+      return {
+        mode: "metricOrFunction",
+        token: defaultToken,
+        segmentStart: cursor - defaultToken.length,
+      };
+    }
+
+    const selectorStart = openBraceIndex + 1;
+    const selectorText = beforeCursor.slice(selectorStart);
+    const lastCommaInSelector = selectorText.lastIndexOf(",");
+    const segmentStart = selectorStart + (lastCommaInSelector >= 0 ? lastCommaInSelector + 1 : 0);
+    const rawSegment = beforeCursor.slice(segmentStart);
+    const leadingWhitespace = rawSegment.length - rawSegment.trimStart().length;
+    const segmentTrimmedStart = segmentStart + leadingWhitespace;
+    const segmentText = rawSegment.trimStart();
+
+    const metricMatch = beforeCursor
+      .slice(0, openBraceIndex)
+      .match(/([a-zA-Z_:][a-zA-Z0-9_:]*)\s*$/);
+    const metricName = String(metricMatch?.[1] || "");
+
+    const previousSegments = selectorText
+      .slice(0, Math.max(lastCommaInSelector, 0))
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const existingLabelKeys = new Set(
+      previousSegments
+        .map((part) => {
+          const m = part.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(=|!=|=~|!~)/);
+          return m ? m[1] : "";
+        })
+        .filter(Boolean),
+    );
+
+    const opMatch = segmentText.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(=~|!~|=|!=)\s*(.*)$/);
+    if (opMatch) {
+      const labelKey = opMatch[1];
+      const operator = opMatch[2];
+      const rawValue = String(opMatch[3] || "");
+      const valueToken = rawValue
+        .replace(/^"/, "")
+        .replace(/".*$/, "")
+        .trim();
+      return {
+        mode: "labelValue",
+        token: valueToken,
+        segmentStart: segmentTrimmedStart,
+        labelKey,
+        operator,
+        metricName,
+      };
+    }
+
+    const keyTokenMatch = segmentText.match(/^([a-zA-Z_][a-zA-Z0-9_]*)?$/);
+    const keyToken = String(keyTokenMatch?.[1] || "");
+    return {
+      mode: "labelKey",
+      token: keyToken,
+      segmentStart: segmentTrimmedStart,
+      metricName,
+      existingLabelKeys,
+    };
+  }, [formData.expr]);
 
   useEffect(() => {
     loadGroups();
@@ -144,7 +256,7 @@ export default function RuleEditor({
     setSelectedGroups(new Set(incomingGroups));
   }, [rule]);
 
-  const buildCompositeExprFromBuilder = (
+  const buildCompositeExprFromBuilder = useCallback((
     conditions = [],
     useRate = false,
     rateWindow = "5m",
@@ -176,7 +288,7 @@ export default function RuleEditor({
         return `${joiner} ${exprPart}`;
       })
       .join(" ");
-  };
+  }, []);
 
   useEffect(() => {
     if (queryMode !== "builder") return;
@@ -187,7 +299,7 @@ export default function RuleEditor({
     );
     if (!nextExpr) return;
     setFormData((prev) => (prev.expr === nextExpr ? prev : { ...prev, expr: nextExpr }));
-  }, [queryMode, builderConditions, builderUseRate, builderRateWindow]);
+  }, [queryMode, builderConditions, builderUseRate, builderRateWindow, buildCompositeExprFromBuilder]);
 
   useEffect(() => {
     const rawOrg = String((rule || DEFAULT_FORM)?.orgId || "").trim();
@@ -241,7 +353,7 @@ export default function RuleEditor({
     setValidationWarnings(warnings);
   }, [formData, labelPairs]);
 
-  const loadMetrics = async () => {
+  const loadMetrics = useCallback(async () => {
     setLoadingMetrics(true);
     setMetricsError(null);
     try {
@@ -253,7 +365,177 @@ export default function RuleEditor({
     } finally {
       setLoadingMetrics(false);
     }
-  };
+  }, [metricsOrgScope]);
+
+  useEffect(() => {
+    if (queryMode !== "promql") return;
+    if (metricNames.length > 0 || loadingMetrics || metricsError) return;
+    if (!metricsOrgScope) return;
+    loadMetrics();
+  }, [queryMode, metricNames.length, loadingMetrics, metricsError, metricsOrgScope, loadMetrics]);
+
+  useEffect(() => {
+    if (queryMode !== "promql") return;
+    if (metricLabels.length > 0 || !metricsOrgScope) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await listMetricLabels(metricsOrgScope);
+        if (cancelled) return;
+        setMetricLabels(Array.isArray(resp?.labels) ? resp.labels : []);
+      } catch {
+        if (!cancelled) setMetricLabels([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [queryMode, metricLabels.length, metricsOrgScope]);
+
+  useEffect(() => {
+    if (queryMode !== "promql") return;
+    if (promqlAutocompleteContext.mode !== "labelValue") return;
+    if (!metricsOrgScope || !promqlAutocompleteContext.labelKey) return;
+    const cacheKey = `${promqlAutocompleteContext.labelKey}::${promqlAutocompleteContext.metricName || "*"}`;
+    if (labelValuesCache[cacheKey]) return;
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const resp = await listMetricLabelValues(
+          promqlAutocompleteContext.labelKey,
+          metricsOrgScope,
+          { metricName: promqlAutocompleteContext.metricName || undefined },
+        );
+        if (cancelled) return;
+        setLabelValuesCache((prev) => ({
+          ...prev,
+          [cacheKey]: Array.isArray(resp?.values) ? resp.values : [],
+        }));
+      } catch {
+        if (cancelled) return;
+        setLabelValuesCache((prev) => ({ ...prev, [cacheKey]: [] }));
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [queryMode, promqlAutocompleteContext, metricsOrgScope, labelValuesCache]);
+
+  useEffect(() => {
+    if (queryMode !== "promql") {
+      setPromqlSuggestions([]);
+      return;
+    }
+
+    const token = String(promqlAutocompleteContext.token || "").toLowerCase();
+
+    if (promqlAutocompleteContext.mode === "labelKey") {
+      const usedKeys = promqlAutocompleteContext.existingLabelKeys || new Set();
+      const keyHints = metricLabels
+        .filter((label) => {
+          const v = String(label || "");
+          if (!v || v === "__name__") return false;
+          if (usedKeys.has(v)) return false;
+          return token.length === 0 || v.toLowerCase().startsWith(token);
+        })
+        .slice(0, 12)
+        .map((value) => ({ value, type: "labelKey" }));
+      setPromqlSuggestions(keyHints);
+      return;
+    }
+
+    if (promqlAutocompleteContext.mode === "labelValue") {
+      const cacheKey = `${promqlAutocompleteContext.labelKey}::${promqlAutocompleteContext.metricName || "*"}`;
+      const values = labelValuesCache[cacheKey] || [];
+      const valueHints = values
+        .filter((value) => {
+          const v = String(value || "");
+          return token.length === 0 || v.toLowerCase().startsWith(token);
+        })
+        .slice(0, 12)
+        .map((value) => ({ value, type: "labelValue" }));
+      setPromqlSuggestions(valueHints);
+      return;
+    }
+
+    if (!token || token.length < 2) {
+      setPromqlSuggestions([]);
+      return;
+    }
+    const metricHints = metricNames
+      .filter((name) => name.toLowerCase().startsWith(token))
+      .slice(0, 8)
+      .map((value) => ({ value, type: "metric" }));
+    const fnHints = promqlFunctionHints
+      .filter((hint) => hint.toLowerCase().startsWith(token))
+      .slice(0, 4)
+      .map((value) => ({ value, type: "function" }));
+    const merged = Array.from(new Map([...metricHints, ...fnHints].map((s) => [s.value, s])).values()).slice(0, 10);
+    setPromqlSuggestions(merged);
+  }, [queryMode, promqlAutocompleteContext, metricLabels, labelValuesCache, metricNames, promqlFunctionHints]);
+
+  useEffect(() => {
+    if (queryMode !== "promql") {
+      setPromqlPreview({
+        loading: false,
+        valid: null,
+        error: "",
+        currentValue: null,
+        sampleCount: 0,
+        resultType: null,
+      });
+      return;
+    }
+    const expr = String(formData.expr || "").trim();
+    if (!expr || expr.length < 3 || !metricsOrgScope) {
+      setPromqlPreview({
+        loading: false,
+        valid: null,
+        error: "",
+        currentValue: null,
+        sampleCount: 0,
+        resultType: null,
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setPromqlPreview((prev) => ({ ...prev, loading: true }));
+      try {
+        const res = await evaluatePromql(expr, metricsOrgScope, {
+          sampleLimit: 5,
+          signal: controller.signal,
+        });
+        setPromqlPreview({
+          loading: false,
+          valid: Boolean(res?.valid),
+          error: String(res?.error || ""),
+          currentValue: res?.currentValue ?? null,
+          sampleCount: Number(res?.sampleCount || 0),
+          resultType: String(res?.resultType || ""),
+        });
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        setPromqlPreview({
+          loading: false,
+          valid: false,
+          error: String(e?.message || "Failed to validate query"),
+          currentValue: null,
+          sampleCount: 0,
+          resultType: null,
+        });
+      }
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [formData.expr, metricsOrgScope, queryMode]);
 
   const filteredMetricNames = useMemo(() => {
     if (!metricFilter) return metricNames;
@@ -263,9 +545,15 @@ export default function RuleEditor({
 
   useEffect(() => {
     const explicitScopes = selectedApiScopes.filter((id) => id !== AUTO_SCOPE);
+    const hasAutoScope = selectedApiScopes.includes(AUTO_SCOPE);
     setFormData((prev) => {
-      const nextOrgId = explicitScopes[0] || "";
-      const nextOrgIds = explicitScopes;
+      const autoResolvedScope = hasAutoScope ? String(activeApiScope || "").trim() : "";
+      const nextOrgId = explicitScopes[0] || autoResolvedScope || "";
+      const nextOrgIds = explicitScopes.length > 0
+        ? explicitScopes
+        : autoResolvedScope
+          ? [autoResolvedScope]
+          : [];
       const prevOrgId = String(prev.orgId || "");
       const prevOrgIds = Array.isArray(prev.orgIds) ? prev.orgIds : [];
       const sameOrgId = prevOrgId === nextOrgId;
@@ -275,7 +563,7 @@ export default function RuleEditor({
       if (sameOrgId && sameOrgIds) return prev;
       return { ...prev, orgId: nextOrgId, orgIds: nextOrgIds };
     });
-  }, [selectedApiScopes]);
+  }, [selectedApiScopes, activeApiScope]);
 
   const correlationIdOptions = useMemo(
     () => {
@@ -362,6 +650,37 @@ export default function RuleEditor({
     }));
     setQueryMode("promql");
     setSelectedTemplate(template.id);
+  };
+
+  const applyPromqlSuggestion = (suggestion) => {
+    const suggestionValue = String(suggestion?.value || "");
+    if (!suggestionValue) return;
+    const currentExpr = String(formData.expr || "");
+    if (promqlAutocompleteContext.mode === "labelKey") {
+      const nextSegment = `${suggestionValue}=""`;
+      const nextExpr = `${currentExpr.slice(0, promqlAutocompleteContext.segmentStart)}${nextSegment}`;
+      setFormData((prev) => ({ ...prev, expr: nextExpr }));
+      return;
+    }
+    if (promqlAutocompleteContext.mode === "labelValue") {
+      const key = String(promqlAutocompleteContext.labelKey || "").trim();
+      const op = String(promqlAutocompleteContext.operator || "=").trim() || "=";
+      if (key) {
+        const nextSegment = `${key}${op}"${suggestionValue}"`;
+        const nextExpr = `${currentExpr.slice(0, promqlAutocompleteContext.segmentStart)}${nextSegment}`;
+        setFormData((prev) => ({ ...prev, expr: nextExpr }));
+        return;
+      }
+    }
+
+    const tokenMatch = currentExpr.match(/([a-zA-Z_:][a-zA-Z0-9_:]*)$/);
+    if (tokenMatch?.[1]) {
+      const nextExpr = currentExpr.replace(/([a-zA-Z_:][a-zA-Z0-9_:]*)$/, suggestionValue);
+      setFormData((prev) => ({ ...prev, expr: nextExpr }));
+      return;
+    }
+    const spacer = currentExpr && !/\s$/.test(currentExpr) ? " " : "";
+    setFormData((prev) => ({ ...prev, expr: `${currentExpr}${spacer}${suggestionValue}` }));
   };
 
   const addBuilderCondition = () => {
@@ -714,8 +1033,8 @@ export default function RuleEditor({
                             ? "fill the latest builder row"
                             : "insert it into PromQL"}.
                         </p>
-                        <div className="mt-2">
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-400/45 bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-300">
+                        <div className="mt-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-indigo-400/45 bg-indigo-500/15 px-2 py-0.5 text-[11px] font-semibold text-indigo-300">
                             <span className="material-icons text-[13px] leading-none">
                               key
                             </span>
@@ -763,9 +1082,9 @@ export default function RuleEditor({
                             className="w-full py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                           />
                         </div>
-                        <div className="max-h-48 overflow-y-auto border border-sre-border rounded-lg p-4 bg-sre-bg-alt">
+                        <div className="max-h-48 overflow-y-auto">
                           {filteredMetricNames.length ? (
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-1.5">
                               {filteredMetricNames.map((name) => (
                                 <button
                                   key={name}
@@ -804,7 +1123,7 @@ export default function RuleEditor({
                                     const template = base ? `${base}\n${name}` : name;
                                     setFormData({ ...formData, expr: template });
                                   }}
-                                  className="px-3 py-2 text-sm rounded-full border border-sre-border bg-sre-bg-card hover:bg-sre-primary/10 hover:border-sre-primary text-sre-text transition-all duration-200 break-words max-w-full shadow-sm hover:shadow-md text-left"
+                                  className="px-2.5 py-1 text-xs rounded-full border border-sre-border/80 bg-sre-bg-card/80 hover:bg-sre-primary/10 hover:border-sre-primary/60 text-sre-text transition-all duration-150 break-words max-w-full text-left"
                                   title={name}
                                 >
                                   {name}
@@ -854,16 +1173,61 @@ export default function RuleEditor({
                     </div>
 
                     {queryMode === "promql" ? (
-                      <Textarea
-                        value={formData.expr}
-                        onChange={(e) =>
-                          setFormData({ ...formData, expr: e.target.value })
-                        }
-                        required
-                        placeholder="rate(requests_total[5m]) > 100"
-                        rows={6}
-                        className="w-full font-mono text-sm py-2.5 px-3 border border-sre-border focus:border-sre-primary transition-colors whitespace-pre leading-relaxed"
-                      />
+                      <div className="space-y-2">
+                        <Textarea
+                          value={formData.expr}
+                          onChange={(e) =>
+                            setFormData({ ...formData, expr: e.target.value })
+                          }
+                          required
+                          placeholder="rate(requests_total[5m]) > 100"
+                          rows={6}
+                          className="w-full font-mono text-sm py-2.5 px-3 border border-sre-border focus:border-sre-primary transition-colors whitespace-pre leading-relaxed"
+                        />
+                        {promqlSuggestions.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {promqlSuggestions.map((suggestion) => (
+                              <button
+                                key={`${suggestion.type || "hint"}-${suggestion.value}`}
+                                type="button"
+                                onClick={() => applyPromqlSuggestion(suggestion)}
+                                className="rounded-full border border-sre-border/80 bg-sre-bg-alt/70 px-2 py-0.5 text-[11px] font-mono text-sre-text hover:border-sre-primary/40 hover:text-sre-primary transition-colors"
+                              >
+                                {suggestion.value}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <div className="rounded-md border border-sre-border/70 bg-sre-bg-alt/60 px-3 py-2">
+                          {promqlPreview.loading ? (
+                            <p className="text-xs text-sre-text-muted">Validating query...</p>
+                          ) : promqlPreview.valid === true ? (
+                            <div className="text-xs text-sre-text">
+                              <span className="text-green-600 dark:text-green-400 font-semibold">
+                                Query valid.
+                              </span>{" "}
+                              {promqlPreview.currentValue !== null && (
+                                <span>
+                                  Current value: <span className="font-mono">{String(promqlPreview.currentValue)}</span>
+                                </span>
+                              )}{" "}
+                              {promqlPreview.resultType && (
+                                <span className="text-sre-text-muted">
+                                  ({promqlPreview.resultType}, {promqlPreview.sampleCount} samples)
+                                </span>
+                              )}
+                            </div>
+                          ) : promqlPreview.valid === false ? (
+                            <p className="text-xs text-red-500 dark:text-red-400">
+                              {promqlPreview.error || "Query is invalid or returned an error."}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-sre-text-muted">
+                              Type a PromQL expression to validate it and preview current values.
+                            </p>
+                          )}
+                        </div>
+                      </div>
                     ) : (
                       <div className="space-y-2.5 rounded-lg border border-sre-border bg-sre-surface p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-sre-border/70 bg-sre-bg-alt/60 px-2.5 py-2">

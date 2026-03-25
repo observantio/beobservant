@@ -199,7 +199,7 @@ export const SIDEBAR_EXTRA_NAV = [
     permission: null,
   },
   {
-    label: "Documentation",
+    label: "Guide",
     icon: "menu_book",
     path: "/docs",
     permission: null,

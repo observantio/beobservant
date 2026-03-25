@@ -10,21 +10,21 @@ export default function GroupCard({
   onDelete,
 }) {
   return (
-    <Card className="p-0 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 border-sre-border/50 hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm rounded-lg group">
-      <div className="p-6">
-        <div className="flex items-start gap-4 mb-4">
-          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-sre-primary/20 to-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold border border-sre-border/50 flex-shrink-0">
+    <Card className="p-0 relative overflow-visible bg-gradient-to-br from-sre-surface to-sre-surface/80 border border-sre-border hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm rounded-lg group">
+      <div className="p-4">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sre-primary/20 to-sre-primary/10 text-sre-primary flex items-center justify-center font-semibold border border-sre-border/50 flex-shrink-0">
             <span className="material-icons text-xl">groups</span>
           </div>
           <div className="flex-1 min-w-0">
             <h3
-              className="text-xl font-bold text-sre-text truncate mb-1"
+              className="text-lg font-bold text-sre-text truncate"
               title={group.name}
             >
               {group.name}
             </h3>
             <p
-              className="text-sm text-sre-text-muted truncate"
+              className="text-xs text-sre-text-muted truncate"
               title={group.description || "No description"}
             >
               {group.description || "No description provided"}
@@ -32,18 +32,18 @@ export default function GroupCard({
           </div>
         </div>
 
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
+        <div className="mb-3">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Badge
               variant="info"
-              className="whitespace-nowrap text-xs px-3 py-1 font-medium"
+              className="whitespace-nowrap text-xs px-2.5 py-0.5 font-medium"
             >
               <span className="material-icons text-xs mr-1">security</span>
               {permsCount} permission{permsCount !== 1 ? "s" : ""}
             </Badge>
             <Badge
               variant="success"
-              className="whitespace-nowrap text-xs px-3 py-1 font-medium"
+              className="whitespace-nowrap text-xs px-2.5 py-0.5 font-medium"
             >
               <span className="material-icons text-xs mr-1">person</span>
               {usersCount} member{usersCount !== 1 ? "s" : ""}
@@ -51,11 +51,11 @@ export default function GroupCard({
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 items-center pt-2 border-t border-sre-border/30">
+        <div className="flex flex-wrap gap-1.5 items-center pt-2 border-t border-sre-border/30">
           <Button
             size="sm"
             variant="ghost"
-            className="flex items-center gap-2 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors"
+            className="h-8 px-2.5 text-xs flex items-center gap-1.5 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors"
             onClick={() => onOpenPermissions(group)}
             aria-label={`Permissions for ${group.name}`}
           >
@@ -66,7 +66,7 @@ export default function GroupCard({
           <Button
             size="sm"
             variant="ghost"
-            className="flex items-center gap-2 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors"
+            className="h-8 px-2.5 text-xs flex items-center gap-1.5 hover:bg-sre-primary/10 hover:text-sre-primary transition-colors"
             onClick={() => onEdit(group)}
             aria-label={`Edit ${group.name}`}
           >
@@ -77,7 +77,7 @@ export default function GroupCard({
           <Button
             size="sm"
             variant="ghost"
-            className="flex items-center gap-2 hover:bg-red-500/10 hover:text-red-500 transition-colors"
+            className="h-8 px-2.5 text-xs flex items-center gap-1.5 hover:bg-red-500/10 hover:text-red-500 transition-colors"
             onClick={() => onDelete(group)}
             aria-label={`Delete ${group.name}`}
           >

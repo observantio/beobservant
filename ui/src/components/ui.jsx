@@ -757,12 +757,11 @@ export function Modal({
 
   const content = (
     <div
-      className="fixed inset-0 flex items-center justify-center animate-fade-in overflow-y-auto bg-black/35 backdrop-blur-xl dark:bg-black/50"
+      className="fixed inset-0 z-[9999] flex items-center justify-center animate-fade-in overflow-y-auto bg-black/35 backdrop-blur-xl dark:bg-black/50"
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "modal-title" : undefined}
       onClick={handleOverlayClick}
-      style={{ zIndex: 9999 }}
     >
       <div
         className={clsx(

@@ -861,6 +861,35 @@ export async function listMetricNames(orgId) {
   return request(path);
 }
 
+export async function evaluatePromql(query, orgId, { sampleLimit = 5, signal } = {}) {
+  const params = new URLSearchParams();
+  params.append("query", query);
+  if (orgId) params.append("orgId", orgId);
+  if (sampleLimit) params.append("sampleLimit", String(sampleLimit));
+  return request(`/api/alertmanager/metrics/query?${params.toString()}`, { signal });
+}
+
+export async function listMetricLabels(orgId, { signal } = {}) {
+  const params = new URLSearchParams();
+  if (orgId) params.append("orgId", orgId);
+  const qs = params.toString();
+  const path = qs
+    ? `/api/alertmanager/metrics/labels?${qs}`
+    : "/api/alertmanager/metrics/labels";
+  return request(path, { signal });
+}
+
+export async function listMetricLabelValues(label, orgId, { metricName, signal } = {}) {
+  const params = new URLSearchParams();
+  if (orgId) params.append("orgId", orgId);
+  if (metricName) params.append("metricName", metricName);
+  const qs = params.toString();
+  const path = qs
+    ? `/api/alertmanager/metrics/label-values/${encodeURIComponent(label)}?${qs}`
+    : `/api/alertmanager/metrics/label-values/${encodeURIComponent(label)}`;
+  return request(path, { signal });
+}
+
 export async function queryLogs({
   query,
   limit = 100,
