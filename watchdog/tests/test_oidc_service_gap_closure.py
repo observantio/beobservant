@@ -101,6 +101,55 @@ def test_verify_jwt_rejection_and_nonce_paths(monkeypatch):
     assert service._verify_jwt(token) is None
 
 
+def test_verify_jwt_accepts_google_issuer_alias(monkeypatch):
+    service = mod.OIDCService()
+    token = "a.b.c"
+    decode_issuers = []
+
+    monkeypatch.setattr(mod.jwt, "get_unverified_header", lambda _token: {"alg": "RS256"})
+    monkeypatch.setattr(service, "_select_jwk", lambda **kwargs: {"kty": "RSA", "kid": "kid-1"})
+    monkeypatch.setattr(service, "_verification_key_for", lambda *args, **kwargs: object())
+    monkeypatch.setattr(service, "_get_well_known", lambda: {"issuer": "https://accounts.google.com"})
+    monkeypatch.setattr(mod.config, "OIDC_AUDIENCE", None, raising=False)
+    monkeypatch.setattr(mod.config, "OIDC_CLIENT_ID", "client", raising=False)
+
+    def fake_decode(*_args, **kwargs):
+        decode_issuers.append(kwargs.get("issuer"))
+        if kwargs.get("issuer") == "https://accounts.google.com":
+            raise jwt.InvalidIssuerError("https variant rejected")
+        return {"exp": 1, "iat": 1, "nonce": "n1", "sub": "google-user"}
+
+    monkeypatch.setattr(mod.jwt, "decode", fake_decode)
+
+    claims = service._verify_jwt(token, nonce="n1", require_nonce=False)
+    assert claims and claims.get("sub") == "google-user"
+    assert decode_issuers == ["https://accounts.google.com", "accounts.google.com"]
+
+
+def test_verify_jwt_passes_clock_skew_leeway(monkeypatch):
+    service = mod.OIDCService()
+    token = "a.b.c"
+    decode_kwargs = {}
+
+    monkeypatch.setattr(mod.jwt, "get_unverified_header", lambda _token: {"alg": "RS256"})
+    monkeypatch.setattr(service, "_select_jwk", lambda **kwargs: {"kty": "RSA", "kid": "kid-1"})
+    monkeypatch.setattr(service, "_verification_key_for", lambda *args, **kwargs: object())
+    monkeypatch.setattr(service, "_get_well_known", lambda: {"issuer": "https://issuer"})
+    monkeypatch.setattr(mod.config, "OIDC_AUDIENCE", None, raising=False)
+    monkeypatch.setattr(mod.config, "OIDC_CLIENT_ID", "client", raising=False)
+    monkeypatch.setattr(mod.config, "OIDC_CLOCK_SKEW_LEEWAY_SECONDS", 90, raising=False)
+
+    def fake_decode(*_args, **kwargs):
+        decode_kwargs.update(kwargs)
+        return {"exp": 1, "iat": 1, "nonce": "n1", "sub": "user-1"}
+
+    monkeypatch.setattr(mod.jwt, "decode", fake_decode)
+
+    claims = service._verify_jwt(token, nonce="n1", require_nonce=False)
+    assert claims and claims.get("sub") == "user-1"
+    assert decode_kwargs["leeway"] == 90
+
+
 def test_admin_token_and_keycloak_user_error_paths(monkeypatch):
     service = mod.OIDCService()
     monkeypatch.setattr(mod.config, "KEYCLOAK_ADMIN_URL", "https://kc", raising=False)

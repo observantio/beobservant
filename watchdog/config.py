@@ -240,6 +240,10 @@ class Config:
         self.OIDC_AUDIENCE: Optional[str] = os.getenv("OIDC_AUDIENCE")
         self.OIDC_JWKS_URL: Optional[str] = os.getenv("OIDC_JWKS_URL")
         self.OIDC_SCOPES: str = os.getenv("OIDC_SCOPES", "openid profile email")
+        self.OIDC_CLOCK_SKEW_LEEWAY_SECONDS: int = max(
+            0,
+            int(os.getenv("OIDC_CLOCK_SKEW_LEEWAY_SECONDS", "60")),
+        )
         self.OIDC_AUTO_PROVISION_USERS: bool = _to_bool(os.getenv("OIDC_AUTO_PROVISION_USERS"), default=True)
         self.OIDC_AUTO_LINK_BY_EMAIL: bool = _to_bool(os.getenv("OIDC_AUTO_LINK_BY_EMAIL"), default=True)
         self.OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK: bool = _to_bool(

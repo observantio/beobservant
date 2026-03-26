@@ -8,7 +8,35 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 */
 
-@import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:wght@400;700&family=Ubuntu:wght@300;400;500;700&display=swap');
+@import "@fontsource/ubuntu-mono/400.css";
+@import "@fontsource/ubuntu-mono/700.css";
+@import "@fontsource/ubuntu/300.css";
+@import "@fontsource/ubuntu/400.css";
+@import "@fontsource/ubuntu/500.css";
+@import "@fontsource/ubuntu/700.css";
+@import "@fontsource/material-icons/index.css";
+
+/* Make Material Icons render crisply by ensuring standard icon-clas styles */
+.material-icons,
+.material-icons-outlined,
+.material-icons-round,
+.material-icons-sharp,
+.material-icons-two-tone {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: inherit;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  display: inline-block;
+  vertical-align: middle;
+}
 
 @tailwind base;
 @tailwind components;
@@ -60,7 +88,8 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
   body {
     background: linear-gradient(to bottom, var(--sre-bg), var(--sre-bg-alt), var(--sre-bg));
     color: var(--sre-text);
-    @apply font-mono antialiased;
+    font-family: "Ubuntu Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Courier New", monospace;
+    @apply antialiased;
     transition: background-color 0.3s ease, color 0.3s ease;
     overflow-y: auto;
   }

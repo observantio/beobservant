@@ -67,6 +67,27 @@ function collectDatasourceReferences(node, refs) {
   });
 }
 
+function getDatasourceJsonData(datasource) {
+  if (!datasource || typeof datasource !== "object") return {};
+  if (datasource.jsonData && typeof datasource.jsonData === "object") {
+    return datasource.jsonData;
+  }
+  if (datasource.json_data && typeof datasource.json_data === "object") {
+    return datasource.json_data;
+  }
+  return {};
+}
+
+function findApiKeyById(apiKeys, candidateId) {
+  const id = String(candidateId || "").trim();
+  if (!id) return null;
+  return (
+    (Array.isArray(apiKeys) ? apiKeys : []).find(
+      (k) => String(k?.id || "").trim() === id,
+    ) || null
+  );
+}
+
 export default function GrafanaPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useLocalStorage(
@@ -247,43 +268,25 @@ export default function GrafanaPage() {
 
       const rawOrg = String(datasource?.orgId || datasource?.org_id || "").trim();
       const apiKeys = Array.isArray(user?.api_keys) ? user.api_keys : [];
-      const jsonData =
-        datasource && typeof datasource.jsonData === "object"
-          ? datasource.jsonData
-          : {};
+      const jsonData = getDatasourceJsonData(datasource);
       const selectedApiKeyId = String(jsonData.watchdogApiKeyId || "").trim();
       const selectedScopeKey = String(jsonData.watchdogScopeKey || "").trim();
-      const bySelectedId = apiKeys.find(
-        (k) => String(k?.id || "") === selectedApiKeyId,
-      );
-      const byId = apiKeys.find((k) => String(k?.id || "") === rawOrg);
+      const bySelectedId = findApiKeyById(apiKeys, selectedApiKeyId);
+      const byId = findApiKeyById(apiKeys, rawOrg);
       const byKey = apiKeys.find((k) => String(k?.key || "") === rawOrg);
       const byScopeKey = apiKeys.find(
         (k) => String(k?.key || "") === selectedScopeKey,
       );
-      const activeKey =
-        apiKeys.find((k) => k?.is_enabled) ||
-        apiKeys.find((k) => k?.is_default) ||
-        apiKeys[0];
+      const mappedKey = bySelectedId || byScopeKey || byId || byKey || null;
+      const keyCandidate =
+        mappedKey?.key ||
+        selectedScopeKey ||
+        (!/^\d+$/.test(rawOrg) ? rawOrg : "");
+      const keyNameCandidate = mappedKey?.name || "";
 
       return {
-        key: String(
-          bySelectedId?.key ||
-            byScopeKey?.key ||
-            byId?.key ||
-            byKey?.key ||
-            selectedScopeKey ||
-            activeKey?.key ||
-            "",
-        ).trim(),
-        keyName: String(
-          bySelectedId?.name ||
-            byScopeKey?.name ||
-            byId?.name ||
-            byKey?.name ||
-            activeKey?.name ||
-            "",
-        ).trim(),
+        key: String(keyCandidate || "").trim(),
+        keyName: String(keyNameCandidate || "").trim(),
       };
     },
     [user?.api_keys],
@@ -524,6 +527,8 @@ export default function GrafanaPage() {
     const selectedDatasource = datasources.find(
       (ds) => ds.uid === dashboardForm.datasourceUid,
     );
+    const canSyncDatasourceVisibility =
+      Boolean(selectedDatasource?.is_owned) && !Boolean(selectedDatasource?.isDefault);
     const normalizeGroupIds = (ids) =>
       Array.from(
         new Set((Array.isArray(ids) ? ids : []).map((id) => String(id).trim()).filter(Boolean)),
@@ -536,7 +541,7 @@ export default function GrafanaPage() {
       selectedDatasource?.sharedGroupIds || selectedDatasource?.shared_group_ids,
     );
     const visibilityNeedsSync =
-      Boolean(selectedDatasource) &&
+      canSyncDatasourceVisibility &&
       (dashboardForm.visibility !== datasourceVisibility ||
         (dashboardForm.visibility === "group" &&
           JSON.stringify(dashboardGroupIds) !== JSON.stringify(datasourceGroupIds)));
@@ -795,10 +800,7 @@ export default function GrafanaPage() {
 
   function openDatasourceEditor(datasource = null) {
     if (datasource) {
-      const jsonData =
-        datasource && typeof datasource.jsonData === "object"
-          ? datasource.jsonData
-          : {};
+      const jsonData = getDatasourceJsonData(datasource);
       const selectedApiKeyId = String(jsonData.watchdogApiKeyId || "").trim();
       const selectedScopeKey = String(jsonData.watchdogScopeKey || "").trim();
       const currentOrg = datasource.orgId || datasource.org_id || "";
@@ -808,9 +810,7 @@ export default function GrafanaPage() {
       const matchedKey = (user?.api_keys || []).find(
         (k) => String(k.key) === String(currentOrg),
       );
-      const defaultKey =
-        (user?.api_keys || []).find((k) => k.is_default) ||
-        (user?.api_keys || [])[0];
+      const matchedById = findApiKeyById(user?.api_keys || [], currentOrg);
       setEditingDatasource(datasource);
       setDatasourceForm({
         name: datasource.name || "",
@@ -822,7 +822,11 @@ export default function GrafanaPage() {
         sharedGroupIds:
           datasource.sharedGroupIds || datasource.shared_group_ids || [],
         apiKeyId:
-          selectedApiKeyId || byScopeKey?.id || matchedKey?.id || defaultKey?.id || "",
+          selectedApiKeyId ||
+          byScopeKey?.id ||
+          matchedKey?.id ||
+          matchedById?.id ||
+          "",
       });
     } else {
       const dk =
@@ -866,7 +870,7 @@ export default function GrafanaPage() {
 
       if (isMultiTenantType) {
         const selectedKey = (user?.api_keys || []).find(
-          (k) => k.id === datasourceForm.apiKeyId,
+          (k) => String(k?.id || "") === String(datasourceForm.apiKeyId || ""),
         );
         payload.org_id = selectedKey?.key || user?.org_id || "default";
         payload.jsonData = {

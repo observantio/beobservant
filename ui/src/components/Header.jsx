@@ -9,6 +9,8 @@ import * as api from "../api";
 import { NAV_ITEMS } from "../utils/constants";
 import { useLayoutMode } from "../contexts/LayoutModeContext";
 import { useSharedIncidentSummary } from "../contexts/IncidentSummaryContext";
+import { useToast } from "../contexts/ToastContext";
+import { copyToClipboard } from "../utils/helpers";
 
 const NAV_ITEM_LIST = Object.values(NAV_ITEMS);
 const RELEASE_LABEL = "Wolfmegasaur v0.0.2";
@@ -489,6 +491,7 @@ export default function Header() {
 }
 
 function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
+  const toast = useToast();
   const [step, setStep] = useState(0);
   const [selectedOs, setSelectedOs] = useState("linux");
   const [instanceIdSuffix, setInstanceIdSuffix] = useState("");
@@ -779,11 +782,12 @@ chmod +x ojo
   };
 
   const copyText = async (value) => {
-    try {
-      await navigator.clipboard.writeText(value);
-    } catch {
-      // no-op
+    const copied = await copyToClipboard(value);
+    if (copied) {
+      toast.success("Copied to clipboard");
+      return;
     }
+    toast.error("Failed to copy to clipboard");
   };
 
   const handleCreateApiKey = async () => {

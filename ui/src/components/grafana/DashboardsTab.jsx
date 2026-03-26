@@ -1,6 +1,8 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
 import { Button, Input, Badge } from "../ui";
+import { useToast } from "../../contexts/ToastContext";
+import { copyToClipboard } from "../../utils/helpers";
 
 function FilterBar({
   filters,
@@ -134,6 +136,7 @@ export default function DashboardsTab({
   onToggleHidden,
   dashboardKeyNamesByUid,
 }) {
+  const toast = useToast();
   const [copiedDashboardUid, setCopiedDashboardUid] = useState("");
 
   const dashboardLink = (dashboard) => {
@@ -150,28 +153,17 @@ export default function DashboardsTab({
   const copyDashboardLink = async (dashboard) => {
     const link = dashboardLink(dashboard);
     if (!link) return;
-    try {
-      if (globalThis.navigator?.clipboard?.writeText) {
-        await globalThis.navigator.clipboard.writeText(link);
-      } else {
-        const fallback = document.createElement("textarea");
-        fallback.value = link;
-        fallback.setAttribute("readonly", "");
-        fallback.style.position = "absolute";
-        fallback.style.left = "-9999px";
-        document.body.appendChild(fallback);
-        fallback.select();
-        document.execCommand("copy");
-        document.body.removeChild(fallback);
-      }
+    const copied = await copyToClipboard(link);
+    if (copied) {
       const uid = String(dashboard?.uid || "");
       setCopiedDashboardUid(uid);
+      toast.success("Dashboard URL copied to clipboard");
       globalThis.setTimeout(() => {
         setCopiedDashboardUid((current) => (current === uid ? "" : current));
       }, 1200);
-    } catch {
-      // Keep UX silent if clipboard access is denied.
+      return;
     }
+    toast.error("Failed to copy dashboard URL");
   };
 
   return (

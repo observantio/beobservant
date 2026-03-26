@@ -36,7 +36,7 @@ export default {
       },
       fontFamily: {
         mono: [
-          "Ubuntu Mono Sans",
+          "Ubuntu Mono",
           "ui-monospace",
           "SFMono-Regular",
           "Menlo",
@@ -45,7 +45,6 @@ export default {
           "monospace",
         ],
         sans: [
-          "Ubuntu Mono",
           "Ubuntu",
           "system-ui",
           "-apple-system",

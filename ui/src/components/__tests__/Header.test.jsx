@@ -26,6 +26,13 @@ vi.mock("../../contexts/AuthContext", () => ({
   }),
 }));
 
+vi.mock("../../contexts/ToastContext", () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 vi.mock("../ChangePasswordModal", () => ({
   default: () => null,
 }));
