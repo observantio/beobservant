@@ -11,6 +11,15 @@ vi.mock("../contexts/ToastContext", () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),
 }));
 
+vi.mock("../contexts/AuthContext", () => ({
+  useAuth: () => ({
+    user: {
+      org_id: "org-test",
+      api_keys: [{ id: "key-1", key: "org-test", is_enabled: true }],
+    },
+  }),
+}));
+
 vi.mock("../api", () => ({
   getLabels: vi.fn(),
   getLabelValues: vi.fn(),

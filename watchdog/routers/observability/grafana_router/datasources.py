@@ -48,6 +48,7 @@ async def datasource_query(
         return await proxy.query_datasource(payload.model_dump(exclude_none=True))
     except GrafanaAPIError as exc:
         proxy._raise_http_from_grafana_error(exc)
+        raise HTTPException(status_code=500, detail="Unexpected Grafana proxy error") from exc
 
 
 @router.get("/datasources/meta/filters")

@@ -913,7 +913,7 @@ export default function IncidentBoardPage() {
       }
       return true;
     },
-    [toast],
+    [setError, toast],
   );
 
   
