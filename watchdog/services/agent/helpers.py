@@ -42,6 +42,7 @@ AGENT_LABEL_CANDIDATES = ("instance", "job", "service_name")
 # multiple scrape targets/endpoints for a single collector host and inflates
 # host counts in the UI.
 HOST_LABEL_CANDIDATES = ("host.name", "host.hostname")
+MIMIR_QUERY_EXCEPTIONS = (httpx.HTTPError, ValueError, KeyError, TypeError, RuntimeError)
 
 
 def make_agent_id(name: str, tenant_id: str) -> str:
@@ -152,7 +153,7 @@ async def query_key_activity(key_value: str, mimir_client: httpx.AsyncClient) ->
             for label in AGENT_LABEL_CANDIDATES:
                 try:
                     candidate_count = await query_label_value_count(key_value, label, mimir_client)
-                except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                except MIMIR_QUERY_EXCEPTIONS:
                     continue
                 if candidate_count > 0:
                     agent_estimate = candidate_count
@@ -161,12 +162,12 @@ async def query_key_activity(key_value: str, mimir_client: httpx.AsyncClient) ->
             for label in HOST_LABEL_CANDIDATES:
                 try:
                     candidate_count = await query_label_value_count(key_value, label, mimir_client)
-                except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                except MIMIR_QUERY_EXCEPTIONS:
                     continue
                 if candidate_count > 0:
                     host_estimate = candidate_count
                     break
-    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+    except MIMIR_QUERY_EXCEPTIONS:
         metrics_active = False
 
     return {
@@ -233,5 +234,5 @@ async def query_key_volume_series(
             raise ValueError("Unexpected Mimir payload")
         payload: JSONDict = payload_raw
         return extract_metrics_series(payload)
-    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+    except MIMIR_QUERY_EXCEPTIONS:
         return []
