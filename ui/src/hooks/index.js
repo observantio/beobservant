@@ -154,6 +154,7 @@ export function usePagination(totalItems, itemsPerPage = 10) {
  */
 export function useAutoRefresh(callback, interval = 30000, enabled = false) {
   const savedCallback = useRef(callback);
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     savedCallback.current = callback;
@@ -162,13 +163,43 @@ export function useAutoRefresh(callback, interval = 30000, enabled = false) {
   useEffect(() => {
     if (!enabled) return;
 
-    const tick = () => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      savedCallback.current();
-    };
-    const id = setInterval(tick, interval);
+    let mounted = true;
 
-    return () => clearInterval(id);
+    const tick = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
+      try {
+        await Promise.resolve(savedCallback.current?.());
+      } finally {
+        if (mounted) {
+          inFlightRef.current = false;
+        }
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState === "visible"
+      ) {
+        void tick();
+      }
+    };
+
+    const id = setInterval(tick, interval);
+    void tick();
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+
+    return () => {
+      mounted = false;
+      clearInterval(id);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
   }, [interval, enabled]);
 }
 

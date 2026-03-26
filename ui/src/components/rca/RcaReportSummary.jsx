@@ -8,6 +8,13 @@ function severityStatus(severity) {
   return "success";
 }
 
+function severityValueClass(severity) {
+  if (severity === "critical" || severity === "high") {
+    return "text-red-500 dark:text-red-300";
+  }
+  return "";
+}
+
 export default function RcaReportSummary({ report, compact = false }) {
   if (!report) return null;
   const quality = report.quality || null;
@@ -26,6 +33,7 @@ export default function RcaReportSummary({ report, compact = false }) {
     ? Object.values(quality.anomaly_density).map((v) => Number(v || 0))
     : [];
   const maxDensity = densityValues.length ? Math.max(...densityValues) : null;
+  const overallSeverity = String(report.overall_severity || "unknown");
 
   const content = (
     <>
@@ -39,8 +47,12 @@ export default function RcaReportSummary({ report, compact = false }) {
         <div className="flex-1 min-w-[150px]">
           <MetricCard
             label="Overall Severity"
-            value={String(report.overall_severity || "unknown").toUpperCase()}
-            status={severityStatus(report.overall_severity)}
+            value={
+              <span className={severityValueClass(overallSeverity)}>
+                {overallSeverity.toUpperCase()}
+              </span>
+            }
+            status={severityStatus(overallSeverity)}
           />
         </div>
         <div className="flex-1 min-w-[150px]">

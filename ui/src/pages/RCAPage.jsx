@@ -39,6 +39,14 @@ const TABS = [
   { key: "warnings", label: "Warnings" },
 ];
 
+function severityTextClass(severity) {
+  if (severity === "critical" || severity === "high") {
+    return "text-red-500 dark:text-red-300";
+  }
+  if (severity === "medium") return "text-sre-warning";
+  return "text-sre-success";
+}
+
 export default function RCAPage() {
   const { user } = useAuth();
   const activeOrgScopeKey = useMemo(() => {
@@ -99,13 +107,7 @@ export default function RCAPage() {
       {
         label: "Overall Severity",
         value: String(report.overall_severity || "UNKNOWN").toUpperCase(),
-        color:
-          report.overall_severity === "critical" ||
-          report.overall_severity === "high"
-            ? "text-sre-error"
-            : report.overall_severity === "medium"
-              ? "text-sre-warning"
-              : "text-sre-success",
+        color: severityTextClass(report.overall_severity),
       },
       {
         label: "Metric Anomalies",
