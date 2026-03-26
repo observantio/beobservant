@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import PropTypes from "prop-types";
 import YAML from "yaml";
 import { Card, Button, Input, Select } from "../ui";
+import HelpTooltip from "../HelpTooltip";
 import { TIME_RANGES } from "../../utils/constants";
 import {
   mergeMetricQueries,
@@ -72,7 +73,12 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Select
-            label={<span className="text-sm font-medium">Time Window</span>}
+            label={
+              <span className="inline-flex items-center text-sm font-medium">
+                Time Window
+                <HelpTooltip text="Select how far back Resolver should analyze telemetry. Larger windows improve historical context but increase analysis time." />
+              </span>
+            }
             value={timeRangeMinutes}
             onChange={(e) => setTimeRangeMinutes(Number(e.target.value))}
             className="px-3 py-2 text-sm rounded-lg"
@@ -84,7 +90,12 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
             ))}
           </Select>
           <Input
-            label={<span className="text-sm font-medium">Resolution</span>}
+            label={
+              <span className="inline-flex items-center text-sm font-medium">
+                Resolution
+                <HelpTooltip text="Sampling step used for metric/log queries (for example 15s, 30s, 1m). Smaller steps give finer detail and higher query cost." />
+              </span>
+            }
             value={step}
             onChange={(e) => setStep(e.target.value)}
             className="px-3 py-2 text-sm rounded-lg"
@@ -94,7 +105,10 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
         <section className="mt-5 space-y-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-sre-text">RCA YAML Overrides</h3>
+              <h3 className="inline-flex items-center text-sm font-semibold text-sre-text">
+                RCA YAML Overrides
+                <HelpTooltip text="Override thresholds, weights, built-in queries, and analyzer tuning for this job only. Uploaded values are merged for the current run and do not change server defaults." />
+              </h3>
               <p className="mt-1 text-xs leading-relaxed text-sre-text-muted">
                 Upload a YAML file to override RCA thresholds, weights,
                 built-in queries, and analyzer tuning for this job only. When
@@ -119,7 +133,10 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
             </Button>
           </div>
           <div className="space-y-2">
-            <div className="text-sm font-medium text-sre-text">YAML File</div>
+            <div className="inline-flex items-center text-sm font-medium text-sre-text">
+              YAML File
+              <HelpTooltip text="Optional. Upload a `.yaml` or `.yml` file generated from the default template and edit only the values you want to override." />
+            </div>
             <input
               id="rca-config-yaml-upload"
               ref={fileInputRef}
@@ -179,7 +196,8 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
             </div>
             <p className="text-xs text-sre-text-muted">
               Optional. Upload a file generated from the default template and
-              edit only the values you want to change.
+              edit only the values you want to change. If no file is uploaded,
+              Resolver runs with server defaults.
             </p>
           </div>
         </section>

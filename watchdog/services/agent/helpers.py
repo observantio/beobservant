@@ -25,12 +25,30 @@ class KeyActivity(TypedDict):
     metrics_active: bool
     metrics_count: int
 
+
+class KeyVolumePoint(TypedDict):
+    ts: int
+    value: int
+
+
 ATTR_HOST_NAME = "host.name"
 ATTR_HOST_HOSTNAME = "host.hostname"
+METRIC_COUNT_QUERY = "count({__name__=~\".+\"})"
 
 
 def make_agent_id(name: str, tenant_id: str) -> str:
     return f"{tenant_id}:{name}" if tenant_id else name
+
+
+def mimir_prometheus_url(base_url: str, path: str) -> str:
+    base = str(base_url or "").strip().rstrip("/")
+    suffix = str(path or "").strip().lstrip("/")
+    if not base:
+        return f"/{suffix}" if suffix else "/"
+    if base.endswith("/prometheus"):
+        return f"{base}/{suffix}"
+    return f"{base}/prometheus/{suffix}"
+
 
 def update_agent_registry(registry: dict[str, AgentInfo], heartbeat: AgentHeartbeat) -> None:
     ts = heartbeat.timestamp or datetime.now(timezone.utc)
@@ -78,17 +96,13 @@ def extract_metrics_count(payload: JSONDict) -> int:
 
 
 async def query_key_activity(key_value: str, mimir_client: httpx.AsyncClient) -> KeyActivity:
-    now = datetime.now(timezone.utc)
-    start_ns = int((now - timedelta(hours=1)).timestamp() * 1_000_000_000)
-    end_ns = int(now.timestamp() * 1_000_000_000)
-
     metrics_active = False
     metrics_count = 0
 
     try:
         response = await mimir_client.get(
-            f"{config.MIMIR_URL.rstrip('/')}/prometheus/api/v1/query",
-            params={"query": "count({__name__=~\".+\"})", "start": start_ns, "end": end_ns},
+            mimir_prometheus_url(config.MIMIR_URL, "api/v1/query"),
+            params={"query": METRIC_COUNT_QUERY},
             headers={"X-Scope-OrgID": key_value},
         )
         response.raise_for_status()
@@ -105,3 +119,63 @@ async def query_key_activity(key_value: str, mimir_client: httpx.AsyncClient) ->
         "metrics_active": metrics_active,
         "metrics_count": metrics_count,
     }
+
+
+def extract_metrics_series(payload: JSONDict) -> list[KeyVolumePoint]:
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return []
+    result = data.get("result")
+    if not isinstance(result, list) or not result:
+        return []
+    first = result[0]
+    if not isinstance(first, dict):
+        return []
+    values = first.get("values")
+    if not isinstance(values, list):
+        return []
+
+    points: list[KeyVolumePoint] = []
+    for entry in values:
+        if not isinstance(entry, list) or len(entry) < 2:
+            continue
+        raw_ts, raw_value = entry[0], entry[1]
+        try:
+            points.append({
+                "ts": int(float(str(raw_ts))),
+                "value": int(float(str(raw_value))),
+            })
+        except (TypeError, ValueError):
+            continue
+    return points
+
+
+async def query_key_volume_series(
+    key_value: str,
+    mimir_client: httpx.AsyncClient,
+    *,
+    minutes: int = 60,
+    step_seconds: int = 300,
+) -> list[KeyVolumePoint]:
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(minutes=max(5, minutes))
+
+    try:
+        response = await mimir_client.get(
+            mimir_prometheus_url(config.MIMIR_URL, "api/v1/query_range"),
+            params={
+                "query": METRIC_COUNT_QUERY,
+                "start": int(start.timestamp()),
+                "end": int(now.timestamp()),
+                "step": max(60, step_seconds),
+            },
+            headers={"X-Scope-OrgID": key_value},
+        )
+        response.raise_for_status()
+        payload_raw = response.json()
+        if not isinstance(payload_raw, dict):
+            raise ValueError("Unexpected Mimir payload")
+        payload: JSONDict = payload_raw
+        return extract_metrics_series(payload)
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        return []

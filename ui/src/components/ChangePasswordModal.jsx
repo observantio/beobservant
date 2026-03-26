@@ -2,6 +2,7 @@ import { useState } from "react";
 import PropTypes from "prop-types";
 import { Modal, Button } from "./ui";
 import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
 import HelpTooltip from "./HelpTooltip";
 import * as api from "../api";
 
@@ -13,6 +14,7 @@ export default function ChangePasswordModal({
   isForced = false,
 }) {
   const toast = useToast();
+  const { authMode } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const [slideIndex, setSlideIndex] = useState(0);
@@ -63,6 +65,9 @@ export default function ChangePasswordModal({
   ];
 
   const canSkipCurrentPassword = isForced && authProvider !== "local";
+  const isOidcOnlyMode = Boolean(
+    authMode?.oidc_enabled && !authMode?.password_enabled,
+  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -162,6 +167,8 @@ export default function ChangePasswordModal({
   let modalTitle;
   if (showTour) {
     modalTitle = slides[slideIndex]?.title || "Welcome to Watchdog";
+  } else if (isOidcOnlyMode) {
+    modalTitle = "Password Managed by OIDC";
   } else if (isForced) {
     modalTitle = "Password Change Required";
   } else {
@@ -171,6 +178,8 @@ export default function ChangePasswordModal({
   let modalOnClose;
   if (isForced && showTour) {
     modalOnClose = undefined;
+  } else if (isOidcOnlyMode) {
+    modalOnClose = onClose;
   } else if (isForced) {
     modalOnClose = undefined;
   } else {
@@ -190,21 +199,41 @@ export default function ChangePasswordModal({
       {!showTour && (
         <div
           className={`mb-4 rounded-lg border p-3 text-sm ${
-            isForced
+            isOidcOnlyMode
+              ? "border-sky-500/40 bg-sky-500/10 text-sre-text"
+              : isForced
               ? "border-yellow-500/60 bg-yellow-500/10 text-yellow-500"
               : "border-sre-primary/30 bg-sre-primary/10 text-sre-text"
           }`}
         >
           <div className="flex items-start gap-2">
             <span className="material-icons text-base leading-none mt-0.5">
-              {isForced ? "warning" : "lock_person"}
+              {isOidcOnlyMode
+                ? "shield_lock"
+                : isForced
+                  ? "warning"
+                  : "lock_person"}
             </span>
             <div>
               <div className="font-semibold">
-                {isForced ? "Password change required" : "Password security"}
+                {isOidcOnlyMode
+                  ? "OIDC manages passwords"
+                  : isForced
+                    ? "Password change required"
+                    : "Password security"}
               </div>
-              <div className={isForced ? "text-yellow-500/90" : "text-sre-text-muted"}>
-                {isForced
+              <div
+                className={
+                  isOidcOnlyMode
+                    ? "text-sre-text-muted"
+                    : isForced
+                      ? "text-yellow-500/90"
+                      : "text-sre-text-muted"
+                }
+              >
+                {isOidcOnlyMode
+                  ? "Single sign-on is enabled and local password login is disabled. Password changes are not available here. If local auth is enabled later, reset the password to generate a local password for this user."
+                  : isForced
                   ? "You must change your password before continuing. Please choose a secure password with at least 12 characters."
                   : "Use a strong password with at least 12 characters, and avoid reusing passwords across services."}
               </div>
@@ -260,6 +289,24 @@ export default function ChangePasswordModal({
                 </Button>
               )}
             </div>
+          </div>
+        </div>
+      ) : isOidcOnlyMode ? (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-sre-border bg-sre-surface/50 p-4">
+            <div className="text-sm font-medium text-sre-text">
+              Password fields are unavailable in OIDC-only mode.
+            </div>
+            <div className="mt-1 text-sm text-sre-text-muted">
+              Authentication is handled by your identity provider. To assign a
+              local password later, enable local auth and then run a password
+              reset for the user.
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={onClose} variant="primary">
+              Continue
+            </Button>
           </div>
         </div>
       ) : (

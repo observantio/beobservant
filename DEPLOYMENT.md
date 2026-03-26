@@ -16,7 +16,7 @@ Quick install script:
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-v0.0.1}"
+VERSION="${1:-v0.0.2}"
 ARCH="${2:-multi}" # amd64 | arm64 | multi
 REPO="observantio/watchdog"
 ASSET="observantio-${VERSION}-linux-${ARCH}.tar.gz"

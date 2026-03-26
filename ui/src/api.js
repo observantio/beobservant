@@ -589,6 +589,21 @@ export async function getAgents(opts = {}) {
   return request("/api/agents/", opts);
 }
 
+export async function getAgentMetricVolume({
+  tenantId,
+  minutes,
+  stepSeconds,
+  signal,
+  maxRetries,
+} = {}) {
+  const params = new URLSearchParams();
+  if (String(tenantId || "").trim()) params.set("tenant_id", String(tenantId).trim());
+  if (Number.isFinite(minutes)) params.set("minutes", String(minutes));
+  if (Number.isFinite(stepSeconds)) params.set("step_seconds", String(stepSeconds));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return request(`/api/agents/volume${qs}`, { signal, maxRetries });
+}
+
 export const updatePassword = updateUserPassword;
 
 export async function getAlerts({
@@ -1178,6 +1193,7 @@ export async function getDashboardFilterMeta() {
 
 export async function getDatasources({
   uid,
+  query,
   labelKey,
   labelValue,
   teamId,
@@ -1187,6 +1203,7 @@ export async function getDatasources({
 } = {}) {
   const params = new URLSearchParams();
   if (uid) params.append("uid", uid);
+  if (query) params.append("query", query);
   if (labelKey) params.append("label_key", labelKey);
   if (labelValue) params.append("label_value", labelValue);
   if (teamId) params.append("team_id", teamId);

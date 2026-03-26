@@ -546,18 +546,22 @@ export function Sparkline({
   fill = "none",
   className,
 }) {
+  const noDataMessage =
+    "We are not getting any data points for this metric. Please check your configuration and ensure that your application is emitting metrics correctly.";
+  const renderNoData = () => (
+    <div
+      className={clsx(
+        "flex h-full w-full items-center justify-center px-6 text-center text-xs text-sre-text-muted",
+        className,
+      )}
+      style={{ minHeight: height }}
+    >
+      <div className="mx-auto max-w-md">{noDataMessage}</div>
+    </div>
+  );
+
   if (!data?.length) {
-    return (
-      <div
-        className={clsx(
-          "flex items-center justify-center text-xs text-sre-text-muted",
-          className,
-        )}
-        style={{ width, height }}
-      >
-        no data
-      </div>
-    );
+    return renderNoData();
   }
 
   const values = data
@@ -566,17 +570,7 @@ export function Sparkline({
     .filter((v) => Number.isFinite(v));
 
   if (!values.length) {
-    return (
-      <div
-        className={clsx(
-          "flex items-center justify-center text-xs text-sre-text-muted",
-          className,
-        )}
-        style={{ width, height }}
-      >
-        no data
-      </div>
-    );
+    return renderNoData();
   }
 
   const safeValues = values.length === 1 ? [values[0], values[0]] : values;

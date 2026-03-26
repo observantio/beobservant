@@ -323,6 +323,7 @@ class GrafanaProxyService:
         tenant_id: str,
         group_ids: List[str],
         uid: Optional[str] = None,
+        query: Optional[str] = None,
         team_id: Optional[str] = None,
         show_hidden: bool = False,
         limit: Optional[int] = None,
@@ -334,7 +335,7 @@ class GrafanaProxyService:
         )
         return await get_datasources(
             self, db, user_id, tenant_id, effective_group_ids,
-            uid, team_id, show_hidden, limit, offset, datasource_context,
+            uid, query, team_id, show_hidden, limit, offset, datasource_context,
         )
 
     async def get_datasource(

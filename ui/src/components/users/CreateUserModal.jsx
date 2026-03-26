@@ -40,6 +40,7 @@ export default function CreateUserModal({
   const isOidcEnabled = Boolean(authMode?.oidc_enabled);
   const isPasswordEnabled = Boolean(authMode?.password_enabled);
   const requirePassword = !isOidcEnabled || isPasswordEnabled;
+  const hidePasswordInput = isOidcEnabled && !isPasswordEnabled;
 
   useEffect(() => {
     let active = true;
@@ -251,93 +252,106 @@ export default function CreateUserModal({
           </div>
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <Input
-                    label="Password"
-                    placeholder="••••••••••••••"
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormData({ ...formData, password: val });
-                      if (errors.password && val.length >= 8) {
-                        const nextErrors = { ...errors };
-                        delete nextErrors.password;
-                        setErrors(nextErrors);
-                      }
-                    }}
-                    required={requirePassword}
-                    error={errors.password}
-                    helperText={
-                      !errors.password &&
-                      (formData.password || "").length < 8 &&
-                      requirePassword
-                        ? `${8 - (formData.password || "").length} characters to go`
-                        : undefined
-                    }
-                    className="w-full"
-                  />
+        {hidePasswordInput ? (
+          <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <span className="material-icons text-sky-400">shield_lock</span>
+              <div>
+                <div className="text-sm font-semibold text-sre-text">
+                  OIDC is enabled
                 </div>
-                <div className="flex-shrink-0 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleGeneratePassword}
-                    aria-label="Generate password"
-                    className="inline-flex items-center justify-center p-2 rounded-md bg-sre-surface hover:bg-sre-surface-light border border-sre-border"
-                    title="Generate password"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 4v5h.582M20 20v-5h-.581M5.5 9A7.5 7.5 0 0119 12.5M18.5 15A7.5 7.5 0 015 11.5"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCopyPassword}
-                    aria-label="Copy password"
-                    disabled={!formData.password}
-                    className="inline-flex items-center justify-center p-2 rounded-md bg-sre-surface hover:bg-sre-surface-light border border-sre-border disabled:opacity-50"
-                    title="Copy password"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2M16 20h2a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2h6z"
-                      />
-                    </svg>
-                  </button>
+                <div className="mt-1 text-sm text-sre-text-muted">
+                  Local passwords are not required right now, so password input
+                  is hidden for new users. If you switch authentication back to
+                  local later, reset the user password to generate a local
+                  password for them.
                 </div>
               </div>
             </div>
-            <HelpTooltip text="Secure password for account access. Must be at least 8 characters. Use the generate button for a strong random password." />
           </div>
-          {isOidcEnabled && !isPasswordEnabled && (
-            <p className="text-xs text-sre-text-muted">
-              OIDC is enabled and password login is disabled. Leave password
-              blank to create an externally managed user.
-            </p>
-          )}
-        </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <Input
+                      label="Password"
+                      placeholder="••••••••••••••"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({ ...formData, password: val });
+                        if (errors.password && val.length >= 8) {
+                          const nextErrors = { ...errors };
+                          delete nextErrors.password;
+                          setErrors(nextErrors);
+                        }
+                      }}
+                      required={requirePassword}
+                      error={errors.password}
+                      helperText={
+                        !errors.password &&
+                        (formData.password || "").length < 8 &&
+                        requirePassword
+                          ? `${8 - (formData.password || "").length} characters to go`
+                          : undefined
+                      }
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="flex-shrink-0 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGeneratePassword}
+                      aria-label="Generate password"
+                      className="inline-flex items-center justify-center p-2 rounded-md bg-sre-surface hover:bg-sre-surface-light border border-sre-border"
+                      title="Generate password"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 4v5h.582M20 20v-5h-.581M5.5 9A7.5 7.5 0 0119 12.5M18.5 15A7.5 7.5 0 015 11.5"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyPassword}
+                      aria-label="Copy password"
+                      disabled={!formData.password}
+                      className="inline-flex items-center justify-center p-2 rounded-md bg-sre-surface hover:bg-sre-surface-light border border-sre-border disabled:opacity-50"
+                      title="Copy password"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2M16 20h2a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2h6z"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <HelpTooltip text="Secure password for account access. Must be at least 8 characters. Use the generate button for a strong random password." />
+            </div>
+          </div>
+        )}
 
         <div className="flex items-start gap-2">
           <div className="flex-1">

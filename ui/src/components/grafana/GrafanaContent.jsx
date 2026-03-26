@@ -69,6 +69,8 @@ export default function GrafanaContent({
       <DatasourcesTab
         datasources={datasources}
         groups={groups}
+        query={query}
+        setQuery={setQuery}
         filters={filters}
         setFilters={setFilters}
         onSearch={onSearch}

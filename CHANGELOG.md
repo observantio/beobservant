@@ -18,6 +18,11 @@ This changelog follows a simple human-first format and keeps entries focused on 
 - Added a new in-app **Documentation** section with topic routes, sidebar mini-links, and focused coverage tests.
 - Added environment/plumbing support for stable Grafana launch scoping via `APP_ORG_KEY` / `VITE_APP_ORG_KEY`.
 - Added `processes` and `load` hostmetric scrapers to the OTel test agent configuration for broader host telemetry collection.
+- Added a dedicated sidebar-first **Agents** page with API-key-scoped status cards, known-agent heartbeat inventory, and a Mimir-backed metric trend panel.
+- Added backend `/api/agents/volume` support for scoped metric trend points, including current/peak/average rollups.
+- Added sidebar quick actions beside API key selection for **Quick Create API Key** and **Quick Metrics Query** (PromQL + JSON output).
+- Added Ojo Agent Setup Wizard support for an **Extra services** install path (GPU, Sensors, Postgres, MySQL, Docker) with searchable package cards and service config templates.
+- Added Ojo setup completion quick-links to create datasource and dashboard immediately after connectivity is confirmed.
 
 ### Changed
 
@@ -42,6 +47,20 @@ This changelog follows a simple human-first format and keeps entries focused on 
 - Updated header chrome in sidebar mode to show release/build context (`wolfmegasaur v0.0.2`) plus quick GitHub/Ojo links.
 - Refined “OTel Collector Overview” template panels by removing empty-prone CPU/network breakdowns and adding resilient process-disk throughput coverage.
 - Updated Grafana launch URL normalization to strip internal `orgId` query params and forward only `org-key`.
+- Updated Audit & Compliance filter semantics:
+  - `resource_type` now supports wildcard/partial matching (`*`, `?`) instead of exact-only matching.
+  - search text now applies backend filtering (not just UI highlighting) across audit details and key metadata fields.
+  - date-only ranges are normalized to full-day bounds (`start` at day start, `end` at day end).
+- Updated Loki **Search & Filter** text behavior in Filter Builder to use case-insensitive wildcard matching (`*`, `?`) via LogQL regex clauses.
+- Updated Tempo trace result filtering so `service`, `operation`, `duration`, and `status` are applied conjunctively (AND) in the UI result set.
+- Updated Tempo service filter options to prefer live discovered services from current trace results, with automatic cleanup of empty/placeholder entries and stale selections.
+- Updated Alert Rules API key filter options by removing the `All products` scope and normalizing legacy persisted values to `All API keys`.
+- Updated Grafana page query-state handling so dashboard search and datasource search are independently persisted (no cross-tab query leakage).
+- Updated Integrations tabs to show combined scope counts via pills (`channels + Jira integrations`).
+- Updated OIDC-only UX to hide unusable password actions: forced password-change is suppressed in OIDC-only mode, password modal shows OIDC guidance, and user creation hides local password input when not required.
+- Updated Tempo and Loki filter option loading to resync immediately when top-nav API key scope changes.
+- Updated Tempo dependency-map empty state to provide clickable trace candidates from current results when no map trace is selected.
+- Updated Agents trend semantics to use sampled metric-count history with denser UI fetch resolution for better visible trend movement.
 
 ### Fixed
 
@@ -51,6 +70,14 @@ This changelog follows a simple human-first format and keeps entries focused on 
 - Fixed residual auth-page card border visibility by explicitly overriding base card borders on sign-in screens.
 - Fixed toast visibility when forced password-change modal is open by ensuring toast stack renders above modal overlays.
 - Fixed duplicate incident-summary polling pressure by reusing shared summary context in Incident Board.
+- Fixed Audit & Compliance range handling where date/time widget formats could cause `start`/`end` filters to be dropped from requests.
+- Fixed Audit & Compliance end-range inclusivity so selecting an end boundary includes records within that boundary window.
+- Fixed Loki builder text-filter mismatch where searches were previously case-sensitive and did not honor wildcard expectations.
+- Fixed Tempo service filter behavior where returned traces could appear unfiltered relative to other active filter controls.
+- Fixed Tempo service dropdown stale-option behavior where outdated/non-actionable service names could remain visible.
+- Fixed Alert Rules product/API key filter UX inconsistency caused by the redundant `All products` option.
+- Fixed sidebar/Agents no-data and metric-activity edge cases where scopes with active metrics could still appear as fully inactive due to missing heartbeat registry entries.
+- Fixed Ojo connectivity check false negatives by treating scoped metric activity as a valid connected signal when heartbeat records are not yet present.
 
 ## [v0.0.1] - 2026-03-20
 

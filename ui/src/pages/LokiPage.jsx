@@ -13,6 +13,7 @@ import LogLabels from "../components/loki/LogLabels";
 import { formatNsToIso } from "../utils/formatters";
 import { LOKI_REFRESH_INTERVALS } from "../utils/constants";
 import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
 import HelpTooltip from "../components/HelpTooltip";
 import {
   normalizeLabelValues,
@@ -20,13 +21,14 @@ import {
   getVolumeValues,
   buildFallbackVolume,
   buildSelectorFromFilters,
-  escapeLogQLValue,
+  buildCaseInsensitiveTextFilterClause,
 } from "../utils/lokiQueryUtils";
 
 const LABEL_PREFETCH_LIMIT = 12;
 const LABEL_PREFETCH_BATCH = 4;
 
 export default function LokiPage() {
+  const { user } = useAuth();
   const [labels, setLabels] = useState([]);
   const [labelValuesCache, setLabelValuesCache] = useState({});
   const [loadingValues, setLoadingValues] = useState({});
@@ -55,6 +57,12 @@ export default function LokiPage() {
   const [topTerms, setTopTerms] = useState([]);
   const queryRunIdRef = useRef(0);
   const activeQueryControllerRef = useRef(null);
+  const previousActiveApiKeyIdRef = useRef(null);
+  const activeApiKeyId = useMemo(() => {
+    const keys = user?.api_keys || [];
+    const active = keys.find((k) => k.is_enabled) || keys.find((k) => k.is_default);
+    return active?.id || active?.key || user?.org_id || "";
+  }, [user]);
 
   const logStats = useMemo(() => {
     const res = queryResult?.data?.result || [];
@@ -140,8 +148,32 @@ export default function LokiPage() {
   }, []);
 
   useEffect(() => {
+    const previous = previousActiveApiKeyIdRef.current;
+    const changed = previous !== null && previous !== activeApiKeyId;
+    previousActiveApiKeyIdRef.current = activeApiKeyId;
+
+    if (changed) {
+      if (activeQueryControllerRef.current) {
+        activeQueryControllerRef.current.abort();
+      }
+      setLabels([]);
+      setLabelValuesCache({});
+      setLoadingValues({});
+      setSelectedFilters([]);
+      setSelectedLabel("");
+      setSelectedValue("");
+      setPattern("");
+      setQueryResult(null);
+      setVolume([]);
+      setTopTerms([]);
+      setExpandedLogs({});
+      setSearchText("");
+      setQueryMode("builder");
+      setCustomLogQL("");
+    }
+
     loadInitialData();
-  }, [loadInitialData]);
+  }, [activeApiKeyId, loadInitialData]);
 
   useEffect(
     () => () => {
@@ -305,9 +337,9 @@ export default function LokiPage() {
         selectorForVolume = selector;
         q = selector;
         if (effectivePattern) {
-          const escaped = escapeLogQLValue(effectivePattern);
-          q += ` |= "${escaped}"`;
-          selectorForVolume = `${selector} |= "${escaped}"`;
+          const clause = buildCaseInsensitiveTextFilterClause(effectivePattern);
+          q += clause;
+          selectorForVolume = `${selector}${clause}`;
         }
       }
 

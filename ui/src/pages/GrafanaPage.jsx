@@ -98,7 +98,14 @@ export default function GrafanaPage() {
   const [datasources, setDatasources] = useState([]);
   const [folders, setFolders] = useState([]);
   const [groups, setGroups] = useState([]);
-  const [query, setQuery] = useLocalStorage("grafana-query", "");
+  const [dashboardQuery, setDashboardQuery] = useLocalStorage(
+    "grafana-dashboard-query",
+    "",
+  );
+  const [datasourceQuery, setDatasourceQuery] = useLocalStorage(
+    "grafana-datasource-query",
+    "",
+  );
   const [loading, setLoading] = useState(true);
 
   const [filters, setFilters] = useLocalStorage("grafana-filters", {
@@ -110,8 +117,38 @@ export default function GrafanaPage() {
   const toast = useToast();
   const lastErrorToastRef = useRef({ key: "", ts: 0 });
   const isMountedRef = useRef(true);
+  const query =
+    activeTab === "datasources"
+      ? datasourceQuery
+      : activeTab === "dashboards"
+        ? dashboardQuery
+        : "";
   const queryRef = useRef(query);
   const filtersRef = useRef(filters);
+
+  const setQuery = useCallback(
+    (nextValue) => {
+      if (activeTab !== "dashboards" && activeTab !== "datasources") return;
+      const prevValue =
+        activeTab === "dashboards" ? dashboardQuery : datasourceQuery;
+      const resolved =
+        typeof nextValue === "function" ? nextValue(prevValue) : nextValue;
+      const finalValue = String(resolved ?? "");
+
+      if (activeTab === "dashboards") {
+        setDashboardQuery(finalValue);
+      } else {
+        setDatasourceQuery(finalValue);
+      }
+    },
+    [
+      activeTab,
+      dashboardQuery,
+      datasourceQuery,
+      setDashboardQuery,
+      setDatasourceQuery,
+    ],
+  );
 
   useEffect(
     () => () => {
@@ -375,6 +412,7 @@ export default function GrafanaPage() {
       } else if (activeTab === "datasources") {
         const [datasourcesData] = await Promise.all([
           getDatasources({
+            query: currentQuery || undefined,
             teamId: currentFilters.teamId || undefined,
             showHidden: currentFilters.showHidden,
           }).catch(() => []),
@@ -409,7 +447,11 @@ export default function GrafanaPage() {
 
   function clearFilters() {
     setFilters({ teamId: "", folderKey: "__general__", showHidden: false });
-    setQuery("");
+    if (activeTab === "dashboards") {
+      setDashboardQuery("");
+    } else if (activeTab === "datasources") {
+      setDatasourceQuery("");
+    }
   }
 
   async function handleToggleDashboardHidden(dashboard) {

@@ -182,8 +182,30 @@ async def test_agents_router_list_active_and_heartbeat(monkeypatch):
 
     active = await agents_router.list_active_agents(current_user)
     assert active[0]["active"] is True
+    assert active[0]["tenant_id"] == "tenant-a"
     assert active[0]["host_names"] == ["host-a"]
     assert active[1]["success"] is False
+
+    async def fake_key_volume_series(_key_value, _client, **_kwargs):
+        return [
+            {"ts": 1711000000, "value": 2},
+            {"ts": 1711000300, "value": 4},
+        ]
+
+    monkeypatch.setattr(agents_router.agent_service, "key_volume_series", fake_key_volume_series)
+    volume = await agents_router.agent_metric_volume(current_user=current_user)
+    assert volume["tenant_id"] == "tenant-a"
+    assert volume["current"] == 4
+    assert volume["peak"] == 4
+    assert volume["average"] == 3
+    assert volume["points"][0]["value"] == 2
+
+    with pytest.raises(HTTPException) as exc:
+        await agents_router.agent_metric_volume(
+            tenant_id="tenant-missing",
+            current_user=current_user,
+        )
+    assert exc.value.status_code == 403
 
     called = []
     monkeypatch.setattr(agents_router, "enforce_public_endpoint_security", lambda *_args, **_kwargs: called.append("public"))

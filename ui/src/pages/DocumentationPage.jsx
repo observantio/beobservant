@@ -271,7 +271,7 @@ const TOPICS = {
     steps: [
       "Open RCA from the left navigation and pick the incident or time window.",
       "Download the default RCA template and customize it with any additional context and ensure to use metrics relevant to your services.",
-      "You can query the metrics available by creating a datasource on Watchdog and clicking the sigma icon next to the query editor to open the metric catalog. The catalog includes metrics from our default dashboards and any custom dashboards you have created.",
+      "You can query the metrics available by creating a datasource on Watchdog and clicking the search icon next to the query editor to open the metric catalog. The catalog includes metrics from our default dashboards and any custom dashboards you have created.",
       "After you configure the template, upload it back to Watchdog and run the RCA job.",
       "Read the analysis report, only use the tool if you suspect an problem is there in your infrastructure, stable services will give false positives and may not be useful to analyze. If the report is inconclusive, consider adding more context to the template and re-running the job.",
     ],

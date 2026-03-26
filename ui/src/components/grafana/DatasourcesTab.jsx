@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import PropTypes from "prop-types";
 import { Button, Badge, Input } from "../ui";
 
@@ -100,6 +100,8 @@ function DsFilterBar({
 export default function DatasourcesTab({
   datasources,
   groups,
+  query,
+  setQuery,
   filters,
   setFilters,
   onSearch,
@@ -112,20 +114,6 @@ export default function DatasourcesTab({
   getDatasourceIcon,
   getDatasourceKeyName,
 }) {
-  const [query, setQuery] = useState("");
-
-  const filtered = useMemo(() => {
-    if (!query.trim()) return datasources;
-    const q = query.toLowerCase();
-    return datasources.filter(
-      (ds) =>
-        (ds.name || "").toLowerCase().includes(q) ||
-        (ds.type || "").toLowerCase().includes(q) ||
-        (ds.url || "").toLowerCase().includes(q) ||
-        (ds.uid || "").toLowerCase().includes(q),
-    );
-  }, [datasources, query]);
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -146,9 +134,7 @@ export default function DatasourcesTab({
 
       <div className="mb-4 flex gap-2">
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
-          }}
+          onSubmit={onSearch}
           className="flex gap-2 flex-1"
         >
           <Input
@@ -158,8 +144,21 @@ export default function DatasourcesTab({
             placeholder="Search datasources by name, type, URL or UID..."
             className="flex-1 px-2 py-0.5 text-sm"
           />
-          <Button type="button" onClick={() => setQuery("")} size="sm">
-            Clear
+          <Button type="submit" size="sm">
+            <svg
+              className="w-4 h-4 mr-1"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            Search
           </Button>
         </form>
         {datasources.length ? (
@@ -195,9 +194,9 @@ export default function DatasourcesTab({
         groups={groups}
       />
 
-      {filtered.length ? (
+      {datasources.length ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filtered.map((ds) => (
+          {datasources.map((ds) => (
             <div
               key={ds.uid}
               className={`p-6 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
@@ -315,7 +314,7 @@ export default function DatasourcesTab({
                     title="View Metrics"
                     className="p-2"
                   >
-                    <span className="material-icons text-base">functions</span>
+                    <span className="material-icons text-base">search</span>
                   </Button>
                   <Button
                     variant="ghost"
@@ -389,6 +388,8 @@ export default function DatasourcesTab({
 DatasourcesTab.propTypes = {
   datasources: PropTypes.arrayOf(PropTypes.object).isRequired,
   groups: PropTypes.arrayOf(PropTypes.object),
+  query: PropTypes.string,
+  setQuery: PropTypes.func,
   filters: PropTypes.object,
   setFilters: PropTypes.func,
   onSearch: PropTypes.func,

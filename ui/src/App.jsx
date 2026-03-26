@@ -36,6 +36,7 @@ const DocumentationPage = lazy(() => import("./pages/DocumentationPage"));
 const AuditCompliancePage = lazy(() => import("./pages/AuditCompliancePage"));
 const RCAPage = lazy(() => import("./pages/RCAPage"));
 const QuotasPage = lazy(() => import("./pages/QuotasPage"));
+const AgentsPage = lazy(() => import("./pages/AgentsPage"));
 
 function PageLoader() {
   return (
@@ -86,10 +87,13 @@ ProtectedPermissionRoute.propTypes = {
 
 function AppContent() {
   const [info, setInfo] = useState(null);
-  const { isAuthenticated, user, refreshUser } = useAuth();
+  const { isAuthenticated, user, refreshUser, authMode } = useAuth();
   const { sidebarMode } = useLayoutMode();
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const location = useLocation();
+  const isOidcOnlyMode = Boolean(
+    authMode?.oidc_enabled && !authMode?.password_enabled,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -110,12 +114,14 @@ function AppContent() {
         if (!cancelled) setInfo(null);
       });
 
-    setShowPasswordChange(Boolean(user?.needs_password_change));
+    setShowPasswordChange(
+      Boolean(user?.needs_password_change) && !isOidcOnlyMode,
+    );
 
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, user?.needs_password_change]);
+  }, [isAuthenticated, isOidcOnlyMode, user?.needs_password_change]);
 
   const handlePasswordChangeClose = async () => {
     setShowPasswordChange(false);
@@ -166,6 +172,11 @@ function AppContent() {
     {
       path: "/quotas",
       element: <QuotasPage />,
+      permissions: ["read:agents"],
+    },
+    {
+      path: "/agents",
+      element: <AgentsPage />,
       permissions: ["read:agents"],
     },
   ];
@@ -225,7 +236,7 @@ function AppContent() {
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-60">
                   <Header />
 
-                  {user?.needs_password_change && (
+                  {user?.needs_password_change && !isOidcOnlyMode && (
                     <ChangePasswordModal
                       isOpen={showPasswordChange}
                       onClose={handlePasswordChangeClose}
@@ -248,7 +259,7 @@ function AppContent() {
               <>
                 <Header />
 
-                {user?.needs_password_change && (
+                {user?.needs_password_change && !isOidcOnlyMode && (
                   <ChangePasswordModal
                     isOpen={showPasswordChange}
                     onClose={handlePasswordChangeClose}

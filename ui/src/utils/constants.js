@@ -171,6 +171,13 @@ export const NAV_ITEMS = {
     path: "/grafana",
     permission: "read:dashboards",
   },
+  AGENTS: {
+    label: "Agents",
+    icon: "precision_manufacturing",
+    path: "/agents",
+    permission: "read:agents",
+    topNavHidden: true,
+  },
 };
 
 export const SIDEBAR_EXTRA_NAV = [

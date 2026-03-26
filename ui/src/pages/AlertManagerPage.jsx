@@ -501,6 +501,12 @@ export default function AlertManagerPage() {
       .map(([value, label]) => ({ value, label }));
   }, [apiKeys, rules]);
 
+  useEffect(() => {
+    if (rulesApiKeyFilter === "__all_products__") {
+      setRulesApiKeyFilter("all");
+    }
+  }, [rulesApiKeyFilter]);
+
   const filteredRules = useMemo(() => {
     const currentUserId = String(user?.id || "").trim();
     const correlationQuery = String(rulesCorrelationSearch || "").trim().toLowerCase();
@@ -518,10 +524,8 @@ export default function AlertManagerPage() {
       if (rulesStatusFilter === "enabled" && !enabled) return false;
       if (rulesStatusFilter === "disabled" && enabled) return false;
       if (rulesSeverityFilter !== "all" && severity !== rulesSeverityFilter) return false;
-      if (rulesApiKeyFilter === "__all_products__" && orgScope) return false;
       if (
         rulesApiKeyFilter !== "all" &&
-        rulesApiKeyFilter !== "__all_products__" &&
         orgScope !== rulesApiKeyFilter
       ) {
         return false;
@@ -1110,7 +1114,6 @@ export default function AlertManagerPage() {
                                 className="text-xs py-1.5 px-2.5"
                               >
                                 <option value="all">All API keys</option>
-                                <option value="__all_products__">All products</option>
                                 {ruleApiKeyOptions.map((opt) => (
                                   <option key={opt.value} value={opt.value}>
                                     {opt.label}
@@ -1239,7 +1242,7 @@ export default function AlertManagerPage() {
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-1 rounded-xl border border-sre-border bg-sre-bg-alt/70 p-1.5 shrink-0">
+                              <div className="flex items-center gap-1 rounded-xl bg-sre-bg-alt/70 p-1.5 shrink-0">
                                 {canHideRule && (
                                   <Button
                                     variant="ghost"

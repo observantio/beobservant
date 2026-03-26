@@ -76,6 +76,7 @@ async def get_datasource_by_name(
 @router.get("/datasources", response_model=List[Datasource])
 async def get_datasources(
     uid: Optional[str] = Query(None),
+    query: Optional[str] = Query(None),
     team_id: Optional[str] = Query(None),
     show_hidden: bool = Query(False),
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
@@ -91,6 +92,7 @@ async def get_datasources(
         tenant_id=tenant_id,
         group_ids=group_ids,
         uid=uid,
+        query=query,
         team_id=team_id,
         show_hidden=show_hidden,
         limit=limit,

@@ -108,6 +108,11 @@ def test_audit_helpers_and_filters(monkeypatch):
     filtered = auth_helper.apply_audit_filters_func(query, "start", "end", "user-1", "login", "users", q="needle")
     assert filtered is query
     assert len(query.filters) == 6
+    assert auth_helper.audit_text_like_pattern("needle") == "%needle%"
+    assert auth_helper.audit_text_like_pattern("dash*update") == "dash%update"
+    assert auth_helper.audit_text_like_pattern("status?") == "status_"
+    assert auth_helper.audit_text_like_pattern("100%") == "%100\\%%"
+    assert auth_helper.audit_text_like_pattern("audit_logs*") == "audit\\_logs%"
 
 
 def test_role_permission_admin_and_rate_limit_delegate(monkeypatch):

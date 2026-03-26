@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import PropTypes from "prop-types";
 import ThemeToggle from "./ThemeToggle";
-import { Badge } from "./ui";
+import { Badge, Button, Input } from "./ui";
 import ChangePasswordModal from "./ChangePasswordModal";
 import * as api from "../api";
 import { NAV_ITEMS } from "../utils/constants";
@@ -47,6 +47,135 @@ function getApiKeyColor(apiKeyId) {
 const OJO_OS_OPTIONS = [
   { key: "linux", label: "Linux", icon: "terminal" },
   { key: "windows", label: "Windows", icon: "desktop_windows" },
+  { key: "extras", label: "Extra services", icon: "extension" },
+];
+
+const OJO_EXTRA_SERVICES = [
+  {
+    key: "docker",
+    label: "Docker",
+    icon: "inventory_2",
+    packageName: "ojo-docker",
+    configFile: "docker.yaml",
+    keywords: ["containers", "docker", "runtime", "sidecar"],
+    description: "Container runtime inventory, CPU, memory, network, and block IO metrics.",
+    sampleConfig: `service:
+  name: docker
+  instance_id: docker-local
+
+source:
+  endpoint: unix:///var/run/docker.sock
+
+collection:
+  poll_interval_secs: 15
+
+export:
+  otlp:
+    endpoint: "http://127.0.0.1:4355/v1/metrics"
+    protocol: http/protobuf
+    timeout_secs: 10
+`,
+  },
+  {
+    key: "gpu",
+    label: "GPU",
+    icon: "memory",
+    packageName: "ojo-gpu",
+    configFile: "gpu.yaml",
+    keywords: ["gpu", "nvidia", "accelerator", "cuda"],
+    description: "GPU utilization, temperature, memory, and power telemetry.",
+    sampleConfig: `service:
+  name: gpu
+  instance_id: gpu-local
+
+collection:
+  poll_interval_secs: 15
+
+source:
+  backend: auto
+
+export:
+  otlp:
+    endpoint: "http://127.0.0.1:4355/v1/metrics"
+    protocol: http/protobuf
+    timeout_secs: 10
+`,
+  },
+  {
+    key: "sensors",
+    label: "Sensors",
+    icon: "device_thermostat",
+    packageName: "ojo-sensors",
+    configFile: "sensors.yaml",
+    keywords: ["hardware", "sensors", "temperature", "fans", "voltages"],
+    description: "Board sensors, temperatures, fan speeds, and voltage readings.",
+    sampleConfig: `service:
+  name: sensors
+  instance_id: sensors-local
+
+collection:
+  poll_interval_secs: 20
+
+source:
+  backend: auto
+
+export:
+  otlp:
+    endpoint: "http://127.0.0.1:4355/v1/metrics"
+    protocol: http/protobuf
+    timeout_secs: 10
+`,
+  },
+  {
+    key: "postgres",
+    label: "Postgres",
+    icon: "storage",
+    packageName: "ojo-postgres",
+    configFile: "postgres.yaml",
+    keywords: ["postgres", "postgresql", "database", "sql"],
+    description: "Postgres availability, connection, transaction, and block metrics.",
+    sampleConfig: `service:
+  name: postgres
+  instance_id: postgres-local
+
+source:
+  dsn: "postgresql://postgres:secret@localhost:5432/postgres"
+
+collection:
+  poll_interval_secs: 30
+
+export:
+  otlp:
+    endpoint: "http://127.0.0.1:4355/v1/metrics"
+    protocol: http/protobuf
+    timeout_secs: 10
+`,
+  },
+  {
+    key: "mysql",
+    label: "MySQL",
+    icon: "database",
+    packageName: "ojo-mysql",
+    configFile: "mysql.yaml",
+    keywords: ["mysql", "database", "sql", "mariadb"],
+    description: "MySQL availability, connection, query rate, and throughput metrics.",
+    sampleConfig: `service:
+  name: mysql
+  instance_id: mysql-local
+
+source:
+  dsn: "mysql://root:secret@tcp(localhost:3306)/"
+
+collection:
+  poll_interval_secs: 30
+
+export:
+  otlp:
+    endpoint: "http://127.0.0.1:4355/v1/metrics"
+    protocol: http/protobuf
+    timeout_secs: 10
+`,
+  },
 ];
 
 function buildMinimalCollectorConfig(os = "linux", instanceId = "") {
@@ -168,6 +297,7 @@ NavItem.propTypes = {
     label: PropTypes.string.isRequired,
     icon: PropTypes.string.isRequired,
     path: PropTypes.string.isRequired,
+    topNavHidden: PropTypes.bool,
   }).isRequired,
   isMobile: PropTypes.bool,
   variant: PropTypes.oneOf(["top", "sidebar"]),
@@ -280,6 +410,346 @@ ApiKeyDropdown.propTypes = {
   compact: PropTypes.bool,
 };
 
+function QuickCreateApiKeyButton({ onCreated }) {
+  const toast = useToast();
+  const panelRef = useRef(null);
+  const triggerRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const trimmed = String(name || "").trim();
+    if (!trimmed || creating) return;
+    setCreating(true);
+    try {
+      const created = await api.createApiKey({ name: trimmed });
+      if (created?.id) {
+        await api.updateApiKey(created.id, { is_enabled: true });
+      }
+      await onCreated?.(created);
+      setName("");
+      setOpen(false);
+      toast.success("API key created");
+    } catch (err) {
+      toast.error(err?.body?.detail || err?.message || "Failed to create API key");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="relative hidden sm:block">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sre-border bg-[linear-gradient(135deg,rgba(14,165,233,0.16),rgba(34,197,94,0.10))] text-sre-text-muted shadow-sm transition-all hover:-translate-y-0.5 hover:border-sre-primary/50 hover:text-sre-text hover:shadow-md"
+        aria-label="Quick create API key"
+        title="Quick create API key"
+      >
+        <span className="material-icons text-[18px] leading-none">key</span>
+        <span className="pointer-events-none absolute -right-0.5 -top-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-sre-primary text-white shadow-sm">
+          <span className="material-icons text-[11px] leading-none">add</span>
+        </span>
+      </button>
+
+      {open && (
+        <div
+          ref={panelRef}
+          className="absolute right-0 top-full z-[70] mt-2 w-[18rem] rounded-2xl border border-sre-border bg-sre-bg-card/95 p-3 shadow-2xl backdrop-blur-xl"
+        >
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-sre-primary/10 text-sre-primary">
+                  <span className="material-icons text-[16px] leading-none">
+                    key
+                  </span>
+                </span>
+                <div>
+                  <div className="text-sm font-semibold text-sre-text">
+                    Quick Create
+                  </div>
+                  <div className="text-[11px] text-sre-text-muted">
+                    Make a new key and switch to it
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Input
+              autoFocus
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Production Team"
+              className="text-sm"
+            />
+
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="text-xs font-medium text-sre-text-muted transition-colors hover:text-sre-text"
+              >
+                Cancel
+              </button>
+              <Button
+                type="submit"
+                size="sm"
+                loading={creating}
+                disabled={!String(name || "").trim()}
+                className="rounded-xl px-3"
+              >
+                <span className="material-icons mr-1 text-[15px] leading-none">
+                  auto_awesome
+                </span>
+                Create
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+QuickCreateApiKeyButton.propTypes = {
+  onCreated: PropTypes.func,
+};
+
+function QuickMetricsQueryButton({ apiKeys = [] }) {
+  const toast = useToast();
+  const panelRef = useRef(null);
+  const triggerRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selectedKeyId, setSelectedKeyId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [resultMeta, setResultMeta] = useState(null);
+
+  const selectableKeys = apiKeys.filter(
+    (key) => (!key.is_shared || key.can_use) && !key.is_hidden,
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!selectableKeys.length) {
+      setSelectedKeyId("");
+      return;
+    }
+    const enabledKey = selectableKeys.find((key) => key.is_enabled);
+    const fallbackKey = enabledKey || selectableKeys[0];
+    setSelectedKeyId((current) => {
+      if (current && selectableKeys.some((key) => key.id === current)) {
+        return current;
+      }
+      return fallbackKey?.id || "";
+    });
+  }, [selectableKeys]);
+
+  const selectedKey = selectableKeys.find((key) => key.id === selectedKeyId);
+  const formattedResult = result ? JSON.stringify(result, null, 2) : "";
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const trimmedQuery = String(query || "").trim();
+    const scope = String(selectedKey?.key || "").trim();
+    if (!trimmedQuery || !scope || loading) return;
+
+    setLoading(true);
+    try {
+      const response = await api.evaluatePromql(trimmedQuery, scope, {
+        sampleLimit: 20,
+      });
+      setResult(response);
+      setResultMeta({
+        keyName: selectedKey?.name || scope,
+        executedAt: new Date().toLocaleTimeString(),
+      });
+    } catch (err) {
+      setResult(null);
+      setResultMeta(null);
+      toast.error(err?.body?.detail || err?.message || "Metric query failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!formattedResult) return;
+    const ok = await copyToClipboard(formattedResult);
+    if (ok) toast.success("JSON copied");
+    else toast.error("Failed to copy JSON");
+  };
+
+  return (
+    <div className="relative hidden sm:block">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sre-border bg-[linear-gradient(135deg,rgba(16,185,129,0.16),rgba(59,130,246,0.12))] text-sre-text-muted shadow-sm transition-all hover:-translate-y-0.5 hover:border-sre-primary/50 hover:text-sre-text hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label="Quick query metrics"
+        title="Quick query metrics"
+        disabled={selectableKeys.length === 0}
+      >
+        <span className="material-icons text-[18px] leading-none">query_stats</span>
+      </button>
+
+      {open && (
+        <div
+          ref={panelRef}
+          className="absolute right-0 top-full z-[70] mt-2 w-[28rem] rounded-2xl border border-sre-border bg-sre-bg-card/95 p-4 shadow-2xl backdrop-blur-xl"
+        >
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sre-primary/10 text-sre-primary">
+                <span className="material-icons text-[18px] leading-none">
+                  query_stats
+                </span>
+              </span>
+              <div>
+                <div className="text-sm font-semibold text-sre-text">
+                  Quick Metrics Query
+                </div>
+                <div className="text-[11px] text-sre-text-muted">
+                  Run a PromQL query against one API key scope and inspect raw JSON.
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="quick-metrics-key"
+                className="text-xs font-medium text-sre-text"
+              >
+                API Key Scope
+              </label>
+              <select
+                id="quick-metrics-key"
+                value={selectedKeyId}
+                onChange={(event) => setSelectedKeyId(event.target.value)}
+                className="w-full rounded-xl border border-sre-border bg-sre-surface px-3 py-2 text-sm text-sre-text focus:border-sre-primary focus:outline-none focus:ring-1 focus:ring-sre-primary"
+              >
+                {selectableKeys.map((key) => (
+                  <option key={key.id} value={key.id}>
+                    {key.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <Input
+              label="PromQL Query"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder='sum(rate(http_requests_total[5m]))'
+              className="text-sm"
+            />
+
+            <div className="rounded-xl border border-sre-border bg-sre-surface/70 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-medium text-sre-text">JSON Result</div>
+                  <div className="text-[11px] text-sre-text-muted">
+                    {resultMeta
+                      ? `${resultMeta.keyName} at ${resultMeta.executedAt}`
+                      : "Results stay local to this quick query panel"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  disabled={!formattedResult}
+                  className="text-xs font-medium text-sre-text-muted transition-colors hover:text-sre-text disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Copy JSON
+                </button>
+              </div>
+              <pre className="max-h-72 overflow-auto rounded-xl bg-sre-bg px-3 py-3 text-xs leading-5 text-sre-text">
+                {formattedResult || "{\n  \"status\": \"ready\",\n  \"message\": \"Run a query to inspect JSON output.\"\n}"}
+              </pre>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[11px] text-sre-text-muted">
+                Tip: use this for quick validation before saving dashboards or rules.
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="text-xs font-medium text-sre-text-muted transition-colors hover:text-sre-text"
+                >
+                  Close
+                </button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  loading={loading}
+                  disabled={!String(query || "").trim() || !selectedKey}
+                  className="rounded-xl px-3"
+                >
+                  <span className="material-icons mr-1 text-[15px] leading-none">
+                    play_arrow
+                  </span>
+                  Run
+                </Button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+QuickMetricsQueryButton.propTypes = {
+  apiKeys: PropTypes.array,
+};
+
 export default function Header() {
   const { user, logout, hasPermission, refreshUser } = useAuth();
   const { sidebarMode, toggleSidebarMode } = useLayoutMode();
@@ -320,7 +790,9 @@ export default function Header() {
   );
 
   const visibleNavItems = NAV_ITEM_LIST.filter(
-    (item) => !item.permission || hasPermission(item.permission),
+    (item) =>
+      (!item.permission || hasPermission(item.permission)) &&
+      !(item.topNavHidden && !sidebarMode),
   );
 
   const headerBarClass = sidebarMode
@@ -374,6 +846,8 @@ export default function Header() {
             onSelect={handleActiveKeyChange}
             disabled={switchingKey}
           />
+          {sidebarMode && <QuickMetricsQueryButton apiKeys={visibleApiKeys} />}
+          {sidebarMode && <QuickCreateApiKeyButton onCreated={refreshUser} />}
         </div>
       )}
 
@@ -492,8 +966,11 @@ export default function Header() {
 
 function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
   const toast = useToast();
+  const wasOpenRef = useRef(false);
   const [step, setStep] = useState(0);
   const [selectedOs, setSelectedOs] = useState("linux");
+  const [selectedExtraServiceKey, setSelectedExtraServiceKey] = useState("docker");
+  const [extraServiceSearch, setExtraServiceSearch] = useState("");
   const [instanceIdSuffix, setInstanceIdSuffix] = useState("");
   const [selectedApiKeyId, setSelectedApiKeyId] = useState("");
   const [fetchedApiKeys, setFetchedApiKeys] = useState([]);
@@ -514,15 +991,22 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
   const effectiveApiKeys = fetchedApiKeys.length ? fetchedApiKeys : apiKeys;
 
   useEffect(() => {
-    if (!open) return;
-    if (!effectiveApiKeys.length) {
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
+    if (!apiKeys.length) {
       setSelectedApiKeyId("");
     } else {
-      const enabled = effectiveApiKeys.find((k) => k.is_enabled);
-      setSelectedApiKeyId(enabled?.id || effectiveApiKeys[0]?.id || "");
+      const enabled = apiKeys.find((k) => k.is_enabled);
+      setSelectedApiKeyId(enabled?.id || apiKeys[0]?.id || "");
     }
     setStep(0);
     setSelectedOs("linux");
+    setSelectedExtraServiceKey("docker");
+    setExtraServiceSearch("");
     setConnectStatus("idle");
     setConnectMessage("");
     setReleaseFetched(false);
@@ -538,7 +1022,7 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
     setFetchedApiKeys([]);
     setTokenRegenerating(false);
     setTokenRegenerateError("");
-  }, [open]);
+  }, [apiKeys, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -638,9 +1122,29 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
   if (!open) return null;
 
   const assets = Array.isArray(releaseData?.assets) ? releaseData.assets : [];
+  const filteredExtraServices = OJO_EXTRA_SERVICES.filter((service) => {
+    const token = String(extraServiceSearch || "").trim().toLowerCase();
+    if (!token) return true;
+    return [service.label, service.packageName, service.description, ...(service.keywords || [])]
+      .join(" ")
+      .toLowerCase()
+      .includes(token);
+  });
+  const selectedExtraService =
+    OJO_EXTRA_SERVICES.find((service) => service.key === selectedExtraServiceKey) ||
+    OJO_EXTRA_SERVICES[0];
   const osAssets = assets.filter((asset) => {
     const name = String(asset?.name || "").toLowerCase();
     if (!name) return false;
+
+    if (selectedOs === "extras") {
+      const packageName = String(selectedExtraService?.packageName || "").toLowerCase();
+      const serviceKey = String(selectedExtraService?.key || "").toLowerCase();
+      return (
+        (!!packageName && name.includes(packageName)) ||
+        (!!serviceKey && name.includes(serviceKey))
+      );
+    }
 
     if (selectedOs === "linux") {
       const isLinux = name.includes("linux");
@@ -687,9 +1191,18 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
     solaris: "solaris.yaml",
     containers: "collector.yaml",
   };
-  const selectedConfigFile = configFileByOs[selectedOs] || "collector.yaml";
+  const selectedConfigFile =
+    selectedOs === "extras"
+      ? selectedExtraService?.configFile || "service.yaml"
+      : configFileByOs[selectedOs] || "collector.yaml";
 
-  const generatedConfig = buildMinimalCollectorConfig(selectedOs, generatedInstanceId);
+  const generatedConfig =
+    selectedOs === "extras"
+      ? String(selectedExtraService?.sampleConfig || "").replace(
+          /instance_id:\s+[^\n]+/,
+          `instance_id: ${selectedExtraService?.key || "service"}-${instanceIdSuffix || "xxxxxx"}`,
+        )
+      : buildMinimalCollectorConfig(selectedOs, generatedInstanceId);
   const selectedToken = String(
     apiKeyTokenMap[selectedApiKeyId] || selectedApiKey?.otlp_token || "",
   ).trim();
@@ -730,6 +1243,10 @@ chmod +x ojo
   -v $(pwd)/otel-agent.yaml:/etc/otelcol/config.yaml \\
   observantio/ojo:latest`,
   };
+  const extraInstallCommand = `curl -L ${resolvedBinaryUrl} -o ${selectedExtraService?.packageName || "ojo-service"}
+chmod +x ${selectedExtraService?.packageName || "ojo-service"}
+sudo mv ${selectedExtraService?.packageName || "ojo-service"} /usr/local/bin/${selectedExtraService?.packageName || "ojo-service"}
+${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigFile}`;
   const fallbackReleaseLinks = [
     { name: "Latest release", url: OJO_RELEASES_URL },
     { name: "All releases", url: "https://github.com/observantio/ojo/releases" },
@@ -751,17 +1268,32 @@ chmod +x ojo
     while (attempts < (waitUntilConnected ? 12 : 1)) {
       attempts += 1;
       try {
-        const knownRes = await api.getAgents({ maxRetries: 0 });
+        const [knownRes, activeRes] = await Promise.all([
+          api.getAgents({ maxRetries: 0 }),
+          api.getActiveAgents({ maxRetries: 0 }),
+        ]);
         const knownAgents = Array.isArray(knownRes) ? knownRes : [];
         const scopedAgents = selectedApiScope
           ? knownAgents.filter(
               (agent) => String(agent?.tenant_id || "").trim() === selectedApiScope,
             )
           : knownAgents;
-        if (scopedAgents.length > 0) {
+        const activeScopes = Array.isArray(activeRes) ? activeRes : [];
+        const scopedActivity = selectedApiScope
+          ? activeScopes.find(
+              (item) => String(item?.tenant_id || "").trim() === selectedApiScope,
+            )
+          : activeScopes[0];
+        const hasHeartbeat = scopedAgents.length > 0;
+        const hasMetricsActivity = Boolean(scopedActivity?.active || scopedActivity?.metrics_active);
+
+        if (hasHeartbeat || hasMetricsActivity) {
+          const detectionLabel = hasHeartbeat
+            ? `heartbeat detected for ${scopedAgents.length} agent${scopedAgents.length === 1 ? "" : "s"}`
+            : `metrics detected for ${scopedActivity?.name || "the selected API key"}`;
           setConnectStatus("connected");
           setConnectMessage(
-            `Connected: heartbeat detected for ${scopedAgents.length} agent${scopedAgents.length === 1 ? "" : "s"} in the selected API key scope.`,
+            `Connected: ${detectionLabel} in the selected API key scope.`,
           );
           return;
         }
@@ -868,7 +1400,7 @@ chmod +x ojo
               <h3 className="text-base font-semibold text-sre-text">
                 1. Pick your operating system
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {OJO_OS_OPTIONS.map((option) => (
                   <button
                     key={option.key}
@@ -876,6 +1408,9 @@ chmod +x ojo
                     onClick={() => {
                       setSelectedOs(option.key);
                       setSelectedAssetUrl("");
+                      if (option.key === "extras" && !selectedExtraServiceKey) {
+                        setSelectedExtraServiceKey(OJO_EXTRA_SERVICES[0]?.key || "");
+                      }
                     }}
                     className={`rounded-lg border px-4 py-3 text-left transition-colors ${
                       selectedOs === option.key
@@ -892,6 +1427,80 @@ chmod +x ojo
                   </button>
                 ))}
               </div>
+
+              {selectedOs === "extras" && (
+                <div className="rounded-xl border border-sre-border bg-sre-surface/70 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-sre-text">
+                        Extra services
+                      </h4>
+                      <p className="mt-1 text-sm text-sre-text-muted">
+                        Add focused sidecar collectors for Docker, GPU, sensors, Postgres, or MySQL. Each runs as its own binary and sends OTLP metrics to the same collector endpoint.
+                      </p>
+                    </div>
+                    <div className="w-full sm:max-w-xs">
+                      <Input
+                        value={extraServiceSearch}
+                        onChange={(event) => setExtraServiceSearch(event.target.value)}
+                        placeholder="Search gpu, docker, postgres..."
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    {filteredExtraServices.map((service) => (
+                      <button
+                        key={service.key}
+                        type="button"
+                        onClick={() => {
+                          setSelectedExtraServiceKey(service.key);
+                          setSelectedAssetUrl("");
+                        }}
+                        className={`rounded-xl border p-4 text-left transition-all ${
+                          selectedExtraServiceKey === service.key
+                            ? "border-sre-primary bg-sre-primary/10 shadow-sm"
+                            : "border-sre-border bg-sre-bg hover:border-sre-primary/40"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="material-icons inline-flex h-5 w-5 shrink-0 items-center justify-center text-base leading-none text-sre-primary"
+                                aria-hidden
+                              >
+                                {service.icon}
+                              </span>
+                              <span className="font-semibold text-sre-text">
+                                {service.label}
+                              </span>
+                            </div>
+                            <div className="mt-1 text-xs text-sre-text-muted">
+                              {service.packageName} · {service.configFile}
+                            </div>
+                          </div>
+                          {selectedExtraServiceKey === service.key ? (
+                            <span className="rounded-full border border-sre-primary/30 bg-sre-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-sre-primary">
+                              Selected
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-3 text-sm text-sre-text-muted">
+                          {service.description}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {filteredExtraServices.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-dashed border-sre-border bg-sre-bg p-4 text-sm text-sre-text-muted">
+                      No matching extra services found. Try `gpu`, `sensors`, `postgres`, `mysql`, or `docker`.
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           )}
 
@@ -919,7 +1528,9 @@ chmod +x ojo
                   Open releases page
                 </a>
                 <p className="mt-2 text-xs text-sre-text-muted">
-                  Download the raw binary or `.exe` asset directly. No tar extraction is required.
+                  {selectedOs === "extras"
+                    ? `Download the ${selectedExtraService?.packageName || "extension"} binary if it is published with the release. If it is missing, build it from source and use the config template in the next step.`
+                    : "Download the raw binary or `.exe` asset directly. No tar extraction is required."}
                 </p>
               </div>
 
@@ -946,7 +1557,9 @@ chmod +x ojo
                 ) : null}
                 <pre className="rounded-md text-xs text-sre-text overflow-x-auto">
                   <code className="whitespace-pre">
-                    {installCommandByOs[selectedOs]}
+                    {selectedOs === "extras"
+                      ? extraInstallCommand
+                      : installCommandByOs[selectedOs]}
                   </code>
                 </pre>
               </div>
@@ -1001,7 +1614,9 @@ chmod +x ojo
                   </div>
                 ) : (
                   <p className="text-sm text-sre-text-muted">
-                    No auto-matched assets yet. Pick the binary/EXE package for {selectedOs} from the releases list below.
+                    {selectedOs === "extras"
+                      ? `No auto-matched asset found for ${selectedExtraService?.packageName || "this extension"} yet. Build it from source or pick the matching binary from the release list below if your pipeline publishes it.`
+                      : `No auto-matched assets yet. Pick the binary/EXE package for ${selectedOs} from the releases list below.`}
                   </p>
                 )}
               </div>
@@ -1063,20 +1678,24 @@ chmod +x ojo
           {step === 2 && (
             <div className="space-y-4">
               <h3 className="text-base font-semibold text-sre-text">
-                3. Generate Ojo config file
+                {selectedOs === "extras"
+                  ? `3. Generate ${selectedExtraService?.label || "service"} config file`
+                  : "3. Generate Ojo config file"}
               </h3>
               <div className="rounded-lg border border-sre-border bg-sre-surface p-3 text-sm text-sre-text-muted">
                 Use this file as{" "}
                 <span className="font-semibold text-sre-text">
                   {selectedConfigFile}
                 </span>{" "}
-                for your selected OS.
+                {selectedOs === "extras"
+                  ? "for your selected extra service binary."
+                  : "for your selected OS."}
               </div>
 
               <div className="rounded-lg border border-sre-border bg-sre-bg-alt p-3">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-sre-text-muted">
-                    Ojo config ({selectedConfigFile})
+                    {selectedOs === "extras" ? "Service config" : "Ojo config"} ({selectedConfigFile})
                   </p>
                   <button
                     type="button"
@@ -1090,6 +1709,11 @@ chmod +x ojo
                   <code>{generatedConfig}</code>
                 </pre>
               </div>
+              {selectedOs === "extras" ? (
+                <div className="rounded-lg border border-sre-border bg-sre-bg-alt p-3 text-sm text-sre-text-muted">
+                  This extension binary still needs the OTEL collector config from the next step. Point its OTLP export to the same collector endpoint and keep the collector listening on port <span className="font-semibold text-sre-text">4355</span>.
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -1262,6 +1886,46 @@ chmod +x ojo
                   {connectMessage}
                 </div>
               ) : null}
+              {connectStatus === "connected" ? (
+                <div className="rounded-xl border border-sre-primary/30 bg-[linear-gradient(135deg,rgba(14,165,233,0.12),rgba(34,197,94,0.08))] p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="material-icons text-sre-primary">
+                      rocket_launch
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-sre-text">
+                        Next up: make the data usable
+                      </div>
+                      <div className="mt-1 text-sm text-sre-text-muted">
+                        Once confirmed, create a datasource and then create a
+                        dashboard that uses that datasource.
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <NavLink
+                          to="/grafana"
+                          onClick={onClose}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-sre-primary/40 bg-sre-primary/10 px-3 py-2 text-xs font-semibold text-sre-text transition-colors hover:border-sre-primary/70 hover:bg-sre-primary/15"
+                        >
+                          <span className="material-icons text-sm leading-none">
+                            storage
+                          </span>
+                          Create datasource
+                        </NavLink>
+                        <NavLink
+                          to="/grafana"
+                          onClick={onClose}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-sre-border bg-sre-surface px-3 py-2 text-xs font-semibold text-sre-text transition-colors hover:border-sre-primary/40"
+                        >
+                          <span className="material-icons text-sm leading-none">
+                            dashboard_customize
+                          </span>
+                          Create dashboard
+                        </NavLink>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -1280,6 +1944,7 @@ chmod +x ojo
             <button
               type="button"
               onClick={() => setStep((s) => Math.min(4, s + 1))}
+              disabled={selectedOs === "extras" && !selectedExtraServiceKey}
               className="rounded-md border border-sre-primary/40 bg-sre-primary/10 px-3 py-1.5 text-sm font-medium text-sre-text"
             >
               Next

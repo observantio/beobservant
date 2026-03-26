@@ -32,6 +32,40 @@ import { discoverServices, computeTraceStats } from "../utils/tempoTraceUtils";
 
 const TRACE_PAGE_SIZE = 20;
 
+function normalizeServiceNames(values) {
+  const set = new Set();
+  (Array.isArray(values) ? values : []).forEach((value) => {
+    const text = String(value || "").trim();
+    if (!text) return;
+    if (text.toLowerCase() === "unknown") return;
+    set.add(text);
+  });
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+function getTraceIdentity(trace) {
+  return trace?.traceID || trace?.traceId || trace?.id || "";
+}
+
+function getTraceSummary(trace) {
+  const spans = Array.isArray(trace?.spans) ? trace.spans : [];
+  const rootSpan =
+    spans.find((span) => !span.parentSpanId && !span.parentSpanID) || spans[0];
+  const duration = Number(rootSpan?.duration || 0);
+  const traceId = getTraceIdentity(trace);
+  const rootServiceName = rootSpan ? getServiceName(rootSpan) : "unknown";
+  const hasError = spans.some(hasSpanError);
+
+  return {
+    traceId,
+    rootSpan,
+    duration,
+    rootServiceName,
+    hasError,
+    spanCount: spans.length,
+  };
+}
+
 export default function TempoPage() {
   const [services, setServices] = useState([]);
   const [service, setService] = useState("");
@@ -59,9 +93,16 @@ export default function TempoPage() {
   const [refreshInterval, setRefreshInterval] = useState(30);
   const searchRunIdRef = useRef(0);
   const activeSearchControllerRef = useRef(null);
+  const servicesLoadControllerRef = useRef(null);
+  const previousActiveApiKeyIdRef = useRef(null);
 
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const toast = useToast();
+  const activeApiKeyId = useMemo(() => {
+    const keys = user?.api_keys || [];
+    const active = keys.find((k) => k.is_enabled) || keys.find((k) => k.is_default);
+    return active?.id || active?.key || user?.org_id || "";
+  }, [user]);
 
   const pruneSelectedTraceIds = useCallback((invalidIds) => {
     if (!invalidIds || invalidIds.size === 0) return;
@@ -74,23 +115,52 @@ export default function TempoPage() {
   }, []);
 
   const loadServices = useCallback(async () => {
+    if (servicesLoadControllerRef.current) {
+      servicesLoadControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    servicesLoadControllerRef.current = controller;
     try {
-      const data = await fetchTempoServices();
-      setServices(data || []);
+      const data = await fetchTempoServices({ signal: controller.signal });
+      setServices(normalizeServiceNames(data));
     } catch (error) {
       if (error?.name === "AbortError" || error?.code === "REQUEST_ABORTED") {
         return;
       }
       setServices([]);
+    } finally {
+      if (servicesLoadControllerRef.current === controller) {
+        servicesLoadControllerRef.current = null;
+      }
     }
   }, []);
 
-  // Load services on mount for authenticated users.
+  // Keep filters/options synced with the active API key (tenant context).
   useEffect(() => {
-    if (isAuthenticated && !authLoading) {
-      loadServices();
+    if (!isAuthenticated || authLoading) {
+      previousActiveApiKeyIdRef.current = null;
+      return;
     }
-  }, [isAuthenticated, authLoading, loadServices]);
+    const previous = previousActiveApiKeyIdRef.current;
+    const changed = previous !== null && previous !== activeApiKeyId;
+    previousActiveApiKeyIdRef.current = activeApiKeyId;
+
+    if (changed) {
+      if (activeSearchControllerRef.current) {
+        activeSearchControllerRef.current.abort();
+      }
+      setService("");
+      setOperation("");
+      setTraceIdSearch("");
+      setTraces(null);
+      setSelectedTrace(null);
+      setSelectedTraceIds(new Set());
+      setGraphTraces([]);
+      setViewMode("list");
+      setTracePage(1);
+    }
+    loadServices();
+  }, [isAuthenticated, authLoading, activeApiKeyId, loadServices]);
 
   useAutoRefresh(() => onSearch(), refreshInterval * 1000, autoRefresh);
 
@@ -99,16 +169,29 @@ export default function TempoPage() {
       if (activeSearchControllerRef.current) {
         activeSearchControllerRef.current.abort();
       }
+      if (servicesLoadControllerRef.current) {
+        servicesLoadControllerRef.current.abort();
+      }
     },
     [],
   );
 
+  const discoveredServiceOptions = useMemo(
+    () => normalizeServiceNames(discoverServices(traces?.data || [])),
+    [traces],
+  );
+
+  const serviceOptions = useMemo(() => {
+    if (discoveredServiceOptions.length > 0) return discoveredServiceOptions;
+    return normalizeServiceNames(services);
+  }, [discoveredServiceOptions, services]);
+
   useEffect(() => {
-    if (!services.length && traces?.data?.length) {
-      const discovered = discoverServices(traces.data);
-      if (discovered.length) setServices(discovered);
+    if (!service) return;
+    if (!serviceOptions.includes(service)) {
+      setService("");
     }
-  }, [traces, services.length]);
+  }, [service, serviceOptions]);
 
   const handleTraceClick = useCallback(
     async (traceId, { silent = false, signal } = {}) => {
@@ -295,10 +378,6 @@ export default function TempoPage() {
         setSelectedTrace(null);
       }
 
-      if (!services.length && res?.data?.length) {
-        const discovered = discoverServices(res.data);
-        if (discovered.length) setServices(discovered);
-      }
     } catch (e) {
       if (e?.name === "AbortError" || e?.code === "REQUEST_ABORTED") return;
       toast.error(e?.message || "Failed to search traces");
@@ -311,13 +390,57 @@ export default function TempoPage() {
 
   const filteredTraces = useMemo(() => {
     if (!traces?.data) return [];
+    const selectedService = String(service || "").trim().toLowerCase();
+    const selectedOperation = String(operation || "").trim().toLowerCase();
+    const minDurationUs = Math.max(0, Number(durationRange?.[0] || 0));
+    const maxDurationUs = Math.max(minDurationUs, Number(durationRange?.[1] || 0));
+
+    const traceDurationUs = (trace) => {
+      const spans = Array.isArray(trace?.spans) ? trace.spans : [];
+      if (!spans.length) return 0;
+      // Summary traces expose the full duration on the synthetic root span.
+      if (spans.length === 1 && Number.isFinite(Number(spans[0]?.duration))) {
+        return Math.max(0, Number(spans[0].duration));
+      }
+      return spans.reduce((max, span) => {
+        const d = Number(span?.duration || 0);
+        return Number.isFinite(d) ? Math.max(max, d) : max;
+      }, 0);
+    };
+
     return traces.data.filter((trace) => {
-      if (!trace.spans || trace.spans.length === 0) return true;
+      const spans = Array.isArray(trace?.spans) ? trace.spans : [];
+      if (!spans.length) return false;
+
+      if (selectedService) {
+        const hasService = spans.some(
+          (span) =>
+            String(getServiceName(span) || "")
+              .trim()
+              .toLowerCase() === selectedService,
+        );
+        if (!hasService) return false;
+      }
+
+      if (selectedOperation) {
+        const hasOperation = spans.some((span) =>
+          String(span?.operationName || "")
+            .toLowerCase()
+            .includes(selectedOperation),
+        );
+        if (!hasOperation) return false;
+      }
+
+      const durationUs = traceDurationUs(trace);
+      if (durationUs < minDurationUs || durationUs > maxDurationUs) {
+        return false;
+      }
+
       if (statusFilter === "error") return trace.spans.some(hasSpanError);
       if (statusFilter === "ok") return !trace.spans.some(hasSpanError);
       return true;
     });
-  }, [traces, statusFilter]);
+  }, [traces, statusFilter, service, operation, durationRange]);
 
   const traceStats = useMemo(() => {
     return computeTraceStats(filteredTraces);
@@ -329,6 +452,13 @@ export default function TempoPage() {
   }, [filteredTraces, tracePage, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTraces.length / pageSize));
+
+  const graphSuggestions = useMemo(() => {
+    return filteredTraces.slice(0, 8).map((trace) => ({
+      trace,
+      ...getTraceSummary(trace),
+    }));
+  }, [filteredTraces]);
 
   useEffect(() => {
     if (tracePage > totalPages) {
@@ -474,8 +604,8 @@ export default function TempoPage() {
                   className="flex-1 px-2 py-0.5 text-sm"
                 >
                   <option value="">All Services</option>
-                  {services.length > 0 ? (
-                    services.map((s) => (
+                  {serviceOptions.length > 0 ? (
+                    serviceOptions.map((s) => (
                       <option key={s} value={s}>
                         {s}
                       </option>
@@ -677,7 +807,7 @@ export default function TempoPage() {
               : graphTraces.length
                 ? `Showing relationships between ${new Set(graphTraces.flatMap((t) => t.spans?.map((s) => getServiceName(s)).filter(Boolean) || [])).size} services (selected)`
                 : filteredTraces.length
-                  ? `Showing relationships between ${new Set(filteredTraces.flatMap((t) => t.spans?.map((s) => getServiceName(s)).filter(Boolean) || [])).size} services`
+                  ? "Select one of the traces below to build the dependency map"
                   : "Run a search to see the dependency map"
           }
         >
@@ -688,10 +818,92 @@ export default function TempoPage() {
                 Building dependency map…
               </p>
             </div>
-          ) : (graphTraces.length ? graphTraces : filteredTraces).length > 0 ? (
-            <ServiceGraph
-              traces={graphTraces.length ? graphTraces : filteredTraces}
-            />
+          ) : graphTraces.length > 0 ? (
+            <ServiceGraph traces={graphTraces} />
+          ) : filteredTraces.length > 0 ? (
+            <div className="rounded-2xl border border-sre-border bg-sre-bg-alt/70 p-5">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-sre-text">
+                    Pick a Trace to Inspect
+                  </h3>
+                  <p className="mt-1 max-w-2xl text-sm text-sre-text-muted">
+                    Dependency maps need a full trace. Choose one of the traces
+                    from your current search and we&apos;ll open its service map here.
+                  </p>
+                </div>
+                <div className="rounded-full border border-sre-border bg-sre-surface px-3 py-1 text-xs font-medium text-sre-text-muted">
+                  {filteredTraces.length} possible trace
+                  {filteredTraces.length === 1 ? "" : "s"}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {graphSuggestions.map(
+                  ({
+                    trace,
+                    traceId,
+                    rootServiceName,
+                    duration,
+                    hasError,
+                    spanCount,
+                    rootSpan,
+                  }) => (
+                    <button
+                      key={traceId}
+                      type="button"
+                      onClick={() => showTraceOnMap(traceId)}
+                      className="rounded-xl border border-sre-border bg-sre-surface/70 p-4 text-left transition-all hover:border-sre-primary/40 hover:bg-sre-surface hover:shadow-md"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate font-mono text-sm font-semibold text-sre-text">
+                            {traceId}
+                          </div>
+                          <div className="mt-1 text-xs text-sre-text-muted">
+                            {rootServiceName}
+                            {rootSpan?.operationName
+                              ? ` · ${rootSpan.operationName}`
+                              : ""}
+                          </div>
+                        </div>
+                        <span
+                          className={`material-icons text-lg ${
+                            hasError ? "text-red-500" : "text-sre-primary"
+                          }`}
+                          aria-hidden
+                        >
+                          {hasError ? "error" : "hub"}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-sre-text-muted">
+                        <span className="rounded-full border border-sre-border bg-sre-bg px-2 py-1">
+                          {formatDuration(duration)}
+                        </span>
+                        <span className="rounded-full border border-sre-border bg-sre-bg px-2 py-1">
+                          {spanCount} span{spanCount === 1 ? "" : "s"}
+                        </span>
+                        <span className="rounded-full border border-sre-border bg-sre-bg px-2 py-1">
+                          {hasError ? "Contains errors" : "Healthy trace"}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 text-xs font-medium text-sre-primary">
+                        Open on dependency map
+                      </div>
+                    </button>
+                  ),
+                )}
+              </div>
+
+              {filteredTraces.length > graphSuggestions.length && (
+                <p className="mt-4 text-xs text-sre-text-muted">
+                  Showing {graphSuggestions.length} suggestions from your current
+                  search. Refine the query in list view to narrow this down further.
+                </p>
+              )}
+            </div>
           ) : (
             <div className="text-center py-16 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
               <span className="material-icons text-5xl text-sre-text-muted mb-4 block">

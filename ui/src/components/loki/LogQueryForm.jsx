@@ -132,11 +132,11 @@ export default function LogQueryForm({
             <div>
               <label className="block text-sm font-medium text-sre-text mb-2">
                 <span>Text Filter</span>
-                <HelpTooltip text="Filter logs containing specific text patterns. Use quotes for exact matches, e.g., 'timeout' or 'error 500'." />
+                <HelpTooltip text="Case-insensitive text match. Use * for any characters and ? for a single character, e.g. error* or timeout?." />
                 <input
                   value={pattern}
                   onChange={(e) => setPattern(e.target.value)}
-                  placeholder='e.g., "timeout"'
+                  placeholder="e.g., error*timeout?"
                   className="mt-2 w-full px-3 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text focus:border-sre-primary focus:ring-1 focus:ring-sre-primary"
                 />
               </label>

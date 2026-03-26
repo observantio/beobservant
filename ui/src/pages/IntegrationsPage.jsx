@@ -309,6 +309,19 @@ export default function IntegrationsPage() {
     () => jiraIntegrations.filter((item) => item.visibility === activeTab),
     [jiraIntegrations, activeTab]
   );
+  const tabIntegrationCounts = useMemo(() => {
+    const counts = {};
+    VISIBILITY_TABS.forEach((tab) => {
+      const channelsCount = channels.filter((channel) => channel.visibility === tab.key).length;
+      const jiraCount = jiraIntegrations.filter((integration) => integration.visibility === tab.key).length;
+      counts[tab.key] = {
+        total: channelsCount + jiraCount,
+        channels: channelsCount,
+        jira: jiraCount,
+      };
+    });
+    return counts;
+  }, [channels, jiraIntegrations]);
   const activeVisibilityMeta = useMemo(
     () => VISIBILITY_TABS.find((tab) => tab.key === activeTab) || VISIBILITY_TABS[0],
     [activeTab]
@@ -763,7 +776,14 @@ export default function IntegrationsPage() {
 
       <div className="rounded-xl bg-sre-surface/40 p-2">
         <div className="flex flex-wrap justify-center items-center gap-2">
-          {VISIBILITY_TABS.map((tab) => (
+          {VISIBILITY_TABS.map((tab) => {
+            // Show total integrations in scope (channels + Jira integrations).
+            const tabCount = tabIntegrationCounts[tab.key] || {
+              total: 0,
+              channels: 0,
+              jira: 0,
+            };
+            return (
             <button
               type="button"
               key={tab.key}
@@ -776,8 +796,20 @@ export default function IntegrationsPage() {
             >
               <span className="material-icons text-sm">{tab.icon}</span>
               {tab.label}
+              <span
+                aria-label={`${tab.label} integrations count`}
+                title={`${tabCount.total} total (${tabCount.channels} channels, ${tabCount.jira} Jira)`}
+                className={`inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                  activeTab === tab.key
+                    ? "bg-sre-primary/20 text-sre-primary"
+                    : "bg-sre-surface border border-sre-border text-sre-text-muted"
+                }`}
+              >
+                {tabCount.total}
+              </span>
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 

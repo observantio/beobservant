@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { render, fireEvent, screen, within } from "@testing-library/react";
 import { axe, toHaveNoViolations } from "jest-axe";
 import CreateUserModal from "../CreateUserModal";
@@ -8,13 +8,20 @@ expect.extend(toHaveNoViolations);
 vi.mock("../../../contexts/ToastContext", () => ({
   useToast: vi.fn(() => ({ success: vi.fn(), error: vi.fn() })),
 }));
+let authState = {
+  authMode: { oidc_enabled: false, password_enabled: true },
+};
 vi.mock("../../../contexts/AuthContext", () => ({
-  useAuth: vi.fn(() => ({
-    authMode: { oidc_enabled: false, password_enabled: true },
-  })),
+  useAuth: vi.fn(() => authState),
 }));
 
 describe("CreateUserModal — accessibility & keyboard interactions", () => {
+  beforeEach(() => {
+    authState = {
+      authMode: { oidc_enabled: false, password_enabled: true },
+    };
+  });
+
   it("toggles group selection with Enter/Space and has no a11y violations", async () => {
     const groups = [
       { id: "g1", name: "Group One" },
@@ -51,5 +58,27 @@ describe("CreateUserModal — accessibility & keyboard interactions", () => {
 
     const results = await axe(container);
     expect(results).toHaveNoViolations();
+  });
+
+  it("hides password input when OIDC is enabled and local auth is disabled", () => {
+    authState = {
+      authMode: { oidc_enabled: true, password_enabled: false },
+    };
+
+    render(
+      <CreateUserModal
+        isOpen
+        onClose={() => {}}
+        onCreated={() => {}}
+        groups={[]}
+        users={[]}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(screen.getByText(/OIDC is enabled/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/reset the user password to generate a local password/i),
+    ).toBeInTheDocument();
   });
 });

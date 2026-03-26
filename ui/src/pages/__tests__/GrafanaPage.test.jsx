@@ -104,12 +104,23 @@ vi.mock("../../components/grafana/GrafanaTabs", () => ({
 
 vi.mock("../../components/grafana/GrafanaContent", () => ({
   default: ({
+    activeTab,
+    query,
+    setQuery,
     openDashboardEditor,
     datasources = [],
     getDatasourceKeyName,
     onViewDatasourceMetrics,
   }) => (
     <div>
+      <div data-testid="active-query">{query || ""}</div>
+      <button
+        onClick={() =>
+          setQuery(activeTab === "dashboards" ? "dashboard-only" : "datasource-only")
+        }
+      >
+        Set Active Query
+      </button>
       <button onClick={() => openDashboardEditor()}>Open Dashboard Editor</button>
       {datasources.map((ds) => (
         <div key={ds.uid}>
@@ -220,6 +231,30 @@ describe("GrafanaPage state persistence", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Folders/i }));
     expect(JSON.parse(localStorage.getItem("grafana-active-tab"))).toBe(
       "folders",
+    );
+  });
+
+  it("keeps dashboard and datasource search queries separate", async () => {
+    render(<GrafanaPage />);
+
+    expect(screen.getByTestId("active-query")).toHaveTextContent("");
+    fireEvent.click(screen.getByText("Set Active Query"));
+    expect(screen.getByTestId("active-query")).toHaveTextContent("dashboard-only");
+
+    fireEvent.click(screen.getByRole("tab", { name: /Datasources/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId("active-query")).toHaveTextContent(""),
+    );
+    fireEvent.click(screen.getByText("Set Active Query"));
+    expect(screen.getByTestId("active-query")).toHaveTextContent(
+      "datasource-only",
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /Dashboards/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId("active-query")).toHaveTextContent(
+        "dashboard-only",
+      ),
     );
   });
 

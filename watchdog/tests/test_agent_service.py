@@ -47,11 +47,38 @@ def test_extract_metrics_count():
     assert helpers.extract_metrics_count(payload) == 7
 
 
+def test_extract_metrics_series():
+    payload = {
+        "data": {
+            "result": [
+                {
+                    "values": [
+                        [1711000000, "2"],
+                        ["1711000300", "5.0"],
+                        [1711000600, "bad"],
+                    ]
+                }
+            ]
+        }
+    }
+    assert helpers.extract_metrics_series(payload) == [
+        {"ts": 1711000000, "value": 2},
+        {"ts": 1711000300, "value": 5},
+    ]
+
+
+def test_mimir_prometheus_url_helper():
+    assert helpers.mimir_prometheus_url("http://mimir", "api/v1/query") == "http://mimir/prometheus/api/v1/query"
+    assert helpers.mimir_prometheus_url("http://mimir/prometheus", "api/v1/query_range") == "http://mimir/prometheus/api/v1/query_range"
+
+
 class DummyClient:
     def __init__(self, payload):
         self.payload = payload
+        self.last_url = None
 
     async def get(self, url, params=None, headers=None):
+        self.last_url = url
         class Resp:
             def __init__(self, data):
                 self._data = data
@@ -72,6 +99,7 @@ async def test_query_key_activity_success():
     result = await helpers.query_key_activity("key", client)
     assert result["metrics_active"]
     assert result["metrics_count"] == 3
+    assert client.last_url.endswith("/prometheus/api/v1/query")
 
 
 @pytest.mark.asyncio
@@ -82,7 +110,31 @@ async def test_service_wrapper_methods():
     agents = svc.list_agents()
     assert len(agents) == 1
     assert svc.extract_metrics_count({}) == 0
+    assert svc.extract_metrics_series({}) == []
     client = DummyClient({"data": {"result": []}})
     result = await svc.key_activity("k", client)
     assert not result["metrics_active"]
     assert result["metrics_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_query_key_volume_series_success():
+    payload = {
+        "data": {
+            "result": [
+                {
+                    "values": [
+                        [1711000000, "3"],
+                        [1711000300, "6"],
+                    ]
+                }
+            ]
+        }
+    }
+    client = DummyClient(payload)
+    result = await helpers.query_key_volume_series("key", client)
+    assert result == [
+        {"ts": 1711000000, "value": 3},
+        {"ts": 1711000300, "value": 6},
+    ]
+    assert client.last_url.endswith("/prometheus/api/v1/query_range")

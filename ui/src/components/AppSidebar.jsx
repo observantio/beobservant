@@ -59,9 +59,6 @@ export default function AppSidebar() {
           <span className="material-icons text-[22px] leading-none" aria-hidden>
             view_headline
           </span>
-          <span className="text-xs font-semibold tracking-wide uppercase">
-            Switch Mode
-          </span>
         </button>
       </div>
 

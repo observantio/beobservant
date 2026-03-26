@@ -382,6 +382,7 @@ async def get_datasources(
     tenant_id: str,
     group_ids: List[str],
     uid: Optional[str] = None,
+    query: Optional[str] = None,
     team_id: Optional[str] = None,
     show_hidden: bool = False,
     limit: Optional[int] = None,
@@ -389,6 +390,7 @@ async def get_datasources(
     datasource_context: Optional[DatasourceListContext] = None,
 ) -> List[Datasource]:
     capped_limit, capped_offset = _cap(limit, offset)
+    query_lc = str(query or "").strip().lower()
 
     if uid:
         datasource = await service.grafana_service.get_datasource(uid)
@@ -429,6 +431,20 @@ async def get_datasources(
             if not db_ds:
                 continue
             if str(team_id) not in {str(g.id) for g in (db_ds.shared_groups or [])}:
+                continue
+        if query_lc:
+            name_value = str(
+                (db_ds.name if db_ds and db_ds.name else getattr(d, "name", "")) or "",
+            ).lower()
+            type_value = str(getattr(d, "type", "") or "").lower()
+            url_value = str(getattr(d, "url", "") or "").lower()
+            uid_value = uid_val.lower()
+            if (
+                query_lc not in name_value
+                and query_lc not in type_value
+                and query_lc not in url_value
+                and query_lc not in uid_value
+            ):
                 continue
         payload = _enrich_datasource_payload(d.model_dump(), db_ds=db_ds, user_id=user_id, is_unregistered_safe_system=is_unregistered_safe)
         out.append(Datasource.model_validate(payload))
