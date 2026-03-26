@@ -196,7 +196,7 @@ function setupDatasources(datasourceOverrides = {}) {
   ]);
 }
 
-describe("GrafanaPage state persistence", () => {
+describe("GrafanaPage state behavior", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
@@ -212,26 +212,23 @@ describe("GrafanaPage state persistence", () => {
     setupDatasources();
   });
 
-  it("loads activeTab from localStorage", async () => {
+  it("does not load activeTab from localStorage", async () => {
     localStorage.setItem("grafana-active-tab", JSON.stringify("datasources"));
     render(<GrafanaPage />);
 
-    const dsBtn = await waitFor(() =>
-      screen.getByRole("tab", { name: /Datasources/i }),
+    const dashboardsBtn = await waitFor(() =>
+      screen.getByRole("tab", { name: /Dashboards/i }),
     );
-    expect(dsBtn).toHaveClass("text-sre-primary");
+    expect(dashboardsBtn).toHaveClass("text-sre-primary");
   });
 
-  it("persists activeTab changes", async () => {
+  it("does not persist activeTab changes", async () => {
     render(<GrafanaPage />);
 
-    const init = JSON.parse(localStorage.getItem("grafana-active-tab"));
-    expect([null, "dashboards"]).toContain(init);
+    expect(localStorage.getItem("grafana-active-tab")).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: /Folders/i }));
-    expect(JSON.parse(localStorage.getItem("grafana-active-tab"))).toBe(
-      "folders",
-    );
+    expect(localStorage.getItem("grafana-active-tab")).toBeNull();
   });
 
   it("keeps dashboard and datasource search queries separate", async () => {

@@ -101,6 +101,39 @@ class DummyClient:
         return Resp(payload)
 
 
+class DummyClientWithFailures:
+    def __init__(self, query_payload, by_path=None, raise_paths=None):
+        self.query_payload = query_payload
+        self.by_path = by_path or {}
+        self.raise_paths = set(raise_paths or [])
+        self.request_urls = []
+
+    async def get(self, url, params=None, headers=None):
+        url_text = str(url)
+        self.request_urls.append(url_text)
+        for path in self.raise_paths:
+            if path in url_text:
+                raise RuntimeError(f"forced failure for {path}")
+
+        payload = self.query_payload
+        for path, override in self.by_path.items():
+            if path in url_text:
+                payload = override
+                break
+
+        class Resp:
+            def __init__(self, data):
+                self._data = data
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self._data
+
+        return Resp(payload)
+
+
 @pytest.mark.asyncio
 async def test_query_key_activity_success():
     payload = {"data": {"result": [{"value": [0, "3"]}]}}
@@ -117,6 +150,73 @@ async def test_query_key_activity_success():
     assert result["agent_estimate"] == 2
     assert result["host_estimate"] == 3
     assert any(url.endswith("/prometheus/api/v1/query") for url in client.request_urls)
+
+
+@pytest.mark.asyncio
+async def test_query_key_activity_uses_fallback_agent_label_candidates():
+    payload = {"data": {"result": [{"value": [0, "9"]}]}}
+    client = DummyClientWithFailures(
+        payload,
+        by_path={
+            "/label/instance/values": {"data": []},
+            "/label/job/values": {"data": ["job-a", "job-b", "job-c"]},
+            "/label/host.name/values": {"data": ["host-a"]},
+        },
+    )
+    result = await helpers.query_key_activity("key", client)
+    assert result["metrics_active"] is True
+    assert result["metrics_count"] == 9
+    assert result["agent_estimate"] == 3
+    assert result["host_estimate"] == 1
+
+
+@pytest.mark.asyncio
+async def test_query_key_activity_falls_back_to_host_hostname_when_host_name_fails():
+    payload = {"data": {"result": [{"value": [0, "5"]}]}}
+    client = DummyClientWithFailures(
+        payload,
+        by_path={
+            "/label/instance/values": {"data": ["inst-a"]},
+            "/label/host.hostname/values": {"data": ["node-a", "node-b"]},
+        },
+        raise_paths={"/label/host.name/values"},
+    )
+    result = await helpers.query_key_activity("key", client)
+    assert result["metrics_active"] is True
+    assert result["agent_estimate"] == 1
+    assert result["host_estimate"] == 2
+
+
+@pytest.mark.asyncio
+async def test_query_key_activity_does_not_use_instance_for_host_estimate():
+    payload = {"data": {"result": [{"value": [0, "12"]}]}}
+    client = DummyClient(
+        payload,
+        by_path={
+            "/label/instance/values": {"data": ["inst-a", "inst-b", "inst-c", "inst-d"]},
+            # Simulate missing host labels in Mimir for this scope.
+            "/label/host.name/values": {"data": []},
+            "/label/host.hostname/values": {"data": []},
+        },
+    )
+    result = await helpers.query_key_activity("key", client)
+    assert result["metrics_active"]
+    assert result["agent_estimate"] == 4
+    # Host estimate should remain unknown (0) instead of inflating from "instance".
+    assert result["host_estimate"] == 0
+
+
+@pytest.mark.asyncio
+async def test_query_key_activity_skips_label_queries_when_metrics_absent():
+    payload = {"data": {"result": [{"value": [0, "0"]}]}}
+    client = DummyClientWithFailures(payload)
+    result = await helpers.query_key_activity("key", client)
+    assert result["metrics_active"] is False
+    assert result["metrics_count"] == 0
+    assert result["agent_estimate"] == 0
+    assert result["host_estimate"] == 0
+    assert len(client.request_urls) == 1
+    assert client.request_urls[0].endswith("/prometheus/api/v1/query")
 
 
 @pytest.mark.asyncio

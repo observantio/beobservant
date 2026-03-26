@@ -38,7 +38,10 @@ ATTR_HOST_NAME = "host.name"
 ATTR_HOST_HOSTNAME = "host.hostname"
 METRIC_COUNT_QUERY = "count({__name__=~\".+\"})"
 AGENT_LABEL_CANDIDATES = ("instance", "job", "service_name")
-HOST_LABEL_CANDIDATES = ("host.name", "host.hostname", "instance")
+# Do not use "instance" for host estimation. In many setups it represents
+# multiple scrape targets/endpoints for a single collector host and inflates
+# host counts in the UI.
+HOST_LABEL_CANDIDATES = ("host.name", "host.hostname")
 
 
 def make_agent_id(name: str, tenant_id: str) -> str:

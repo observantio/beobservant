@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useLocalStorage } from "../hooks";
 import {
   searchDashboards,
   createDashboard,
@@ -90,25 +89,16 @@ function findApiKeyById(apiKeys, candidateId) {
 
 export default function GrafanaPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useLocalStorage(
-    "grafana-active-tab",
-    "dashboards",
-  );
+  const [activeTab, setActiveTab] = useState("dashboards");
   const [dashboards, setDashboards] = useState([]);
   const [datasources, setDatasources] = useState([]);
   const [folders, setFolders] = useState([]);
   const [groups, setGroups] = useState([]);
-  const [dashboardQuery, setDashboardQuery] = useLocalStorage(
-    "grafana-dashboard-query",
-    "",
-  );
-  const [datasourceQuery, setDatasourceQuery] = useLocalStorage(
-    "grafana-datasource-query",
-    "",
-  );
+  const [dashboardQuery, setDashboardQuery] = useState("");
+  const [datasourceQuery, setDatasourceQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [filters, setFilters] = useLocalStorage("grafana-filters", {
+  const [filters, setFilters] = useState({
     teamId: "",
     folderKey: "__general__",
     showHidden: false,

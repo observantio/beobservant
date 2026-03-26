@@ -1,10 +1,10 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-This changelog follows a simple human-first format and keeps entries focused on what changed, why it matters, and what to do next.
+All notable changes to this project are documented here.
 
 ## [Unreleased]
+
+## [v0.0.2] - 2026-03-26
 
 ### Added
 
@@ -85,7 +85,7 @@ This changelog follows a simple human-first format and keeps entries focused on 
 
 - Introduced a production release flow that ships deployable assets as GitHub Release attachments.
 - Added `docker-compose.prod.yml` for image-based deployment (no local source build required).
-- Added a release installer script (`release/install.sh`) so users can run the orchestration
+- Added a release installer script (`release/install.sh`) so users can run the orchestration.
 - Added `release/versions.json` as the central version manifest for independent per-service image tags.
 - Added release packaging for architecture-specific bundles (`amd64`, `arm64`, and `multi` metadata bundle).
 
@@ -101,9 +101,8 @@ This changelog follows a simple human-first format and keeps entries focused on 
   - `IMAGE_TAG_RESOLVER`
 - Updated root release workflow to read versions from `release/versions.json`, publish local service images, and build release bundles pinned to the manifest values.
 
-Please use the development guide at `DEPLOYMENT.md` on how to deploy this on cloud service or local node
-
 ### Notes
 
 - `notifier` and `resolver` are expected to publish their own images from their own repositories using matching version tags.
 - Before tagging this repo, update `release/versions.json` so bundle and service versions reflect the intended release.
+- See `DEPLOYMENT.md` for release deployment and hardening guidance.

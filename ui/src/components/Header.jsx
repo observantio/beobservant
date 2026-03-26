@@ -18,6 +18,7 @@ const WATCHDOG_GITHUB_URL = "https://github.com/observantio/watchdog";
 const OJO_REPO_URL = "https://github.com/observantio/ojo";
 const OJO_RELEASES_URL = `${OJO_REPO_URL}/releases/latest`;
 const RELEASE_FETCH_TIMEOUT_MS = 8000;
+const hasWindowsMarker = (name) => String(name || "").toLowerCase().includes("windows");
 
 function getApiKeyColor(apiKeyId) {
   if (!apiKeyId) return "hsl(220, 25%, 65%)";
@@ -1102,7 +1103,7 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
 
     if (selectedOs === "linux") {
       const isLinux = name.includes("linux");
-      const isWindows = name.includes("windows") || name.endsWith(".exe");
+      const isWindows = hasWindowsMarker(name);
       const isSolaris = name.includes("solaris") || name.includes("sunos");
       const isArchive = name.endsWith(".zip") || name.endsWith(".tar.gz");
       return isLinux && !isWindows && !isSolaris && !isArchive;
@@ -1110,7 +1111,7 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
 
     if (selectedOs === "windows") {
       return (
-        (name.includes("windows") || name.endsWith(".exe") || name.endsWith(".msi")) &&
+        hasWindowsMarker(name) &&
         !name.includes("linux") &&
         !name.includes("solaris")
       );

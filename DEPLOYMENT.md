@@ -6,7 +6,7 @@ This guide explains how to deploy Observantio from the release tarball, what to 
 
 - Linux host with Docker Engine installed
 - Docker Compose plugin (`docker compose`) or `docker-compose`
-- Internet egress from host to pull container images from `ghcr.io`
+- Internet egress from host to pull container images from `ghcr.io` and from other docker repos
 
 ## Install From Release Tarball
 
@@ -35,8 +35,16 @@ fi
 
 tar -xzf "${ASSET}"
 cd "observantio-${VERSION}-linux-${ARCH}"
-chmod +x install.sh restart.sh uninstall.sh
-./install.sh
+
+# Some bundles place scripts at root, others under ./release
+chmod +x install.sh restart.sh uninstall.sh 2>/dev/null || true
+chmod +x ./release/install.sh ./release/restart.sh ./release/uninstall.sh 2>/dev/null || true
+
+if [[ -x ./install.sh ]]; then
+  ./install.sh
+else
+  ./release/install.sh
+fi
 ```
 
 Manual install steps:
@@ -48,7 +56,7 @@ Manual install steps:
 3. Enter the extracted directory:
    `cd observantio-vX.Y.Z-linux-amd64`
 4. Run installer:
-   `chmod +x install.sh && ./install.sh`
+   `chmod +x install.sh && ./install.sh` (or `chmod +x ./release/install.sh && ./release/install.sh` if scripts are packaged under `release/`)
 
 The installer will:
 - Create `.env` from `.env.example` if missing
@@ -60,15 +68,22 @@ The installer will:
 ## Day-2 Operations
 
 - Restart:
-  `./restart.sh`
+  `./restart.sh` (or `./release/restart.sh`)
 - Re-render adaptive observability sizing without restarting:
   `./scripts/render-observability-config.sh`
 - Stop/uninstall:
-  `./uninstall.sh`
+  `./uninstall.sh` (or `./release/uninstall.sh`)
 - Uninstall and remove named volumes:
-  `./uninstall.sh --purge`
+  `./uninstall.sh --purge` (or `./release/uninstall.sh --purge`)
 
 Set `OBS_RESOURCE_PROFILE=manual` in `.env` if you want to keep hand-tuned `LOKI_*`, `TEMPO_*`, and `MIMIR_*` sizing values instead of auto-detecting from the host.
+
+## Ojo Agent (Telemetry Collection)
+
+To collect and ship host/service telemetry into this platform, you can run the Ojo agent.
+
+- Ojo repository: https://github.com/observantio/ojo
+- Configure Ojo (or your collector) to send OTLP data to this deployment's gateway (`http://<host>:4320`) using your `x-otlp-token`.
 
 ## Required Network Ports
 
@@ -78,6 +93,7 @@ Open only what you actually need.
 - `8080/tcp` Grafana proxy
 - `4320/tcp` OTLP gateway ingest
 - `4319/tcp` Watchdog API direct access (recommended to keep private and front with reverse proxy instead)
+- `4323/tcp` Notifier API (if accessed directly)
 
 ## Recommended Public Exposure Model
 
@@ -127,6 +143,8 @@ After startup, check:
 
 - `docker compose -f docker-compose.prod.yml ps`
 - `curl http://localhost:4319/health`
+- `curl http://localhost:4319/ready`
+- `curl http://localhost:4323/health`
 
 If host port `4319` is private, run the health check on the host itself or from inside the Docker network.
 

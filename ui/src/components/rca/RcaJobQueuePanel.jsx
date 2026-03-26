@@ -1,5 +1,6 @@
 import PropTypes from "prop-types";
 import { Badge, Button, Card, Spinner } from "../ui";
+import { copyToClipboard } from "../../utils/helpers";
 
 function statusVariant(status) {
   const normalized = String(status || "").toLowerCase();
@@ -25,6 +26,11 @@ export default function RcaJobQueuePanel({
   deletingReport,
   canDelete,
 }) {
+  const handleCopyReportId = async (event, reportId) => {
+    event.stopPropagation();
+    await copyToClipboard(String(reportId || ""));
+  };
+
   return (
     <Card className="">
       <div className="mb-3">
@@ -103,9 +109,23 @@ export default function RcaJobQueuePanel({
                   )}
                 </div>
                 {job.report_id && (
-                  <p className="text-xs text-sre-text-muted mt-1 font-mono truncate">
-                    Report ID: {job.report_id}
-                  </p>
+                  <div className="mt-1 flex items-center gap-1">
+                    <p className="min-w-0 flex-1 truncate text-xs font-mono text-sre-text-muted">
+                      Report ID: {job.report_id}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Copy Report ID"
+                      className="shrink-0 p-1"
+                      onClick={(e) => handleCopyReportId(e, job.report_id)}
+                      title="Copy Report ID"
+                    >
+                      <span className="material-icons text-sm">
+                        content_copy
+                      </span>
+                    </Button>
+                  </div>
                 )}
                 <p className="text-xs text-sre-text-muted mt-1">
                   {job.created_at

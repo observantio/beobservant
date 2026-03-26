@@ -177,6 +177,41 @@ describe("Header user menu", () => {
     expect(await screen.findByText(/Open Ojo repository examples/i)).toBeInTheDocument();
   });
 
+  it("matches Windows assets only when filename contains windows (not win)", async () => {
+    api.getOjoReleases.mockResolvedValueOnce({
+      latest: {
+        tag_name: "v0.0.2",
+        assets: [
+          {
+            id: "a1",
+            name: "ojo-docker-win-v0.0.2.exe",
+            browser_download_url: "https://example.com/ojo-docker-win-v0.0.2.exe",
+          },
+          {
+            id: "a2",
+            name: "ojo-v0.0.2-windows-x86_64.exe",
+            browser_download_url: "https://example.com/ojo-v0.0.2-windows-x86_64.exe",
+          },
+        ],
+      },
+      releases: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <Header />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Download Ojo Agent/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Windows$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Next/i }));
+
+    expect(await screen.findByText(/Matching assets \(1\)/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ojo-v0\.0\.2-windows-x86_64\.exe/i)).toBeInTheDocument();
+    expect(screen.queryByText(/ojo-docker-win-v0\.0\.2\.exe/i)).not.toBeInTheDocument();
+  });
+
   it("treats scoped metrics activity as connected in the Ojo wizard", async () => {
     authState.user.api_keys = [
       {

@@ -54,7 +54,7 @@ Watchdog adds the pieces those components do not provide as a single opinionated
 ## Repo Links
 
 - **Watchdog (main control plane)**: https://github.com/observantio/watchdog
-- **Ojo (opentelemtry agent)**: https://github.com/observantio/ojo
+- **Ojo (OpenTelemetry agent)**: https://github.com/observantio/ojo
 - **Notifier (alerting & incidents)**: https://github.com/observantio/notifier
 - **Resolver (RCA / AIops engine)**: https://github.com/observantio/resolver
 
@@ -380,8 +380,6 @@ All access is scoped according to the user’s permissions and visibility rights
 The RCA section provides job creation, queue monitoring, historical report lookup, ranked root causes, anomaly detection, topology views, causal analysis, and forecast/SLO views.
 
 This area is functionally in place, but it still requires real production data for full validation and testing.
-
-If you want, I can also turn this into a more polished enterprise-style version for docs, PRs, or stakeholder demos.
 
 ## Important Security Model
 
