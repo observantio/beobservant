@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Input, Modal, Select } from "../../components/ui";
 import HelpTooltip from "../../components/HelpTooltip";
 import VisibilitySelector from "./VisibilitySelector";
@@ -27,6 +27,23 @@ export default function DashboardEditorModal({
 }) {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [showJsonConflict, setShowJsonConflict] = useState(false);
+  const jsonConflictRef = useRef(null);
+
+  useEffect(() => {
+    if (!showJsonConflict) return;
+    const conflictNode = jsonConflictRef.current;
+    if (!conflictNode) return;
+    const modalBody = conflictNode.closest(".overflow-y-auto");
+    if (modalBody) {
+      modalBody.scrollTop = 0;
+    }
+    if (typeof conflictNode.scrollIntoView === "function") {
+      conflictNode.scrollIntoView({ block: "start" });
+    }
+    if (typeof conflictNode.focus === "function") {
+      conflictNode.focus({ preventScroll: true });
+    }
+  }, [showJsonConflict]);
 
   const applyTemplate = (template) => {
     setSelectedTemplate(template.id);
@@ -237,7 +254,11 @@ export default function DashboardEditorModal({
         {editorTab === "form" && (
           <div className="space-y-4">
             {showJsonConflict && (
-              <div className="p-5 mb-4 rounded-xl border-2 border-red-600 border-dashed">
+              <div
+                ref={jsonConflictRef}
+                tabIndex={-1}
+                className="p-5 mb-4 rounded-xl border-2 border-red-600 border-dashed"
+              >
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-4">
                   <div className="flex-1">
                     <div className="text-base font-semibold text-sre-text mb-1">

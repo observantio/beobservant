@@ -308,6 +308,9 @@ export default function GrafanaPage() {
       const jsonData = getDatasourceJsonData(datasource);
       const selectedApiKeyId = String(jsonData.watchdogApiKeyId || "").trim();
       const selectedScopeKey = String(jsonData.watchdogScopeKey || "").trim();
+      const selectedApiKeyName = String(
+        jsonData.watchdogApiKeyName || "",
+      ).trim();
       const bySelectedId = findApiKeyById(apiKeys, selectedApiKeyId);
       const byId = findApiKeyById(apiKeys, rawOrg);
       const byKey = apiKeys.find((k) => String(k?.key || "") === rawOrg);
@@ -319,7 +322,7 @@ export default function GrafanaPage() {
         mappedKey?.key ||
         selectedScopeKey ||
         (!/^\d+$/.test(rawOrg) ? rawOrg : "");
-      const keyNameCandidate = mappedKey?.name || "";
+      const keyNameCandidate = mappedKey?.name || selectedApiKeyName || "";
 
       return {
         key: String(keyCandidate || "").trim(),
@@ -918,6 +921,7 @@ export default function GrafanaPage() {
         payload.jsonData = {
           ...payload.jsonData,
           watchdogApiKeyId: datasourceForm.apiKeyId,
+          watchdogApiKeyName: String(selectedKey?.name || "").trim(),
           watchdogScopeKey: payload.org_id,
         };
       }

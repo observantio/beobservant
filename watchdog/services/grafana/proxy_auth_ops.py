@@ -167,6 +167,8 @@ def _required_permissions_for_path(path: str, method: str) -> Set[str]:
         if m in {"POST", "PUT", "PATCH", "DELETE"}:
             return {Permission.QUERY_DATASOURCES.value}
         return {Permission.QUERY_DATASOURCES.value, Permission.READ_DASHBOARDS.value}
+    if p.startswith("/grafana/api/frontend-metrics"):
+        return {Permission.READ_DASHBOARDS.value}
     if p.startswith("/grafana/api/datasources/proxy/"):
         return {Permission.QUERY_DATASOURCES.value}
     if p.startswith("/grafana/api/dashboards/db") and m == "POST":

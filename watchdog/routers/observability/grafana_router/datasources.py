@@ -22,6 +22,7 @@ from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, TokenData
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from models.observability.grafana_request_models import GrafanaDatasourceQueryRequest, GrafanaHiddenToggleRequest
+from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.route_payloads import validate_visibility
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
@@ -43,7 +44,10 @@ async def datasource_query(
         tenant_id=tenant_id,
         group_ids=group_ids,
     )
-    return await proxy.query_datasource(payload.model_dump(exclude_none=True))
+    try:
+        return await proxy.query_datasource(payload.model_dump(exclude_none=True))
+    except GrafanaAPIError as exc:
+        proxy._raise_http_from_grafana_error(exc)
 
 
 @router.get("/datasources/meta/filters")

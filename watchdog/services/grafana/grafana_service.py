@@ -211,10 +211,15 @@ class GrafanaService:
     @with_retry()
     @with_timeout()
     async def query_datasource(self, payload: JSONDict) -> JSONDict:
-        r = await self._request("POST", "/api/ds/query", json=payload)
-        r.raise_for_status()
-        payload_json = r.json()
-        return payload_json if isinstance(payload_json, dict) else {}
+        try:
+            r = await self._request("POST", "/api/ds/query", json=payload)
+            r.raise_for_status()
+            payload_json = r.json()
+            return payload_json if isinstance(payload_json, dict) else {}
+        except httpx.HTTPStatusError as e:
+            parsed = self._parse_error_body(e)
+            logger.error("Grafana POST /api/ds/query HTTP %s: %s", e.response.status_code, parsed)
+            raise GrafanaAPIError(e.response.status_code, parsed) from e
 
     @with_retry()
     @with_timeout()

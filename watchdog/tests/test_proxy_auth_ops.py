@@ -219,6 +219,7 @@ def test_proxy_small_helper_branches(monkeypatch):
         ("/grafana/api/folders", "POST", {Permission.CREATE_FOLDERS.value}),
         ("/grafana/api/folders", "DELETE", {Permission.DELETE_FOLDERS.value}),
         ("/grafana/api/live/ws", "GET", {Permission.READ_DASHBOARDS.value}),
+        ("/grafana/api/frontend-metrics", "POST", {Permission.READ_DASHBOARDS.value}),
         (
             "/grafana/api/dashboards/db",
             "POST",
