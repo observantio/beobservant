@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import { Button, Input, Select, Textarea } from "../ui";
 import RuleEditorWizard from "./RuleEditorWizard";
@@ -93,6 +93,8 @@ export default function RuleEditor({
     setFormData((prev) => ({ ...prev, group: id }));
   };
   const [selectedApiScopes, setSelectedApiScopes] = useState([AUTO_SCOPE]);
+  const isMountedRef = useRef(true);
+  const metricsLoadRequestRef = useRef(0);
   const visibleApiKeys = useMemo(
     () =>
       (apiKeys || []).filter(
@@ -147,6 +149,12 @@ export default function RuleEditor({
     );
     return matched?.name || `${String(metricsOrgScope).slice(0, 8)}...`;
   }, [metricsOrgScope, apiKeys]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   const promqlFunctionHints = useMemo(
     () => [
       "rate(",
@@ -354,16 +362,22 @@ export default function RuleEditor({
   }, [formData, labelPairs]);
 
   const loadMetrics = useCallback(async () => {
+    const requestId = metricsLoadRequestRef.current + 1;
+    metricsLoadRequestRef.current = requestId;
     setLoadingMetrics(true);
     setMetricsError(null);
     try {
       const resp = await listMetricNames(metricsOrgScope);
+      if (!isMountedRef.current || requestId !== metricsLoadRequestRef.current) return;
       setMetricNames(Array.isArray(resp.metrics) ? resp.metrics : []);
     } catch (e) {
+      if (!isMountedRef.current || requestId !== metricsLoadRequestRef.current) return;
       setMetricsError(e.message || "Failed to load metrics from Mimir");
       setMetricNames([]);
     } finally {
-      setLoadingMetrics(false);
+      if (isMountedRef.current && requestId === metricsLoadRequestRef.current) {
+        setLoadingMetrics(false);
+      }
     }
   }, [metricsOrgScope]);
 
