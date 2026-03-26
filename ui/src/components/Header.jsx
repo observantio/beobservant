@@ -397,7 +397,7 @@ function QuickCreateApiKeyButton({ onCreated }) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sre-border bg-[linear-gradient(135deg,rgba(14,165,233,0.16),rgba(34,197,94,0.10))] text-sre-text-muted shadow-sm transition-all hover:-translate-y-0.5 hover:border-sre-primary/50 hover:text-sre-text hover:shadow-md"
+        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sre-border bg-sre-surface/60 text-sre-text-muted backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-sre-primary/50 hover:bg-sre-surface/80 hover:text-sre-text"
         aria-label="Quick create API key"
         title="Quick create API key"
       >
@@ -585,7 +585,7 @@ function QuickMetricsQueryButton({ apiKeys = [] }) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sre-border bg-[linear-gradient(135deg,rgba(16,185,129,0.16),rgba(59,130,246,0.12))] text-sre-text-muted shadow-sm transition-all hover:-translate-y-0.5 hover:border-sre-primary/50 hover:text-sre-text hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sre-border bg-sre-surface/60 text-sre-text-muted backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-sre-primary/50 hover:bg-sre-surface/80 hover:text-sre-text disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Quick query metrics"
         title="Quick query metrics"
         disabled={selectableKeys.length === 0}
