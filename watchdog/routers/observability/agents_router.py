@@ -77,6 +77,8 @@ async def list_active_agents(current_user: TokenData = Depends(require_permissio
                 "host_names": [],
                 "metrics_active": False,
                 "metrics_count": 0,
+                "agent_estimate": 0,
+                "host_estimate": 0,
             })
             continue
 

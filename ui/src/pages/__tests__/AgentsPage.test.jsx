@@ -141,6 +141,8 @@ describe("AgentsPage", () => {
         active: true,
         metrics_count: 245,
         host_names: [],
+        agent_estimate: 4,
+        host_estimate: 2,
       },
     ]);
     vi.mocked(api.getAgentMetricVolume).mockResolvedValueOnce({
@@ -157,9 +159,10 @@ describe("AgentsPage", () => {
     expect(await screen.findByText(/Heartbeat optional/i)).toBeInTheDocument();
     expect(await screen.findByText(/Metrics active/i)).toBeInTheDocument();
     expect(await screen.findByText(/Metric names right now:/i)).toBeInTheDocument();
-    expect(await screen.findByText(/At least one agent is publishing metrics in this scope/i)).toBeInTheDocument();
-    expect(await screen.findByText(/A metric source is active in this scope/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Estimated from metric labels: 4 active metric sources/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Estimated from metric labels: 2 hosts/i)).toBeInTheDocument();
     expect(screen.getAllByText("245").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("4").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("2").length).toBeGreaterThan(0);
   });
 });

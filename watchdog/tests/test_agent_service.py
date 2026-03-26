@@ -73,12 +73,21 @@ def test_mimir_prometheus_url_helper():
 
 
 class DummyClient:
-    def __init__(self, payload):
+    def __init__(self, payload, by_path=None):
         self.payload = payload
+        self.by_path = by_path or {}
         self.last_url = None
+        self.request_urls = []
 
     async def get(self, url, params=None, headers=None):
         self.last_url = url
+        self.request_urls.append(str(url))
+        payload = self.payload
+        for path, override in self.by_path.items():
+            if path in str(url):
+                payload = override
+                break
+
         class Resp:
             def __init__(self, data):
                 self._data = data
@@ -89,17 +98,25 @@ class DummyClient:
             def json(self):
                 return self._data
 
-        return Resp(self.payload)
+        return Resp(payload)
 
 
 @pytest.mark.asyncio
 async def test_query_key_activity_success():
     payload = {"data": {"result": [{"value": [0, "3"]}]}}
-    client = DummyClient(payload)
+    client = DummyClient(
+        payload,
+        by_path={
+            "/label/instance/values": {"data": ["inst-a", "inst-b"]},
+            "/label/host.name/values": {"data": ["host-a", "host-b", "host-c"]},
+        },
+    )
     result = await helpers.query_key_activity("key", client)
     assert result["metrics_active"]
     assert result["metrics_count"] == 3
-    assert client.last_url.endswith("/prometheus/api/v1/query")
+    assert result["agent_estimate"] == 2
+    assert result["host_estimate"] == 3
+    assert any(url.endswith("/prometheus/api/v1/query") for url in client.request_urls)
 
 
 @pytest.mark.asyncio

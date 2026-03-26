@@ -238,6 +238,8 @@ export default function AgentsPage() {
         ? [activity.metrics_count, activity.metrics_count]
         : [];
   const activityCount = Number(activity?.metrics_count) || 0;
+  const estimatedAgentCount = Number(activity?.agent_estimate) || 0;
+  const estimatedHostCount = Number(activity?.host_estimate) || 0;
   const currentVolume = positiveOrFallback(volume?.current, activityCount);
   const peakVolume = positiveOrFallback(volume?.peak, currentVolume);
   const averageVolume = positiveOrFallback(volume?.average, currentVolume);
@@ -252,22 +254,34 @@ export default function AgentsPage() {
       ? "Metric activity detected, but no heartbeat registry entry has arrived yet"
       : "No heartbeat";
   const resolvedActiveAgentCount =
-    activeAgents.length > 0 ? activeAgents.length : hasMetricActivity ? 1 : 0;
+    activeAgents.length > 0
+      ? activeAgents.length
+      : estimatedAgentCount > 0
+        ? estimatedAgentCount
+        : hasMetricActivity
+          ? 1
+          : 0;
   const resolvedHostCount =
     hostCount > 0
       ? hostCount
       : activity?.host_names?.length
         ? activity.host_names.length
+        : estimatedHostCount > 0
+          ? estimatedHostCount
         : hasMetricActivity
           ? 1
           : 0;
   const activeAgentsHint =
     hasMetricActivity && agents.length === 0
-      ? "At least one agent is publishing metrics in this scope, but no heartbeat entries are registered yet"
+      ? estimatedAgentCount > 0
+        ? `Estimated from metric labels: ${estimatedAgentCount.toLocaleString()} active metric source${estimatedAgentCount === 1 ? "" : "s"} (no heartbeat entries yet)`
+        : "At least one agent is publishing metrics in this scope, but no heartbeat entries are registered yet"
       : `${agents.length.toLocaleString()} known in this scope`;
   const hostHint =
     activity?.host_names?.length
       ? `${activity.host_names.length} host names discovered by activity checks`
+      : estimatedHostCount > 0
+        ? `Estimated from metric labels: ${estimatedHostCount.toLocaleString()} host${estimatedHostCount === 1 ? "" : "s"} (heartbeat host details pending)`
       : hasMetricActivity && resolvedHostCount > 0
         ? "A metric source is active in this scope, but host details have not been reported yet"
         : "Heartbeat registry host names";
