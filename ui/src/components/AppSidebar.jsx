@@ -16,7 +16,7 @@ export default function AppSidebar() {
   const { toggleSidebarMode } = useLayoutMode();
   const { hasPermission, user } = useAuth();
   const incidentSummary = useSharedIncidentSummary();
-  const [docsExpanded, setDocsExpanded] = useState(true);
+  const [docsExpanded, setDocsExpanded] = useState(false);
 
   const visibleNavItems = NAV_ITEM_LIST.filter(
     (item) => !item.permission || hasPermission(item.permission),

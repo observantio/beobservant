@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 
 from middleware.dependencies import auth_service, require_any_permission_with_scope, require_permission_with_scope
 from middleware.error_handlers import handle_route_errors
@@ -24,7 +24,20 @@ from .shared import GROUP_NOT_FOUND, router, rtp
 
 
 @router.get("/groups", response_model=List[Group])
-async def list_groups(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_GROUPS, "auth"))) -> List[Group]:
+async def list_groups(
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_GROUPS, "auth")),
+    q: str | None = Query(None),
+) -> List[Group]:
+    query_text = str(q or "").strip()
+    if query_text:
+        return await rtp(
+            auth_service.list_groups,
+            current_user.tenant_id,
+            current_user.user_id,
+            current_user.role,
+            bool(getattr(current_user, "is_superuser", False)),
+            q=query_text,
+        )
     return await rtp(
         auth_service.list_groups,
         current_user.tenant_id,

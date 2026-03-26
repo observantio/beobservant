@@ -94,6 +94,9 @@ def test_user_ops_helpers_and_getters(monkeypatch):
     assert user_ops.get_user_by_username(service, " ADMIN ").id == admin.id
     assert user_ops.get_user_by_username(service, "missing") is None
     assert user_ops.list_users(service, "t1", limit=1, offset=0)[0].id in {admin.id, user.id, viewer.id, external.id}
+    filtered = user_ops.list_users(service, "t1", q=" view ")
+    assert len(filtered) == 1
+    assert filtered[0].username == "viewer"
     with pytest.raises(ValueError, match="integers"):
         user_ops.list_users(service, "t1", limit="bad")
 

@@ -345,8 +345,15 @@ class DatabaseAuthService:
             actor_is_superuser=actor_is_superuser,
         )
 
-    def list_users(self, tenant_id: str, *, limit: Optional[int] = None, offset: int = 0) -> List[UserSchema]:
-        return list_users_op(self, tenant_id, limit=limit, offset=offset)
+    def list_users(
+        self,
+        tenant_id: str,
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        q: Optional[str] = None,
+    ) -> List[UserSchema]:
+        return list_users_op(self, tenant_id, limit=limit, offset=offset, q=q)
 
     def update_user(
         self, user_id: str, user_update: UserUpdate, tenant_id: str, updater_id: Optional[str] = None
@@ -438,6 +445,7 @@ class DatabaseAuthService:
         actor_user_id: Optional[str] = None,
         actor_role: Optional[str] = None,
         actor_is_superuser: bool = False,
+        q: Optional[str] = None,
     ) -> List[GroupSchema]:
         return list_groups_op(
             self,
@@ -445,6 +453,7 @@ class DatabaseAuthService:
             actor_user_id=actor_user_id,
             actor_role=actor_role,
             actor_is_superuser=actor_is_superuser,
+            q=q,
         )
 
     def get_group(

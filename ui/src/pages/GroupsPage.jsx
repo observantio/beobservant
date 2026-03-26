@@ -37,6 +37,7 @@ export default function GroupsPage() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [serverSearchQuery, setServerSearchQuery] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -75,11 +76,12 @@ export default function GroupsPage() {
     await createGroup();
   };
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (queryText = serverSearchQuery) => {
     setLoading(true);
     try {
+      const searchText = String(queryText || "").trim();
       const [groupsData, permsData] = await Promise.all([
-        api.getGroups(),
+        api.getGroups(searchText ? { q: searchText } : {}),
         api.getPermissions(),
       ]);
       setGroups(groupsData);
@@ -91,11 +93,15 @@ export default function GroupsPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [serverSearchQuery, toast]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchData(serverSearchQuery);
+  }, [fetchData, serverSearchQuery]);
+
+  const applyServerSearch = useCallback(() => {
+    setServerSearchQuery(String(searchQuery || "").trim());
+  }, [searchQuery]);
 
   const createGroup = async () => {
     if (!formData.name.trim()) {
@@ -316,8 +322,23 @@ export default function GroupsPage() {
             placeholder="Search groups by name or description..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyServerSearch();
+              }
+            }}
             className="flex-1"
           />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={applyServerSearch}
+            title="Search groups"
+            aria-label="Search groups"
+          >
+            <span className="material-icons text-base">search</span>
+          </Button>
           <HelpTooltip text="Search groups by their name or description. The search is case-insensitive and matches partial strings." />
         </div>
       </Card>

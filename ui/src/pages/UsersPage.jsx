@@ -43,6 +43,7 @@ export default function UsersPage() {
     must_setup_mfa: false,
   });
   const [searchQuery, setSearchQuery] = useState("");
+  const [serverSearchQuery, setServerSearchQuery] = useState("");
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
     title: "",
@@ -82,7 +83,8 @@ export default function UsersPage() {
     setLoading(true);
     try {
       if (canManageUsers) {
-        const usersData = await api.getUsers();
+        const searchText = String(serverSearchQuery || "").trim();
+        const usersData = await api.getUsers(searchText ? { q: searchText } : {});
         setUsers(usersData);
         try {
           const groupsData = await api.getGroups();
@@ -98,11 +100,15 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [canManageUsers, toast]);
+  }, [canManageUsers, serverSearchQuery, toast]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const applyServerSearch = useCallback(() => {
+    setServerSearchQuery(String(searchQuery || "").trim());
+  }, [searchQuery]);
 
   const handleDeleteUser = async (userId) => {
     setConfirmDialog({
@@ -287,8 +293,23 @@ export default function UsersPage() {
             placeholder="Search users by username, email, or name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyServerSearch();
+              }
+            }}
             className="flex-1"
           />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={applyServerSearch}
+            title="Search users"
+            aria-label="Search users"
+          >
+            <span className="material-icons text-base">search</span>
+          </Button>
           <HelpTooltip text="Search users by their username, email address, or full name. The search is case-insensitive and matches partial strings." />
         </div>
       </Card>

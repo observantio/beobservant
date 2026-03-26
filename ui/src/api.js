@@ -503,8 +503,15 @@ export async function exportAuditLogs(params = {}) {
   return res;
 }
 
-export async function getUsers() {
-  return request("/api/auth/users");
+export async function getUsers(params = {}) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && `${value}` !== "") {
+      search.set(key, String(value));
+    }
+  });
+  const qs = search.toString();
+  return request(`/api/auth/users${qs ? `?${qs}` : ""}`);
 }
 
 export async function createUser(user) {
@@ -524,8 +531,15 @@ export async function deleteUser(userId) {
   });
 }
 
-export async function getGroups() {
-  return request("/api/auth/groups");
+export async function getGroups(params = {}) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && `${value}` !== "") {
+      search.set(key, String(value));
+    }
+  });
+  const qs = search.toString();
+  return request(`/api/auth/groups${qs ? `?${qs}` : ""}`);
 }
 
 export async function createGroup(group) {

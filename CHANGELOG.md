@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+
 ## [v0.0.2] - 2026-03-26
 
 ### Added
@@ -23,6 +24,7 @@ All notable changes to this project are documented here.
 - Added sidebar quick actions beside API key selection for **Quick Create API Key** and **Quick Metrics Query** (PromQL + JSON output).
 - Added Ojo Agent Setup Wizard support for an **Extra services** install path (GPU, Sensors, Postgres, MySQL, Docker) with searchable package cards and service config templates.
 - Added Ojo setup completion quick-links to create datasource and dashboard immediately after connectivity is confirmed.
+- Added hybrid user/group search behavior: typing continues to filter results client-side instantly, while pressing `Enter` or clicking the search icon triggers server-side filtering via `q` for cleaner, scalable list retrieval.
 
 ### Changed
 
@@ -61,6 +63,8 @@ All notable changes to this project are documented here.
 - Updated Tempo and Loki filter option loading to resync immediately when top-nav API key scope changes.
 - Updated Tempo dependency-map empty state to provide clickable trace candidates from current results when no map trace is selected.
 - Updated Agents trend semantics to use sampled metric-count history with denser UI fetch resolution for better visible trend movement.
+- Updated sidebar **Guide** section default state to collapsed on first load (still auto-expands when navigating under `/docs`).
+- Updated RCA job queue card actions so **Copy Report ID** lives beside the eye/view action in the selected-row action cluster.
 
 ### Fixed
 
@@ -78,6 +82,8 @@ All notable changes to this project are documented here.
 - Fixed Alert Rules product/API key filter UX inconsistency caused by the redundant `All products` option.
 - Fixed sidebar/Agents no-data and metric-activity edge cases where scopes with active metrics could still appear as fully inactive due to missing heartbeat registry entries.
 - Fixed Ojo connectivity check false negatives by treating scoped metric activity as a valid connected signal when heartbeat records are not yet present.
+- Fixed RCA job card copy action feedback by showing explicit toast acknowledgment on success/failure.
+- Fixed Mimir key-activity fallback robustness so host label probing continues when a candidate label query raises a runtime exception.
 
 ## [v0.0.1] - 2026-03-20
 

@@ -307,9 +307,17 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     result = await users_router.update_current_user_info(UserUpdate(role=Role.ADMIN, is_active=False), admin_user)
     assert result.api_keys == ["key"]
 
-    monkeypatch.setattr(users_router.auth_service, "list_users", lambda *_args, **_kwargs: [user_obj])
+    captured_user_list_kwargs = {}
+    monkeypatch.setattr(
+        users_router.auth_service,
+        "list_users",
+        lambda *_args, **kwargs: (captured_user_list_kwargs.update(kwargs) or [user_obj]),
+    )
     users = await users_router.list_users(10, 0, admin_user)
     assert users == [response_obj]
+    users = await users_router.list_users(10, 0, admin_user, "alice")
+    assert users == [response_obj]
+    assert captured_user_list_kwargs.get("q") == "alice"
 
     sent = []
     monkeypatch.setattr(users_router.auth_service, "create_user", lambda *_args: user_obj)
@@ -448,8 +456,15 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     assert all(Permission.READ_USERS.value in perms or not perms for perms in filtered_defaults.values())
 
     group_obj = SimpleNamespace(id="g1")
-    monkeypatch.setattr(groups_router.auth_service, "list_groups", lambda *_args: [group_obj])
+    captured_group_list_kwargs = {}
+    monkeypatch.setattr(
+        groups_router.auth_service,
+        "list_groups",
+        lambda *_args, **kwargs: (captured_group_list_kwargs.update(kwargs) or [group_obj]),
+    )
     assert await groups_router.list_groups(admin_user) == [group_obj]
+    assert await groups_router.list_groups(admin_user, "ops") == [group_obj]
+    assert captured_group_list_kwargs.get("q") == "ops"
 
     monkeypatch.setattr(groups_router.auth_service, "create_group", lambda *_args: group_obj)
     assert await groups_router.create_group(GroupCreate(name="grp"), admin_user) is group_obj

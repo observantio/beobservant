@@ -1,6 +1,7 @@
 import PropTypes from "prop-types";
 import { Badge, Button, Card, Spinner } from "../ui";
 import { copyToClipboard } from "../../utils/helpers";
+import { useToast } from "../../contexts/ToastContext";
 
 function statusVariant(status) {
   const normalized = String(status || "").toLowerCase();
@@ -26,9 +27,13 @@ export default function RcaJobQueuePanel({
   deletingReport,
   canDelete,
 }) {
+  const toast = useToast();
+
   const handleCopyReportId = async (event, reportId) => {
     event.stopPropagation();
-    await copyToClipboard(String(reportId || ""));
+    const copied = await copyToClipboard(String(reportId || ""));
+    if (copied) toast?.success?.("Report ID copied");
+    else toast?.error?.("Failed to copy report ID");
   };
 
   return (
@@ -80,6 +85,20 @@ export default function RcaJobQueuePanel({
                           </span>
                         </Button>
                       )}
+                      {job.report_id && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label="Copy Report ID"
+                          className="p-1"
+                          onClick={(e) => handleCopyReportId(e, job.report_id)}
+                          title="Copy Report ID"
+                        >
+                          <span className="material-icons text-base">
+                            content_copy
+                          </span>
+                        </Button>
+                      )}
                       {canDelete && (
                         <Button
                           variant="ghost"
@@ -113,18 +132,6 @@ export default function RcaJobQueuePanel({
                     <p className="min-w-0 flex-1 truncate text-xs font-mono text-sre-text-muted">
                       Report ID: {job.report_id}
                     </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label="Copy Report ID"
-                      className="shrink-0 p-1"
-                      onClick={(e) => handleCopyReportId(e, job.report_id)}
-                      title="Copy Report ID"
-                    >
-                      <span className="material-icons text-sm">
-                        content_copy
-                      </span>
-                    </Button>
                   </div>
                 )}
                 <p className="text-xs text-sre-text-muted mt-1">

@@ -255,7 +255,7 @@ export default function CreateUserModal({
         {hidePasswordInput ? (
           <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4">
             <div className="flex items-start gap-3">
-              <span className="material-icons text-sky-400">shield_lock</span>
+              <span className="material-icons text-sky-400">lock</span>
               <div>
                 <div className="text-sm font-semibold text-sre-text">
                   OIDC is enabled

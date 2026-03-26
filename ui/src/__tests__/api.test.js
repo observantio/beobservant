@@ -93,6 +93,16 @@ describe("api request behavior", () => {
     });
   });
 
+  it("appends query params for filtered users and groups requests", async () => {
+    await api.getUsers({ q: "alice" });
+    await api.getGroups({ q: "ops team" });
+
+    const [usersUrl] = fetch.mock.calls[0];
+    const [groupsUrl] = fetch.mock.calls[1];
+    expect(usersUrl).toContain("/api/auth/users?q=alice");
+    expect(groupsUrl).toContain("/api/auth/groups?q=ops+team");
+  });
+
   it("creates server-side grafana bootstrap session without token in URL", async () => {
     await api.createGrafanaBootstrapSession("/d/abc");
     const [url, options] = fetch.mock.calls[0];
