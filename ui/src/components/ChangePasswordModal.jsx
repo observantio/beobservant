@@ -207,13 +207,6 @@ export default function ChangePasswordModal({
           }`}
         >
           <div className="flex items-start gap-2">
-            <span className="material-icons text-base leading-none mt-0.5">
-              {isOidcOnlyMode
-                ? "shield_lock"
-                : isForced
-                  ? "warning"
-                  : "lock_person"}
-            </span>
             <div>
               <div className="font-semibold">
                 {isOidcOnlyMode

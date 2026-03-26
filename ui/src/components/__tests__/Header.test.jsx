@@ -20,6 +20,10 @@ let authState = {
 };
 
 vi.mock("../../api", () => ({
+  createApiKey: vi.fn().mockResolvedValue({
+    id: "new-key-1",
+    otlp_token: "otlp-test-token",
+  }),
   updateApiKey: vi.fn().mockResolvedValue({}),
   evaluatePromql: vi.fn().mockResolvedValue({ status: "success", data: { result: [] } }),
   getIncidentsSummary: vi.fn().mockResolvedValue(null),
@@ -116,6 +120,36 @@ describe("Header user menu", () => {
     expect(await screen.findByText(/"status": "success"/i)).toBeInTheDocument();
   });
 
+  it("shows temporary OTLP token after quick create api key", async () => {
+    authState.user.api_keys = [
+      {
+        id: "key-1",
+        name: "Tenant A",
+        key: "tenant-a",
+        is_enabled: true,
+        is_shared: false,
+        can_use: true,
+        is_hidden: false,
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <Header />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Quick create API key/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Production Team/i), {
+      target: { value: "New Scope" },
+    });
+    fireEvent.click(document.querySelector('button[type="submit"]'));
+
+    expect(await screen.findByText(/This is OTLP token/i)).toBeInTheDocument();
+    expect(await screen.findByText(/otlp-test-token/i)).toBeInTheDocument();
+    expect(api.updateApiKey).toHaveBeenCalledWith("new-key-1", { is_enabled: true });
+  });
+
   it("shows extra services in the Ojo wizard with search and selection", async () => {
     render(
       <MemoryRouter>
@@ -138,9 +172,9 @@ describe("Header user menu", () => {
     fireEvent.click(screen.getByRole("button", { name: /Next/i }));
 
     expect(
-      await screen.findByText(/3\. Generate GPU config file/i),
+      await screen.findByText(/3\. Configure GPU service/i),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/gpu.yaml/i).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Open Ojo repository examples/i)).toBeInTheDocument();
   });
 
   it("treats scoped metrics activity as connected in the Ojo wizard", async () => {

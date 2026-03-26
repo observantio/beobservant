@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/ui/PageHeader";
-import { Card, Button, Spinner, Badge, Select } from "../components/ui";
+import { Card, Button, Spinner, Badge } from "../components/ui";
 import { getSystemQuotas } from "../api";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -84,32 +84,32 @@ export default function QuotasPage() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [quotas, setQuotas] = useState(null);
-  const [selectedOrgId, setSelectedOrgId] = useState("");
   const lastLoadedOrgRef = useRef("");
 
-  const apiKeyOptions = useMemo(
-    () =>
-      (user?.api_keys || [])
-        .filter((k) => (!k.is_shared || k.can_use) && !k.is_hidden)
-        .map((k) => ({
-          id: k.id,
-          name: k.name,
-          orgId: k.key,
-          isEnabled: k.is_enabled,
-        })),
-    [user?.api_keys],
-  );
+  const selectedOrgId = useMemo(() => {
+    const keys = user?.api_keys || [];
+    const visibleKeys = keys.filter((k) => (!k.is_shared || k.can_use) && !k.is_hidden);
+    const enabledKey = visibleKeys.find((k) => k.is_enabled);
+    if (enabledKey?.key) {
+      return enabledKey.key;
+    }
+    const defaultKey = visibleKeys.find((k) => k.is_default) || visibleKeys[0];
+    return defaultKey?.key || user?.org_id || "";
+  }, [user?.api_keys, user?.org_id]);
 
   useEffect(() => {
-    if (!selectedOrgId) {
-      const enabled = apiKeyOptions.find((k) => k.isEnabled);
-      setSelectedOrgId(enabled?.orgId || user?.org_id || "");
+    if (lastLoadedOrgRef.current && lastLoadedOrgRef.current !== selectedOrgId) {
+      lastLoadedOrgRef.current = "";
     }
-  }, [apiKeyOptions, selectedOrgId, user?.org_id]);
+  }, [selectedOrgId]);
 
-  const loadQuotas = useCallback(async () => {
-    if (!selectedOrgId) return;
-    if (lastLoadedOrgRef.current === selectedOrgId) return;
+  const loadQuotas = useCallback(async (force = false) => {
+    if (!selectedOrgId) {
+      setQuotas(null);
+      setLoading(false);
+      return;
+    }
+    if (!force && lastLoadedOrgRef.current === selectedOrgId) return;
     setLoading(true);
     try {
       const data = await getSystemQuotas(selectedOrgId);
@@ -128,10 +128,8 @@ export default function QuotasPage() {
   }, [loadQuotas]);
 
   const handleRefresh = useCallback(async () => {
-    if (!selectedOrgId) return;
-    lastLoadedOrgRef.current = "";
-    await loadQuotas();
-  }, [loadQuotas, selectedOrgId]);
+    await loadQuotas(true);
+  }, [loadQuotas]);
 
   const apiKeys = useMemo(() => quotas?.api_keys || null, [quotas]);
   const apiKeyMax = Math.max(0, Number(apiKeys?.max || 0));
@@ -163,27 +161,6 @@ export default function QuotasPage() {
       />
 
       <div className="space-y-4">
-        <Card className="p-4">
-          <div className="grid grid-cols-1 gap-3">
-            <div>
-              <div className="mb-1 text-xs font-medium text-sre-text-muted uppercase tracking-wide">
-                API Key Scope
-              </div>
-              <Select
-                value={selectedOrgId}
-                onChange={(e) => setSelectedOrgId(e.target.value)}
-                className="w-full"
-              >
-                {apiKeyOptions.map((k) => (
-                  <option key={k.id} value={k.orgId}>
-                    {k.name} ({k.orgId})
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-        </Card>
-
         <Card className="p-4">
           <div className="flex items-start justify-between gap-4">
             <div>

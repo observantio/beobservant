@@ -15,7 +15,8 @@ import { copyToClipboard } from "../utils/helpers";
 const NAV_ITEM_LIST = Object.values(NAV_ITEMS);
 const RELEASE_LABEL = "Wolfmegasaur v0.0.2";
 const WATCHDOG_GITHUB_URL = "https://github.com/observantio/watchdog";
-const OJO_RELEASES_URL = "https://github.com/observantio/ojo/releases/latest";
+const OJO_REPO_URL = "https://github.com/observantio/ojo";
+const OJO_RELEASES_URL = `${OJO_REPO_URL}/releases/latest`;
 const RELEASE_FETCH_TIMEOUT_MS = 8000;
 
 function getApiKeyColor(apiKeyId) {
@@ -59,22 +60,6 @@ const OJO_EXTRA_SERVICES = [
     configFile: "docker.yaml",
     keywords: ["containers", "docker", "runtime", "sidecar"],
     description: "Container runtime inventory, CPU, memory, network, and block IO metrics.",
-    sampleConfig: `service:
-  name: docker
-  instance_id: docker-local
-
-source:
-  endpoint: unix:///var/run/docker.sock
-
-collection:
-  poll_interval_secs: 15
-
-export:
-  otlp:
-    endpoint: "http://127.0.0.1:4355/v1/metrics"
-    protocol: http/protobuf
-    timeout_secs: 10
-`,
   },
   {
     key: "gpu",
@@ -84,22 +69,6 @@ export:
     configFile: "gpu.yaml",
     keywords: ["gpu", "nvidia", "accelerator", "cuda"],
     description: "GPU utilization, temperature, memory, and power telemetry.",
-    sampleConfig: `service:
-  name: gpu
-  instance_id: gpu-local
-
-collection:
-  poll_interval_secs: 15
-
-source:
-  backend: auto
-
-export:
-  otlp:
-    endpoint: "http://127.0.0.1:4355/v1/metrics"
-    protocol: http/protobuf
-    timeout_secs: 10
-`,
   },
   {
     key: "sensors",
@@ -109,22 +78,6 @@ export:
     configFile: "sensors.yaml",
     keywords: ["hardware", "sensors", "temperature", "fans", "voltages"],
     description: "Board sensors, temperatures, fan speeds, and voltage readings.",
-    sampleConfig: `service:
-  name: sensors
-  instance_id: sensors-local
-
-collection:
-  poll_interval_secs: 20
-
-source:
-  backend: auto
-
-export:
-  otlp:
-    endpoint: "http://127.0.0.1:4355/v1/metrics"
-    protocol: http/protobuf
-    timeout_secs: 10
-`,
   },
   {
     key: "postgres",
@@ -134,22 +87,6 @@ export:
     configFile: "postgres.yaml",
     keywords: ["postgres", "postgresql", "database", "sql"],
     description: "Postgres availability, connection, transaction, and block metrics.",
-    sampleConfig: `service:
-  name: postgres
-  instance_id: postgres-local
-
-source:
-  dsn: "postgresql://postgres:secret@localhost:5432/postgres"
-
-collection:
-  poll_interval_secs: 30
-
-export:
-  otlp:
-    endpoint: "http://127.0.0.1:4355/v1/metrics"
-    protocol: http/protobuf
-    timeout_secs: 10
-`,
   },
   {
     key: "mysql",
@@ -159,22 +96,6 @@ export:
     configFile: "mysql.yaml",
     keywords: ["mysql", "database", "sql", "mariadb"],
     description: "MySQL availability, connection, query rate, and throughput metrics.",
-    sampleConfig: `service:
-  name: mysql
-  instance_id: mysql-local
-
-source:
-  dsn: "mysql://root:secret@tcp(localhost:3306)/"
-
-collection:
-  poll_interval_secs: 30
-
-export:
-  otlp:
-    endpoint: "http://127.0.0.1:4355/v1/metrics"
-    protocol: http/protobuf
-    timeout_secs: 10
-`,
   },
 ];
 
@@ -417,6 +338,15 @@ function QuickCreateApiKeyButton({ onCreated }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createdToken, setCreatedToken] = useState("");
+
+  useEffect(() => {
+    if (!createdToken) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      setCreatedToken("");
+    }, 30000);
+    return () => window.clearTimeout(timeoutId);
+  }, [createdToken]);
 
   useEffect(() => {
     if (!open) return;
@@ -450,7 +380,8 @@ function QuickCreateApiKeyButton({ onCreated }) {
       }
       await onCreated?.(created);
       setName("");
-      setOpen(false);
+      setCreatedToken(String(created?.otlp_token || "").trim());
+      setOpen(true);
       toast.success("API key created");
     } catch (err) {
       toast.error(err?.body?.detail || err?.message || "Failed to create API key");
@@ -506,6 +437,29 @@ function QuickCreateApiKeyButton({ onCreated }) {
               placeholder="Production Team"
               className="text-sm"
             />
+
+            {createdToken ? (
+              <div className="rounded-xl border border-sre-primary/30 bg-sre-primary/10 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-sre-primary">
+                    This is OTLP token
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(createdToken)}
+                    className="rounded-md border border-sre-border px-2 py-0.5 text-[11px] font-medium text-sre-text hover:border-sre-primary/40"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <div className="mt-1.5 break-all rounded-md bg-sre-bg px-2 py-1.5 font-mono text-[11px] text-sre-text">
+                  {createdToken}
+                </div>
+                <div className="mt-1 text-[10px] text-sre-text-muted">
+                  Visible temporarily for 30 seconds.
+                </div>
+              </div>
+            ) : null}
 
             <div className="flex items-center justify-between gap-2">
               <button
@@ -1196,13 +1150,7 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
       ? selectedExtraService?.configFile || "service.yaml"
       : configFileByOs[selectedOs] || "collector.yaml";
 
-  const generatedConfig =
-    selectedOs === "extras"
-      ? String(selectedExtraService?.sampleConfig || "").replace(
-          /instance_id:\s+[^\n]+/,
-          `instance_id: ${selectedExtraService?.key || "service"}-${instanceIdSuffix || "xxxxxx"}`,
-        )
-      : buildMinimalCollectorConfig(selectedOs, generatedInstanceId);
+  const generatedConfig = buildMinimalCollectorConfig(selectedOs, generatedInstanceId);
   const selectedToken = String(
     apiKeyTokenMap[selectedApiKeyId] || selectedApiKey?.otlp_token || "",
   ).trim();
@@ -1529,7 +1477,7 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
                 </a>
                 <p className="mt-2 text-xs text-sre-text-muted">
                   {selectedOs === "extras"
-                    ? `Download the ${selectedExtraService?.packageName || "extension"} binary if it is published with the release. If it is missing, build it from source and use the config template in the next step.`
+                    ? `Download the ${selectedExtraService?.packageName || "extension"} binary if it is published with the release. If it is missing, build it from source and use the repository config examples in the next step.`
                     : "Download the raw binary or `.exe` asset directly. No tar extraction is required."}
                 </p>
               </div>
@@ -1541,7 +1489,13 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
                   </p>
                   <button
                     type="button"
-                    onClick={() => copyText(installCommandByOs[selectedOs])}
+                    onClick={() =>
+                      copyText(
+                        selectedOs === "extras"
+                          ? extraInstallCommand
+                          : installCommandByOs[selectedOs],
+                      )
+                    }
                     className="rounded-md border border-sre-border px-2 py-1 text-xs text-sre-text hover:border-sre-primary/40"
                   >
                     Copy command
@@ -1679,36 +1633,67 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
             <div className="space-y-4">
               <h3 className="text-base font-semibold text-sre-text">
                 {selectedOs === "extras"
-                  ? `3. Generate ${selectedExtraService?.label || "service"} config file`
+                  ? `3. Configure ${selectedExtraService?.label || "service"} service`
                   : "3. Generate Ojo config file"}
               </h3>
               <div className="rounded-lg border border-sre-border bg-sre-surface p-3 text-sm text-sre-text-muted">
-                Use this file as{" "}
-                <span className="font-semibold text-sre-text">
-                  {selectedConfigFile}
-                </span>{" "}
-                {selectedOs === "extras"
-                  ? "for your selected extra service binary."
-                  : "for your selected OS."}
+                {selectedOs === "extras" ? (
+                  <>
+                    For extra services, refer to repository config examples and use{" "}
+                    <span className="font-semibold text-sre-text">
+                      {selectedConfigFile}
+                    </span>{" "}
+                    as your starting file name.
+                  </>
+                ) : (
+                  <>
+                    Use this file as{" "}
+                    <span className="font-semibold text-sre-text">
+                      {selectedConfigFile}
+                    </span>{" "}
+                    for your selected OS.
+                  </>
+                )}
               </div>
 
-              <div className="rounded-lg border border-sre-border bg-sre-bg-alt p-3">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-sre-text-muted">
-                    {selectedOs === "extras" ? "Service config" : "Ojo config"} ({selectedConfigFile})
+              {selectedOs === "extras" ? (
+                <div className="rounded-lg border border-sre-border bg-sre-bg-alt p-3 text-sm text-sre-text-muted space-y-2">
+                  <p>
+                    Review the Ojo repository for service-specific config examples and copy the
+                    example for{" "}
+                    <span className="font-semibold text-sre-text">
+                      {selectedExtraService?.packageName || "this service"}
+                    </span>
+                    .
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => copyText(generatedConfig)}
-                    className="rounded-md border border-sre-border px-2 py-1 text-xs text-sre-text hover:border-sre-primary/40"
+                  <a
+                    href={OJO_REPO_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex text-xs font-semibold text-sre-primary hover:underline"
                   >
-                    Copy config
-                  </button>
+                    Open Ojo repository examples
+                  </a>
                 </div>
-                <pre className="max-h-72 overflow-auto rounded-md bg-sre-surface p-3 text-xs text-sre-text">
-                  <code>{generatedConfig}</code>
-                </pre>
-              </div>
+              ) : (
+                <div className="rounded-lg border border-sre-border bg-sre-bg-alt p-3">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-sre-text-muted">
+                      Ojo config ({selectedConfigFile})
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => copyText(generatedConfig)}
+                      className="rounded-md border border-sre-border px-2 py-1 text-xs text-sre-text hover:border-sre-primary/40"
+                    >
+                      Copy config
+                    </button>
+                  </div>
+                  <pre className="max-h-72 overflow-auto rounded-md bg-sre-surface p-3 text-xs text-sre-text">
+                    <code>{generatedConfig}</code>
+                  </pre>
+                </div>
+              )}
               {selectedOs === "extras" ? (
                 <div className="rounded-lg border border-sre-border bg-sre-bg-alt p-3 text-sm text-sre-text-muted">
                   This extension binary still needs the OTEL collector config from the next step. Point its OTLP export to the same collector endpoint and keep the collector listening on port <span className="font-semibold text-sre-text">4355</span>.
