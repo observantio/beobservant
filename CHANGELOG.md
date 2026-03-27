@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Updated repository lint/quality tooling to use `pyproject.toml` for Watchdog pylint in pre-commit (`.pre-commit-config.yaml`), fixing hook execution in local commits.
+- Refined broad pylint policy/config in root `pyproject.toml` (design limits, naming styles, and disable list alignment) to reduce noisy false positives and better match current codebase patterns.
+- Improved internal/router/service code quality and consistency across Watchdog and Gatekeeper:
+  - cleaned minor import/style issues and docstrings in Gatekeeper secret modules.
+  - replaced unnecessary callable dunder invocations in database session helpers.
+  - normalized intentionally-unused dependency parameters (`_current_user`, `_app`, etc.) in multiple routers/services.
+  - hardened Grafana proxy error mapping by normalizing status/body handling for non-typed upstream exceptions.
+
+### Fixed
+
+- Fixed resolver router tests to patch the bound `resolver_proxy_service` instance directly, preventing real upstream-token validation paths from leaking into unit tests.
+- Fixed notifier/notification edge tests to patch live auth/proxy globals safely (instead of brittle import-path patching), preventing unintended DB/bootstrap execution during test runs.
+- Fixed multiple backend test reliability issues across internal/auth/OIDC/Loki/workflow suites by switching to safer monkeypatch targets, tighter dependency overrides, and explicit test-app setup.
+- Fixed workflow test DB override coverage by recursively collecting `get_db` dependencies so nested route dependencies receive deterministic overrides in integration-style tests.
 
 ## [v0.0.2] - 2026-03-26
 
