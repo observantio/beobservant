@@ -47,7 +47,7 @@ async def test_proxy_post_overrides_payload_tenant(monkeypatch):
         captured.update(kwargs)
         return {"ok": True}
 
-    monkeypatch.setattr("routers.observability.resolver_router.resolver_proxy_service.request_json", fake_request_json)
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
 
     result = await resolver_router.anomalies_metrics(
         request=_request(),
@@ -73,7 +73,7 @@ async def test_job_result_requires_completed_status(monkeypatch):
             "result": {"summary": "ok"},
         }
 
-    monkeypatch.setattr("routers.observability.resolver_router.resolver_proxy_service.request_json", fake_request_json)
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
 
     result = await resolver_router.get_analyze_job_result(
         job_id="job-1",
@@ -100,7 +100,7 @@ async def test_get_report_by_id_proxies(monkeypatch):
             "result": {"summary": "ok"},
         }
 
-    monkeypatch.setattr("routers.observability.resolver_router.resolver_proxy_service.request_json", fake_request_json)
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
     result = await resolver_router.get_report_by_id("rep-1", _request(), _user())
     assert result.report_id == "rep-1"
     assert captured["upstream_path"] == "/api/v1/reports/rep-1"
@@ -114,7 +114,7 @@ async def test_delete_report_by_id_proxies(monkeypatch):
         captured.update(kwargs)
         return {"report_id": "rep-1", "status": "deleted", "deleted": True}
 
-    monkeypatch.setattr("routers.observability.resolver_router.resolver_proxy_service.request_json", fake_request_json)
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
     result = await resolver_router.delete_report_by_id("rep-1", _request(), _user())
     assert result.deleted is True
     assert captured["upstream_path"] == "/api/v1/reports/rep-1"
@@ -132,7 +132,7 @@ async def test_get_analyze_job_result_tolerates_unknown_running_status(monkeypat
             "result": None,
         }
 
-    monkeypatch.setattr("routers.observability.resolver_router.resolver_proxy_service.request_json", fake_request_json)
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
     result = await resolver_router.get_analyze_job_result(
         job_id="job-2",
         request=_request(),
@@ -153,7 +153,7 @@ async def test_get_analyze_job_result_maps_succeeded_status_to_completed(monkeyp
             "result": {"summary": "ok"},
         }
 
-    monkeypatch.setattr("routers.observability.resolver_router.resolver_proxy_service.request_json", fake_request_json)
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
     result = await resolver_router.get_analyze_job_result(
         job_id="job-2b",
         request=_request(),
@@ -181,7 +181,7 @@ async def test_get_analyze_job_result_maps_conflict_to_job_summary(monkeypatch):
             "result": None,
         }
 
-    monkeypatch.setattr("routers.observability.resolver_router.resolver_proxy_service.request_json", fake_request_json)
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
     result = await resolver_router.get_analyze_job_result(
         job_id="job-3",
         request=_request(),
@@ -199,7 +199,7 @@ async def test_get_analyze_job_result_reraises_non_conflict(monkeypatch):
     async def fake_request_json(**kwargs):
         raise resolver_router.HTTPException(status_code=502, detail="upstream down")
 
-    monkeypatch.setattr("routers.observability.resolver_router.resolver_proxy_service.request_json", fake_request_json)
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
 
     with pytest.raises(resolver_router.HTTPException) as exc:
         await resolver_router.get_analyze_job_result(
@@ -218,7 +218,7 @@ async def test_ml_weights_feedback_proxies(monkeypatch):
         captured.update(kwargs)
         return {"updated_weights": {"metrics": 0.5}, "update_count": 1}
 
-    monkeypatch.setattr("routers.observability.resolver_router.resolver_proxy_service.request_json", fake_request_json)
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
     result = await resolver_router.ml_weights_feedback(
         request=_request(),
         signal="metrics",
@@ -240,7 +240,7 @@ async def test_ml_weights_reset_proxies(monkeypatch):
         captured.update(kwargs)
         return {"weights": {"metrics": 0.3, "logs": 0.35, "traces": 0.35}, "update_count": 0}
 
-    monkeypatch.setattr("routers.observability.resolver_router.resolver_proxy_service.request_json", fake_request_json)
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
     user = TokenData(
         user_id="u1",
         username="user-1",
