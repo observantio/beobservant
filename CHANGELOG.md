@@ -2,25 +2,6 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
-
-### Changed
-
-- Updated repository lint/quality tooling to use `pyproject.toml` for Watchdog pylint in pre-commit (`.pre-commit-config.yaml`), fixing hook execution in local commits.
-- Refined broad pylint policy/config in root `pyproject.toml` (design limits, naming styles, and disable list alignment) to reduce noisy false positives and better match current codebase patterns.
-- Improved internal/router/service code quality and consistency across Watchdog and Gatekeeper:
-  - cleaned minor import/style issues and docstrings in Gatekeeper secret modules.
-  - replaced unnecessary callable dunder invocations in database session helpers.
-  - normalized intentionally-unused dependency parameters (`_current_user`, `_app`, etc.) in multiple routers/services.
-  - hardened Grafana proxy error mapping by normalizing status/body handling for non-typed upstream exceptions.
-
-### Fixed
-
-- Fixed resolver router tests to patch the bound `resolver_proxy_service` instance directly, preventing real upstream-token validation paths from leaking into unit tests.
-- Fixed notifier/notification edge tests to patch live auth/proxy globals safely (instead of brittle import-path patching), preventing unintended DB/bootstrap execution during test runs.
-- Fixed multiple backend test reliability issues across internal/auth/OIDC/Loki/workflow suites by switching to safer monkeypatch targets, tighter dependency overrides, and explicit test-app setup.
-- Fixed workflow test DB override coverage by recursively collecting `get_db` dependencies so nested route dependencies receive deterministic overrides in integration-style tests.
-
 ## [v0.0.2] - 2026-03-26
 
 ### Added
@@ -81,6 +62,13 @@ All notable changes to this project are documented here.
 - Updated Agents trend semantics to use sampled metric-count history with denser UI fetch resolution for better visible trend movement.
 - Updated sidebar **Guide** section default state to collapsed on first load (still auto-expands when navigating under `/docs`).
 - Updated RCA job queue card actions so **Copy Report ID** lives beside the eye/view action in the selected-row action cluster.
+- Updated repository lint/quality tooling to use `pyproject.toml` for Watchdog pylint in pre-commit (`.pre-commit-config.yaml`), fixing hook execution in local commits.
+- Refined broad pylint policy/config in root `pyproject.toml` (design limits, naming styles, and disable list alignment) to reduce noisy false positives and better match current codebase patterns.
+- Improved internal/router/service code quality and consistency across Watchdog and Gatekeeper:
+  - cleaned minor import/style issues and docstrings in Gatekeeper secret modules.
+  - replaced unnecessary callable dunder invocations in database session helpers.
+  - normalized intentionally-unused dependency parameters (`_current_user`, `_app`, etc.) in multiple routers/services.
+  - hardened Grafana proxy error mapping by normalizing status/body handling for non-typed upstream exceptions.
 
 ### Fixed
 
@@ -100,6 +88,10 @@ All notable changes to this project are documented here.
 - Fixed Ojo connectivity check false negatives by treating scoped metric activity as a valid connected signal when heartbeat records are not yet present.
 - Fixed RCA job card copy action feedback by showing explicit toast acknowledgment on success/failure.
 - Fixed Mimir key-activity fallback robustness so host label probing continues when a candidate label query raises a runtime exception.
+- Fixed resolver router tests to patch the bound `resolver_proxy_service` instance directly, preventing real upstream-token validation paths from leaking into unit tests.
+- Fixed notifier/notification edge tests to patch live auth/proxy globals safely (instead of brittle import-path patching), preventing unintended DB/bootstrap execution during test runs.
+- Fixed multiple backend test reliability issues across internal/auth/OIDC/Loki/workflow suites by switching to safer monkeypatch targets, tighter dependency overrides, and explicit test-app setup.
+- Fixed workflow test DB override coverage by recursively collecting `get_db` dependencies so nested route dependencies receive deterministic overrides in integration-style tests.
 
 ## [v0.0.1] - 2026-03-20
 
