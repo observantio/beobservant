@@ -229,7 +229,6 @@ TEMPO_CONFIG_FILE="${TEMPO_CONFIG_FILE:-./configs/generated/tempo.yaml}"
 MIMIR_CONFIG_FILE="$(get_env_key MIMIR_CONFIG_FILE)"
 MIMIR_CONFIG_FILE="${MIMIR_CONFIG_FILE:-./configs/generated/mimir.yaml}"
 
-# Ensure config paths are files (not existing directories) and dirs exist.
 for CONFIG_FILE in "${LOKI_CONFIG_FILE}" "${TEMPO_CONFIG_FILE}" "${MIMIR_CONFIG_FILE}"; do
   if [ -d "${CONFIG_FILE}" ]; then
     rm -rf "${CONFIG_FILE}"

@@ -98,7 +98,8 @@ def _parse_version(version: str) -> tuple[int, int, int]:
     parts = version.split(".")
     if len(parts) < 3:
         raise ValueError(f"Invalid version format: {version}")
-    return tuple(int(p) for p in parts[:3])
+    major, minor, patch = (int(p) for p in parts[:3])
+    return (major, minor, patch)
 
 
 def require_buildx(required_version: str = "0.17.0") -> None:

@@ -70,7 +70,7 @@ The installer will:
 - Restart:
   `./restart.sh` (or `./release/restart.sh`)
 - Re-render adaptive observability sizing without restarting:
-  `./scripts/render-observability-config.sh`
+  `./scripts/run_optimal_config.sh`
 - Stop/uninstall:
   `./uninstall.sh` (or `./release/uninstall.sh`)
 - Uninstall and remove named volumes:

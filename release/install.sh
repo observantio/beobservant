@@ -22,7 +22,7 @@ if [[ ! -f ".env" ]]; then
   cp .env.example .env
 fi
 
-chmod +x ./scripts/render-observability-config.sh
+chmod +x ./scripts/run_optimal_config.sh
 
 randomized_keys=()
 
@@ -306,7 +306,7 @@ if [[ -n "${release_arch}" && "${release_arch}" != "multi" ]]; then
   fi
 fi
 echo ""
-./scripts/render-observability-config.sh
+./scripts/run_optimal_config.sh
 echo ""
 echo "Pulling images for OBSERVANTIO_BUNDLE_VERSION=$(get_env_key OBSERVANTIO_BUNDLE_VERSION)..."
 "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml pull
