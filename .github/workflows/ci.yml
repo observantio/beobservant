@@ -53,7 +53,7 @@ jobs:
           python -m pip install pytest pytest-asyncio
 
       - name: Run Gateway tests
-        run: pytest -q
+        run: pytest -c "${{ github.workspace }}/pyproject.toml" -q tests
 
   server:
     name: Server tests (pytest)
@@ -75,7 +75,7 @@ jobs:
           python -m pip install pytest pytest-asyncio
 
       - name: Run server tests
-        run: pytest -q
+        run: pytest -c "${{ github.workspace }}/pyproject.toml" -q tests
 
   backend-quality:
     name: ${{ matrix.name }} quality (mypy, pylint)
@@ -87,14 +87,11 @@ jobs:
           - name: Gateway
             service: gatekeeper
             requirements: gatekeeper/requirements.txt
-            mypy_config: mypy.ini
             extra_packages: ""
             run_pylint: "false"
           - name: Watchdog
             service: watchdog
             requirements: watchdog/requirements.txt
-            mypy_config: mypy.ini
-            pylint_config: .pylintrc
             extra_packages: "types-psutil"
             run_pylint: "true"
     env:
@@ -138,7 +135,7 @@ jobs:
 
       - name: Run mypy
         working-directory: ${{ matrix.service }}
-        run: mypy --config-file "${{ matrix.mypy_config }}" .
+        run: mypy --config-file "${{ github.workspace }}/pyproject.toml" .
 
       - name: Run pylint
         if: matrix.run_pylint == 'true'
@@ -154,4 +151,4 @@ jobs:
             ! -name dist \
             ! -name tmp \
             ! -name vendor | sort)"
-          pylint --rcfile "${{ github.workspace }}/${{ matrix.service }}/${{ matrix.pylint_config }}" $TARGETS
+          pylint --rcfile "${{ github.workspace }}/pyproject.toml" $TARGETS
