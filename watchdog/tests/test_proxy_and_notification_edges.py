@@ -152,7 +152,7 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
     assert svc._normalize_group_ids([" g1 ", "g1", "", None, "g2"]) == ["g1", "g2"]
 
     monkeypatch.setattr(svc, "_effective_group_ids", lambda *_args, **_kwargs: ["live"])
-    monkeypatch.setattr("services.grafana_proxy_service.search_dashboards", lambda *_args, **_kwargs: [{"uid": "d1"}])
+    monkeypatch.setitem(svc.search_dashboards.__globals__, "search_dashboards", lambda *_args, **_kwargs: [{"uid": "d1"}])
 
     async def fake_search(*args, **kwargs):
         return [{"uid": "d1", "groups": args[4]}]
@@ -166,17 +166,17 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
     async def fake_get_folder(*args, **kwargs):
         return {"uid": args[2], "groups": args[5]}
 
-    monkeypatch.setattr("services.grafana_proxy_service.search_dashboards", fake_search)
-    monkeypatch.setattr("services.grafana_proxy_service.get_dashboard", fake_get_dashboard)
-    monkeypatch.setattr("services.grafana_proxy_service.get_datasources", fake_get_datasources)
-    monkeypatch.setattr("services.grafana_proxy_service.get_folder", fake_get_folder)
-    monkeypatch.setattr("services.grafana_proxy_service.get_dashboard_metadata", lambda *_args: {1: "one"})
-    monkeypatch.setattr("services.grafana_proxy_service.get_datasource_metadata", lambda *_args: {2: "two"})
-    monkeypatch.setattr("services.grafana_proxy_service.toggle_dashboard_hidden", lambda *_args: True)
-    monkeypatch.setattr("services.grafana_proxy_service.toggle_datasource_hidden", lambda *_args: True)
-    monkeypatch.setattr("services.grafana_proxy_service.toggle_folder_hidden", lambda *_args: True)
-    monkeypatch.setattr("services.grafana_proxy_service.check_folder_access", lambda *_args, **_kwargs: "folder")
-    monkeypatch.setattr("services.grafana_proxy_service.is_folder_accessible", lambda *_args, **_kwargs: True)
+    monkeypatch.setitem(svc.search_dashboards.__globals__, "search_dashboards", fake_search)
+    monkeypatch.setitem(svc.get_dashboard.__globals__, "get_dashboard", fake_get_dashboard)
+    monkeypatch.setitem(svc.get_datasources.__globals__, "get_datasources", fake_get_datasources)
+    monkeypatch.setitem(svc.get_folder.__globals__, "get_folder", fake_get_folder)
+    monkeypatch.setitem(svc.get_dashboard_metadata.__globals__, "get_dashboard_metadata", lambda *_args: {1: "one"})
+    monkeypatch.setitem(svc.get_datasource_metadata.__globals__, "get_datasource_metadata", lambda *_args: {2: "two"})
+    monkeypatch.setitem(svc.toggle_dashboard_hidden.__globals__, "toggle_dashboard_hidden", lambda *_args: True)
+    monkeypatch.setitem(svc.toggle_datasource_hidden.__globals__, "toggle_datasource_hidden", lambda *_args: True)
+    monkeypatch.setitem(svc.toggle_folder_hidden.__globals__, "toggle_folder_hidden", lambda *_args: True)
+    monkeypatch.setitem(svc.check_folder_access.__globals__, "check_folder_access", lambda *_args, **_kwargs: "folder")
+    monkeypatch.setitem(svc.is_folder_accessible.__globals__, "is_folder_accessible", lambda *_args, **_kwargs: True)
 
     assert await svc.search_dashboards("db", "u1", "tenant", ["stale"]) == [{"uid": "d1", "groups": ["live"]}]
     assert await svc.get_dashboard("db", "dash-1", "u1", "tenant", ["stale"]) == {"uid": "dash-1", "groups": ["live"]}
