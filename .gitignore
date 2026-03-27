@@ -24,7 +24,6 @@ coverage/
 *.tmp
 *.zip
 *.tar.gz
-*.log
 *.venv/
 .mypy_cache/
 .ruff_cache/
@@ -35,3 +34,6 @@ showcase/
 .pylint-cache/
 configs/generated/*.yaml
 .vitest/
+.coveragerc
+coverage.xml
+test-reports/
