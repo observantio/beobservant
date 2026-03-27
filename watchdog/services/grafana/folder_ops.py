@@ -46,6 +46,7 @@ def check_folder_access(
     is_admin: bool = False,
     include_hidden: bool = False,
 ) -> Optional[GrafanaFolder]:
+    _ = is_admin
     folder = _db_folder_by_uid(db, tenant_id, uid)
     if not folder:
         return None

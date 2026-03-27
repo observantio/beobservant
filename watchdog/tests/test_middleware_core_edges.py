@@ -24,7 +24,12 @@ ensure_test_env()
 
 from middleware import audit as audit_middleware
 from middleware.concurrency_limit import ConcurrencyLimitMiddleware
-from middleware.error_handlers import general_exception_handler, handle_route_errors, validation_exception_handler
+from middleware.error_handlers import (
+    build_api_error_response,
+    general_exception_handler,
+    handle_route_errors,
+    validation_exception_handler,
+)
 from middleware.request_size_limit import RequestSizeLimitMiddleware
 
 
@@ -91,6 +96,24 @@ async def test_error_handlers_and_json_safe_paths():
         await gateway_timeout(_request("/timeout", headers=[(b"x-request-id", b"req-1")]))
     assert timeout_exc.value.status_code == 504
     assert timeout_exc.value.headers["X-Request-ID"] == "req-1"
+
+
+def test_build_api_error_response_uses_state_request_id() -> None:
+    request = _request("/errors")
+    request.state.request_id = "  req-from-state  "
+
+    response = build_api_error_response(
+        request=request,
+        status_code=418,
+        detail={"nested": ValueError("boom")},
+        error_code="TEST_CODE",
+    )
+
+    assert response.status_code == 418
+    payload = json.loads(response.body.decode("utf-8"))
+    assert payload["request_id"] == "req-from-state"
+    assert payload["detail"]["nested"] == "boom"
+    assert response.headers["X-Request-ID"] == "req-from-state"
 
 
 @pytest.mark.asyncio

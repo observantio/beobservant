@@ -24,7 +24,11 @@ router = APIRouter(prefix="/api/internal", tags=["internal"])
 internal_service = InternalService()
 
 
-@router.get("/otlp/validate", dependencies=[Depends(internal_service.verify_service_token)])
+def _verify_service_token(x_internal_token: str = Header(...)) -> None:
+    internal_service.verify_service_token(x_internal_token)
+
+
+@router.get("/otlp/validate", dependencies=[Depends(_verify_service_token)])
 async def validate_otlp_token_query(token: str = Query(..., min_length=1)) -> dict[str, str]:
     _ = token
     raise HTTPException(
@@ -33,7 +37,7 @@ async def validate_otlp_token_query(token: str = Query(..., min_length=1)) -> di
     )
 
 
-@router.post("/otlp/validate", dependencies=[Depends(internal_service.verify_service_token)])
+@router.post("/otlp/validate", dependencies=[Depends(_verify_service_token)])
 async def validate_otlp_token_post(
     payload: OtlpValidateRequest,
     x_otlp_token: str | None = Header(None),

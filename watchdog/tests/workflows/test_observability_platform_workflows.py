@@ -16,7 +16,6 @@ import httpx
 import pytest
 from fastapi.responses import JSONResponse
 
-import main as main_module
 from routers import internal_router
 from routers.observability import agents_router, alertmanager_router, resolver_router, loki_router, tempo_router
 from routers.platform import system_router
@@ -28,12 +27,18 @@ def test_root_health_ready_system_and_internal_workflow(client, monkeypatch: pyt
     state = WorkflowState()
     patch_auth_service(monkeypatch, state)
 
-    monkeypatch.setattr(main_module, "connection_test", lambda: True)
+    ready_endpoint = next(
+        route.endpoint
+        for route in client.app.routes
+        if getattr(route, "path", None) == "/ready" and "GET" in getattr(route, "methods", set())
+    )
+
+    monkeypatch.setitem(ready_endpoint.__globals__, "connection_test", lambda: True)
 
     async def fake_upstream_reachable(_url: str) -> bool:
         return True
 
-    monkeypatch.setattr(main_module, "_upstream_reachable", fake_upstream_reachable)
+    monkeypatch.setitem(ready_endpoint.__globals__, "_upstream_reachable", fake_upstream_reachable)
     monkeypatch.setattr(system_router.system_service, "get_all_metrics", lambda: {"uptime": 123, "agents": 2})
     monkeypatch.setattr(internal_router.internal_service, "_get_internal_token", lambda: "internal-token")
     monkeypatch.setattr(internal_router.internal_service._auth_service, "validate_otlp_token", state.validate_otlp_token)

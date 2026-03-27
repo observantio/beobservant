@@ -99,7 +99,7 @@ def _require_session_factory() -> Callable[[], Session]:
 
 @contextmanager
 def _session_scope() -> Iterator[Session]:
-    session = _require_session_factory().__call__()
+    session = _require_session_factory()()
     try:
         yield session
         session.commit()
@@ -115,7 +115,7 @@ class _SessionContext:
         self._session: Optional[Session] = None
 
     def __enter__(self) -> Session:
-        self._session = _require_session_factory().__call__()
+        self._session = _require_session_factory()()
         return self._session
 
     def __exit__(

@@ -160,7 +160,7 @@ async def test_system_router_ojo_releases_returns_cached_inside_lock(monkeypatch
     await system_router.ojo_release_cache_lock.acquire()
 
     async def _call_release():
-        return await system_router.get_ojo_releases(current_user=SimpleNamespace())
+        return await system_router.get_ojo_releases(_current_user=SimpleNamespace())
 
     task = asyncio.create_task(_call_release())
     await asyncio.sleep(0)

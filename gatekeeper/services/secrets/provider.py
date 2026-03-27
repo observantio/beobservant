@@ -1,5 +1,9 @@
 """
-Provider interfaces and implementations for secrets management, defining a protocol for secret providers and a simple implementation that reads secrets from environment variables. The SecretProvider protocol specifies methods for retrieving individual secrets by key as well as retrieving multiple secrets at once, while the EnvSecretProvider provides a concrete implementation that accesses secrets stored in the process environment. This module allows for flexible integration of different secret management solutions by adhering to the defined protocol, enabling secure handling of sensitive information such as API keys, database credentials, and other configuration secrets within the application.
+Provider interfaces and implementations for secrets management.
+
+Defines a `SecretProvider` protocol and a simple `EnvSecretProvider`
+implementation backed by process environment variables. This keeps secret
+lookup pluggable while preserving a minimal default implementation.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 

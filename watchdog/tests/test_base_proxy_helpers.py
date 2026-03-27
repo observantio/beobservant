@@ -91,7 +91,7 @@ def test_write_audit_uses_session_context(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr("services.proxy.base_proxy.get_db_session", lambda: Ctx())
+    monkeypatch.setitem(service.write_audit.__globals__, "get_db_session", lambda: Ctx())
     service.write_audit(
         current_user=_user(is_superuser=True),
         action="proxy.complete",
@@ -120,7 +120,7 @@ def test_write_audit_allows_anonymous_context_and_json_detail_fallback(monkeypat
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr("services.proxy.base_proxy.get_db_session", lambda: Ctx())
+    monkeypatch.setitem(service.write_audit.__globals__, "get_db_session", lambda: Ctx())
     service.write_audit(
         current_user=None,
         action="proxy.complete",

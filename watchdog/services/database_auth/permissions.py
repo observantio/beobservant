@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
 
 
-def get_user_permissions(service: DatabaseAuthService, user: User | UserSchema) -> List[str]:
+def get_user_permissions(_service: DatabaseAuthService, user: User | UserSchema) -> List[str]:
     user_id = getattr(user, "id", None)
     if not user_id:
         return []

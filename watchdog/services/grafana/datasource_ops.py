@@ -268,7 +268,7 @@ def check_datasource_access_by_id(
 
 
 def get_accessible_datasource_uids(
-    service: GrafanaProxyService,
+    _service: GrafanaProxyService,
     db: Session,
     user_id: str,
     tenant_id: str,
@@ -293,7 +293,7 @@ def get_accessible_datasource_uids(
 
 
 def build_datasource_list_context(
-    service: GrafanaProxyService,
+    _service: GrafanaProxyService,
     db: Session,
     *,
     tenant_id: str,

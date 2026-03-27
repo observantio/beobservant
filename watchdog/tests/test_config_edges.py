@@ -136,8 +136,10 @@ def test_config_vault_optional_warning_and_secret_loading_paths(monkeypatch):
         assert module.config.GATEWAY_INTERNAL_SERVICE_TOKEN == "vault-token"
         assert module.config.get_secret("MAX_QUERY_LIMIT") == str(module.config.MAX_QUERY_LIMIT)
         module.config.MISSING_VALUE = None
+        original_secret_provider = module.config._secret_provider
         module.config._secret_provider = types.SimpleNamespace(get=lambda key: (_ for _ in ()).throw(RuntimeError("boom")))
         assert module.config.get_secret("MISSING_VALUE") is None
+        module.config._secret_provider = original_secret_provider
 
 
 def test_apply_security_defaults_unsupported_auto_key_algorithm():

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import importlib
 from types import SimpleNamespace
 
 import httpx
@@ -25,6 +26,9 @@ ensure_test_env()
 
 from models.observability.loki_models import LogDirection, LogQuery
 from services.loki_service import LokiService, _json_dict, _object_list, _string_list
+
+
+_loki_module = importlib.import_module(LokiService.__module__)
 
 
 def test_loki_service_small_helpers_cover_fallback_types(monkeypatch):
@@ -114,7 +118,7 @@ async def test_query_logs_covers_fallback_and_http_errors(monkeypatch):
         }
 
     monkeypatch.setattr(service._http, "timed_get_json", timed_get_json)
-    monkeypatch.setattr("services.loki_service.run_fallback_queries", fallback)
+    monkeypatch.setattr(_loki_module, "run_fallback_queries", fallback)
     response = await service.query_logs(
         LogQuery(query='{app="web"}', limit=10, start=1, end=2, direction=LogDirection.BACKWARD, step=None),
         tenant_id="tenant-a",
@@ -161,7 +165,7 @@ async def test_query_logs_instant_get_labels_and_label_values_cover_error_paths(
 
     monkeypatch.setattr(service._http, "timed_get_json", timed_get_json)
     monkeypatch.setattr(service._http, "safe_get_json", safe_get_json)
-    monkeypatch.setattr("services.loki_service.run_fallback_queries", fallback)
+    monkeypatch.setattr(_loki_module, "run_fallback_queries", fallback)
     monkeypatch.setattr(service, "query_logs", query_logs)
 
     instant = await service.query_logs_instant("{app=\"web\"}", at_time=10, tenant_id="tenant-a", limit=2)
@@ -217,7 +221,7 @@ async def test_aggregate_volume_search_and_filter_cover_remaining_branches(monke
         return {"status": "success", "data": {"result": [{"values": [["1", "5"]]}]}, "query": query_str}
 
     monkeypatch.setattr(service, "aggregate_logs", aggregate_logs)
-    monkeypatch.setattr("services.loki_service.build_volume_fallback_queries", lambda query, max_queries: ["candidate-1", "candidate-2"])
+    monkeypatch.setattr(_loki_module, "build_volume_fallback_queries", lambda query, max_queries: ["candidate-1", "candidate-2"])
     volume = await service.get_log_volume("{service_name=\"api\"}", start=5, end=5, step=60, tenant_id="tenant-a")
     assert volume["data"]["result"]
 

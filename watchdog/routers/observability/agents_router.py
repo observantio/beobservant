@@ -44,7 +44,7 @@ async def close_mimir_client() -> None:
 
 
 @router.get("/")
-async def list_agents(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents"))) -> list[dict[str, object]]:
+async def list_agents(_current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents"))) -> list[dict[str, object]]:
     return [agent.model_dump() for agent in agent_service.list_agents()]
 
 

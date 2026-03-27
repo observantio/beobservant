@@ -36,7 +36,7 @@ ojo_release_cache_lock = asyncio.Lock()
 @router.get("/metrics", response_model=JSONDict)
 @handle_route_errors(internal_detail="Failed to retrieve system metrics")
 async def get_system_metrics(
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
+    _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
 ) -> JSONDict:
     return system_service.get_all_metrics()
 
@@ -71,7 +71,7 @@ async def get_system_quotas(
 @router.get("/ojo/releases", response_model=JSONDict)
 @handle_route_errors(internal_detail="Failed to retrieve Ojo release metadata")
 async def get_ojo_releases(
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
+    _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
 ) -> JSONDict:
     now = time.monotonic()
     if ojo_release_cache_payload is not None and now < ojo_release_cache_expires_at:

@@ -584,8 +584,8 @@ async def test_internal_and_system_router_edges(monkeypatch):
     monkeypatch.setattr(system_router, "ojo_release_cache_payload", None)
     monkeypatch.setattr(system_router, "ojo_release_cache_expires_at", 0.0)
 
-    first = await system_router.get_ojo_releases(current_user=types.SimpleNamespace())
-    second = await system_router.get_ojo_releases(current_user=types.SimpleNamespace())
+    first = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
+    second = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
     assert first["latest"]["tag_name"] == "v0.0.2"
     assert second["latest"]["tag_name"] == "v0.0.2"
     assert len(fake_client.calls) == 2
