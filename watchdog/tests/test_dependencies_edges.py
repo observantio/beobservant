@@ -9,7 +9,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 import types
 
 import pytest
@@ -105,7 +105,7 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
     dependencies.apply_scoped_rate_limit(current_user, "tempo")
     assert calls == [{"key": "user:u1:tempo", "limit": dependencies.config.RATE_LIMIT_USER_PER_MINUTE, "window_seconds": 60}]
 
-    naive_user = types.SimpleNamespace(session_invalid_before=datetime.utcfromtimestamp(101))
+    naive_user = types.SimpleNamespace(session_invalid_before=datetime.fromtimestamp(101, timezone.utc))
     with pytest.raises(HTTPException) as revoked:
         dependencies._enforce_session_revocation(naive_user, _token_data(iat=100))
     assert revoked.value.status_code == 401

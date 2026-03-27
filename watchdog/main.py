@@ -31,7 +31,7 @@ from routers import (
     system_router,
     internal_router,
 )
-from database import init_database, init_db, connection_test
+import database as database_module
 from middleware.request_size_limit import RequestSizeLimitMiddleware
 from middleware.concurrency_limit import ConcurrencyLimitMiddleware
 
@@ -47,10 +47,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("watchdog")
 
+connection_test = database_module.connection_test
+
 if not config.SKIP_STARTUP_DB_INIT:
     logger.info("Connecting to database: %s", config.DATABASE_URL.split("@")[-1])
-    init_database(config.DATABASE_URL, config.LOG_LEVEL == "debug")
-    init_db()
+    init_database_fn = getattr(database_module, "init_database")
+    init_database_fn(config.DATABASE_URL)
+    database_module.init_db()
     logger.info("✓ Database initialized")
     logger.info("✓ Database schema ready")
 

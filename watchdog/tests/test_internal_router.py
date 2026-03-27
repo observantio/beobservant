@@ -55,6 +55,7 @@ def test_missing_header(monkeypatch):
 
 def test_service_token_not_configured(monkeypatch):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", None)
+    monkeypatch.setattr(InternalService, "_get_internal_token", lambda self: "")
     client = TestClient(app)
     resp = client.post(
         "/api/internal/otlp/validate",

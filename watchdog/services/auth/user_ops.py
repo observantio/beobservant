@@ -225,7 +225,7 @@ def create_user(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Only administrators can assign admin role",
                 )
-            if (getattr(user_create, "group_ids", None) or []):
+            if getattr(user_create, "group_ids", None):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Only administrators can assign initial group memberships",

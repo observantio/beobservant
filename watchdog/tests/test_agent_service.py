@@ -72,6 +72,11 @@ def test_mimir_prometheus_url_helper():
     assert helpers.mimir_prometheus_url("http://mimir/prometheus", "api/v1/query_range") == "http://mimir/prometheus/api/v1/query_range"
 
 
+def test_mimir_prometheus_url_handles_empty_base_and_suffix():
+    assert helpers.mimir_prometheus_url("", "") == "/"
+    assert helpers.mimir_prometheus_url("   ", "api/v1/query") == "/api/v1/query"
+
+
 class DummyClient:
     def __init__(self, payload, by_path=None):
         self.payload = payload
@@ -220,6 +225,23 @@ async def test_query_key_activity_skips_label_queries_when_metrics_absent():
 
 
 @pytest.mark.asyncio
+async def test_query_key_activity_recovers_from_agent_label_query_exception():
+    payload = {"data": {"result": [{"value": [0, "4"]}]}}
+    client = DummyClient(
+        payload,
+        by_path={
+            "/label/instance/values": ["not-an-object"],
+            "/label/job/values": {"data": ["job-a", "job-b"]},
+            "/label/host.name/values": {"data": ["host-a"]},
+        },
+    )
+    result = await helpers.query_key_activity("key", client)
+    assert result["metrics_active"] is True
+    assert result["agent_estimate"] == 2
+    assert result["host_estimate"] == 1
+
+
+@pytest.mark.asyncio
 async def test_service_wrapper_methods():
     svc = AgentService()
     hb = AgentHeartbeat(name="a", tenant_id="t")
@@ -255,3 +277,50 @@ async def test_query_key_volume_series_success():
         {"ts": 1711000300, "value": 6},
     ]
     assert client.last_url.endswith("/prometheus/api/v1/query_range")
+
+
+@pytest.mark.asyncio
+async def test_query_label_value_count_rejects_non_object_payload():
+    client = DummyClient(["unexpected"])
+    with pytest.raises(ValueError, match="Unexpected label values payload"):
+        await helpers.query_label_value_count("tenant-a", "instance", client)
+
+
+def test_extract_metrics_series_guard_branches():
+    assert helpers.extract_metrics_series({"data": {"result": {"unexpected": "shape"}}}) == []
+    assert helpers.extract_metrics_series({"data": {"result": [["not-a-dict"]]}}) == []
+    assert helpers.extract_metrics_series({"data": {"result": [{"values": "bad"}]}}) == []
+    payload = {
+        "data": {
+            "result": [
+                {
+                    "values": [
+                        "skip",
+                        [1711000000],
+                        [1711000300, "4"],
+                    ]
+                }
+            ]
+        }
+    }
+    assert helpers.extract_metrics_series(payload) == [{"ts": 1711000300, "value": 4}]
+
+
+@pytest.mark.asyncio
+async def test_query_key_volume_series_handles_invalid_payload_and_errors():
+    invalid_payload_client = DummyClient(["bad-payload"])
+    assert await helpers.query_key_volume_series("tenant-a", invalid_payload_client) == []
+
+    failing_client = DummyClientWithFailures(
+        {"data": {"result": [{"values": []}]}},
+        raise_paths={"/query_range"},
+    )
+    assert await helpers.query_key_volume_series("tenant-a", failing_client) == []
+
+
+@pytest.mark.asyncio
+async def test_service_wrapper_key_volume_series_path():
+    svc = AgentService()
+    client = DummyClient({"data": {"result": [{"values": [[1711000000, "1"]]}]}})
+    points = await svc.key_volume_series("tenant-a", client)
+    assert points == [{"ts": 1711000000, "value": 1}]

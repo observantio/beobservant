@@ -73,7 +73,6 @@ async def get_system_quotas(
 async def get_ojo_releases(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
 ) -> JSONDict:
-    global ojo_release_cache_payload, ojo_release_cache_expires_at
     now = time.monotonic()
     if ojo_release_cache_payload is not None and now < ojo_release_cache_expires_at:
         return ojo_release_cache_payload
@@ -103,6 +102,6 @@ async def get_ojo_releases(
             "latest_ok": latest_res.is_success,
             "releases_ok": list_res.is_success,
         }
-        ojo_release_cache_payload = payload
-        ojo_release_cache_expires_at = now + OJO_RELEASE_CACHE_TTL_SECONDS
+        globals()["ojo_release_cache_payload"] = payload
+        globals()["ojo_release_cache_expires_at"] = now + OJO_RELEASE_CACHE_TTL_SECONDS
         return payload

@@ -200,12 +200,29 @@ async def test_agents_router_list_active_and_heartbeat(monkeypatch):
     assert volume["average"] == 3
     assert volume["points"][0]["value"] == 2
 
+    selected_volume = await agents_router.agent_metric_volume(
+        tenant_id="tenant-a",
+        current_user=current_user,
+    )
+    assert selected_volume["tenant_id"] == "tenant-a"
+
     with pytest.raises(HTTPException) as exc:
         await agents_router.agent_metric_volume(
             tenant_id="tenant-missing",
             current_user=current_user,
         )
     assert exc.value.status_code == 403
+
+    monkeypatch.setattr(agents_router.auth_service, "list_api_keys", lambda *_args: [])
+    empty_volume = await agents_router.agent_metric_volume(current_user=current_user)
+    assert empty_volume == {
+        "tenant_id": "",
+        "key_name": "",
+        "points": [],
+        "current": 0,
+        "peak": 0,
+        "average": 0,
+    }
 
     called = []
     monkeypatch.setattr(agents_router, "enforce_public_endpoint_security", lambda *_args, **_kwargs: called.append("public"))

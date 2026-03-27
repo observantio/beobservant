@@ -376,7 +376,11 @@ def test_main_startup_initializes_database_and_auth(monkeypatch):
     monkeypatch.setattr(config_module.config, "SKIP_STARTUP_DB_INIT", False)
     monkeypatch.setattr(config_module.config, "DATABASE_URL", "postgresql://safeuser:safePass_123@db:5432/watchdog")
     monkeypatch.setattr(config_module.config, "LOG_LEVEL", "debug")
-    monkeypatch.setattr(database_module, "init_database", lambda url, debug: calls.append(("init_database", url, debug)))
+    monkeypatch.setattr(
+        database_module,
+        "init_database",
+        lambda database_url: calls.append(("init_database", database_url)),
+    )
     monkeypatch.setattr(database_module, "init_db", lambda: calls.append("init_db"))
 
     import middleware.dependencies as dependencies_module
@@ -390,7 +394,7 @@ def test_main_startup_initializes_database_and_auth(monkeypatch):
     importlib.import_module("main")
 
     assert calls == [
-        ("init_database", "postgresql://safeuser:safePass_123@db:5432/watchdog", True),
+        ("init_database", "postgresql://safeuser:safePass_123@db:5432/watchdog"),
         "init_db",
         "lazy_init",
         "backfill_otlp_tokens",

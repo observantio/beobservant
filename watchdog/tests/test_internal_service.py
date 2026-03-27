@@ -27,6 +27,7 @@ class ErrorAuth:
 def test_verify_service_token_missing(monkeypatch):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", None)
     svc = InternalService()
+    monkeypatch.setattr(svc, "_get_internal_token", lambda: "")
     with pytest.raises(HTTPException) as exc:
         svc.verify_service_token("any")
     assert exc.value.status_code == 500

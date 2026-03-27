@@ -48,8 +48,6 @@ def init_database(
     echo: bool = False,
     pool_size: Optional[int] = None,
 ) -> None:
-    global _engine, _session_local
-
     if _engine is not None and _session_local is not None:
         return
 
@@ -76,29 +74,32 @@ def init_database(
                 }
             )
 
-        _engine = create_engine(
+        engine = create_engine(
             database_url,
             **engine_kwargs,
         )
 
-        _session_local = sessionmaker(
-            bind=_engine,
+        session_local = sessionmaker(
+            bind=engine,
             autocommit=False,
             autoflush=False,
             expire_on_commit=False,
             future=True,
         )
+        globals()["_engine"] = engine
+        globals()["_session_local"] = session_local
 
 
 def _require_session_factory() -> Callable[[], Session]:
-    if _session_local is None:
+    session_local = _session_local
+    if session_local is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
-    return _session_local
+    return session_local
 
 
 @contextmanager
 def _session_scope() -> Iterator[Session]:
-    session = _require_session_factory()()
+    session = _require_session_factory().__call__()
     try:
         yield session
         session.commit()
@@ -114,7 +115,7 @@ class _SessionContext:
         self._session: Optional[Session] = None
 
     def __enter__(self) -> Session:
-        self._session = _require_session_factory()()
+        self._session = _require_session_factory().__call__()
         return self._session
 
     def __exit__(
@@ -162,14 +163,13 @@ def connection_test() -> bool:
 
 
 def dispose_database() -> None:
-    global _engine, _session_local
     with _init_lock:
-        _session_local = None
+        globals()["_session_local"] = None
         if _engine is not None:
             try:
                 _engine.dispose()
             finally:
-                _engine = None
+                globals()["_engine"] = None
 
 
 def init_db() -> None:
