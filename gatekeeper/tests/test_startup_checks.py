@@ -83,3 +83,22 @@ async def test_startup_strict_mode_raises_when_auth_api_unavailable(monkeypatch)
     with pytest.raises(DatabaseUnavailable):
         async with gateway_main.lifespan(gateway_main.app):
             await asyncio.sleep(0)  # pragma: no cover
+
+
+@pytest.mark.asyncio
+async def test_startup_skips_probe_when_auth_api_url_is_empty(monkeypatch):
+    calls: list[str] = []
+
+    monkeypatch.setattr(gateway_main.gw_config, "AUTH_API_URL", "")
+    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STATUS_OTLP_TOKEN", "probe-token")
+    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_CHECK_MODE", "strict")
+    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_RETRIES", 1)
+    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_BACKOFF", 0.01)
+
+    service_cls = type(gateway_main.service)
+    monkeypatch.setattr(service_cls, "_fetch_org_from_api", lambda self, token: calls.append(token))
+
+    async with gateway_main.lifespan(gateway_main.app):
+        await asyncio.sleep(0)
+
+    assert calls == []

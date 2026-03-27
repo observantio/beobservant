@@ -112,6 +112,24 @@ def test_build_secret_provider_uses_secret_id_env(monkeypatch):
     assert captured["secret_id_fn"]() == "secret-1"
 
 
+def test_build_secret_provider_without_role_id(monkeypatch):
+    captured = {}
+
+    class FakeProvider:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setenv("VAULT_ADDR", "https://vault")
+    monkeypatch.delenv("VAULT_ROLE_ID", raising=False)
+    monkeypatch.delenv("VAULT_SECRET_ID", raising=False)
+    monkeypatch.delenv("VAULT_SECRET_ID_FILE", raising=False)
+    monkeypatch.setattr(gw_config, "VaultSecretProvider", FakeProvider)
+    provider = gw_config.build_secret_provider()
+    assert isinstance(provider, FakeProvider)
+    assert captured["role_id"] is None
+    assert captured["secret_id_fn"] is None
+
+
 def test_build_secret_provider_rejects_missing_secret_id(monkeypatch):
     monkeypatch.setenv("VAULT_ADDR", "https://vault")
     monkeypatch.setenv("VAULT_ROLE_ID", "role-1")
@@ -334,6 +352,24 @@ async def test_gateway_main_health_and_main_entrypoint(monkeypatch):
     assert captured["ssl_ca_certs"] == "/tmp/ca.pem"
 
 
+@pytest.mark.asyncio
+async def test_gateway_main_entrypoint_without_tls_files(monkeypatch):
+    captured = {}
+    fake_uvicorn = types.SimpleNamespace(run=lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
+    monkeypatch.delenv("GATEWAY_SSL_CERTFILE", raising=False)
+    monkeypatch.delenv("GATEWAY_SSL_KEYFILE", raising=False)
+    monkeypatch.delenv("GATEWAY_SSL_CA_CERTS", raising=False)
+    monkeypatch.setenv("GATEWAY_HOST", "127.0.0.1")
+    monkeypatch.setenv("GATEWAY_PORT", "4318")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    config_module = importlib.import_module("config")
+    importlib.reload(config_module)
+    runpy.run_module("main", run_name="__main__")
+    assert captured["ssl_certfile"] is None
+    assert captured["ssl_keyfile"] is None
+
+
 def test_gateway_service_remaining_branches(monkeypatch):
     monkeypatch.setattr(gateway_service_module.gw_config, "TRUST_PROXY_HEADERS", True)
     monkeypatch.setattr(gateway_service_module.gw_config, "TRUSTED_PROXY_CIDRS", [])
@@ -350,6 +386,19 @@ def test_gateway_service_remaining_branches(monkeypatch):
     monkeypatch.setattr(GatewayAuthService, "_fetch_org_from_api", lambda self, token: (_ for _ in ()).throw(FakeNamedDatabaseUnavailable("same-name")))
     with pytest.raises(FakeNamedDatabaseUnavailable):
         service.validate_otlp_token("tok")
+
+
+def test_parse_networks_with_explicit_cidr_and_proxy_cidr_iteration(monkeypatch):
+    networks = gateway_service_module._parse_networks("127.0.0.0/24")
+    assert [str(net) for net in networks] == ["127.0.0.0/24"]
+
+    monkeypatch.setattr(gateway_service_module.gw_config, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(
+        gateway_service_module.gw_config,
+        "TRUSTED_PROXY_CIDRS",
+        ["10.0.0.0/8", "127.0.0.0/8"],
+    )
+    assert GatewayAuthService._trusted_proxy_peer(_request(client_host="127.0.0.1")) is True
 
 
 def test_rate_limit_remaining_branches(monkeypatch):
@@ -434,8 +483,8 @@ def test_reloadable_config_remaining_validation(monkeypatch):
         ctx.setenv("GATEWAY_INTERNAL_SERVICE_TOKEN", "strong_internal_token_123")
         ctx.setenv("GATEWAY_STATUS_OTLP_TOKEN", "startup_probe_token_123")
         ctx.setenv("GATEWAY_STARTUP_CHECK_MODE", "invalid")
-        if "config" in sys.modules:
-            del sys.modules["config"]
+        sys.modules["config"] = importlib.import_module("config")
+        del sys.modules["config"]
         with pytest.raises(ValueError):
             importlib.import_module("config")
 
