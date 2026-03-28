@@ -22,6 +22,7 @@ All notable changes to this project are documented here.
 - Added Ojo Agent Setup Wizard support for an **Extra services** install path (GPU, Sensors, Postgres, MySQL, Docker) with searchable package cards and service config templates.
 - Added Ojo setup completion quick-links to create datasource and dashboard immediately after connectivity is confirmed.
 - Added hybrid user/group search behavior: typing continues to filter results client-side instantly, while pressing `Enter` or clicking the search icon triggers server-side filtering via `q` for cleaner, scalable list retrieval.
+- Added expanded cross-service workflow coverage for multi-user authorization and scope transitions, including admin-account guardrails, delegated group-permission ceilings, Grafana read-only mutation denial checks, and Alertmanager Jira/incident/integration permission boundaries.
 
 ### Changed
 
@@ -92,6 +93,7 @@ All notable changes to this project are documented here.
 - Fixed notifier/notification edge tests to patch live auth/proxy globals safely (instead of brittle import-path patching), preventing unintended DB/bootstrap execution during test runs.
 - Fixed multiple backend test reliability issues across internal/auth/OIDC/Loki/workflow suites by switching to safer monkeypatch targets, tighter dependency overrides, and explicit test-app setup.
 - Fixed workflow test DB override coverage by recursively collecting `get_db` dependencies so nested route dependencies receive deterministic overrides in integration-style tests.
+- Fixed workflow test authorization parity by enforcing real delegation constraints in the in-memory workflow helper for user/group and Grafana dashboard mutation paths, preventing false positives in security workflow tests.
 
 ## [v0.0.1] - 2026-03-20
 
