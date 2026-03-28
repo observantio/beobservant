@@ -488,3 +488,215 @@ def test_alertmanager_silence_validation_and_ownership_workflow(client, monkeypa
     assert owner_delete_response.status_code == 200
     assert store["silences"] == {}
     assert any(call["path"].endswith("/silences") for call in forward_calls)
+
+
+def test_alertmanager_incident_and_integration_permission_boundaries_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    operator = state.create_user(
+        SimpleNamespace(username="incident-op", email="incident-op@example.com", password="password123", role=Role.USER),
+        state.tenant_id,
+    )
+    reader = state.create_user(
+        SimpleNamespace(username="incident-reader", email="incident-reader@example.com", password="password123", role=Role.VIEWER),
+        state.tenant_id,
+    )
+
+    state.update_user_permissions(
+        operator.id,
+        [
+            Permission.READ_RULES.value,
+            Permission.READ_CHANNELS.value,
+            Permission.READ_INCIDENTS.value,
+            Permission.UPDATE_INCIDENTS.value,
+        ],
+        state.tenant_id,
+    )
+    state.update_user_permissions(
+        reader.id,
+        [
+            Permission.READ_RULES.value,
+            Permission.READ_CHANNELS.value,
+            Permission.READ_INCIDENTS.value,
+        ],
+        state.tenant_id,
+    )
+
+    store = {
+        "rules": {
+            "rule-1": {
+                "id": "rule-1",
+                "name": "seed-rule",
+                "expr": "up == 0",
+                "for": "1m",
+                "labels": {},
+                "annotations": {},
+                "created_by": operator.id,
+            }
+        },
+        "channels": {
+            "chan-1": {
+                "id": "chan-1",
+                "name": "seed-channel",
+                "type": "email",
+                "config": {"to": ["ops@example.com"]},
+                "created_by": operator.id,
+            }
+        },
+        "silences": {},
+        "issues": {},
+        "jira_config": {"projectKey": None, "issueType": None, "strategy": "create"},
+        "integrations": {},
+        "incidents": {},
+        "next_rule_id": 2,
+        "next_channel_id": 2,
+        "next_silence_id": 1,
+        "next_issue_id": 1,
+    }
+    forward_calls: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(alertmanager_router, "enforce_public_endpoint_security", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        alertmanager_router.notifier_proxy_service,
+        "forward",
+        _build_alertmanager_forwarder(store, forward_calls),
+    )
+
+    operator_headers = state.auth_header(f"token-{operator.id}")
+    reader_headers = state.auth_header(f"token-{reader.id}")
+
+    rules_response = client.get("/api/alertmanager/rules", headers=reader_headers)
+    assert rules_response.status_code == 200
+    assert rules_response.json()[0]["name"] == "seed-rule"
+
+    channels_response = client.get("/api/alertmanager/channels", headers=reader_headers)
+    assert channels_response.status_code == 200
+    assert channels_response.json()[0]["name"] == "seed-channel"
+
+    reader_incident_patch_response = client.patch(
+        "/api/alertmanager/incidents/inc-reader-1",
+        headers=reader_headers,
+        json={"status": "acknowledged"},
+    )
+    assert reader_incident_patch_response.status_code == 403
+
+    reader_integration_write_response = client.post(
+        "/api/alertmanager/integrations/slack",
+        headers=reader_headers,
+        json={"method": "webhook", "channel": "#incidents"},
+    )
+    assert reader_integration_write_response.status_code == 403
+
+    operator_incident_patch_response = client.patch(
+        "/api/alertmanager/incidents/inc-op-1",
+        headers=operator_headers,
+        json={"status": "acknowledged", "owner": "primary-oncall"},
+    )
+    assert operator_incident_patch_response.status_code == 200
+    assert operator_incident_patch_response.json()["status"] == "acknowledged"
+
+    operator_integration_write_response = client.post(
+        "/api/alertmanager/integrations/pagerduty",
+        headers=operator_headers,
+        json={"method": "events-v2", "routingKey": "rk-test"},
+    )
+    assert operator_integration_write_response.status_code == 200
+
+    assert set(store["integrations"].keys()) == {"pagerduty"}
+    assert any(call["path"].endswith("/incidents/inc-op-1") for call in forward_calls)
+
+
+def test_alertmanager_jira_configuration_requires_tenant_management_workflow(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    incident_operator = state.create_user(
+        SimpleNamespace(
+            username="jira-operator",
+            email="jira-operator@example.com",
+            password="password123",
+            role=Role.USER,
+        ),
+        state.tenant_id,
+    )
+    tenant_manager = state.create_user(
+        SimpleNamespace(
+            username="jira-tenant-manager",
+            email="jira-tenant-manager@example.com",
+            password="password123",
+            role=Role.USER,
+        ),
+        state.tenant_id,
+    )
+
+    state.update_user_permissions(
+        incident_operator.id,
+        [Permission.READ_INCIDENTS.value, Permission.UPDATE_INCIDENTS.value],
+        state.tenant_id,
+    )
+    state.update_user_permissions(
+        tenant_manager.id,
+        [Permission.MANAGE_TENANTS.value],
+        state.tenant_id,
+    )
+
+    store = {
+        "rules": {},
+        "channels": {},
+        "silences": {},
+        "issues": {},
+        "jira_config": {"projectKey": None, "issueType": None, "strategy": "create"},
+        "integrations": {},
+        "incidents": {},
+        "next_rule_id": 1,
+        "next_channel_id": 1,
+        "next_silence_id": 1,
+        "next_issue_id": 1,
+    }
+    forward_calls: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(alertmanager_router, "enforce_public_endpoint_security", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        alertmanager_router.notifier_proxy_service,
+        "forward",
+        _build_alertmanager_forwarder(store, forward_calls),
+    )
+
+    operator_headers = state.auth_header(f"token-{incident_operator.id}")
+    tenant_manager_headers = state.auth_header(f"token-{tenant_manager.id}")
+
+    operator_updates_jira_config_response = client.post(
+        "/api/alertmanager/jira/config",
+        headers=operator_headers,
+        json={"projectKey": "OPS", "issueType": "Incident", "strategy": "dedupe"},
+    )
+    assert operator_updates_jira_config_response.status_code == 403
+
+    tenant_manager_updates_jira_config_response = client.post(
+        "/api/alertmanager/jira/config",
+        headers=tenant_manager_headers,
+        json={"projectKey": "OPS", "issueType": "Incident", "strategy": "dedupe"},
+    )
+    assert tenant_manager_updates_jira_config_response.status_code == 200
+    assert tenant_manager_updates_jira_config_response.json()["strategy"] == "dedupe"
+
+    operator_reads_jira_config_response = client.get(
+        "/api/alertmanager/jira/config",
+        headers=operator_headers,
+    )
+    assert operator_reads_jira_config_response.status_code == 403
+
+    operator_creates_jira_issue_response = client.post(
+        "/api/alertmanager/jira/issues",
+        headers=operator_headers,
+        json={"summary": "Incident created by operator", "labels": ["prod", "critical"]},
+    )
+    assert operator_creates_jira_issue_response.status_code == 200
+    assert operator_creates_jira_issue_response.json()["summary"] == "Incident created by operator"
+
+    assert any(call["path"].endswith("/jira/config") for call in forward_calls)
+    assert any(call["path"].endswith("/jira/issues") for call in forward_calls)
