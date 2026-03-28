@@ -233,3 +233,154 @@ def test_grafana_datasource_query_and_visibility_workflow(client, monkeypatch: p
 
     delete_ds_response = client.delete(f"/api/grafana/datasources/{group_ds_uid}", headers=admin_headers)
     assert delete_ds_response.status_code == 200
+
+
+def test_grafana_permission_denials_for_read_only_user_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    monkeypatch.setattr(dashboards, "parse_dashboard_create_payload", lambda raw: raw)
+    monkeypatch.setattr(dashboards, "parse_dashboard_update_payload", lambda raw: raw)
+    monkeypatch.setattr(dashboards.proxy, "get_dashboard_metadata", state.get_dashboard_metadata)
+    monkeypatch.setattr(dashboards.proxy, "build_dashboard_search_context", state.build_dashboard_search_context)
+    monkeypatch.setattr(dashboards.proxy, "create_dashboard", state.create_dashboard)
+    monkeypatch.setattr(dashboards.proxy, "update_dashboard", state.update_dashboard)
+    monkeypatch.setattr(dashboards.proxy, "delete_dashboard", state.delete_dashboard)
+    monkeypatch.setattr(dashboards.proxy, "toggle_dashboard_hidden", state.toggle_dashboard_hidden)
+    monkeypatch.setattr(dashboards.proxy, "search_dashboards", state.search_dashboards)
+    monkeypatch.setattr(dashboards.proxy, "get_dashboard", state.get_dashboard)
+    monkeypatch.setattr(folders.proxy, "create_folder", state.create_folder)
+    monkeypatch.setattr(folders.proxy, "update_folder", state.update_folder)
+    monkeypatch.setattr(folders.proxy, "delete_folder", state.delete_folder)
+    monkeypatch.setattr(folders.proxy, "toggle_folder_hidden", state.toggle_folder_hidden)
+    monkeypatch.setattr(folders.proxy, "get_folders", state.get_folders)
+    monkeypatch.setattr(datasources.proxy, "query_datasource", state.query_datasource)
+    monkeypatch.setattr(datasources.proxy, "create_datasource", state.create_datasource)
+    monkeypatch.setattr(datasources.proxy, "update_datasource", state.update_datasource)
+    monkeypatch.setattr(datasources.proxy, "delete_datasource", state.delete_datasource)
+    monkeypatch.setattr(datasources.proxy, "toggle_datasource_hidden", state.toggle_datasource_hidden)
+    monkeypatch.setattr(datasources.proxy, "get_datasources", state.get_datasources)
+    monkeypatch.setattr(datasources.proxy, "build_datasource_list_context", state.build_datasource_list_context)
+
+    admin_headers = state.auth_header("token-u-admin")
+
+    seeded_folder_response = client.post(
+        "/api/grafana/folders?visibility=tenant",
+        headers=admin_headers,
+        json={"title": "Seed Folder", "allowDashboardWrites": True},
+    )
+    assert seeded_folder_response.status_code == 200
+    seeded_folder_id = seeded_folder_response.json()["id"]
+
+    seeded_dashboard_response = client.post(
+        "/api/grafana/dashboards?visibility=tenant",
+        headers=admin_headers,
+        json={"dashboard": {"uid": "ro-seeded-dash", "title": "RO Seed"}, "folderId": seeded_folder_id},
+    )
+    assert seeded_dashboard_response.status_code == 200
+
+    seeded_datasource_response = client.post(
+        "/api/grafana/datasources?visibility=tenant",
+        headers=admin_headers,
+        json={"name": "seeded-ds", "type": "prometheus", "url": "http://prom-seeded"},
+    )
+    assert seeded_datasource_response.status_code == 200
+    seeded_datasource_uid = seeded_datasource_response.json()["uid"]
+    seeded_folder_uid = seeded_folder_response.json()["uid"]
+
+    read_only_user_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={
+            "username": "grafana-readonly",
+            "email": "grafana-readonly@example.com",
+            "password": "password123",
+            "role": "viewer",
+        },
+    )
+    assert read_only_user_response.status_code == 200
+    read_only_user_id = read_only_user_response.json()["id"]
+
+    grant_read_permissions_response = client.put(
+        f"/api/auth/users/{read_only_user_id}/permissions",
+        headers=admin_headers,
+        json=["read:dashboards", "read:folders", "read:datasources"],
+    )
+    assert grant_read_permissions_response.status_code == 200
+    read_only_headers = state.auth_header(f"token-{read_only_user_id}")
+
+    assert client.get("/api/grafana/dashboards/search", headers=read_only_headers).status_code == 200
+    assert client.get("/api/grafana/folders", headers=read_only_headers).status_code == 200
+    assert client.get("/api/grafana/datasources", headers=read_only_headers).status_code == 200
+
+    assert client.post(
+        "/api/grafana/folders?visibility=tenant",
+        headers=read_only_headers,
+        json={"title": "Blocked Folder", "allowDashboardWrites": True},
+    ).status_code == 403
+
+    assert client.post(
+        "/api/grafana/dashboards?visibility=tenant",
+        headers=read_only_headers,
+        json={"dashboard": {"uid": "blocked-dash", "title": "Blocked"}, "folderId": seeded_folder_id},
+    ).status_code == 403
+
+    assert client.put(
+        "/api/grafana/dashboards/ro-seeded-dash?visibility=tenant",
+        headers=read_only_headers,
+        json={"dashboard": {"uid": "ro-seeded-dash", "title": "Blocked Update"}, "folderId": seeded_folder_id},
+    ).status_code == 403
+
+    assert client.post(
+        "/api/grafana/dashboards/db",
+        headers=read_only_headers,
+        json={"dashboard": {"uid": "ro-seeded-dash", "title": "Blocked Save"}, "folderId": seeded_folder_id},
+    ).status_code == 403
+
+    assert client.delete("/api/grafana/dashboards/ro-seeded-dash", headers=read_only_headers).status_code == 403
+
+    assert client.post(
+        "/api/grafana/dashboards/ro-seeded-dash/hide",
+        headers=read_only_headers,
+        json={"hidden": True},
+    ).status_code == 403
+
+    assert client.put(
+        f"/api/grafana/folders/{seeded_folder_uid}?visibility=tenant",
+        headers=read_only_headers,
+        json={"title": "Blocked Folder Update", "allowDashboardWrites": True},
+    ).status_code == 403
+
+    assert client.delete(f"/api/grafana/folders/{seeded_folder_uid}", headers=read_only_headers).status_code == 403
+
+    assert client.post(
+        f"/api/grafana/folders/{seeded_folder_uid}/hide",
+        headers=read_only_headers,
+        json={"hidden": True},
+    ).status_code == 403
+
+    assert client.post(
+        "/api/grafana/datasources?visibility=tenant",
+        headers=read_only_headers,
+        json={"name": "blocked-ds", "type": "prometheus", "url": "http://prom"},
+    ).status_code == 403
+
+    assert client.put(
+        f"/api/grafana/datasources/{seeded_datasource_uid}?visibility=tenant",
+        headers=read_only_headers,
+        json={"name": "blocked-ds-update", "url": "http://prom-updated"},
+    ).status_code == 403
+
+    assert client.delete(f"/api/grafana/datasources/{seeded_datasource_uid}", headers=read_only_headers).status_code == 403
+
+    assert client.post(
+        f"/api/grafana/datasources/{seeded_datasource_uid}/hide",
+        headers=read_only_headers,
+        json={"hidden": True},
+    ).status_code == 403
+
+    assert client.post(
+        "/api/grafana/ds/query",
+        headers=read_only_headers,
+        json={"queries": [{"expr": "sum(rate(http_requests_total[5m]))"}]},
+    ).status_code == 403
