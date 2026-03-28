@@ -14,6 +14,8 @@ from threading import RLock
 from types import SimpleNamespace
 from typing import Any
 
+from fastapi import HTTPException, status
+
 from models.access.api_key_models import ApiKey, ApiKeyShareUser, ApiKeyUpdate
 from models.access.auth_models import Permission, ROLE_PERMISSIONS, Role, Token, TokenData
 from models.access.group_models import Group
@@ -303,9 +305,69 @@ class WorkflowState:
 
     def create_user(self, payload: Any, tenant_id: str, *_args: Any) -> SimpleNamespace:
         with self._lock:
+            creator_id = str(_args[0]) if len(_args) > 0 and _args[0] is not None else ""
+            actor_role_raw = _args[1] if len(_args) > 1 else None
+            actor_permissions = set(_args[2] or []) if len(_args) > 2 else set()
+            actor_is_superuser = bool(_args[3]) if len(_args) > 3 else False
+
+            requested_role_raw = getattr(payload, "role", Role.USER)
+            if isinstance(requested_role_raw, Role):
+                role = requested_role_raw
+            else:
+                role = Role(str(requested_role_raw or Role.USER.value))
+
+            actor_role = ""
+            if creator_id:
+                creator = self.users.get(creator_id)
+                if creator is None or creator.tenant_id != tenant_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Creator account is not valid for this tenant",
+                    )
+
+                actor_role = (
+                    actor_role_raw.value
+                    if isinstance(actor_role_raw, Role)
+                    else str(actor_role_raw or creator.role.value)
+                )
+                if not actor_permissions:
+                    actor_permissions = set(creator.permissions)
+                actor_is_superuser = actor_is_superuser or bool(creator.is_superuser)
+
+                role_rank = {
+                    Role.PROVISIONING.value: 0,
+                    Role.VIEWER.value: 1,
+                    Role.USER.value: 2,
+                    Role.ADMIN.value: 3,
+                }
+                actor_rank = role_rank.get(actor_role, 0)
+                target_rank = role_rank.get(role.value, 0)
+
+                if not actor_is_superuser:
+                    if target_rank > actor_rank:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Cannot assign a role higher than your own",
+                        )
+                    if role == Role.ADMIN and actor_role != Role.ADMIN.value:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only administrators can assign admin role",
+                        )
+                    if list(getattr(payload, "group_ids", []) or []):
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only administrators can assign initial group memberships",
+                        )
+                    requested_org = str(getattr(payload, "org_id", "") or "").strip()
+                    if requested_org and requested_org != self.org_id:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only administrators can assign tenant scope during user creation",
+                        )
+
             user_id = f"u-{self.next_user_id}"
             self.next_user_id += 1
-            role = getattr(payload, "role", Role.USER)
             permissions = [permission.value for permission in ROLE_PERMISSIONS[role]]
             user = self._add_user(
                 user_id=user_id,
@@ -477,6 +539,35 @@ class WorkflowState:
             group = self.get_group(group_id, tenant_id)
             if group is None:
                 return False
+
+            actor_role_raw = _args[1] if len(_args) > 1 else None
+            actor_permissions = set(_args[2] or []) if len(_args) > 2 else set()
+            actor_is_superuser = bool(_args[3]) if len(_args) > 3 else False
+
+            actor_role = (
+                actor_role_raw.value
+                if isinstance(actor_role_raw, Role)
+                else str(actor_role_raw or Role.USER.value)
+            )
+
+            if not actor_is_superuser:
+                requested = {str(name).strip() for name in (permission_names or []) if str(name).strip()}
+                if not requested.issubset(actor_permissions):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="You can't set group permissions higher than your own",
+                    )
+
+                has_admin_member = any(
+                    self.users.get(member_id) and self.users[member_id].role == Role.ADMIN
+                    for member_id in [u.id for u in self.users.values() if group_id in u.group_ids]
+                )
+                if has_admin_member and actor_role != Role.ADMIN.value:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Only administrators can modify permissions for groups containing admins",
+                    )
+
             updated = group.model_copy(
                 update={
                     "permissions": [
@@ -676,8 +767,19 @@ class WorkflowState:
         tenant_id: str,
         visibility: str,
         shared_group_ids: list[str],
+        actor_permissions: list[str] | None = None,
         **_kwargs: Any,
     ) -> dict[str, Any]:
+        permissions = set(actor_permissions or [])
+        if not (
+            Permission.CREATE_DASHBOARDS.value in permissions
+            or Permission.WRITE_DASHBOARDS.value in permissions
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Missing permission to create dashboards",
+            )
+
         payload = dashboard_create.get("dashboard", {}) if isinstance(dashboard_create, dict) else {}
         uid = str(payload.get("uid") or f"dash-{self.next_dashboard_id}")
         title = str(payload.get("title") or uid)
@@ -709,8 +811,19 @@ class WorkflowState:
         visibility: str | None,
         shared_group_ids: list[str] | None,
         is_admin: bool,
+        actor_permissions: list[str] | None = None,
         **_kwargs: Any,
     ) -> dict[str, Any] | None:
+        permissions = set(actor_permissions or [])
+        if not is_admin and not (
+            Permission.UPDATE_DASHBOARDS.value in permissions
+            or Permission.WRITE_DASHBOARDS.value in permissions
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Missing permission to update dashboards",
+            )
+
         current_user = TokenData(user_id=user_id, username="user", tenant_id=tenant_id, org_id=self.org_id, role=Role.ADMIN if is_admin else Role.USER, is_superuser=is_admin, permissions=[], group_ids=list(self.users[user_id].group_ids))
         item = self.dashboards.get(uid)
         if item is None or not self._resource_visible(item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current_user):

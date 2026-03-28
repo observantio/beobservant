@@ -187,7 +187,15 @@ def test_user_group_role_and_permission_workflow(client, monkeypatch: pytest.Mon
     update_permissions_response = client.put(
         f"/api/auth/users/{worker_id}/permissions",
         headers=admin_headers,
-        json=["create:groups", "manage:groups", "update:group_members", "read:groups", "read:users"],
+        json=[
+            "create:groups",
+            "manage:groups",
+            "update:group_members",
+            "read:groups",
+            "read:users",
+            "read:logs",
+            "read:traces",
+        ],
     )
     assert update_permissions_response.status_code == 200
 
@@ -259,6 +267,217 @@ def test_user_group_role_and_permission_workflow(client, monkeypatch: pytest.Mon
 
     delete_user_response = client.delete(f"/api/auth/users/{viewer_id}", headers=admin_headers)
     assert delete_user_response.status_code == 200
+
+
+def test_user_management_permission_boundaries_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+    admin_headers = state.auth_header("token-u-admin")
+
+    second_admin_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={
+            "username": "admin2",
+            "email": "admin2@example.com",
+            "password": "password123",
+            "role": "admin",
+        },
+    )
+    assert second_admin_response.status_code == 200
+    second_admin_id = second_admin_response.json()["id"]
+
+    delete_admin_response = client.delete(
+        f"/api/auth/users/{second_admin_id}",
+        headers=admin_headers,
+    )
+    assert delete_admin_response.status_code == 403
+    assert "cannot be deleted" in delete_admin_response.json()["detail"].lower()
+
+    operator_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={
+            "username": "operator-a",
+            "email": "operator-a@example.com",
+            "password": "password123",
+            "role": "user",
+        },
+    )
+    assert operator_response.status_code == 200
+    operator_id = operator_response.json()["id"]
+
+    grant_operator_permissions_response = client.put(
+        f"/api/auth/users/{operator_id}/permissions",
+        headers=admin_headers,
+        json=["create:users", "update:users", "read:users"],
+    )
+    assert grant_operator_permissions_response.status_code == 200
+    operator_headers = state.auth_header(f"token-{operator_id}")
+
+    non_admin_creates_admin_response = client.post(
+        "/api/auth/users",
+        headers=operator_headers,
+        json={
+            "username": "blocked-admin",
+            "email": "blocked-admin@example.com",
+            "password": "password123",
+            "role": "admin",
+        },
+    )
+    assert non_admin_creates_admin_response.status_code == 403
+    assert "higher than your own" in non_admin_creates_admin_response.json()["detail"].lower()
+
+    non_admin_assigns_scope_response = client.post(
+        "/api/auth/users",
+        headers=operator_headers,
+        json={
+            "username": "blocked-scope",
+            "email": "blocked-scope@example.com",
+            "password": "password123",
+            "role": "viewer",
+            "org_id": "another-org",
+        },
+    )
+    assert non_admin_assigns_scope_response.status_code == 403
+    assert "tenant scope" in non_admin_assigns_scope_response.json()["detail"].lower()
+
+    target_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={
+            "username": "target-user",
+            "email": "target-user@example.com",
+            "password": "password123",
+            "role": "viewer",
+        },
+    )
+    assert target_response.status_code == 200
+    target_id = target_response.json()["id"]
+
+    non_admin_role_escalation_response = client.put(
+        f"/api/auth/users/{target_id}",
+        headers=operator_headers,
+        json={"role": "admin"},
+    )
+    assert non_admin_role_escalation_response.status_code == 403
+    assert "only administrators can modify role" in non_admin_role_escalation_response.json()["detail"].lower()
+
+
+def test_manage_tenants_user_can_only_toggle_activation_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+    admin_headers = state.auth_header("token-u-admin")
+
+    tenant_manager_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={
+            "username": "tenant-manager",
+            "email": "tenant-manager@example.com",
+            "password": "password123",
+            "role": "user",
+        },
+    )
+    assert tenant_manager_response.status_code == 200
+    tenant_manager_id = tenant_manager_response.json()["id"]
+
+    tenant_manager_permissions_response = client.put(
+        f"/api/auth/users/{tenant_manager_id}/permissions",
+        headers=admin_headers,
+        json=["manage:tenants"],
+    )
+    assert tenant_manager_permissions_response.status_code == 200
+    tenant_manager_headers = state.auth_header(f"token-{tenant_manager_id}")
+
+    target_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={
+            "username": "tenant-target",
+            "email": "tenant-target@example.com",
+            "password": "password123",
+            "role": "viewer",
+        },
+    )
+    assert target_response.status_code == 200
+    target_id = target_response.json()["id"]
+
+    activate_toggle_response = client.put(
+        f"/api/auth/users/{target_id}",
+        headers=tenant_manager_headers,
+        json={"is_active": False},
+    )
+    assert activate_toggle_response.status_code == 200
+    assert activate_toggle_response.json()["is_active"] is False
+
+    forbidden_profile_update_response = client.put(
+        f"/api/auth/users/{target_id}",
+        headers=tenant_manager_headers,
+        json={"full_name": "Updated By Tenant Manager"},
+    )
+    assert forbidden_profile_update_response.status_code == 403
+    assert "only activate/deactivate" in forbidden_profile_update_response.json()["detail"].lower()
+
+
+def test_non_admin_cannot_grant_group_permissions_above_own_scope_workflow(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+    admin_headers = state.auth_header("token-u-admin")
+
+    delegate_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={
+            "username": "group-delegate",
+            "email": "group-delegate@example.com",
+            "password": "password123",
+            "role": "user",
+        },
+    )
+    assert delegate_response.status_code == 200
+    delegate_id = delegate_response.json()["id"]
+
+    grant_delegate_permissions_response = client.put(
+        f"/api/auth/users/{delegate_id}/permissions",
+        headers=admin_headers,
+        json=[
+            "create:groups",
+            "read:groups",
+            "update:groups",
+            "update:group_permissions",
+            "update:group_members",
+            "read:logs",
+        ],
+    )
+    assert grant_delegate_permissions_response.status_code == 200
+    delegate_headers = state.auth_header(f"token-{delegate_id}")
+
+    create_group_response = client.post(
+        "/api/auth/groups",
+        headers=delegate_headers,
+        json={"name": "delegate-scope-group", "description": "Delegation scope checks"},
+    )
+    assert create_group_response.status_code == 200
+    group_id = create_group_response.json()["id"]
+
+    out_of_scope_permissions_response = client.put(
+        f"/api/auth/groups/{group_id}/permissions",
+        headers=delegate_headers,
+        json=["manage:users"],
+    )
+    assert out_of_scope_permissions_response.status_code == 403
+    assert "higher than your own" in out_of_scope_permissions_response.json()["detail"].lower()
+
+    in_scope_permissions_response = client.put(
+        f"/api/auth/groups/{group_id}/permissions",
+        headers=delegate_headers,
+        json=["read:logs"],
+    )
+    assert in_scope_permissions_response.status_code == 200
 
 
 def test_api_key_sharing_and_visibility_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
