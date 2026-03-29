@@ -269,6 +269,9 @@ def test_vault_client_auth_and_payload_edge_branches(monkeypatch):
 
     provider = vault_module.VaultSecretProvider(address="https://vault", token="token", cache_ttl=100)
     assert provider.get("missing") is None
+    provider._approle_credentials = ("role-id", lambda: "secret-id")
+    provider._approle_login()
+    assert provider._client.token == "role-token"
 
 
 def test_reload_vault_import_with_non_exception_symbols(monkeypatch):

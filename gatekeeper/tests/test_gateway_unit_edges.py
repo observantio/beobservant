@@ -476,6 +476,9 @@ def test_vault_provider_remaining_branches(monkeypatch):
     provider._approle_credentials = (None, None)
     with pytest.raises(vault_module.VaultClientError):
         provider._approle_login()
+    provider._approle_credentials = ("role-id", lambda: "secret-id")
+    provider._approle_login()
+    assert provider._client.token == "role-token"
 
 
 def test_reloadable_config_remaining_validation(monkeypatch):
