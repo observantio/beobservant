@@ -35,6 +35,7 @@ def _build_alertmanager_forwarder(state: dict[str, Any], forward_calls: list[dic
 
         request = kwargs["request"]
         method = request.method.upper()
+        query_params = dict(request.query_params)
         path = kwargs["upstream_path"].removeprefix("/internal/v1/api/alertmanager/")
         current_user = kwargs.get("current_user")
         body = await request.body()
@@ -44,7 +45,17 @@ def _build_alertmanager_forwarder(state: dict[str, Any], forward_calls: list[dic
             return JSONResponse({"groups": list(state["rules"].values())})
 
         if path == "rules" and method == "GET":
-            return JSONResponse(list(state["rules"].values()))
+            show_hidden = str(query_params.get("show_hidden", "false")).lower() == "true"
+            rows = []
+            for rule in state["rules"].values():
+                hidden_by = set(rule.get("hidden_by", []))
+                is_hidden = current_user is not None and getattr(current_user, "user_id", "") in hidden_by
+                if is_hidden and not show_hidden:
+                    continue
+                row = dict(rule)
+                row["is_hidden"] = is_hidden
+                rows.append(row)
+            return JSONResponse(rows)
         if path == "rules" and method == "POST":
             rule_id = f"rule-{state['next_rule_id']}"
             state["next_rule_id"] += 1
@@ -90,9 +101,34 @@ def _build_alertmanager_forwarder(state: dict[str, Any], forward_calls: list[dic
             rule_id = path.split("/", 1)[1]
             state["rules"].pop(rule_id, None)
             return JSONResponse({"deleted": True, "id": rule_id})
+        if path.endswith("/hide") and path.startswith("rules/") and method == "POST":
+            rule_id = path.split("/")[1]
+            rule = state["rules"].get(rule_id)
+            if rule is None:
+                return JSONResponse({"detail": "Rule not found"}, status_code=404)
+            hidden = bool(payload.get("hidden", True))
+            hidden_by = set(rule.get("hidden_by", []))
+            actor = getattr(current_user, "user_id", "")
+            if actor:
+                if hidden:
+                    hidden_by.add(actor)
+                else:
+                    hidden_by.discard(actor)
+            rule["hidden_by"] = sorted(hidden_by)
+            return JSONResponse({"status": "success", "hidden": hidden})
 
         if path == "channels" and method == "GET":
-            return JSONResponse(list(state["channels"].values()))
+            show_hidden = str(query_params.get("show_hidden", "false")).lower() == "true"
+            rows = []
+            for channel in state["channels"].values():
+                hidden_by = set(channel.get("hidden_by", []))
+                is_hidden = current_user is not None and getattr(current_user, "user_id", "") in hidden_by
+                if is_hidden and not show_hidden:
+                    continue
+                row = dict(channel)
+                row["is_hidden"] = is_hidden
+                rows.append(row)
+            return JSONResponse(rows)
         if path == "channels" and method == "POST":
             channel_id = f"chan-{state['next_channel_id']}"
             state["next_channel_id"] += 1
@@ -120,9 +156,34 @@ def _build_alertmanager_forwarder(state: dict[str, Any], forward_calls: list[dic
             channel_id = path.split("/", 1)[1]
             state["channels"].pop(channel_id, None)
             return JSONResponse({"deleted": True, "id": channel_id})
+        if path.endswith("/hide") and path.startswith("channels/") and method == "POST":
+            channel_id = path.split("/")[1]
+            channel = state["channels"].get(channel_id)
+            if channel is None:
+                return JSONResponse({"detail": "Channel not found"}, status_code=404)
+            hidden = bool(payload.get("hidden", True))
+            hidden_by = set(channel.get("hidden_by", []))
+            actor = getattr(current_user, "user_id", "")
+            if actor:
+                if hidden:
+                    hidden_by.add(actor)
+                else:
+                    hidden_by.discard(actor)
+            channel["hidden_by"] = sorted(hidden_by)
+            return JSONResponse({"status": "success", "hidden": hidden})
 
         if path == "silences" and method == "GET":
-            return JSONResponse(list(state["silences"].values()))
+            show_hidden = str(query_params.get("show_hidden", "false")).lower() == "true"
+            rows = []
+            for silence in state["silences"].values():
+                hidden_by = set(silence.get("hidden_by", []))
+                is_hidden = current_user is not None and getattr(current_user, "user_id", "") in hidden_by
+                if is_hidden and not show_hidden:
+                    continue
+                row = dict(silence)
+                row["is_hidden"] = is_hidden
+                rows.append(row)
+            return JSONResponse(rows)
         if path == "silences" and method == "POST":
             silence_id = payload.get("id") or f"sil-{state['next_silence_id']}"
             state["next_silence_id"] += 1
@@ -152,6 +213,21 @@ def _build_alertmanager_forwarder(state: dict[str, Any], forward_calls: list[dic
             silence_id = path.split("/", 1)[1]
             state["silences"].pop(silence_id, None)
             return JSONResponse({"deleted": True, "id": silence_id})
+        if path.endswith("/hide") and path.startswith("silences/") and method == "POST":
+            silence_id = path.split("/")[1]
+            silence = state["silences"].get(silence_id)
+            if silence is None:
+                return JSONResponse({"detail": "Silence not found"}, status_code=404)
+            hidden = bool(payload.get("hidden", True))
+            hidden_by = set(silence.get("hidden_by", []))
+            actor = getattr(current_user, "user_id", "")
+            if actor:
+                if hidden:
+                    hidden_by.add(actor)
+                else:
+                    hidden_by.discard(actor)
+            silence["hidden_by"] = sorted(hidden_by)
+            return JSONResponse({"status": "success", "hidden": hidden})
 
         if path == "jira/config" and method == "GET":
             return JSONResponse(state["jira_config"])
@@ -186,6 +262,8 @@ def _build_alertmanager_forwarder(state: dict[str, Any], forward_calls: list[dic
             incident = state["incidents"].setdefault(incident_id, {"id": incident_id, "status": "open"})
             incident.update(payload)
             return JSONResponse(incident)
+        if path == "incidents" and method == "GET":
+            return JSONResponse(list(state["incidents"].values()))
 
         raise AssertionError(f"Unhandled alertmanager path: {method} {path}")
 
@@ -700,3 +778,294 @@ def test_alertmanager_jira_configuration_requires_tenant_management_workflow(
 
     assert any(call["path"].endswith("/jira/config") for call in forward_calls)
     assert any(call["path"].endswith("/jira/issues") for call in forward_calls)
+
+
+def test_alertmanager_rule_creation_permission_intersection_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    operator = state.create_user(
+        SimpleNamespace(username="rules-op", email="rules-op@example.com", password="password123", role=Role.USER),
+        state.tenant_id,
+    )
+    state.update_user_permissions(
+        operator.id,
+        [Permission.CREATE_RULES.value, Permission.WRITE_ALERTS.value, Permission.READ_RULES.value],
+        state.tenant_id,
+    )
+
+    store = {
+        "rules": {},
+        "channels": {},
+        "silences": {},
+        "issues": {},
+        "jira_config": {},
+        "integrations": {},
+        "incidents": {},
+        "next_rule_id": 1,
+        "next_channel_id": 1,
+        "next_silence_id": 1,
+        "next_issue_id": 1,
+    }
+    forward_calls: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(alertmanager_router, "enforce_public_endpoint_security", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        alertmanager_router.notifier_proxy_service,
+        "forward",
+        _build_alertmanager_forwarder(store, forward_calls),
+    )
+
+    operator_headers = state.auth_header(f"token-{operator.id}")
+
+    create_with_partial_permissions = client.post(
+        "/api/alertmanager/rules",
+        headers=operator_headers,
+        json={"name": "needs-test-perm", "expr": "up == 0"},
+    )
+    assert create_with_partial_permissions.status_code == 200
+
+    state.update_user_permissions(
+        operator.id,
+        [
+            Permission.CREATE_RULES.value,
+            Permission.WRITE_ALERTS.value,
+            Permission.READ_RULES.value,
+            Permission.TEST_RULES.value,
+        ],
+        state.tenant_id,
+    )
+
+    create_with_full_permissions = client.post(
+        "/api/alertmanager/rules",
+        headers=operator_headers,
+        json={"name": "now-allowed", "expr": "up == 0"},
+    )
+    assert create_with_full_permissions.status_code == 200
+    assert create_with_full_permissions.json()["name"] == "now-allowed"
+
+
+def test_alertmanager_incident_state_cycle_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    incident_operator = state.create_user(
+        SimpleNamespace(
+            username="incident-cycle-op",
+            email="incident-cycle-op@example.com",
+            password="password123",
+            role=Role.USER,
+        ),
+        state.tenant_id,
+    )
+    state.update_user_permissions(
+        incident_operator.id,
+        [Permission.READ_INCIDENTS.value, Permission.UPDATE_INCIDENTS.value],
+        state.tenant_id,
+    )
+
+    store = {
+        "rules": {},
+        "channels": {},
+        "silences": {},
+        "issues": {},
+        "jira_config": {},
+        "integrations": {},
+        "incidents": {},
+        "next_rule_id": 1,
+        "next_channel_id": 1,
+        "next_silence_id": 1,
+        "next_issue_id": 1,
+    }
+    monkeypatch.setattr(alertmanager_router, "enforce_public_endpoint_security", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        alertmanager_router.notifier_proxy_service,
+        "forward",
+        _build_alertmanager_forwarder(store, []),
+    )
+
+    op_headers = state.auth_header(f"token-{incident_operator.id}")
+
+    acknowledge_response = client.patch(
+        "/api/alertmanager/incidents/inc-cycle-1",
+        headers=op_headers,
+        json={"status": "acknowledged", "owner": "primary-oncall", "note": "triage started"},
+    )
+    assert acknowledge_response.status_code == 200
+    assert acknowledge_response.json()["status"] == "acknowledged"
+
+    resolve_response = client.patch(
+        "/api/alertmanager/incidents/inc-cycle-1",
+        headers=op_headers,
+        json={"status": "resolved", "resolution": "rollback completed"},
+    )
+    assert resolve_response.status_code == 200
+    assert resolve_response.json()["status"] == "resolved"
+
+    reopen_response = client.patch(
+        "/api/alertmanager/incidents/inc-cycle-1",
+        headers=op_headers,
+        json={"status": "open", "note": "regression detected"},
+    )
+    assert reopen_response.status_code == 200
+    assert reopen_response.json()["status"] == "open"
+    assert reopen_response.json()["owner"] == "primary-oncall"
+    assert store["incidents"]["inc-cycle-1"]["resolution"] == "rollback completed"
+
+
+def test_alertmanager_silence_hide_show_hidden_lifecycle_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    operator = state.create_user(
+        SimpleNamespace(username="silence-hide-op", email="silence-hide-op@example.com", password="password123", role=Role.USER),
+        state.tenant_id,
+    )
+    state.update_user_permissions(
+        operator.id,
+        [
+            Permission.READ_SILENCES.value,
+            Permission.CREATE_SILENCES.value,
+            Permission.UPDATE_SILENCES.value,
+            Permission.DELETE_SILENCES.value,
+            Permission.WRITE_ALERTS.value,
+        ],
+        state.tenant_id,
+    )
+
+    store = {
+        "rules": {},
+        "channels": {},
+        "silences": {},
+        "issues": {},
+        "jira_config": {},
+        "integrations": {},
+        "incidents": {},
+        "next_rule_id": 1,
+        "next_channel_id": 1,
+        "next_silence_id": 1,
+        "next_issue_id": 1,
+    }
+
+    async def fake_find_silence_for_mutation(**kwargs: Any) -> dict[str, Any]:
+        silence = store["silences"].get(kwargs["silence_id"])
+        if silence is None:
+            raise HTTPException(status_code=404, detail="Silence not found")
+        return silence
+
+    monkeypatch.setattr(alertmanager_router, "find_silence_for_mutation", fake_find_silence_for_mutation)
+    monkeypatch.setattr(
+        alertmanager_router.notifier_proxy_service,
+        "forward",
+        _build_alertmanager_forwarder(store, []),
+    )
+
+    headers = state.auth_header(f"token-{operator.id}")
+
+    create_silence = client.post(
+        "/api/alertmanager/silences",
+        headers=headers,
+        json={"id": "sil-hide-1", "visibility": "private", "matchers": [{"name": "service", "value": "checkout"}]},
+    )
+    assert create_silence.status_code == 200
+
+    hide_silence = client.post(
+        "/api/alertmanager/silences/sil-hide-1/hide",
+        headers=headers,
+        json={"hidden": True},
+    )
+    assert hide_silence.status_code == 200
+
+    default_list = client.get("/api/alertmanager/silences", headers=headers)
+    show_hidden_list = client.get("/api/alertmanager/silences?show_hidden=true", headers=headers)
+    assert default_list.status_code == 200
+    assert show_hidden_list.status_code == 200
+    assert default_list.json() == []
+    assert any(item["id"] == "sil-hide-1" and item["is_hidden"] is True for item in show_hidden_list.json())
+
+    unhide_silence = client.post(
+        "/api/alertmanager/silences/sil-hide-1/hide",
+        headers=headers,
+        json={"hidden": False},
+    )
+    assert unhide_silence.status_code == 200
+
+    visible_after_unhide = client.get("/api/alertmanager/silences", headers=headers)
+    assert visible_after_unhide.status_code == 200
+    assert any(item["id"] == "sil-hide-1" for item in visible_after_unhide.json())
+
+
+def test_alertmanager_channel_hide_show_hidden_lifecycle_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    operator = state.create_user(
+        SimpleNamespace(username="channel-hide-op", email="channel-hide-op@example.com", password="password123", role=Role.USER),
+        state.tenant_id,
+    )
+    state.update_user_permissions(
+        operator.id,
+        [
+            Permission.READ_CHANNELS.value,
+            Permission.CREATE_CHANNELS.value,
+            Permission.UPDATE_CHANNELS.value,
+            Permission.DELETE_CHANNELS.value,
+            Permission.WRITE_CHANNELS.value,
+            Permission.TEST_CHANNELS.value,
+        ],
+        state.tenant_id,
+    )
+
+    store = {
+        "rules": {},
+        "channels": {},
+        "silences": {},
+        "issues": {},
+        "jira_config": {},
+        "integrations": {},
+        "incidents": {},
+        "next_rule_id": 1,
+        "next_channel_id": 1,
+        "next_silence_id": 1,
+        "next_issue_id": 1,
+    }
+    monkeypatch.setattr(
+        alertmanager_router.notifier_proxy_service,
+        "forward",
+        _build_alertmanager_forwarder(store, []),
+    )
+
+    headers = state.auth_header(f"token-{operator.id}")
+
+    channel_create = client.post(
+        "/api/alertmanager/channels",
+        headers=headers,
+        json={"name": "hideable-channel", "type": "email", "config": {"to": ["ops@example.com"]}},
+    )
+    assert channel_create.status_code == 200
+    channel_id = channel_create.json()["id"]
+
+    hide_channel = client.post(
+        f"/api/alertmanager/channels/{channel_id}/hide",
+        headers=headers,
+        json={"hidden": True},
+    )
+    assert hide_channel.status_code == 200
+
+    default_channels = client.get("/api/alertmanager/channels", headers=headers)
+    hidden_channels = client.get("/api/alertmanager/channels?show_hidden=true", headers=headers)
+    assert default_channels.status_code == 200
+    assert hidden_channels.status_code == 200
+    assert default_channels.json() == []
+    assert any(item["id"] == channel_id and item["is_hidden"] is True for item in hidden_channels.json())
+
+    unhide_channel = client.post(
+        f"/api/alertmanager/channels/{channel_id}/hide",
+        headers=headers,
+        json={"hidden": False},
+    )
+    assert unhide_channel.status_code == 200
+
+    channels_after_unhide = client.get("/api/alertmanager/channels", headers=headers)
+    assert channels_after_unhide.status_code == 200
+    assert any(item["id"] == channel_id for item in channels_after_unhide.json())

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from routers import internal_router
 from routers.access.auth_router import authentication as auth_routes
 
 from .helpers import WorkflowState, patch_auth_service
@@ -727,3 +728,237 @@ def test_api_key_hide_unhide_restores_shared_visibility_workflow(client, monkeyp
     list_after_unhide = client.get("/api/auth/api-keys", headers=recipient_headers)
     assert list_after_unhide.status_code == 200
     assert {item["id"] for item in list_after_unhide.json()} == {key_id}
+
+
+def test_api_key_otlp_rotation_and_enablement_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    monkeypatch.setattr(internal_router.internal_service, "_get_internal_token", lambda: "internal-token")
+    monkeypatch.setattr(internal_router.internal_service._auth_service, "validate_otlp_token", state.validate_otlp_token)
+
+    admin_headers = state.auth_header("token-u-admin")
+    key_response = client.post(
+        "/api/auth/api-keys",
+        headers=admin_headers,
+        json={"name": "rotation-key", "key": "scope-rotation"},
+    )
+    assert key_response.status_code == 200
+    key = key_response.json()
+    key_id = key["id"]
+    old_token = key["otlp_token"]
+
+    initial_validate = client.post(
+        "/api/internal/otlp/validate",
+        headers={"X-Internal-Token": "internal-token"},
+        json={"token": old_token},
+    )
+    assert initial_validate.status_code == 200
+    assert initial_validate.json() == {"org_id": "scope-rotation"}
+
+    rotate_response = client.post(
+        f"/api/auth/api-keys/{key_id}/otlp-token/regenerate",
+        headers=admin_headers,
+    )
+    assert rotate_response.status_code == 200
+    new_token = rotate_response.json()["otlp_token"]
+    assert new_token != old_token
+
+    old_token_rejected = client.post(
+        "/api/internal/otlp/validate",
+        headers={"X-Internal-Token": "internal-token"},
+        json={"token": old_token},
+    )
+    assert old_token_rejected.status_code == 404
+
+    disable_key = client.patch(
+        f"/api/auth/api-keys/{key_id}",
+        headers=admin_headers,
+        json={"is_enabled": False},
+    )
+    assert disable_key.status_code == 200
+
+    disabled_token_rejected = client.post(
+        "/api/internal/otlp/validate",
+        headers={"X-Internal-Token": "internal-token"},
+        json={"token": new_token},
+    )
+    assert disabled_token_rejected.status_code == 404
+
+    reenable_key = client.patch(
+        f"/api/auth/api-keys/{key_id}",
+        headers=admin_headers,
+        json={"is_enabled": True},
+    )
+    assert reenable_key.status_code == 200
+
+    reenabled_token_valid = client.post(
+        "/api/internal/otlp/validate",
+        headers={"X-Internal-Token": "internal-token"},
+        json={"token": new_token},
+    )
+    assert reenabled_token_valid.status_code == 200
+    assert reenabled_token_valid.json() == {"org_id": "scope-rotation"}
+
+
+def test_api_key_share_replacement_user_to_group_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+    admin_headers = state.auth_header("token-u-admin")
+
+    group_response = client.post(
+        "/api/auth/groups",
+        headers=admin_headers,
+        json={"name": "share-switch-group", "description": "Share replacement checks"},
+    )
+    assert group_response.status_code == 200
+    group_id = group_response.json()["id"]
+
+    user_one_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "switch-user-1", "email": "switch-user-1@example.com", "password": "password123"},
+    )
+    user_two_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "switch-user-2", "email": "switch-user-2@example.com", "password": "password123"},
+    )
+    assert user_one_response.status_code == 200
+    assert user_two_response.status_code == 200
+    user_one_id = user_one_response.json()["id"]
+    user_two_id = user_two_response.json()["id"]
+    user_one_headers = state.auth_header(f"token-{user_one_id}")
+    user_two_headers = state.auth_header(f"token-{user_two_id}")
+
+    add_group_member = client.put(
+        f"/api/auth/groups/{group_id}/members",
+        headers=admin_headers,
+        json={"user_ids": [user_two_id]},
+    )
+    assert add_group_member.status_code == 200
+
+    key_response = client.post(
+        "/api/auth/api-keys",
+        headers=admin_headers,
+        json={"name": "share-switch", "key": "scope-share-switch"},
+    )
+    assert key_response.status_code == 200
+    key_id = key_response.json()["id"]
+
+    share_to_user = client.put(
+        f"/api/auth/api-keys/{key_id}/shares",
+        headers=admin_headers,
+        json={"user_ids": [user_one_id], "group_ids": []},
+    )
+    assert share_to_user.status_code == 200
+
+    user_one_visible = client.get("/api/auth/api-keys", headers=user_one_headers)
+    user_two_hidden = client.get("/api/auth/api-keys", headers=user_two_headers)
+    assert user_one_visible.status_code == 200
+    assert user_two_hidden.status_code == 200
+    assert {item["id"] for item in user_one_visible.json()} == {key_id}
+    assert user_two_hidden.json() == []
+
+    share_to_group = client.put(
+        f"/api/auth/api-keys/{key_id}/shares",
+        headers=admin_headers,
+        json={"user_ids": [], "group_ids": [group_id]},
+    )
+    assert share_to_group.status_code == 200
+
+    user_one_now_hidden = client.get("/api/auth/api-keys", headers=user_one_headers)
+    user_two_now_visible = client.get("/api/auth/api-keys", headers=user_two_headers)
+    assert user_one_now_hidden.status_code == 200
+    assert user_two_now_visible.status_code == 200
+    assert user_one_now_hidden.json() == []
+    assert {item["id"] for item in user_two_now_visible.json()} == {key_id}
+
+
+def test_api_key_non_owner_share_and_delete_restrictions_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+    admin_headers = state.auth_header("token-u-admin")
+
+    outsider_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "outsider-key", "email": "outsider-key@example.com", "password": "password123"},
+    )
+    assert outsider_response.status_code == 200
+    outsider_id = outsider_response.json()["id"]
+    outsider_headers = state.auth_header(f"token-{outsider_id}")
+
+    key_response = client.post(
+        "/api/auth/api-keys",
+        headers=admin_headers,
+        json={"name": "owner-only", "key": "scope-owner-only"},
+    )
+    assert key_response.status_code == 200
+    key_id = key_response.json()["id"]
+
+    outsider_share_update = client.put(
+        f"/api/auth/api-keys/{key_id}/shares",
+        headers=outsider_headers,
+        json={"user_ids": [outsider_id], "group_ids": []},
+    )
+    assert outsider_share_update.status_code in {400, 404}
+
+    outsider_share_delete = client.delete(
+        f"/api/auth/api-keys/{key_id}/shares/{outsider_id}",
+        headers=outsider_headers,
+    )
+    assert outsider_share_delete.status_code in {400, 404}
+
+    outsider_delete_key = client.delete(
+        f"/api/auth/api-keys/{key_id}",
+        headers=outsider_headers,
+    )
+    assert outsider_delete_key.status_code == 404
+
+
+def test_api_key_delete_after_hidden_shared_state_cleanup_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+    admin_headers = state.auth_header("token-u-admin")
+
+    recipient_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "cleanup-recipient", "email": "cleanup-recipient@example.com", "password": "password123"},
+    )
+    assert recipient_response.status_code == 200
+    recipient_id = recipient_response.json()["id"]
+    recipient_headers = state.auth_header(f"token-{recipient_id}")
+
+    key_response = client.post(
+        "/api/auth/api-keys",
+        headers=admin_headers,
+        json={"name": "cleanup-key", "key": "scope-cleanup"},
+    )
+    assert key_response.status_code == 200
+    key_id = key_response.json()["id"]
+
+    share_response = client.put(
+        f"/api/auth/api-keys/{key_id}/shares",
+        headers=admin_headers,
+        json={"user_ids": [recipient_id], "group_ids": []},
+    )
+    assert share_response.status_code == 200
+
+    hide_response = client.post(
+        f"/api/auth/api-keys/{key_id}/hide",
+        headers=recipient_headers,
+        json={"hidden": True},
+    )
+    assert hide_response.status_code == 200
+
+    delete_response = client.delete(
+        f"/api/auth/api-keys/{key_id}",
+        headers=admin_headers,
+    )
+    assert delete_response.status_code == 200
+
+    list_after_delete = client.get("/api/auth/api-keys?show_hidden=true", headers=recipient_headers)
+    assert list_after_delete.status_code == 200
+    assert list_after_delete.json() == []
