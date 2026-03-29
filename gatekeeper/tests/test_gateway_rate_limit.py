@@ -41,6 +41,18 @@ class GatewayRateLimitTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             limiter.enforce("client-a")
 
+    def test_in_memory_gateway_limiter_allows_exact_threshold(self):
+        limiter = TokenRateLimiter(limit_per_minute=2)
+        limiter.enforce("client-threshold")
+        limiter.enforce("client-threshold")
+
+    def test_in_memory_gateway_limiter_isolated_per_token(self):
+        limiter = TokenRateLimiter(limit_per_minute=1)
+        limiter.enforce("client-a")
+        limiter.enforce("client-b")
+        with self.assertRaises(HTTPException):
+            limiter.enforce("client-a")
+
     def test_hybrid_gateway_limiter_falls_back_to_memory(self):
         fallback = TokenRateLimiter(limit_per_minute=1)
         limiter = HybridTokenRateLimiter(_BrokenPrimaryRateLimiter(), fallback)

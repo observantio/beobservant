@@ -7,6 +7,7 @@ vi.mock("../../api", () => ({
   getCurrentUser: vi.fn(),
   getSystemQuotas: vi.fn(),
   deleteApiKey: vi.fn(),
+  setApiKeyHidden: vi.fn(),
   replaceApiKeyShares: vi.fn(),
   getUsers: vi.fn(),
   getGroups: vi.fn(),
@@ -226,5 +227,80 @@ describe("ApiKeyPage (quota capacity)", () => {
     const capacity = await screen.findByText(/Capacity:/i);
     expect(capacity).toBeInTheDocument();
     expect(capacity).toHaveTextContent("10 / 10");
+  });
+});
+
+describe("ApiKeyPage (share and hide workflows)", () => {
+  it("toggles hide on a shared key", async () => {
+    currentUser.api_keys = [{ ...sharedKey, is_hidden: false }];
+    vi.mocked(api.getCurrentUser).mockResolvedValue({
+      ...currentUser,
+      org_id: "org-shared",
+    });
+    vi.mocked(api.listApiKeys).mockResolvedValue([{ ...sharedKey, is_hidden: false }]);
+
+    const Page = (await import("../ApiKeyPage")).default;
+    render(<Page />);
+
+    const hideButton = await screen.findByRole("button", {
+      name: `Hide ${sharedKey.name}`,
+    });
+    fireEvent.click(hideButton);
+
+    await waitFor(() =>
+      expect(api.setApiKeyHidden).toHaveBeenCalledWith(sharedKey.id, true),
+    );
+  });
+
+  it("reloads API keys with show hidden when checkbox is enabled", async () => {
+    currentUser.api_keys = [ownedKey];
+    const Page = (await import("../ApiKeyPage")).default;
+    render(<Page />);
+
+    const checkbox = await screen.findByRole("checkbox", { name: /Show hidden/i });
+    fireEvent.click(checkbox);
+
+    await waitFor(() =>
+      expect(api.listApiKeys).toHaveBeenCalledWith({ showHidden: true }),
+    );
+  });
+
+  it("saves updated key shares with selected users and groups", async () => {
+    const keyForShare = {
+      ...ownedKey,
+      shared_with: [{ user_id: "u3" }],
+    };
+    currentUser = {
+      ...currentUser,
+      id: "u2",
+      group_ids: ["g1"],
+      api_keys: [keyForShare],
+    };
+    vi.mocked(api.getUsers).mockResolvedValue([
+      { id: "u2", username: "me", group_ids: ["g1"] },
+      { id: "u3", username: "alice", group_ids: ["g1"] },
+      { id: "u4", username: "bob", group_ids: [] },
+    ]);
+    vi.mocked(api.getGroups).mockResolvedValue([
+      { id: "g1", name: "Ops" },
+      { id: "g2", name: "QA" },
+    ]);
+
+    const Page = (await import("../ApiKeyPage")).default;
+    render(<Page />);
+
+    fireEvent.click(await screen.findByRole("button", { name: `Share ${keyForShare.name}` }));
+    const dialog = await screen.findByRole("dialog");
+    const { within } = await import("@testing-library/react");
+    fireEvent.click(within(dialog).getAllByRole("checkbox")[0]);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(api.replaceApiKeyShares).toHaveBeenCalledWith(
+        keyForShare.id,
+        expect.any(Array),
+        [],
+      ),
+    );
   });
 });
