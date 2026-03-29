@@ -602,3 +602,128 @@ def test_api_key_sharing_and_visibility_workflow(client, monkeypatch: pytest.Mon
 
     delete_key_response = client.delete(f"/api/auth/api-keys/{key_id}", headers=admin_headers)
     assert delete_key_response.status_code == 200
+
+
+def test_api_key_group_share_membership_revocation_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+    admin_headers = state.auth_header("token-u-admin")
+
+    group_response = client.post(
+        "/api/auth/groups",
+        headers=admin_headers,
+        json={"name": "share-membership", "description": "Membership-scoped shares"},
+    )
+    assert group_response.status_code == 200
+    group_id = group_response.json()["id"]
+
+    recipient_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "recipient2", "email": "recipient2@example.com", "password": "password123"},
+    )
+    assert recipient_response.status_code == 200
+    recipient_id = recipient_response.json()["id"]
+    recipient_headers = state.auth_header(f"token-{recipient_id}")
+
+    add_member_response = client.put(
+        f"/api/auth/groups/{group_id}/members",
+        headers=admin_headers,
+        json={"user_ids": [recipient_id]},
+    )
+    assert add_member_response.status_code == 200
+
+    created_key_response = client.post(
+        "/api/auth/api-keys",
+        headers=admin_headers,
+        json={"name": "membership-shared", "key": "scope-membership"},
+    )
+    assert created_key_response.status_code == 200
+    key_id = created_key_response.json()["id"]
+
+    share_to_group_response = client.put(
+        f"/api/auth/api-keys/{key_id}/shares",
+        headers=admin_headers,
+        json={"user_ids": [], "group_ids": [group_id]},
+    )
+    assert share_to_group_response.status_code == 200
+
+    visible_before_removal = client.get("/api/auth/api-keys", headers=recipient_headers)
+    assert visible_before_removal.status_code == 200
+    assert {item["id"] for item in visible_before_removal.json()} == {key_id}
+
+    remove_member_response = client.put(
+        f"/api/auth/groups/{group_id}/members",
+        headers=admin_headers,
+        json={"user_ids": []},
+    )
+    assert remove_member_response.status_code == 200
+
+    hidden_after_removal = client.get("/api/auth/api-keys", headers=recipient_headers)
+    assert hidden_after_removal.status_code == 200
+    assert hidden_after_removal.json() == []
+
+    restore_member_response = client.put(
+        f"/api/auth/groups/{group_id}/members",
+        headers=admin_headers,
+        json={"user_ids": [recipient_id]},
+    )
+    assert restore_member_response.status_code == 200
+
+    visible_after_restore = client.get("/api/auth/api-keys", headers=recipient_headers)
+    assert visible_after_restore.status_code == 200
+    assert {item["id"] for item in visible_after_restore.json()} == {key_id}
+
+
+def test_api_key_hide_unhide_restores_shared_visibility_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+    admin_headers = state.auth_header("token-u-admin")
+
+    recipient_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "recipient3", "email": "recipient3@example.com", "password": "password123"},
+    )
+    assert recipient_response.status_code == 200
+    recipient_id = recipient_response.json()["id"]
+    recipient_headers = state.auth_header(f"token-{recipient_id}")
+
+    key_response = client.post(
+        "/api/auth/api-keys",
+        headers=admin_headers,
+        json={"name": "hide-toggle", "key": "scope-hide-toggle"},
+    )
+    assert key_response.status_code == 200
+    key_id = key_response.json()["id"]
+
+    share_response = client.put(
+        f"/api/auth/api-keys/{key_id}/shares",
+        headers=admin_headers,
+        json={"user_ids": [recipient_id], "group_ids": []},
+    )
+    assert share_response.status_code == 200
+
+    hide_response = client.post(
+        f"/api/auth/api-keys/{key_id}/hide",
+        headers=recipient_headers,
+        json={"hidden": True},
+    )
+    assert hide_response.status_code == 200
+    assert hide_response.json() == {"status": "success", "hidden": True}
+
+    list_default_hidden = client.get("/api/auth/api-keys", headers=recipient_headers)
+    assert list_default_hidden.status_code == 200
+    assert list_default_hidden.json() == []
+
+    unhide_response = client.post(
+        f"/api/auth/api-keys/{key_id}/hide",
+        headers=recipient_headers,
+        json={"hidden": False},
+    )
+    assert unhide_response.status_code == 200
+    assert unhide_response.json() == {"status": "success", "hidden": False}
+
+    list_after_unhide = client.get("/api/auth/api-keys", headers=recipient_headers)
+    assert list_after_unhide.status_code == 200
+    assert {item["id"] for item in list_after_unhide.json()} == {key_id}
