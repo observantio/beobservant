@@ -247,8 +247,18 @@ describe("IncidentBoardPage additional coverage", () => {
     fireEvent.click((await screen.findByText("edit")).closest("button"));
     fireEvent.click(screen.getByRole("button", { name: /Jira/i }));
 
+    await waitFor(() => {
+      expect(listJiraIntegrations).toHaveBeenCalled();
+      expect(listJiraProjectsByIntegration).toHaveBeenCalled();
+    });
+
+    await screen.findByRole("button", { name: /Create Jira/i });
+
     fireEvent.click(screen.getByRole("button", { name: /Create Jira/i }));
-    expect(toastMock.error).toHaveBeenCalledWith("Missing update:incidents permission");
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith("Missing update:incidents permission");
+    });
     expect(createIncidentJira).not.toHaveBeenCalled();
   });
 
