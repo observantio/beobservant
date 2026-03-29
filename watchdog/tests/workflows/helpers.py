@@ -586,11 +586,11 @@ class WorkflowState:
             for user in self.users.values():
                 user.group_ids = [existing for existing in user.group_ids if existing != group_id]
             for user_id in user_ids:
-                user = self.users.get(user_id)
-                if user is None:
+                user_state = self.users.get(user_id)
+                if user_state is None:
                     continue
-                user.group_ids.append(group_id)
-                self._sync_user_tokens(user)
+                user_state.group_ids.append(group_id)
+                self._sync_user_tokens(user_state)
             return True
 
     def _api_key_visible_to_user(self, key: ApiKeyState, user: UserState, show_hidden: bool) -> bool:
@@ -933,21 +933,35 @@ class WorkflowState:
         return self._datasource_model(item, self.users[user_id])
 
     def _datasource_model(self, item: DatasourceState, user: UserState) -> Datasource:
-        return Datasource(
-            id=item.id,
-            uid=item.uid,
-            orgId=1,
-            name=item.name,
-            type=item.type,
-            access="proxy",
-            url=item.url,
-            isDefault=item.is_default,
-            version=item.version,
-            created_by=item.created_by,
-            is_hidden=user.id in item.hidden_by,
-            is_owned=item.created_by == user.id,
-            visibility=item.visibility,
-            shared_group_ids=list(item.shared_group_ids),
+        return Datasource.model_validate(
+            {
+                "id": item.id,
+                "uid": item.uid,
+                "orgId": 1,
+                "name": item.name,
+                "type": item.type,
+                "typeLogoUrl": None,
+                "access": "proxy",
+                "url": item.url,
+                "password": None,
+                "user": None,
+                "database": None,
+                "basicAuth": False,
+                "basicAuthUser": None,
+                "basicAuthPassword": None,
+                "withCredentials": False,
+                "isDefault": item.is_default,
+                "jsonData": None,
+                "secureJsonData": None,
+                "secureJsonFields": None,
+                "version": item.version,
+                "readOnly": False,
+                "created_by": item.created_by,
+                "is_hidden": user.id in item.hidden_by,
+                "is_owned": item.created_by == user.id,
+                "visibility": item.visibility,
+                "shared_group_ids": list(item.shared_group_ids),
+            }
         )
 
     async def get_datasource_by_name(self, *, name: str, user_id: str, tenant_id: str, group_ids: list[str], **_kwargs: Any) -> Datasource | None:

@@ -143,15 +143,14 @@ def test_token_cache_factory_returns_redis_backend(monkeypatch):
 
 
 def test_reload_optional_redis_and_vault_import_fallbacks(monkeypatch):
-    import importlib as importlib_module
-    original_import_module = importlib_module.import_module
+    original_import_module = importlib.import_module
 
     redis_compat_module = importlib.import_module("services.token_cache._redis_compat")
     original_redis = redis_compat_module.redis
-    monkeypatch.setattr(importlib_module, "import_module", lambda name, package=None: (_ for _ in ()).throw(ImportError("missing")))
+    monkeypatch.setattr(importlib, "import_module", lambda name, package=None: (_ for _ in ()).throw(ImportError("missing")))
     importlib.reload(redis_compat_module)
     assert redis_compat_module.redis is None
-    monkeypatch.setattr(importlib_module, "import_module", original_import_module)
+    monkeypatch.setattr(importlib, "import_module", original_import_module)
     importlib.reload(redis_compat_module)
     redis_compat_module.redis = original_redis
 
@@ -163,13 +162,13 @@ def test_reload_optional_redis_and_vault_import_fallbacks(monkeypatch):
     def fake_import(name: str):
         raise ImportError(name)
 
-    monkeypatch.setattr(importlib_module, "import_module", lambda name, package=None: fake_import(name))
+    monkeypatch.setattr(importlib, "import_module", lambda name, package=None: fake_import(name))
     importlib.reload(vault_module)
     assert vault_module.hvac is None
     assert issubclass(vault_module.Forbidden, Exception)
     assert issubclass(vault_module.InvalidPath, Exception)
     assert issubclass(vault_module.VaultError, Exception)
-    monkeypatch.setattr(importlib_module, "import_module", original_import_module)
+    monkeypatch.setattr(importlib, "import_module", original_import_module)
     importlib.reload(vault_module)
     vault_module.hvac = original_hvac
     vault_module.Forbidden = original_forbidden
@@ -185,11 +184,11 @@ def test_hybrid_rate_limiter_reraises_http_exception():
     from services.rate_limits.hybrid_token_rate_limiter import HybridTokenRateLimiter
 
     class Primary:
-        def enforce(self, key):
+        def enforce(self, _key):
             raise HTTPException(status_code=429, detail="stop")
 
     class Fallback:
-        def enforce(self, key):
+        def enforce(self, _key):
             raise AssertionError("fallback should not run")  # pragma: no cover
 
     limiter = HybridTokenRateLimiter(Primary(), Fallback())
@@ -212,6 +211,7 @@ def test_redis_rate_limiter_constructor_and_error_branches(monkeypatch):
             return True  # pragma: no cover
 
         def pipeline(self, transaction=False):  # pragma: no cover
+            _ = transaction
             return types.SimpleNamespace(
                 incr=lambda bucket: None,
                 expire=lambda bucket, ttl: None,
@@ -224,7 +224,7 @@ def test_redis_rate_limiter_constructor_and_error_branches(monkeypatch):
         def __init__(self, client):
             self._client = client
 
-        def from_url(self, *args, **kwargs):
+        def from_url(self, *_args, **_kwargs):
             return self._client
 
     assert redis_rate_module._sanitize_redis_url("redis://user:pass@host:6379/0") == "redis://host:6379/0"
@@ -237,6 +237,7 @@ def test_redis_rate_limiter_constructor_and_error_branches(monkeypatch):
 def test_vault_client_auth_and_payload_edge_branches(monkeypatch):
     class FakeAppRole:
         def login(self, role_id=None, secret_id=None):
+            _ = (role_id, secret_id)
             return {"auth": {"client_token": "role-token"}}  # pragma: no cover
 
     class FakeKV:
@@ -244,17 +245,17 @@ def test_vault_client_auth_and_payload_edge_branches(monkeypatch):
             self.v2 = self
             self._response = response
 
-        def read_secret_version(self, **kwargs):
+        def read_secret_version(self, **_kwargs):
             return self._response
 
-        def read_secret(self, **kwargs):
+        def read_secret(self, **_kwargs):
             return self._response  # pragma: no cover
 
     class FakeClient:
         authenticated = True  # pragma: no cover
         response = {"data": {"data": {}}}
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *_args, **_kwargs):
             self.auth = types.SimpleNamespace(approle=FakeAppRole())
             self.secrets = types.SimpleNamespace(kv=FakeKV(self.response))
             self.token = None
@@ -271,9 +272,7 @@ def test_vault_client_auth_and_payload_edge_branches(monkeypatch):
 
 
 def test_reload_vault_import_with_non_exception_symbols(monkeypatch):
-    import importlib as importlib_module
-
-    original_import_module = importlib_module.import_module
+    original_import_module = importlib.import_module
 
     fake_hvac_module = types.SimpleNamespace()
     fake_exceptions_module = types.SimpleNamespace(Forbidden="bad", InvalidPath=object(), VaultError=None)
@@ -285,28 +284,26 @@ def test_reload_vault_import_with_non_exception_symbols(monkeypatch):
             return fake_exceptions_module
         return original_import_module(name, package)  # pragma: no cover
 
-    monkeypatch.setattr(importlib_module, "import_module", fake_import)
+    monkeypatch.setattr(importlib, "import_module", fake_import)
     importlib.reload(vault_module)
     assert vault_module.hvac is fake_hvac_module
     assert vault_module.Forbidden is not fake_exceptions_module.Forbidden
     assert vault_module.InvalidPath is not fake_exceptions_module.InvalidPath
     assert vault_module.VaultError is not fake_exceptions_module.VaultError
-    monkeypatch.setattr(importlib_module, "import_module", original_import_module)
+    monkeypatch.setattr(importlib, "import_module", original_import_module)
     importlib.reload(vault_module)
 
 
 def test_reload_redis_rate_module_without_redis(monkeypatch):
-    import importlib as importlib_module
-
-    original_import_module = importlib_module.import_module
+    original_import_module = importlib.import_module
 
     def fake_import(name, package=None):
         if name == "redis":
             raise ImportError(name)  # pragma: no cover
         return original_import_module(name, package)  # pragma: no cover
 
-    monkeypatch.setattr(importlib_module, "import_module", fake_import)
+    monkeypatch.setattr(importlib, "import_module", fake_import)
     importlib.reload(redis_rate_module)
     assert redis_rate_module.redis is None
-    monkeypatch.setattr(importlib_module, "import_module", original_import_module)
+    monkeypatch.setattr(importlib, "import_module", original_import_module)
     importlib.reload(redis_rate_module)

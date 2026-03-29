@@ -9,6 +9,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 import os
 import time
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from starlette.requests import Request
@@ -130,7 +131,7 @@ def _token_data(**overrides) -> TokenData:
         "is_superuser": False,
     }
     values.update(overrides)
-    return TokenData(**values)
+    return TokenData(**cast(dict[str, Any], values))
 
 
 def test_proxy_role_helpers_accept_string_roles():

@@ -110,7 +110,7 @@ def test_build_api_error_response_uses_state_request_id() -> None:
     )
 
     assert response.status_code == 418
-    payload = json.loads(response.body.decode("utf-8"))
+    payload = json.loads(bytes(response.body).decode("utf-8"))
     assert payload["request_id"] == "req-from-state"
     assert payload["detail"]["nested"] == "boom"
     assert response.headers["X-Request-ID"] == "req-from-state"

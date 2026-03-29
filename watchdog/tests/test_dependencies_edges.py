@@ -11,6 +11,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import types
+from typing import Any, cast
 
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
@@ -63,7 +64,7 @@ def _token_data(**overrides) -> TokenData:
         "is_mfa_setup": False,
     }
     values.update(overrides)
-    return TokenData(**values)
+    return TokenData(**cast(dict[str, Any], values))
 
 
 @pytest.mark.asyncio

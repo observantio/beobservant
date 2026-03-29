@@ -59,9 +59,17 @@ def _seed(db):
 
 def _create_payload(uid: str | None = "d1", folder_id: int = 0):
     return DashboardCreate(
-        dashboard=Dashboard(uid=uid, title="CPU", tags=["ops"], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds-1"}}]),
+        dashboard=Dashboard.model_validate(
+            {
+                "uid": uid,
+                "title": "CPU",
+                "tags": ["ops"],
+                "panels": [{"targets": [{"expr": "up"}], "datasource": {"uid": "ds-1"}}],
+            }
+        ),
         folderId=folder_id,
         overwrite=False,
+        message=None,
     )
 
 

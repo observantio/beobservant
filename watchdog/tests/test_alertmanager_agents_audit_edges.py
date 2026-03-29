@@ -12,6 +12,7 @@ import inspect
 import io
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from fastapi import HTTPException, Request
@@ -73,7 +74,7 @@ def _user(**kwargs) -> TokenData:
         "is_superuser": True,
     }
     payload.update(kwargs)
-    return TokenData(**payload)
+    return TokenData(**cast(dict[str, Any], payload))
 
 
 @pytest.fixture(autouse=True)

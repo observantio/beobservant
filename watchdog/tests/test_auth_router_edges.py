@@ -11,6 +11,7 @@ from __future__ import annotations
 import inspect
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from fastapi import HTTPException, Request, Response
@@ -34,18 +35,19 @@ from routers.access.auth_router import users as users_router
 
 
 def _request(headers: list[tuple[bytes, bytes]] | None = None, cookies: dict[str, str] | None = None) -> Request:
+    header_list: list[tuple[bytes, bytes]] = list(headers or [])
+    if cookies:
+        header_list.append((b"cookie", "; ".join(f"{k}={v}" for k, v in cookies.items()).encode("utf-8")))
     scope = {
         "type": "http",
         "http_version": "1.1",
         "method": "GET",
         "path": "/",
-        "headers": headers or [],
+        "headers": header_list,
         "client": ("127.0.0.1", 1234),
         "scheme": "http",
         "query_string": b"",
     }
-    if cookies:
-        scope["headers"] = scope["headers"] + [(b"cookie", "; ".join(f"{k}={v}" for k, v in cookies.items()).encode("utf-8"))]
     return Request(scope)
 
 
@@ -68,7 +70,7 @@ def _current_user(**kwargs) -> TokenData:
         "is_superuser": True,
     }
     data.update(kwargs)
-    return TokenData(**data)
+    return TokenData(**cast(dict[str, Any], data))
 
 
 @pytest.fixture(autouse=True)

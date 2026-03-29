@@ -21,7 +21,7 @@ async def test_startup_warn_mode_uses_synthetic_probe_token(monkeypatch):
     monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_RETRIES", 1)
     monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_BACKOFF", 0.01)
     service_cls = type(gateway_main.service)
-    monkeypatch.setattr(service_cls, "_fetch_org_from_api", lambda self, token: captured.append(token))
+    monkeypatch.setattr(service_cls, "_fetch_org_from_api", lambda _self, token: captured.append(token))
 
     async with gateway_main.lifespan(gateway_main.app):
         await asyncio.sleep(0)
@@ -52,7 +52,7 @@ async def test_startup_warn_mode_continues_when_auth_api_unavailable(monkeypatch
     monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_RETRIES", 2)
     monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_BACKOFF", 0.01)
 
-    def fail_probe(self, token):
+    def fail_probe(_self, token):
         attempts.append(token)
         raise DatabaseUnavailable("auth api unavailable")
 
@@ -96,9 +96,9 @@ async def test_startup_skips_probe_when_auth_api_url_is_empty(monkeypatch):
     monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_BACKOFF", 0.01)
 
     service_cls = type(gateway_main.service)
-    monkeypatch.setattr(service_cls, "_fetch_org_from_api", lambda self, token: calls.append(token))
+    monkeypatch.setattr(service_cls, "_fetch_org_from_api", lambda _self, token: calls.append(token))
 
     async with gateway_main.lifespan(gateway_main.app):
         await asyncio.sleep(0)
 
-    assert calls == []
+    assert not calls

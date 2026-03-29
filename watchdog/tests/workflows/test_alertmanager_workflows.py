@@ -312,7 +312,7 @@ def test_alertmanager_rules_channels_and_integrations_workflow(client, monkeypat
     )
     state.update_user_permissions(tenant_manager.id, [Permission.MANAGE_TENANTS.value], state.tenant_id)
 
-    store = {
+    store: dict[str, Any] = {
         "rules": {},
         "channels": {},
         "silences": {},
@@ -487,7 +487,7 @@ def test_alertmanager_silence_validation_and_ownership_workflow(client, monkeypa
     ops_group = state.create_group(SimpleNamespace(name="ops", description="Operations"), state.tenant_id)
     state.update_group_members(ops_group.id, [operator_one.id], state.tenant_id)
 
-    store = {
+    store: dict[str, Any] = {
         "rules": {},
         "channels": {},
         "silences": {},
@@ -601,7 +601,7 @@ def test_alertmanager_incident_and_integration_permission_boundaries_workflow(cl
         state.tenant_id,
     )
 
-    store = {
+    store: dict[str, Any] = {
         "rules": {
             "rule-1": {
                 "id": "rule-1",
@@ -722,7 +722,7 @@ def test_alertmanager_jira_configuration_requires_tenant_management_workflow(
         state.tenant_id,
     )
 
-    store = {
+    store: dict[str, Any] = {
         "rules": {},
         "channels": {},
         "silences": {},
@@ -794,7 +794,7 @@ def test_alertmanager_rule_creation_permission_intersection_workflow(client, mon
         state.tenant_id,
     )
 
-    store = {
+    store: dict[str, Any] = {
         "rules": {},
         "channels": {},
         "silences": {},
@@ -864,7 +864,7 @@ def test_alertmanager_incident_state_cycle_workflow(client, monkeypatch: pytest.
         state.tenant_id,
     )
 
-    store = {
+    store: dict[str, Any] = {
         "rules": {},
         "channels": {},
         "silences": {},
@@ -933,7 +933,7 @@ def test_alertmanager_silence_hide_show_hidden_lifecycle_workflow(client, monkey
         state.tenant_id,
     )
 
-    store = {
+    store: dict[str, Any] = {
         "rules": {},
         "channels": {},
         "silences": {},
@@ -1016,7 +1016,7 @@ def test_alertmanager_channel_hide_show_hidden_lifecycle_workflow(client, monkey
         state.tenant_id,
     )
 
-    store = {
+    store: dict[str, Any] = {
         "rules": {},
         "channels": {},
         "silences": {},

@@ -64,14 +64,17 @@ def _session():
 
 def _update_payload(title: str = "Updated by collaborator", folder_id=None):
     return DashboardUpdate(
-        dashboard=Dashboard(
-            uid="d1",
-            title=title,
-            tags=["ops"],
-            panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds-1"}}],
+        dashboard=Dashboard.model_validate(
+            {
+                "uid": "d1",
+                "title": title,
+                "tags": ["ops"],
+                "panels": [{"targets": [{"expr": "up"}], "datasource": {"uid": "ds-1"}}],
+            }
         ),
         folderId=folder_id,
         overwrite=True,
+        message=None,
     )
 
 

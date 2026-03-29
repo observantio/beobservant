@@ -9,6 +9,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 from __future__ import annotations
 
 from collections.abc import Callable
+from collections.abc import Generator
 from typing import Any
 
 import pytest
@@ -41,7 +42,7 @@ def _collect_get_db_dependencies(root: Dependant) -> set[Callable[..., Any]]:
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]:
     async def _send_user_welcome_email(**kwargs: Any) -> bool:
         del kwargs
         return True

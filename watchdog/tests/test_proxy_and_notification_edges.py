@@ -29,18 +29,19 @@ from services.grafana_proxy_service import GrafanaProxyService
 
 
 def _request(headers: list[tuple[bytes, bytes]] | None = None, cookies: dict[str, str] | None = None) -> Request:
+    header_list: list[tuple[bytes, bytes]] = list(headers or [])
+    if cookies:
+        header_list.append((b"cookie", "; ".join(f"{k}={v}" for k, v in cookies.items()).encode("utf-8")))
     scope = {
         "type": "http",
         "http_version": "1.1",
         "method": "GET",
         "path": "/grafana",
-        "headers": headers or [],
+        "headers": header_list,
         "client": ("127.0.0.1", 1234),
         "scheme": "http",
         "query_string": b"",
     }
-    if cookies:
-        scope["headers"] = scope["headers"] + [(b"cookie", "; ".join(f"{k}={v}" for k, v in cookies.items()).encode("utf-8"))]
     return Request(scope)
 
 

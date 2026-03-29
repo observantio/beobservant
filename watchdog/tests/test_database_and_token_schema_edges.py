@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -189,7 +190,7 @@ def test_init_database_returns_when_initialized_inside_lock(monkeypatch):
     class LockStub:
         def __enter__(self):
             database_module._engine = EngineStub()
-            database_module._session_local = lambda: SimpleNamespace()
+            database_module._session_local = cast(Any, lambda: SimpleNamespace())
             return self
 
         def __exit__(self, exc_type, exc, tb):
