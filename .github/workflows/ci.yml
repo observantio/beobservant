@@ -29,7 +29,10 @@ jobs:
 
       - run: npm run lint
       - run: npm run build
-      - run: npm test -- --run
+      - run: npm test -- --run --coverage
+      - name: Enforce UI coverage = 100%
+        run: |
+          node -e "const j=require('./coverage/coverage-summary.json'); const bad=[]; for(const [k,v] of Object.entries(j)){ for(const m of ['lines','branches','functions','statements']){ if(v[m].pct!==100){ bad.push({scope:k,metric:m,pct:v[m].pct}); } } } if(bad.length){ console.error('Coverage must be exactly 100% for all metrics.'); console.error(JSON.stringify(bad,null,2)); process.exit(1);} console.log('Coverage gate passed: 100% for all metrics.');"
 
   gateway:
     name: Gateway tests (pytest)
