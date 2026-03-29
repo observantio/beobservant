@@ -170,6 +170,7 @@ describe("ApiKeyPage (shared-key UX)", () => {
     const Page = (await import("../ApiKeyPage")).default;
 
     render(<Page />);
+    await waitFor(() => expect(api.listApiKeys).toHaveBeenCalled());
 
     expect(
       screen.queryByRole("button", { name: `Share ${defaultOwnedKey.name}` }),

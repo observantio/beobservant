@@ -23,7 +23,11 @@ vi.mock("../../components/ui/AutoRefreshControl", () => ({
 }));
 vi.mock("../../components/ui", () => ({
   Card: ({ children }) => <div>{children}</div>,
-  Button: ({ children, ...props }) => <button {...props}>{children}</button>,
+  Button: ({ children, loading, ...props }) => (
+    <button {...props} disabled={loading || props.disabled}>
+      {children}
+    </button>
+  ),
   Input: (props) => <input {...props} />,
   Select: ({ children, ...props }) => <select {...props}>{children}</select>,
   Spinner: () => <div>Loading</div>,
@@ -31,6 +35,12 @@ vi.mock("../../components/ui", () => ({
   Alert: ({ children }) => <div>{children}</div>,
 }));
 vi.mock("../../components/HelpTooltip", () => ({ default: () => <span /> }));
+vi.mock("../../components/tempo/TraceResults", () => ({
+  default: ({ traces }) => <div>Trace results: {traces?.length || 0}</div>,
+}));
+vi.mock("../../components/tempo/TraceTimeline", () => ({
+  default: () => <div>Trace timeline</div>,
+}));
 
 vi.mock("../../api");
 
@@ -75,16 +85,14 @@ describe("TempoPage — fetch limit and pagination", () => {
     }));
     api.searchTraces.mockResolvedValue({ data: fakeTraces });
 
-    const { getByText } = render(<TempoPage />);
+    const { getByText, findByText } = render(<TempoPage />);
     const searchBtn = getByText(/Search Traces/i);
     fireEvent.click(searchBtn);
 
     await waitFor(() => expect(api.searchTraces).toHaveBeenCalled());
 
-    
-    await waitFor(() => {
-      expect(getByText(/Page 1 of 3/)).toBeInTheDocument();
-    });
+    const pageInfo = await findByText(/Page\s*1\s*of\s*3/i);
+    expect(pageInfo).toBeInTheDocument();
   });
 
   it("does not restore filters or auto-search from localStorage on mount", async () => {
@@ -117,6 +125,7 @@ describe("TempoPage — fetch limit and pagination", () => {
     api.getTrace.mockResolvedValue({ traceID: "missing", spans: [] });
 
     render(<TempoPage />);
+    await waitFor(() => expect(api.fetchTempoServices).toHaveBeenCalled());
     expect(api.getTrace).not.toHaveBeenCalled();
   });
 

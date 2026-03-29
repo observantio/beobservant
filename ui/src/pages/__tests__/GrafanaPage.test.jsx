@@ -49,13 +49,22 @@ vi.mock("../../components/ui", () => ({
       {children}
     </button>
   ),
-  Modal: ({ isOpen, children }) => (isOpen ? <div>{children}</div> : null),
+  Modal: ({ isOpen, children, onClose, footer, title }) =>
+    isOpen ? (
+      <div>
+        {title ? <div>{title}</div> : null}
+        <button onClick={onClose}>Modal Close</button>
+        {children}
+        {footer}
+      </div>
+    ) : null,
   Spinner: () => <div>Loading</div>,
   ConfirmDialog: ({
     isOpen,
     title,
     message,
     onConfirm,
+    onCancel,
     onClose,
     confirmText = "Confirm",
     cancelText = "Cancel",
@@ -108,6 +117,18 @@ vi.mock("../../components/grafana/GrafanaContent", () => ({
     query,
     setQuery,
     openDashboardEditor,
+    openDatasourceEditor,
+    onCreateFolder,
+    onEditFolder,
+    onSearch,
+    onClearFilters,
+    onOpenGrafana,
+    onDeleteDashboard,
+    onToggleDashboardHidden,
+    onDeleteDatasource,
+    onToggleDatasourceHidden,
+    onDeleteFolder,
+    onToggleFolderHidden,
     datasources = [],
     getDatasourceKeyName,
     onViewDatasourceMetrics,
@@ -122,6 +143,87 @@ vi.mock("../../components/grafana/GrafanaContent", () => ({
         Set Active Query
       </button>
       <button onClick={() => openDashboardEditor()}>Open Dashboard Editor</button>
+      <button onClick={() => openDatasourceEditor?.()}>Open Datasource Editor</button>
+      <button onClick={() => onCreateFolder?.()}>Open Folder Creator</button>
+      <button
+        onClick={() =>
+          onEditFolder?.({
+            uid: "f-1",
+            title: "Existing Folder",
+            visibility: "group",
+            sharedGroupIds: ["g-1"],
+            allowDashboardWrites: true,
+          })
+        }
+      >
+        Open Folder Editor
+      </button>
+      <button onClick={() => onSearch?.({ preventDefault: () => {} })}>Search Action</button>
+      <button onClick={() => onClearFilters?.()}>Clear Filters Action</button>
+      <button onClick={() => onOpenGrafana?.("/explore")}>Open Grafana Path</button>
+      <button
+        onClick={() =>
+          onDeleteDashboard?.({ uid: "db-1", title: "CPU Dashboard", is_hidden: false })
+        }
+      >
+        Delete Dashboard Action
+      </button>
+      <button
+        onClick={() =>
+          onToggleDashboardHidden?.({ uid: "db-1", title: "CPU Dashboard", is_hidden: false })
+        }
+      >
+        Hide Dashboard Action
+      </button>
+      <button
+        onClick={() =>
+          onToggleDashboardHidden?.({ uid: "db-2", title: "Old Dashboard", is_hidden: true })
+        }
+      >
+        Unhide Dashboard Action
+      </button>
+      <button
+        onClick={() =>
+          onDeleteDatasource?.({ uid: "ds-1", name: "Primary DS", is_hidden: false })
+        }
+      >
+        Delete Datasource Action
+      </button>
+      <button
+        onClick={() =>
+          onToggleDatasourceHidden?.({ uid: "ds-1", name: "Primary DS", is_hidden: false })
+        }
+      >
+        Hide Datasource Action
+      </button>
+      <button
+        onClick={() =>
+          onToggleDatasourceHidden?.({ uid: "ds-2", name: "Legacy DS", is_hidden: true })
+        }
+      >
+        Unhide Datasource Action
+      </button>
+      <button
+        onClick={() =>
+          onDeleteFolder?.({ uid: "f-1", title: "Folder One", is_hidden: false })
+        }
+      >
+        Delete Folder Action
+      </button>
+      <button
+        onClick={() =>
+          onToggleFolderHidden?.({ uid: "f-1", title: "Folder One", is_hidden: false })
+        }
+      >
+        Hide Folder Action
+      </button>
+      <button
+        onClick={() =>
+          onToggleFolderHidden?.({ uid: "f-2", title: "Folder Two", is_hidden: true })
+        }
+      >
+        Unhide Folder Action
+      </button>
       {datasources.map((ds) => (
         <div key={ds.uid}>
           <div data-testid={`datasource-key-${ds.uid}`}>
@@ -154,31 +256,82 @@ vi.mock("../../components/grafana/DashboardEditorModal", () => ({
           Configure Dashboard
         </button>
         <button onClick={() => onSave()}>Save Dashboard</button>
+        <button onClick={() => onSave("{invalid-json")}>Save Invalid Dashboard JSON</button>
         <div>{dashboardForm.datasourceUid}</div>
       </div>
     ) : null,
 }));
 
 vi.mock("../../components/grafana/DatasourceEditorModal", () => ({
-  default: () => null,
+  default: ({ isOpen, setDatasourceForm, onSave }) =>
+    isOpen ? (
+      <div>
+        <button
+          onClick={() =>
+            setDatasourceForm((prev) => ({
+              ...prev,
+              name: "Mimir DS",
+              type: "prometheus",
+              url: "http://mimir",
+              apiKeyId: "k-target",
+              visibility: "private",
+            }))
+          }
+        >
+          Configure Datasource
+        </button>
+        <button
+          onClick={() =>
+            setDatasourceForm((prev) => ({
+              ...prev,
+              name: "No Key DS",
+              type: "prometheus",
+              url: "http://mimir",
+              apiKeyId: "",
+              visibility: "private",
+            }))
+          }
+        >
+          Configure Datasource Without Key
+        </button>
+        <button onClick={() => onSave()}>Save Datasource</button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("../../components/grafana/FolderCreatorModal", () => ({
-  default: () => null,
+  default: ({ isOpen, setFolderName, onCreate, onClose }) =>
+    isOpen ? (
+      <div>
+        <button onClick={() => setFolderName("Ops Folder")}>Configure Folder</button>
+        <button onClick={() => onCreate()}>Save Folder</button>
+        <button onClick={() => onClose?.()}>Close Folder Modal</button>
+      </div>
+    ) : null,
 }));
 
 import GrafanaPage from "../GrafanaPage";
 import {
+  createDatasource,
+  createFolder,
   createDashboard,
   createGrafanaBootstrapSession,
+  deleteDashboard,
+  deleteDatasource,
+  deleteFolder,
   getDashboardFilterMeta,
   getDatasourceFilterMeta,
   getDatasources,
   getFolders,
   getGroups,
+  getDashboard,
   searchDashboards,
   listMetricNames,
+  toggleDashboardHidden,
+  toggleDatasourceHidden,
+  toggleFolderHidden,
   updateDatasource,
+  updateFolder,
 } from "../../api";
 
 function setupDatasources(datasourceOverrides = {}) {
@@ -209,6 +362,7 @@ describe("GrafanaPage state behavior", () => {
     createGrafanaBootstrapSession.mockResolvedValue({});
     createDashboard.mockResolvedValue({});
     updateDatasource.mockResolvedValue({});
+    updateFolder.mockResolvedValue({});
     setupDatasources();
   });
 
@@ -224,10 +378,15 @@ describe("GrafanaPage state behavior", () => {
 
   it("does not persist activeTab changes", async () => {
     render(<GrafanaPage />);
+    await waitFor(() => expect(getDatasources).toHaveBeenCalled());
+    await screen.findByRole("tab", { name: /Dashboards/i });
 
     expect(localStorage.getItem("grafana-active-tab")).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: /Folders/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Folders/i })).toHaveClass("text-sre-primary"),
+    );
     expect(localStorage.getItem("grafana-active-tab")).toBeNull();
   });
 
@@ -265,6 +424,48 @@ describe("GrafanaPage state behavior", () => {
     expect(
       await screen.findByText("Sync Datasource Visibility?"),
     ).toBeInTheDocument();
+    expect(createDashboard).not.toHaveBeenCalled();
+  });
+
+  it("saves dashboard only when sync prompt is cancelled", async () => {
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Open Dashboard Editor"));
+    fireEvent.click(screen.getByText("Configure Dashboard"));
+    fireEvent.click(screen.getByText("Save Dashboard"));
+
+    fireEvent.click(await screen.findByText("No, dashboard only"));
+
+    await waitFor(() => {
+      expect(createDashboard).toHaveBeenCalledTimes(1);
+      expect(updateDatasource).not.toHaveBeenCalled();
+    });
+  });
+
+  it("syncs datasource visibility when sync prompt is confirmed", async () => {
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Open Dashboard Editor"));
+    fireEvent.click(screen.getByText("Configure Dashboard"));
+    fireEvent.click(screen.getByText("Save Dashboard"));
+
+    fireEvent.click(await screen.findByText("Yes, sync datasource"));
+
+    await waitFor(() => {
+      expect(createDashboard).toHaveBeenCalledTimes(1);
+      expect(updateDatasource).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("shows validation error when saving dashboard without datasource", async () => {
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Open Dashboard Editor"));
+    fireEvent.click(screen.getByText("Save Dashboard"));
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Select a default datasource before saving the dashboard",
+    );
     expect(createDashboard).not.toHaveBeenCalled();
   });
 
@@ -349,5 +550,270 @@ describe("GrafanaPage state behavior", () => {
     fireEvent.click(screen.getByText("View Metrics ds-1"));
 
     await waitFor(() => expect(listMetricNames).toHaveBeenCalledWith("scope-target"));
+  });
+
+  it("opens Grafana through bootstrap and falls back when bootstrap fails", async () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    createGrafanaBootstrapSession
+      .mockResolvedValueOnce({ launch_url: "/launch?token=abc" })
+      .mockRejectedValueOnce(new Error("bootstrap failed"));
+
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Open Grafana"));
+    fireEvent.click(await screen.findByText("Continue to Grafana"));
+
+    await waitFor(() => {
+      expect(createGrafanaBootstrapSession).toHaveBeenCalledWith("/");
+      expect(openSpy).toHaveBeenCalled();
+    });
+
+    fireEvent.click(await screen.findByText("Open Grafana Path"));
+    fireEvent.click(await screen.findByText("Continue to Grafana"));
+
+    await waitFor(() => {
+      expect(createGrafanaBootstrapSession).toHaveBeenCalledWith("/explore");
+      expect(openSpy).toHaveBeenCalledTimes(2);
+    });
+
+    openSpy.mockRestore();
+  });
+
+  it("does not bootstrap Grafana when launch confirmation is cancelled", async () => {
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Open Grafana Path"));
+    fireEvent.click(await screen.findByText("Cancel"));
+
+    expect(createGrafanaBootstrapSession).not.toHaveBeenCalled();
+  });
+
+  it("executes hide and delete actions via confirm dialog", async () => {
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Hide Dashboard Action"));
+    fireEvent.click(await screen.findByText("Hide"));
+    await waitFor(() => {
+      expect(toggleDashboardHidden).toHaveBeenCalledWith("db-1", true);
+    });
+
+    fireEvent.click(await screen.findByText("Delete Dashboard Action"));
+    fireEvent.click(await screen.findByText("Delete"));
+    await waitFor(() => {
+      expect(deleteDashboard).toHaveBeenCalledWith("db-1");
+    });
+
+    fireEvent.click(await screen.findByText("Hide Datasource Action"));
+    fireEvent.click(await screen.findByText("Hide"));
+    await waitFor(() => {
+      expect(toggleDatasourceHidden).toHaveBeenCalledWith("ds-1", true);
+    });
+
+    fireEvent.click(await screen.findByText("Delete Datasource Action"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Delete(?: Anyway)?$/i }),
+    );
+    await waitFor(() => {
+      expect(deleteDatasource).toHaveBeenCalledWith("ds-1");
+    });
+
+    fireEvent.click(await screen.findByText("Hide Folder Action"));
+    fireEvent.click(await screen.findByText("Hide"));
+    await waitFor(() => {
+      expect(toggleFolderHidden).toHaveBeenCalledWith("f-1", true);
+    });
+
+    fireEvent.click(await screen.findByText("Unhide Dashboard Action"));
+    fireEvent.click(await screen.findByText("Unhide"));
+    await waitFor(() => {
+      expect(toggleDashboardHidden).toHaveBeenCalledWith("db-2", false);
+    });
+
+    fireEvent.click(await screen.findByText("Unhide Datasource Action"));
+    fireEvent.click(await screen.findByText("Unhide"));
+    await waitFor(() => {
+      expect(toggleDatasourceHidden).toHaveBeenCalledWith("ds-2", false);
+    });
+
+    fireEvent.click(await screen.findByText("Unhide Folder Action"));
+    fireEvent.click(await screen.findByText("Unhide"));
+    await waitFor(() => {
+      expect(toggleFolderHidden).toHaveBeenCalledWith("f-2", false);
+    });
+
+    fireEvent.click(await screen.findByText("Delete Folder Action"));
+    fireEvent.click(await screen.findByText("Delete"));
+    await waitFor(() => {
+      expect(deleteFolder).toHaveBeenCalledWith("f-1");
+    });
+  });
+
+  it("surfaces errors from hide actions", async () => {
+    toggleDashboardHidden.mockRejectedValueOnce(new Error("toggle failed"));
+
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Hide Dashboard Action"));
+    fireEvent.click(await screen.findByText("Hide"));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalled();
+    });
+  });
+
+  it("shows delete-anyway warning when datasource is linked to dashboards", async () => {
+    searchDashboards.mockResolvedValue([
+      { uid: "db-linked", title: "Linked Dashboard", slug: "linked" },
+    ]);
+    getDashboard.mockResolvedValue({
+      dashboard: { panels: [{ datasourceUid: "ds-1" }] },
+    });
+
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Delete Datasource Action"));
+    expect(
+      await screen.findByText("Datasource Linked to Dashboards"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete Anyway/i }));
+    await waitFor(() => {
+      expect(deleteDatasource).toHaveBeenCalledWith("ds-1");
+    });
+  });
+
+  it("shows invalid json error when saving dashboard from malformed JSON", async () => {
+    setupDatasources({ isDefault: true });
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Open Dashboard Editor"));
+    fireEvent.click(screen.getByText("Configure Dashboard"));
+    fireEvent.click(screen.getByText("Save Invalid Dashboard JSON"));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Invalid JSON — please fix and try again");
+      expect(createDashboard).not.toHaveBeenCalled();
+    });
+  });
+
+  it("requires API key for multi-tenant datasource types", async () => {
+    mockAuthState.user = { api_keys: [] };
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Open Datasource Editor"));
+    fireEvent.click(screen.getByText("Configure Datasource Without Key"));
+    fireEvent.click(screen.getByText("Save Datasource"));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "API key is required for Prometheus, Loki, and Tempo datasources",
+      );
+      expect(createDatasource).not.toHaveBeenCalled();
+    });
+  });
+
+  it("saves datasource and folder through editor modals", async () => {
+    mockAuthState.user = {
+      api_keys: [
+        { id: "k-target", key: "scope-target", name: "Target Key", is_enabled: true },
+      ],
+    };
+
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Open Datasource Editor"));
+    fireEvent.click(await screen.findByText("Configure Datasource"));
+    fireEvent.click(await screen.findByText("Save Datasource"));
+
+    await waitFor(() => {
+      expect(createDatasource).toHaveBeenCalled();
+    });
+
+    fireEvent.click(await screen.findByText("Open Folder Creator"));
+    fireEvent.click(await screen.findByText("Configure Folder"));
+    fireEvent.click(await screen.findByText("Save Folder"));
+
+    await waitFor(() => {
+      expect(createFolder).toHaveBeenCalledWith(
+        "Ops Folder",
+        expect.any(String),
+        expect.any(Boolean),
+      );
+    });
+  });
+
+  it("shows datasource metrics error and empty states", async () => {
+    listMetricNames
+      .mockRejectedValueOnce(new Error("metrics failed"))
+      .mockResolvedValueOnce({ metrics: [] });
+
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("View Metrics ds-1"));
+    await waitFor(() => {
+      expect(screen.getByText(/metrics failed/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(await screen.findByText("View Metrics ds-1"));
+    await waitFor(() => {
+      expect(screen.getByText(/No metrics found/i)).toBeInTheDocument();
+    });
+  });
+
+  it("renders datasource metrics list and closes modal", async () => {
+    listMetricNames.mockResolvedValue({ metrics: ["z_metric", "a_metric"] });
+
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("View Metrics ds-1"));
+    await waitFor(() => {
+      expect(screen.getByText("a_metric")).toBeInTheDocument();
+      expect(screen.getByText("z_metric")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Modal Close"));
+    await waitFor(() => {
+      expect(screen.queryByText("a_metric")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(await screen.findByText("View Metrics ds-1"));
+    await waitFor(() => {
+      expect(screen.getByText("a_metric")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Close$/i }));
+    await waitFor(() => {
+      expect(screen.queryByText("a_metric")).not.toBeInTheDocument();
+    });
+  });
+
+  it("updates an existing folder from folder editor", async () => {
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Open Folder Editor"));
+    fireEvent.click(screen.getByText("Configure Folder"));
+    fireEvent.click(screen.getByText("Save Folder"));
+
+    await waitFor(() => {
+      expect(updateFolder).toHaveBeenCalledWith(
+        "f-1",
+        expect.objectContaining({ title: "Ops Folder" }),
+        expect.any(String),
+      );
+    });
+  });
+
+  it("resets folder draft when closing folder modal", async () => {
+    render(<GrafanaPage />);
+
+    fireEvent.click(await screen.findByText("Open Folder Creator"));
+    fireEvent.click(screen.getByText("Configure Folder"));
+    fireEvent.click(screen.getByText("Close Folder Modal"));
+
+    fireEvent.click(screen.getByText("Open Folder Creator"));
+    fireEvent.click(screen.getByText("Save Folder"));
+
+    await waitFor(() => {
+      expect(createFolder).not.toHaveBeenCalled();
+    });
   });
 });

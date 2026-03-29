@@ -208,7 +208,7 @@ CardTitle.propTypes = {
  * Badge component for status indicators
  * @param {object} props - Component props
  * @param {React.ReactNode} props.children - Badge content
- * @param {'default'|'success'|'warning'|'error'|'info'|'neon'} props.variant - Badge variant
+ * @param {'default'|'success'|'warning'|'error'|'info'|'neon'|'ghost'} props.variant - Badge variant
  * @param {string} props.className - Additional CSS classes
  */
 export function Badge({ children, variant = "default", className, ...props }) {
@@ -219,6 +219,7 @@ export function Badge({ children, variant = "default", className, ...props }) {
     error: "bg-sre-error/10 text-sre-error border-sre-error/20",
     info: "bg-sre-primary/10 text-sre-primary border-sre-primary/20",
     neon: "bg-sre-neon/10 text-sre-neon border-sre-neon/20 glow",
+    ghost: "bg-transparent text-sre-text-muted border-sre-border/50",
   };
 
   return (
@@ -244,6 +245,7 @@ Badge.propTypes = {
     "error",
     "info",
     "neon",
+    "ghost",
   ]),
   className: PropTypes.string,
 };
@@ -498,6 +500,7 @@ AlertDescription.propTypes = {
  */
 export function Spinner({ size = "md", className }) {
   const sizes = {
+    xs: "w-3 h-3",
     sm: "w-4 h-4",
     md: "w-8 h-8",
     lg: "w-12 h-12",
@@ -530,7 +533,7 @@ export function Spinner({ size = "md", className }) {
 }
 
 Spinner.propTypes = {
-  size: PropTypes.oneOf(["sm", "md", "lg"]),
+  size: PropTypes.oneOf(["xs", "sm", "md", "lg"]),
   className: PropTypes.string,
 };
 
@@ -823,7 +826,7 @@ export function Modal({
 
 Modal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
+  onClose: PropTypes.func,
   title: PropTypes.string,
   children: PropTypes.node.isRequired,
   footer: PropTypes.node,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildServiceGraphData,
+  buildServiceGraphEdges,
   buildServiceGraphInsights,
   buildServiceGraphNodes,
   layoutServiceGraph,
@@ -65,5 +66,47 @@ describe("serviceGraphUtils", () => {
 
     const layout = layoutServiceGraph(nodes, []);
     expect(layout.nodes.length).toBe(2);
+  });
+
+  it("builds styled trace edges when traceEdges exist", () => {
+    const data = buildServiceGraphData([
+      {
+        traceID: "trace-12345678",
+        spans: [
+          { spanId: "1", serviceName: "api", duration: 1500 },
+          {
+            spanId: "2",
+            parentSpanId: "1",
+            serviceName: "db",
+            duration: 3500,
+            status: { code: "ERROR" },
+          },
+        ],
+      },
+    ]);
+
+    const edges = buildServiceGraphEdges(data, null, "api");
+    expect(edges.length).toBeGreaterThan(0);
+    expect(edges[0].label).toContain("calls");
+    expect(edges[0].style).toHaveProperty("stroke");
+    expect(edges[0].markerEnd).toHaveProperty("type");
+  });
+
+  it("lays out disconnected components with stable dimensions", () => {
+    const nodes = [
+      { id: "a", position: { x: 0, y: 0 }, data: {} },
+      { id: "b", position: { x: 0, y: 0 }, data: {} },
+      { id: "c", position: { x: 0, y: 0 }, data: {} },
+    ];
+    const edges = [{ source: "a", target: "b" }];
+
+    const layout = layoutServiceGraph(nodes, edges);
+    expect(layout.nodes).toHaveLength(3);
+    layout.nodes.forEach((node) => {
+      expect(node.style.width).toBe(260);
+      expect(node.style.height).toBe(140);
+      expect(Number.isFinite(node.position.x)).toBe(true);
+      expect(Number.isFinite(node.position.y)).toBe(true);
+    });
   });
 });
