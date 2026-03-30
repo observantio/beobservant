@@ -98,4 +98,26 @@ describe("IntegrationsPage deletion flow", () => {
     );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
+
+  it("shows per-tab integration count pills including channels and Jira", async () => {
+    vi.mocked(api.getNotificationChannels).mockResolvedValue([
+      { ...exampleChannel, id: "c-private", visibility: "private" },
+      { ...exampleChannel, id: "c-tenant", visibility: "tenant", name: "Org Ch" },
+      { ...exampleChannel, id: "c-group", visibility: "group", name: "Grp Ch" },
+    ]);
+    vi.mocked(api.getAllowedChannelTypes).mockResolvedValue({ allowedTypes: [] });
+    vi.mocked(api.listJiraIntegrations).mockResolvedValue({
+      items: [
+        { id: "j-private", name: "Jira Private", visibility: "private" },
+        { id: "j-group", name: "Jira Group", visibility: "group" },
+      ],
+    });
+    vi.mocked(api.getAuthMode).mockResolvedValue({ oidc_enabled: false });
+
+    render(<IntegrationsPage />);
+
+    expect(await screen.findByLabelText("Private integrations count")).toHaveTextContent("2");
+    expect(await screen.findByLabelText("Shared By Organization integrations count")).toHaveTextContent("1");
+    expect(await screen.findByLabelText("Shared By Groups integrations count")).toHaveTextContent("2");
+  });
 });

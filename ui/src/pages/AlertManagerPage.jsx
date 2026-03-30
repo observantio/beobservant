@@ -26,6 +26,7 @@ import {
 import {
   buildRulePayload,
 } from "../utils/alertmanagerRuleUtils";
+import { DEFAULT_FORM } from "../components/alertmanager/ruleEditorUtils";
 
 export default function AlertManagerPage() {
   const { user } = useAuth();
@@ -47,6 +48,7 @@ export default function AlertManagerPage() {
   const [showRuleEditor, setShowRuleEditor] = useState(false);
   const [showSilenceForm, setShowSilenceForm] = useState(false);
   const [editingRule, setEditingRule] = useState(null);
+  const [ruleSeed, setRuleSeed] = useState(null);
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [filterCorrelationId, setFilterCorrelationId] = useState("all");
   const [filterLabel, setFilterLabel] = useState("");
@@ -221,6 +223,42 @@ export default function AlertManagerPage() {
       handleApiError(e);
       return false;
     }
+  }
+
+  function buildRuleSeedFromExisting(sourceRule) {
+    const annotations = sourceRule?.annotations || {};
+    const notificationChannels = Array.isArray(sourceRule?.notificationChannels)
+      ? sourceRule.notificationChannels
+      : Array.isArray(sourceRule?.notification_channels)
+        ? sourceRule.notification_channels
+        : [];
+    const sharedGroupIds = Array.isArray(sourceRule?.sharedGroupIds)
+      ? sourceRule.sharedGroupIds
+      : Array.isArray(sourceRule?.shared_group_ids)
+        ? sourceRule.shared_group_ids
+        : [];
+    const sourceName = String(sourceRule?.name || "").trim();
+    const sourceOrgId = String(sourceRule?.orgId || sourceRule?.org_id || "").trim();
+
+    return {
+      ...DEFAULT_FORM,
+      name: sourceName ? `${sourceName} Copy` : "Copied Rule",
+      orgId: sourceOrgId,
+      orgIds: sourceOrgId ? [sourceOrgId] : [],
+      expr: String(sourceRule?.expr || ""),
+      duration: String(sourceRule?.duration || DEFAULT_FORM.duration),
+      severity: String(sourceRule?.severity || DEFAULT_FORM.severity),
+      labels: { ...(sourceRule?.labels || {}) },
+      annotations: {
+        summary: String(annotations?.summary || ""),
+        description: String(annotations?.description || ""),
+      },
+      enabled: Boolean(sourceRule?.enabled ?? DEFAULT_FORM.enabled),
+      group: String(sourceRule?.group || DEFAULT_FORM.group),
+      visibility: String(sourceRule?.visibility || DEFAULT_FORM.visibility),
+      notificationChannels: notificationChannels.filter(Boolean),
+      sharedGroupIds: sharedGroupIds.filter(Boolean),
+    };
   }
 
   async function handleDeleteRule(ruleId) {
@@ -463,6 +501,12 @@ export default function AlertManagerPage() {
       .map(([value, label]) => ({ value, label }));
   }, [apiKeys, rules]);
 
+  useEffect(() => {
+    if (rulesApiKeyFilter === "__all_products__") {
+      setRulesApiKeyFilter("all");
+    }
+  }, [rulesApiKeyFilter]);
+
   const filteredRules = useMemo(() => {
     const currentUserId = String(user?.id || "").trim();
     const correlationQuery = String(rulesCorrelationSearch || "").trim().toLowerCase();
@@ -480,10 +524,8 @@ export default function AlertManagerPage() {
       if (rulesStatusFilter === "enabled" && !enabled) return false;
       if (rulesStatusFilter === "disabled" && enabled) return false;
       if (rulesSeverityFilter !== "all" && severity !== rulesSeverityFilter) return false;
-      if (rulesApiKeyFilter === "__all_products__" && orgScope) return false;
       if (
         rulesApiKeyFilter !== "all" &&
-        rulesApiKeyFilter !== "__all_products__" &&
         orgScope !== rulesApiKeyFilter
       ) {
         return false;
@@ -580,12 +622,7 @@ export default function AlertManagerPage() {
   return (
     <div className="animate-fade-in">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-sre-text mb-2 flex items-center gap-2">
-          <span className="material-icons text-3xl text-sre-primary">
-            notifications_active
-          </span>{" "}
-          Alerts &amp; Rules
-        </h1>
+        <h1 className="text-3xl font-bold text-sre-text mb-2">Alerts &amp; Rules</h1>
         <p className="text-sre-text-muted">
           Comprehensive alerting system with rules, channels, and silences
         </p>
@@ -704,25 +741,25 @@ export default function AlertManagerPage() {
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border border-sre-border/50 shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between p-4 hover:bg-sre-surface/50 transition-colors duration-200">
+                <div className="bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-lg border border-sre-border/50 shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2.5 hover:bg-sre-surface/50 transition-colors duration-200">
                     <button
                       type="button"
                       onClick={() => setAlertsFiltersExpanded((prev) => !prev)}
                       className="flex-1 flex items-center justify-between"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="material-icons text-sre-primary">
+                      <div className="flex items-center gap-2">
+                        <span className="material-icons text-sre-primary text-[18px]">
                           {alertsFiltersExpanded ? "expand_less" : "expand_more"}
                         </span>
-                        <span className="text-sm font-semibold text-sre-text">Filters</span>
+                        <span className="text-xs font-semibold text-sre-text">Filters</span>
                         {hasActiveAlertFilters && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-sre-primary/15 text-sre-primary">
                             Active
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-sre-text-muted">
+                      <div className="text-[11px] text-sre-text-muted">
                         {hasActiveAlertFilters ? "Filters applied" : "Click to filter"}
                       </div>
                     </button>
@@ -731,23 +768,24 @@ export default function AlertManagerPage() {
                     </div>
                   </div>
                   {alertsFiltersExpanded && (
-                    <div className="px-4 pb-4 border-t border-sre-border/30">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end pt-4">
+                    <div className="px-3 pb-3 border-t border-sre-border/30">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end pt-2.5">
                         <div>
-                          <label className="block text-xs text-sre-text-muted mb-1">Label</label>
+                          <label className="block text-[11px] text-sre-text-muted mb-1">Label</label>
                           <input
                             type="text"
                             value={filterLabel}
                             onChange={(e) => setFilterLabel(e.target.value)}
                             placeholder="instance=node-1"
-                            className="w-full text-sm px-3 py-2 rounded border border-sre-border bg-sre-surface text-sre-text"
+                            className="w-full text-xs px-2.5 py-1.5 rounded border border-sre-border bg-sre-surface text-sre-text"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-sre-text-muted mb-1">Severity</label>
+                          <label className="block text-[11px] text-sre-text-muted mb-1">Severity</label>
                           <Select
                             value={filterSeverity}
                             onChange={(e) => setFilterSeverity(e.target.value)}
+                            className="text-xs py-1.5 px-2.5"
                           >
                             {ALERT_SEVERITY_OPTIONS.map((opt) => (
                               <option key={opt.value} value={opt.value}>
@@ -757,12 +795,13 @@ export default function AlertManagerPage() {
                           </Select>
                         </div>
                         <div>
-                          <label className="block text-xs text-sre-text-muted mb-1">
+                          <label className="block text-[11px] text-sre-text-muted mb-1">
                             Correlation ID
                           </label>
                           <Select
                             value={filterCorrelationId}
                             onChange={(e) => setFilterCorrelationId(e.target.value)}
+                            className="text-xs py-1.5 px-2.5"
                           >
                             <option value="all">All correlation IDs</option>
                             {correlationIdOptions.map((id) => (
@@ -786,6 +825,7 @@ export default function AlertManagerPage() {
                                   label: "",
                                 });
                               }}
+                              size="sm"
                             >
                               Clear
                             </Button>
@@ -800,6 +840,7 @@ export default function AlertManagerPage() {
                               });
                               setAlertsFiltersExpanded(false);
                             }}
+                            size="sm"
                           >
                             Apply
                           </Button>
@@ -810,7 +851,7 @@ export default function AlertManagerPage() {
                 </div>
 
                 {filteredAlerts.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {filteredAlerts.map((a, idx) => {
                       const labels = a.labels || {};
                       const alertName = String(labels.alertname || "").trim();
@@ -826,7 +867,7 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={a.fingerprint || a.id || a.starts_at || idx}
-                          className="p-6 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
+                          className="h-full p-4 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
                         >
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
@@ -875,7 +916,7 @@ export default function AlertManagerPage() {
                                   </span>
                                   {correlationId && (
                                     <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200">
-                                      Correlation ID: {correlationId}
+                                      {correlationId}
                                     </span>
                                   )}
                                 </div>
@@ -946,7 +987,7 @@ export default function AlertManagerPage() {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="material-icons text-2xl text-sre-primary">
+                    <span className="material-icons text-2xl text-sre-text">
                       rule
                     </span>
                     <div>
@@ -988,6 +1029,7 @@ export default function AlertManagerPage() {
                       <Button
                         onClick={() => {
                           setEditingRule(null);
+                          setRuleSeed(null);
                           setShowRuleEditor(true);
                         }}
                         size="sm"
@@ -1001,35 +1043,36 @@ export default function AlertManagerPage() {
 
                 {rules.length > 0 ? (
                   <>
-                    <div className="bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border border-sre-border/50 shadow-sm overflow-hidden">
+                    <div className="bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-lg border border-sre-border/50 shadow-sm overflow-hidden">
                       <button
                         type="button"
                         onClick={() => setRulesFiltersExpanded((prev) => !prev)}
-                        className="w-full flex items-center justify-between p-4 hover:bg-sre-surface/50 transition-colors duration-200"
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-sre-surface/50 transition-colors duration-200"
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="material-icons text-sre-primary">
+                        <div className="flex items-center gap-2">
+                          <span className="material-icons text-sre-primary text-[18px]">
                             {rulesFiltersExpanded ? "expand_less" : "expand_more"}
                           </span>
-                          <span className="text-sm font-semibold text-sre-text">Filters</span>
+                          <span className="text-xs font-semibold text-sre-text">Filters</span>
                           {isRulesFilterActive && (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-sre-primary/15 text-sre-primary">
                               Active
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-sre-text-muted">
+                        <div className="text-[11px] text-sre-text-muted">
                           {isRulesFilterActive ? "Filters applied" : "Click to filter"}
                         </div>
                       </button>
                       {rulesFiltersExpanded && (
-                        <div className="px-4 pb-4 border-t border-sre-border/30">
-                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end pt-4">
+                        <div className="px-3 pb-3 border-t border-sre-border/30">
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end pt-2.5">
                             <div>
-                              <label className="block text-xs text-sre-text-muted mb-1">Owner</label>
+                              <label className="block text-[11px] text-sre-text-muted mb-1">Owner</label>
                               <Select
                                 value={rulesOwnerFilter}
                                 onChange={(e) => setRulesOwnerFilter(e.target.value)}
+                                className="text-xs py-1.5 px-2.5"
                               >
                                 <option value="all">All</option>
                                 <option value="owned">Owned</option>
@@ -1037,10 +1080,11 @@ export default function AlertManagerPage() {
                               </Select>
                             </div>
                             <div>
-                              <label className="block text-xs text-sre-text-muted mb-1">Status</label>
+                              <label className="block text-[11px] text-sre-text-muted mb-1">Status</label>
                               <Select
                                 value={rulesStatusFilter}
                                 onChange={(e) => setRulesStatusFilter(e.target.value)}
+                                className="text-xs py-1.5 px-2.5"
                               >
                                 <option value="all">All</option>
                                 <option value="enabled">Enabled</option>
@@ -1048,10 +1092,11 @@ export default function AlertManagerPage() {
                               </Select>
                             </div>
                             <div>
-                              <label className="block text-xs text-sre-text-muted mb-1">Severity</label>
+                              <label className="block text-[11px] text-sre-text-muted mb-1">Severity</label>
                               <Select
                                 value={rulesSeverityFilter}
                                 onChange={(e) => setRulesSeverityFilter(e.target.value)}
+                                className="text-xs py-1.5 px-2.5"
                               >
                                 <option value="all">All</option>
                                 {ALERT_SEVERITY_OPTIONS.map((opt) => (
@@ -1062,13 +1107,13 @@ export default function AlertManagerPage() {
                               </Select>
                             </div>
                             <div>
-                              <label className="block text-xs text-sre-text-muted mb-1">API Key</label>
+                              <label className="block text-[11px] text-sre-text-muted mb-1">API Key</label>
                               <Select
                                 value={rulesApiKeyFilter}
                                 onChange={(e) => setRulesApiKeyFilter(e.target.value)}
+                                className="text-xs py-1.5 px-2.5"
                               >
                                 <option value="all">All API keys</option>
-                                <option value="__all_products__">All products</option>
                                 {ruleApiKeyOptions.map((opt) => (
                                   <option key={opt.value} value={opt.value}>
                                     {opt.label}
@@ -1077,7 +1122,7 @@ export default function AlertManagerPage() {
                               </Select>
                             </div>
                             <div>
-                              <label className="block text-xs text-sre-text-muted mb-1">
+                              <label className="block text-[11px] text-sre-text-muted mb-1">
                                 Correlation ID
                               </label>
                               <input
@@ -1085,11 +1130,11 @@ export default function AlertManagerPage() {
                                 value={rulesCorrelationSearch}
                                 onChange={(e) => setRulesCorrelationSearch(e.target.value)}
                                 placeholder="Search correlation ID"
-                                className="w-full px-3 py-2 bg-sre-surface border border-sre-border rounded-lg text-sre-text"
+                                className="w-full text-xs px-2.5 py-1.5 bg-sre-surface border border-sre-border rounded-lg text-sre-text"
                               />
                             </div>
                           </div>
-                          <div className="flex justify-end gap-2 pt-3">
+                          <div className="flex justify-end gap-2 pt-2">
                             {isRulesFilterActive && (
                               <Button
                                 variant="secondary"
@@ -1107,6 +1152,7 @@ export default function AlertManagerPage() {
                                     correlationId: "",
                                   });
                                 }}
+                                size="sm"
                               >
                                 Clear
                               </Button>
@@ -1123,6 +1169,7 @@ export default function AlertManagerPage() {
                                 });
                                 setRulesFiltersExpanded(false);
                               }}
+                              size="sm"
                             >
                               Apply
                             </Button>
@@ -1132,7 +1179,7 @@ export default function AlertManagerPage() {
                     </div>
 
                     {filteredRules.length > 0 ? (
-                      <div className="grid gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {filteredRules.map((rule) => {
                       const ownerId = String(rule.createdBy || rule.created_by || "");
                       const isOwnRule = ownerId && ownerId === String(user?.id || "");
@@ -1140,174 +1187,167 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={rule.id}
-                          className={`p-6 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+                          className={`h-full p-4 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
                             rule.isHidden || rule.is_hidden
                               ? "border-amber-400/60 opacity-90"
                               : "border-sre-border"
                           }`}
                         >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-3 mb-3">
-                                <div
-                                  className={`p-2 rounded-lg ${
-                                    rule.severity === "critical"
-                                      ? "bg-red-100 dark:bg-red-900/30"
-                                      : rule.severity === "warning"
-                                        ? "bg-yellow-100 dark:bg-yellow-900/30"
-                                        : "bg-blue-100 dark:bg-blue-900/30"
-                                  }`}
-                                >
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <h3 className="font-semibold uppercase tracking-wide text-sre-text text-xl leading-tight break-words">
+                                  {rule.name}
+                                </h3>
+                                <div className="flex flex-wrap items-center gap-2">
                                   <span
-                                    className={`material-icons text-xl ${
+                                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
                                       rule.severity === "critical"
-                                        ? "text-red-600 dark:text-red-400"
+                                        ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200"
                                         : rule.severity === "warning"
-                                          ? "text-yellow-600 dark:text-yellow-400"
-                                          : "text-blue-600 dark:text-blue-400"
+                                          ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200"
+                                          : "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200"
                                     }`}
                                   >
-                                    {rule.severity === "critical"
-                                      ? "error"
-                                      : rule.severity === "warning"
-                                        ? "warning"
-                                        : "info"}
+                                    {rule.severity || "info"}
                                   </span>
-                                </div>
-                                <div>
-                                  <h3 className="font-semibold text-sre-text text-lg">
-                                    {rule.name}
-                                  </h3>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <span
-                                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                        rule.severity === "critical"
-                                          ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200"
-                                          : rule.severity === "warning"
-                                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200"
-                                            : "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200"
-                                      }`}
-                                    >
-                                      {rule.severity}
+                                  <span
+                                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                      rule.enabled
+                                        ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200"
+                                        : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200"
+                                    }`}
+                                  >
+                                    {rule.enabled ? "Enabled" : "Disabled"}
+                                  </span>
+                                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200">
+                                    {rule.group || "default"}
+                                  </span>
+                                  {rule.orgId ? (
+                                    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium bg-sre-primary/10 text-sre-primary">
+                                      Key:{" "}
+                                      {orgIdToName[rule.orgId] ||
+                                        `${rule.orgId.slice(0, 8)}...`}
                                     </span>
-                                    <span
-                                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                        rule.enabled
-                                          ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200"
-                                          : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200"
-                                      }`}
-                                    >
-                                      {rule.enabled ? "Enabled" : "Disabled"}
+                                  ) : (
+                                    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                                      Key: Default
                                     </span>
-                                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200">
-                                      Correlation ID: {rule.group}
+                                  )}
+                                  {(rule.isHidden || rule.is_hidden) && (
+                                    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                                      Hidden
                                     </span>
-                                    {(rule.isHidden || rule.is_hidden) && (
-                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
-                                        Hidden
-                                      </span>
-                                    )}
-                                    {rule.orgId ? (
-                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200">
-                                        {orgIdToName[rule.orgId] ||
-                                          `${rule.orgId.slice(0, 8)}...`}
-                                      </span>
-                                    ) : (
-                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
-                                        All products
-                                      </span>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
                               </div>
 
-                              <div className="space-y-2 text-sm text-sre-text-muted p-4">
-                                <div className="flex items-center gap-2">
-                                  <span className="material-icons text-sm">
-                                    functions
-                                  </span>
-                                  <span className="font-mono text-xs bg-sre-bg-alt px-2 py-1 rounded border">
-                                    {rule.expr}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="material-icons text-sm">
-                                    schedule
-                                  </span>
-                                  <span>Duration: {rule.duration}</span>
-                                </div>
-                                {rule.annotations?.summary && (
-                                  <div className="flex items-start gap-2">
-                                    <span className="material-icons text-sm mt-0.5">
-                                      description
+                              <div className="flex items-center gap-1 rounded-xl bg-sre-bg-alt/70 p-1.5 shrink-0">
+                                {canHideRule && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleToggleRuleHidden(
+                                        rule,
+                                        !(rule.isHidden || rule.is_hidden),
+                                      )
+                                    }
+                                    className="h-9 w-9 p-0"
+                                    title={
+                                      rule.isHidden || rule.is_hidden
+                                        ? "Unhide Rule"
+                                        : "Hide Rule"
+                                    }
+                                  >
+                                    <span className="material-icons text-[18px]">
+                                      {rule.isHidden || rule.is_hidden
+                                        ? "visibility"
+                                        : "visibility_off"}
                                     </span>
-                                    <span>{rule.annotations.summary}</span>
-                                  </div>
+                                  </Button>
                                 )}
-                              </div>
-                            </div>
-
-                            <div className="flex gap-1 ml-4">
-                              {canHideRule && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() =>
-                                    handleToggleRuleHidden(
-                                      rule,
-                                      !(rule.isHidden || rule.is_hidden),
-                                    )
-                                  }
-                                  className="p-2"
-                                  title={
-                                    rule.isHidden || rule.is_hidden
-                                      ? "Unhide Rule"
-                                      : "Hide Rule"
-                                  }
+                                  onClick={() => handleTestRule(rule.id)}
+                                  className="h-9 w-9 p-0"
+                                  title="Test Rule"
                                 >
-                                  <span className="material-icons text-base">
-                                    {rule.isHidden || rule.is_hidden
-                                      ? "visibility"
-                                      : "visibility_off"}
+                                  <span className="material-icons text-[18px]">
+                                    science
                                   </span>
                                 </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleTestRule(rule.id)}
-                                className="p-2"
-                                title="Test Rule"
-                              >
-                                <span className="material-icons text-base">
-                                  science
-                                </span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingRule(rule);
-                                  setShowRuleEditor(true);
-                                }}
-                                className="p-2"
-                                title="Edit Rule"
-                              >
-                                <span className="material-icons text-base">
-                                  edit
-                                </span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteRule(rule.id)}
-                                className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
-                                title="Delete Rule"
-                              >
-                                <span className="material-icons text-base">
-                                  delete
-                                </span>
-                              </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingRule(null);
+                                    setRuleSeed(buildRuleSeedFromExisting(rule));
+                                    setShowRuleEditor(true);
+                                  }}
+                                  className="h-9 w-9 p-0"
+                                  title="Create from this rule"
+                                >
+                                  <span className="material-icons text-[18px]">
+                                    content_copy
+                                  </span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setRuleSeed(null);
+                                    setEditingRule(rule);
+                                    setShowRuleEditor(true);
+                                  }}
+                                  className="h-9 w-9 p-0"
+                                  title="Edit Rule"
+                                >
+                                  <span className="material-icons text-[18px]">
+                                    edit
+                                  </span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteRule(rule.id)}
+                                  className="h-9 w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                                  title="Delete Rule"
+                                >
+                                  <span className="material-icons text-[18px]">
+                                    delete
+                                  </span>
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="">
+                              <div className="text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted mb-2">
+                                Query
+                              </div>
+                              <div className="thin-scrollbar w-full text-xs leading-relaxed text-sre-text font-mono bg-sre-surface/50 p-2.5 rounded-md overflow-auto whitespace-pre max-h-28">
+                                {rule.expr || "No query specified"}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 w-full">
+                              <div className="rounded-lg border border-sre-border bg-sre-surface px-3 py-2.5 w-full">
+                                <div className="text-[11px] uppercase tracking-wide text-sre-text-muted">
+                                  Duration
+                                </div>
+                                <div className="text-base font-semibold text-sre-text">
+                                  {rule.duration || "1m"}
+                                </div>
+                              </div>
+                              <div className="rounded-lg border border-sre-border bg-sre-surface px-3 py-2.5 w-full">
+                                <div className="text-[11px] uppercase tracking-wide text-sre-text-muted">
+                                  Summary
+                                </div>
+                                <div className="text-sm text-sre-text line-clamp-2">
+                                  {rule.annotations?.summary || "No summary"}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1340,6 +1380,7 @@ export default function AlertManagerPage() {
                     <Button
                       onClick={() => {
                         setEditingRule(null);
+                        setRuleSeed(null);
                         setShowRuleEditor(true);
                       }}
                     >
@@ -1357,7 +1398,7 @@ export default function AlertManagerPage() {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="material-icons text-2xl text-sre-primary">
+                    <span className="material-icons text-2xl text-sre-text">
                       volume_off
                     </span>
                     <div>
@@ -1371,10 +1412,11 @@ export default function AlertManagerPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <label className="inline-flex items-center gap-2 text-xs text-sre-text-muted">
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 text-xs text-sre-text-muted">
                       <input
                         type="checkbox"
+                        className="h-3.5 w-3.5"
                         checked={!!showHiddenSilences}
                         onChange={(e) =>
                           setShowHiddenSilences(e.target.checked)
@@ -1383,8 +1425,8 @@ export default function AlertManagerPage() {
                       Show hidden
                     </label>
                     {silences.length > 0 && (
-                      <Button onClick={() => setShowSilenceForm(true)} size="sm">
-                        <span className="material-icons text-sm mr-2">add</span>
+                      <Button onClick={() => setShowSilenceForm(true)} size="sm" className="h-8 px-3 text-xs">
+                        <span className="material-icons text-sm mr-1.5">add</span>
                         Create Silence
                       </Button>
                     )}
@@ -1392,7 +1434,7 @@ export default function AlertManagerPage() {
                 </div>
 
                 {silences.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {silences.map((s) => {
                       const silenceOwner = String(s.createdBy || s.created_by || "");
                       const isOwnSilence =
@@ -1409,7 +1451,7 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={s.id}
-                          className={`p-6 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+                          className={`h-full p-4 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
                             s.isHidden || s.is_hidden
                               ? "border-amber-400/60 opacity-90"
                               : "border-sre-border"
@@ -1722,13 +1764,20 @@ export default function AlertManagerPage() {
         onClose={() => {
           setShowRuleEditor(false);
           setEditingRule(null);
+          setRuleSeed(null);
         }}
-        title={editingRule ? "Edit Alert Rule" : "Create Alert Rule"}
+        title={
+          editingRule
+            ? "Edit Alert Rule"
+            : ruleSeed
+              ? "Create Alert Rule (Copied)"
+              : "Create Alert Rule"
+        }
         size="lg"
         closeOnOverlayClick={false}
       >
         <RuleEditor
-          rule={editingRule}
+          rule={editingRule || ruleSeed}
           channels={channels}
           apiKeys={apiKeys}
           availableCorrelationIds={correlationIdOptions}
@@ -1737,12 +1786,14 @@ export default function AlertManagerPage() {
             if (ok) {
               setShowRuleEditor(false);
               setEditingRule(null);
+              setRuleSeed(null);
             }
             return ok;
           }}
           onCancel={() => {
             setShowRuleEditor(false);
             setEditingRule(null);
+            setRuleSeed(null);
           }}
         />
       </Modal>

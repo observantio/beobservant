@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCaseInsensitiveTextFilterClause,
   buildFallbackVolume,
   buildSelectorFromFilters,
   computeTopTermsFromResult,
   getVolumeValues,
   normalizeLabelValue,
   normalizeLabelValues,
+  wildcardToRegexPattern,
 } from "../lokiQueryUtils";
 
 describe("lokiQueryUtils", () => {
@@ -62,5 +64,14 @@ describe("lokiQueryUtils", () => {
     );
     expect(Array.isArray(fallback)).toBe(true);
     expect(fallback.length).toBeGreaterThan(0);
+  });
+
+  it("builds case-insensitive wildcard text clauses", () => {
+    expect(wildcardToRegexPattern("error*timeout?")).toBe("error.*timeout.");
+    expect(wildcardToRegexPattern("a.b")).toBe("a\\.b");
+    expect(buildCaseInsensitiveTextFilterClause("")).toBe("");
+    expect(buildCaseInsensitiveTextFilterClause("Error*Timeout")).toBe(
+      ' |~ "(?i)Error.*Timeout"',
+    );
   });
 });

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
+import { useLayoutMode } from "../../contexts/LayoutModeContext";
 import { MetricCard } from "../ui";
 
 export function MetricsGrid({ metrics, metricOrder, onMetricOrderChange }) {
+  const { sidebarMode } = useLayoutMode();
   const [draggedIndex, setDraggedIndex] = useState(null);
 
   const handleDragStart = (e, index) => {
@@ -31,8 +33,12 @@ export function MetricsGrid({ metrics, metricOrder, onMetricOrderChange }) {
     setDraggedIndex(null);
   };
 
+  const gridClass = sidebarMode
+    ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 mb-8"
+    : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8";
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div className={gridClass}>
       {metricOrder.map((metricIndex, displayIndex) => {
         const metric = metrics[metricIndex];
         if (!metric) return null;
@@ -44,7 +50,7 @@ export function MetricsGrid({ metrics, metricOrder, onMetricOrderChange }) {
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, displayIndex)}
             onDragEnd={handleDragEnd}
-            className={`cursor-move transition-transform duration-200 ease-out will-change-transform hover:shadow-lg relative ${
+            className={`flex h-full min-h-0 w-full cursor-move flex-col transition-transform duration-200 ease-out will-change-transform hover:shadow-lg relative ${
               draggedIndex === displayIndex
                 ? "opacity-50 scale-95 shadow-xl"
                 : ""
@@ -52,7 +58,7 @@ export function MetricsGrid({ metrics, metricOrder, onMetricOrderChange }) {
             title="Drag to rearrange"
             type="button"
           >
-            <div className="absolute top-2 right-2 text-sre-text-muted hover:text-sre-text transition-colors z-10">
+            <div className="absolute top-2 right-2 z-10 text-sre-text-muted transition-colors hover:text-sre-text">
               <span className="material-icons text-sm drag-handle" aria-hidden>
                 drag_indicator
               </span>
@@ -63,6 +69,7 @@ export function MetricsGrid({ metrics, metricOrder, onMetricOrderChange }) {
               trend={metric.trend}
               status={metric.status}
               icon={metric.icon}
+              className="flex-1"
             />
           </button>
         );

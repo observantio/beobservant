@@ -4,6 +4,7 @@ import PageHeader from "../components/ui/PageHeader";
 import { Card, Input, Button, Select, Modal, Checkbox } from "../components/ui";
 import ConfirmModal from "../components/ConfirmModal";
 import { useAuth } from "../contexts/AuthContext";
+import { useLayoutMode } from "../contexts/LayoutModeContext";
 import { useToast } from "../contexts/ToastContext";
 import HelpTooltip from "../components/HelpTooltip";
 import * as api from "../api";
@@ -12,6 +13,7 @@ import { buildOtelYaml } from "../utils/otelConfig";
 
 export default function ApiKeyPage() {
   const { user, updateUser } = useAuth();
+  const { sidebarMode } = useLayoutMode();
   const toast = useToast();
   const [orgId, setOrgId] = useState("");
   const [apiKeys, setApiKeys] = useState([]);
@@ -34,6 +36,7 @@ export default function ApiKeyPage() {
   const [selectedShareGroupIds, setSelectedShareGroupIds] = useState([]);
   const [revealedOtlpTokens, setRevealedOtlpTokens] = useState({});
   const [showHidden, setShowHidden] = useState(false);
+  const [apiKeyQuota, setApiKeyQuota] = useState(null);
 
   useEffect(() => {
     if (user) {
@@ -57,10 +60,11 @@ export default function ApiKeyPage() {
   }, [user, showHidden]);
 
   const refreshUser = async () => {
-    const [updatedUser, visibleKeys, displayKeys] = await Promise.all([
+    const [updatedUser, visibleKeys, displayKeys, quotaData] = await Promise.all([
       api.getCurrentUser(),
       api.listApiKeys().catch(() => null),
       api.listApiKeys({ showHidden }).catch(() => null),
+      api.getSystemQuotas().catch(() => null),
     ]);
     const mergedUser = {
       ...updatedUser,
@@ -72,6 +76,7 @@ export default function ApiKeyPage() {
     setApiKeys(
       Array.isArray(displayKeys) ? displayKeys : (mergedUser.api_keys || []),
     );
+    setApiKeyQuota(quotaData?.api_keys || null);
   };
 
   useEffect(() => {
@@ -143,6 +148,10 @@ export default function ApiKeyPage() {
 
   const handleCreateKey = async (e) => {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
+    if (apiKeyQuota && apiKeyQuota.current >= apiKeyQuota.max) {
+      toast.error(`Maximum API key limit reached (${apiKeyQuota.max})`);
+      return;
+    }
     if (!newKeyName.trim()) {
       toast.error("Key name is required");
       return;
@@ -323,6 +332,10 @@ export default function ApiKeyPage() {
     () => apiKeys.filter((k) => !k.is_shared),
     [apiKeys],
   );
+  const maxApiKeys = apiKeyQuota?.max ?? null;
+  const currentApiKeys = apiKeyQuota?.current ?? ownedApiKeys.length;
+  const atApiKeyLimit =
+    maxApiKeys !== null && Number(currentApiKeys) >= Number(maxApiKeys);
 
   const [showYamlModal, setShowYamlModal] = useState(false);
   const [yamlModalKeyId, setYamlModalKeyId] = useState("");
@@ -479,7 +492,13 @@ export default function ApiKeyPage() {
   }
 
   return (
-    <div className="animate-fade-in max-w-7xl mx-auto">
+    <div
+      className={
+        sidebarMode
+          ? "animate-fade-in w-full min-w-0"
+          : "animate-fade-in mx-auto max-w-7xl"
+      }
+    >
       <PageHeader
         icon="key"
         title="API Keys"
@@ -512,6 +531,12 @@ export default function ApiKeyPage() {
                   size="sm"
                   className="py-1 px-3"
                   onClick={() => setShowAddModal(true)}
+                  disabled={atApiKeyLimit}
+                  title={
+                    atApiKeyLimit
+                      ? `Maximum API key limit reached (${maxApiKeys})`
+                      : "Add New Key"
+                  }
                 >
                   Add New Key
                 </Button>
@@ -558,26 +583,54 @@ export default function ApiKeyPage() {
               Agent YAML — keep it secret.
             </strong>
           </p>
+          <div className="mt-2 text-xs text-sre-text-muted">
+            Capacity: <span className="font-medium text-sre-text">{currentApiKeys}</span>
+            {" / "}
+            <span className="font-medium text-sre-text">
+              {maxApiKeys ?? "-"}
+            </span>
+            {" "}owned keys used.
+          </div>
           {apiKeys.length === 0 ? (
             <div className="p-4 text-sm text-sre-text-muted">
               No API keys found.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="mt-3 overflow-x-auto rounded-lg border border-sre-border bg-sre-surface/30">
               <table className="min-w-full text-left text-sm">
                 <thead>
                   <tr className="bg-sre-surface text-sre-text-muted text-xs uppercase tracking-wide">
-                    <th className="py-3 pl-0 pr-4">Name</th>
-                    <th className="py-3 px-4">Key</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Actions</th>
+                    <th className="px-4 py-3.5">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="material-icons text-sm">label</span>
+                        <span>Name</span>
+                      </span>
+                    </th>
+                    <th className="px-4 py-3.5 border-l border-sre-border/50">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="material-icons text-sm">key</span>
+                        <span>Key</span>
+                      </span>
+                    </th>
+                    <th className="px-4 py-3.5 border-l border-sre-border/50">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="material-icons text-sm">verified</span>
+                        <span>Status</span>
+                      </span>
+                    </th>
+                    <th className="px-4 py-3.5 border-l border-sre-border/50">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="material-icons text-sm">tune</span>
+                        <span>Actions</span>
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {apiKeys.map((key) => (
                     <tr
                       key={key.id}
-                      className="align-top hover:bg-sre-background cursor-pointer"
+                      className="cursor-pointer align-top border-t border-sre-border/60 hover:bg-sre-background/70"
                       onClick={(e) => {
                         const interactiveTarget = e.target.closest(
                           "button, input, a, label",
@@ -588,13 +641,14 @@ export default function ApiKeyPage() {
                         handleActivateKey(key);
                       }}
                     >
-                      <td className="py-3 pl-0 pr-4">
+                      <td className="px-4 py-4">
                         <div className="font-medium text-sre-text">
                           {key.name}
                         </div>
                         {key.is_default && (
-                          <div className="text-xs text-sre-text-muted">
-                            Default
+                          <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-sre-border/60 bg-sre-surface-light px-2 py-0.5 text-[11px] font-medium text-sre-text">
+                            <span className="material-icons text-xs">sell</span>
+                            <span>Default key</span>
                           </div>
                         )}
                         {key.is_shared && key.owner_username && (
@@ -614,7 +668,7 @@ export default function ApiKeyPage() {
                             </div>
                           )}
                       </td>
-                      <td className="py-3 px-4 text-xs text-sre-text-muted break-all">
+                      <td className="px-4 py-4 text-xs text-sre-text-muted break-all border-l border-sre-border/40">
                         <div className="flex items-center gap-3">
                           <div className="font-mono text-xs">
                             {formatDisplayKey(key)}
@@ -646,7 +700,7 @@ export default function ApiKeyPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="px-4 py-4 border-l border-sre-border/40">
                         <div className="flex items-center gap-2">
                           <input
                             type="radio"
@@ -667,7 +721,7 @@ export default function ApiKeyPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-2 px-4">
+                      <td className="px-4 py-4 border-l border-sre-border/40">
                         <div className="flex items-center gap-4">
                           {!key.is_shared && !key.is_default && (
                             <button
@@ -851,7 +905,16 @@ export default function ApiKeyPage() {
               <Button variant="ghost" onClick={() => setShowAddModal(false)}>
                 Cancel
               </Button>
-              <Button type="submit" loading={loading}>
+              <Button
+                type="submit"
+                loading={loading}
+                disabled={atApiKeyLimit}
+                title={
+                  atApiKeyLimit
+                    ? `Maximum API key limit reached (${maxApiKeys})`
+                    : "Create"
+                }
+              >
                 Create
               </Button>
             </div>

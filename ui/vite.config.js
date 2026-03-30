@@ -27,6 +27,22 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
       globals: true,
       setupFiles: ["./src/test/setupTests.js"],
+      coverage: {
+        provider: "istanbul",
+        all: true,
+        include: [
+          "src/**/*.{js,jsx}",
+          "*.{js,cjs,mjs}",
+        ],
+        exclude: [
+          "src/**/*.test.{js,jsx}",
+          "src/**/__tests__/**",
+          "coverage/**",
+          "node_modules/**",
+          "dist/**",
+        ],
+        reporter: ["text", "html", "json-summary"],
+      },
     },
   };
 });

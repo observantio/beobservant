@@ -1,6 +1,8 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
 import { Button, Input, Badge } from "../ui";
+import { useToast } from "../../contexts/ToastContext";
+import { copyToClipboard } from "../../utils/helpers";
 
 function FilterBar({
   filters,
@@ -132,12 +134,43 @@ export default function DashboardsTab({
   onOpenGrafana,
   onDeleteDashboard,
   onToggleHidden,
+  dashboardKeyNamesByUid,
 }) {
+  const toast = useToast();
+  const [copiedDashboardUid, setCopiedDashboardUid] = useState("");
+
+  const dashboardLink = (dashboard) => {
+    const path =
+      dashboard?.url ||
+      `/grafana/d/${dashboard?.uid}/${dashboard?.slug || String(dashboard?.title || "").toLowerCase()}`;
+    if (String(path).startsWith("http://") || String(path).startsWith("https://")) {
+      return String(path);
+    }
+    const normalized = String(path).startsWith("/") ? String(path) : `/${String(path)}`;
+    return `${globalThis.location?.origin || ""}${normalized}`;
+  };
+
+  const copyDashboardLink = async (dashboard) => {
+    const link = dashboardLink(dashboard);
+    if (!link) return;
+    const copied = await copyToClipboard(link);
+    if (copied) {
+      const uid = String(dashboard?.uid || "");
+      setCopiedDashboardUid(uid);
+      toast.success("Dashboard URL copied to clipboard");
+      globalThis.setTimeout(() => {
+        setCopiedDashboardUid((current) => (current === uid ? "" : current));
+      }, 1200);
+      return;
+    }
+    toast.error("Failed to copy dashboard URL");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="material-icons text-2xl text-sre-primary">
+          <span className="material-icons text-2xl text-sre-text">
             analytics
           </span>
           <div>
@@ -216,18 +249,19 @@ export default function DashboardsTab({
           {dashboards.map((d) => (
             <div
               key={d.uid}
-              className={`p-6 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+              className={`p-4 bg-sre-surface border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
                 d.is_hidden
                   ? "border-dashed border-sre-border/50 opacity-60"
                   : "border-sre-border"
               }`}
             >
-              <div className="flex items-start justify-between">
+              <div className="flex flex-col gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
                       <svg
-                        className="w-5 h-5 text-blue-600 dark:text-blue-400"
+                        className="w-4 h-4 text-blue-600 dark:text-blue-400"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -240,8 +274,8 @@ export default function DashboardsTab({
                         />
                       </svg>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-sre-text text-lg flex items-center gap-2 min-w-0">
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-sre-text text-xl flex items-center gap-2 min-w-0">
                         <span className="truncate" title={d.title}>
                           {d.title}
                         </span>
@@ -251,15 +285,132 @@ export default function DashboardsTab({
                           </span>
                         )}
                       </h3>
-                      {d.isStarred && (
-                        <span className="text-yellow-500 text-sm">
-                          ⭐ Starred
-                        </span>
-                      )}
+                        {d.isStarred && (
+                          <span className="text-yellow-500 text-xs">
+                            ⭐ Starred
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    <div className="flex gap-1.5 shrink-0">
+                    {/* Toggle visibility (hidden for owners) */}
+                    {!d.is_owned && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onToggleHidden(d)}
+                        title={d.is_hidden ? "Unhide" : "Hide"}
+                        className="h-10 w-10 p-0"
+                      >
+                        <span className="material-icons text-[20px]">
+                          {d.is_hidden ? "visibility" : "visibility_off"}
+                        </span>
+                      </Button>
+                    )}
+
+                    {/* Open in Grafana */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        onOpenGrafana(
+                          d.url ||
+                            `/grafana/d/${d.uid}/${d.slug || d.title.toLowerCase()}`,
+                        )
+                      }
+                      title="Open in Grafana"
+                      className="h-10 w-10 p-0"
+                    >
+                      <svg
+                        className="w-[20px] h-[20px]"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                        />
+                      </svg>
+                    </Button>
+                    {/* Copy link */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyDashboardLink(d)}
+                      title={
+                        copiedDashboardUid === d.uid
+                          ? "Link copied"
+                          : "Copy dashboard link"
+                      }
+                      className="h-10 w-10 p-0"
+                    >
+                      <span className="material-icons text-[20px]">
+                        {copiedDashboardUid === d.uid ? "check" : "link"}
+                      </span>
+                    </Button>
+                    {/* Edit */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openDashboardEditor(d)}
+                      title="Edit"
+                      className="h-10 w-10 p-0"
+                    >
+                      <svg
+                        className="w-[20px] h-[20px]"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                        />
+                      </svg>
+                    </Button>
+                    {/* Delete */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onDeleteDashboard(d)}
+                      className="h-10 w-10 p-0 text-red-500 hover:text-red-600"
+                      title="Delete"
+                    >
+                      <svg
+                        className="w-[20px] h-[20px]"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </Button>
+                  </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 mb-3">
+                  <div className="flex flex-wrap gap-1.5 mb-2 w-full">
+                    {(dashboardKeyNamesByUid?.[d.uid] || []).map((keyName) => (
+                      <Badge
+                        key={`key-${d.uid}-${keyName}`}
+                        variant="info"
+                        className="inline-flex items-center gap-1 whitespace-nowrap"
+                      >
+                        <span className="material-icons text-[13px] leading-none">
+                          vpn_key
+                        </span>
+                        <span>{keyName}</span>
+                      </Badge>
+                    ))}
                     {d.tags?.map((tag) => (
                       <Badge key={tag} variant="info">
                         {tag}
@@ -292,7 +443,7 @@ export default function DashboardsTab({
 
                   {/* Labels */}
                   {d.labels && Object.keys(d.labels).length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-3">
+                    <div className="flex flex-wrap gap-1.5 mb-2 w-full">
                       {Object.entries(d.labels).map(([k, v]) => (
                         <span
                           key={k}
@@ -310,94 +461,6 @@ export default function DashboardsTab({
                   </div>
                 </div>
 
-                <div className="flex gap-1 ml-4">
-                  {/* Toggle visibility (hidden for owners) */}
-                  {!d.is_owned && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onToggleHidden(d)}
-                      title={d.is_hidden ? "Unhide" : "Hide"}
-                      className="p-2"
-                    >
-                      <span className="material-icons text-base">
-                        {d.is_hidden ? "visibility" : "visibility_off"}
-                      </span>
-                    </Button>
-                  )}
-
-                  {/* Open in Grafana */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      onOpenGrafana(
-                        d.url ||
-                          `/grafana/d/${d.uid}/${d.slug || d.title.toLowerCase()}`,
-                      )
-                    }
-                    title="Open in Grafana"
-                    className="p-2"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                      />
-                    </svg>
-                  </Button>
-                  {/* Edit */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openDashboardEditor(d)}
-                    title="Edit"
-                    className="p-2"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                      />
-                    </svg>
-                  </Button>
-                  {/* Delete */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onDeleteDashboard(d)}
-                    className="p-2 text-red-500 hover:text-red-600"
-                    title="Delete"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                  </Button>
-                </div>
               </div>
             </div>
           ))}
@@ -438,5 +501,6 @@ DashboardsTab.propTypes = {
   onOpenGrafana: PropTypes.func.isRequired,
   onDeleteDashboard: PropTypes.func.isRequired,
   onToggleHidden: PropTypes.func,
+  dashboardKeyNamesByUid: PropTypes.object,
   onEditLabels: PropTypes.func,
 };

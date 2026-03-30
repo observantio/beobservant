@@ -8,7 +8,7 @@ export default function ThemeToggle({ className = "" }) {
     <button
       onClick={toggleTheme}
       className={`p-2 rounded-lg transition-all duration-200 
-        hover:bg-sre-surface active:scale-95
+        bg-sre-surface/45 backdrop-blur-md hover:bg-sre-surface/70 active:scale-95
         focus:outline-none focus:ring-2 focus:ring-sre-primary focus:ring-offset-2 focus:ring-offset-sre-bg
         ${className}`}
       title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}

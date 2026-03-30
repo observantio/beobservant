@@ -30,8 +30,7 @@ export default function RcaReportModal({
       >
         {loadingPrimaryReport || loadingReport ? (
           <div className="p-6 text-sm flex items-center justify-center">
-            <Spinner className="mr-3" /> Fetching the report... Powered By Be
-            Certain
+            <Spinner className="mr-3" /> Fetching the report…
           </div>
         ) : hasReport ? (
           <>

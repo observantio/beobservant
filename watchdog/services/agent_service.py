@@ -16,9 +16,12 @@ from models.observability.agent_models import AgentHeartbeat, AgentInfo
 
 from services.agent.helpers import (
     KeyActivity,
+    KeyVolumePoint,
     update_agent_registry,
     extract_metrics_count,
+    extract_metrics_series,
     query_key_activity,
+    query_key_volume_series,
 )
 
 class AgentService:
@@ -35,5 +38,24 @@ class AgentService:
     def extract_metrics_count(payload: JSONDict) -> int:
         return extract_metrics_count(payload)
 
+    @staticmethod
+    def extract_metrics_series(payload: JSONDict) -> list[KeyVolumePoint]:
+        return extract_metrics_series(payload)
+
     async def key_activity(self, key_value: str, mimir_client: httpx.AsyncClient) -> KeyActivity:
         return await query_key_activity(key_value, mimir_client)
+
+    async def key_volume_series(
+        self,
+        key_value: str,
+        mimir_client: httpx.AsyncClient,
+        *,
+        minutes: int = 60,
+        step_seconds: int = 300,
+    ) -> list[KeyVolumePoint]:
+        return await query_key_volume_series(
+            key_value,
+            mimir_client,
+            minutes=minutes,
+            step_seconds=step_seconds,
+        )

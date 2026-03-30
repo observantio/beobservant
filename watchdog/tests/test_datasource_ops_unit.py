@@ -180,6 +180,46 @@ def test_datasource_access_scope_and_metadata_helpers():
     assert datasource_ops.get_datasource_metadata(db, "t1") == {"team_ids": [group.id]}
 
 
+def test_allowed_scope_org_ids_excludes_non_usable_shares():
+    db = _session()
+    owner, viewer, outsider, group, ds_private, ds_group, ds_tenant = _seed(db)
+
+    blocked_share = ApiKeyShare(
+        id="s-blocked",
+        tenant_id="t1",
+        api_key_id="k1",
+        owner_user_id=owner.id,
+        shared_user_id=viewer.id,
+        can_use=False,
+    )
+    db.add(blocked_share)
+    db.commit()
+
+    _, scopes = datasource_ops._load_allowed_scope_org_ids(db, user_id=viewer.id, tenant_id="t1")
+    assert "scope-owned" not in scopes
+    assert "scope-shared" in scopes
+
+
+def test_get_datasources_filters_hidden_for_current_user():
+    db = _session()
+    owner, viewer, outsider, group, ds_private, ds_group, ds_tenant = _seed(db)
+    ds_group.hidden_by = [viewer.id]
+    db.commit()
+
+    stub = GrafanaServiceStub()
+    stub.items = {
+        "uid-group": FakeGrafanaDatasource(id=12, uid="uid-group", name="Grouped", type="loki", url="http://x", access="proxy", isDefault=False, readOnly=False),
+        "uid-tenant": FakeGrafanaDatasource(id=13, uid="uid-tenant", name="TenantWide", type="tempo", url="http://x", access="proxy", isDefault=False, readOnly=False),
+    }
+    service = _service(stub)
+
+    visible = asyncio.run(datasource_ops.get_datasources(service, db, viewer.id, "t1", [group.id]))
+    assert {item.uid for item in visible} == {"uid-tenant"}
+
+    with_hidden = asyncio.run(datasource_ops.get_datasources(service, db, viewer.id, "t1", [group.id], show_hidden=True))
+    assert {item.uid for item in with_hidden} == {"uid-group", "uid-tenant"}
+
+
 def test_enforce_query_access_and_read_paths():
     db = _session()
     owner, viewer, outsider, group, ds_private, ds_group, ds_tenant = _seed(db)
@@ -254,7 +294,9 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
     assert created.name == "Metrics"
     assert created.visibility == "group"
     assert created.shared_group_ids == [group.id]
+    assert created.json_data.get("watchdogScopeKey") == "scope-shared"
     assert stub.create_calls[-1].name.startswith("Metrics__bo_")
+    assert stub.create_calls[-1].json_data.get("watchdogScopeKey") == "scope-shared"
 
     db_owned = db.query(GrafanaDatasource).filter_by(grafana_uid="uid-created").first()
     assert db_owned is not None
@@ -280,7 +322,9 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
     )
     assert updated.name == "Renamed"
     assert updated.visibility == "tenant"
+    assert updated.json_data.get("watchdogScopeKey") == "scope-shared"
     assert db.query(GrafanaDatasource).filter_by(grafana_uid="uid-created").first().visibility == "tenant"
+    assert stub.update_calls[-1][1].json_data.get("watchdogScopeKey") == "scope-shared"
 
     assert asyncio.run(datasource_ops.delete_datasource(service, db, "missing", viewer.id, "t1", [group.id])) is False
     stub.items["uid-created"].readOnly = True

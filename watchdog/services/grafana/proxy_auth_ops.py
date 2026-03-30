@@ -126,11 +126,11 @@ def _cache_get(token: str, method: str, path: str, tenant_id: str) -> Optional[D
 
 
 def _cache_set(token: str, method: str, path: str, tenant_id: str, headers: Dict[str, str]) -> None:
-    global proxy_auth_cache_ops
     key = _cache_key(token, method, path, tenant_id)
     now = time.monotonic()
     with PROXY_AUTH_CACHE_LOCK:
-        proxy_auth_cache_ops += 1
+        ops = proxy_auth_cache_ops + 1
+        globals()["proxy_auth_cache_ops"] = ops
         if proxy_auth_cache_ops % PROXY_AUTH_CACHE_GC_EVERY == 0:
             expired = [k for k, v in PROXY_AUTH_CACHE.items() if v["expires"] <= now]
             for k in expired:
@@ -167,6 +167,8 @@ def _required_permissions_for_path(path: str, method: str) -> Set[str]:
         if m in {"POST", "PUT", "PATCH", "DELETE"}:
             return {Permission.QUERY_DATASOURCES.value}
         return {Permission.QUERY_DATASOURCES.value, Permission.READ_DASHBOARDS.value}
+    if p.startswith("/grafana/api/frontend-metrics"):
+        return {Permission.READ_DASHBOARDS.value}
     if p.startswith("/grafana/api/datasources/proxy/"):
         return {Permission.QUERY_DATASOURCES.value}
     if p.startswith("/grafana/api/dashboards/db") and m == "POST":

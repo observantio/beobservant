@@ -62,10 +62,9 @@ def _parse_pairs(s: str) -> Dict[str, str]:
                         val_chars.append(nxt)
                     i += 2
                     continue
-                else:
-                    val_chars.append("\\")
-                    i += 1
-                    continue
+                val_chars.append("\\")
+                i += 1
+                continue
             if ch == '"':
                 i += 1
                 break

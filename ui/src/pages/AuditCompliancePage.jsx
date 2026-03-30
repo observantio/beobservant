@@ -4,15 +4,61 @@ import { Card, Input, Button, Select, Spinner, Badge } from "../components/ui";
 import { getAuditLogs, exportAuditLogs, getUsers } from "../api";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useLayoutMode } from "../contexts/LayoutModeContext";
 import { copyToClipboard } from "../utils/helpers";
 
 const DEFAULT_LIMIT = 100;
 const LIMIT_OPTIONS = [25, 50, 100, 250];
 
-function toIso(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
+function parseAuditDateInput(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+
+  // Some locale widgets render placeholder time (e.g. "--:-- --").
+  // Drop that tail so date-only filtering still works.
+  const cleaned = text
+    .replace(/[,\s]*[-–—]{2}:[-–—]{2}(?:\s*[-–—]{2}|\s*[APap][Mm])?$/, "")
+    .trim();
+  if (!cleaned) return null;
+
+  const hasIsoTime = /T\d{2}:\d{2}/.test(cleaned);
+  const native = new Date(cleaned);
+  if (!Number.isNaN(native.getTime())) {
+    return { date: native, hasTime: hasIsoTime };
+  }
+
+  const dmy = cleaned.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,\s*|\s+)?(?:(\d{1,2}):(\d{2})(?:\s*([APap][Mm]))?)?$/,
+  );
+  if (!dmy) return null;
+
+  const day = Number(dmy[1]);
+  const month = Number(dmy[2]) - 1;
+  const year = Number(dmy[3]);
+  const hasTime = dmy[4] !== undefined && dmy[5] !== undefined;
+  let hour = hasTime ? Number(dmy[4]) : 0;
+  const minute = hasTime ? Number(dmy[5]) : 0;
+  const ampm = (dmy[6] || "").toUpperCase();
+
+  if (ampm === "PM" && hour < 12) hour += 12;
+  if (ampm === "AM" && hour === 12) hour = 0;
+
+  const local = new Date(year, month, day, hour, minute, 0, 0);
+  if (Number.isNaN(local.getTime())) return null;
+  return { date: local, hasTime };
+}
+
+function toIso(value, { endOfMinute = false } = {}) {
+  const parsed = parseAuditDateInput(value);
+  if (!parsed) return "";
+  const d = new Date(parsed.date.getTime());
+  if (!parsed.hasTime) {
+    if (endOfMinute) d.setHours(23, 59, 59, 999);
+    else d.setHours(0, 0, 0, 0);
+  } else if (endOfMinute) {
+    d.setSeconds(59, 999);
+  }
   return d.toISOString();
 }
 
@@ -57,6 +103,7 @@ function highlight(text = "", q = "") {
 
 export default function AuditCompliancePage() {
   const { hasPermission } = useAuth();
+  const { sidebarMode } = useLayoutMode();
   const toast = useToast();
   const [items, setItems] = useState([]);
   const [users, setUsers] = useState([]);
@@ -98,7 +145,7 @@ export default function AuditCompliancePage() {
         const params = {
           ...queryFilters,
           start: toIso(queryFilters.start),
-          end: toIso(queryFilters.end),
+          end: toIso(queryFilters.end, { endOfMinute: true }),
           limit: requestedLimit + 1,
         };
 
@@ -165,7 +212,7 @@ export default function AuditCompliancePage() {
       const text = await exportAuditLogs({
         ...filters,
         start: toIso(filters.start),
-        end: toIso(filters.end),
+        end: toIso(filters.end, { endOfMinute: true }),
       });
       const { downloadFile } = await import("../utils/helpers");
       downloadFile(
@@ -360,7 +407,13 @@ export default function AuditCompliancePage() {
   }
 
   return (
-    <div className="animate-fade-in max-w-7xl mx-auto">
+    <div
+      className={
+        sidebarMode
+          ? "animate-fade-in w-full min-w-0"
+          : "animate-fade-in mx-auto max-w-7xl"
+      }
+    >
       <PageHeader
         icon="policy"
         title="Audit & Compliance"
@@ -372,9 +425,9 @@ export default function AuditCompliancePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 w-full">
             <div>
               <Input
-                type="datetime-local"
+                type="date"
                 label="Start"
-                helperText="dd/mm/yyyy, hh:mm"
+                helperText="dd/mm/yyyy"
                 className="h-10 max-w-full"
                 value={filters.start}
                 onChange={(e) =>
@@ -385,9 +438,9 @@ export default function AuditCompliancePage() {
 
             <div>
               <Input
-                type="datetime-local"
+                type="date"
                 label="End"
-                helperText="dd/mm/yyyy, hh:mm"
+                helperText="dd/mm/yyyy"
                 className="h-10 max-w-full"
                 value={filters.end}
                 onChange={(e) =>
@@ -436,9 +489,9 @@ export default function AuditCompliancePage() {
               }
             />
             <Input
-              label="Search details"
+              label="Search"
               className="h-10"
-              placeholder="Text in details JSON"
+              placeholder="Text match (* and ? wildcards)"
               value={filters.q}
               onChange={(e) =>
                 setFilters((prev) => ({ ...prev, q: e.target.value }))
@@ -619,7 +672,7 @@ export default function AuditCompliancePage() {
 
       {selected && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-xl dark:bg-black/50"
           onClick={() => setSelected(null)}
         >
           <div

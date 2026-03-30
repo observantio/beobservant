@@ -12,6 +12,7 @@ import RcaJobQueuePanel from "../components/rca/RcaJobQueuePanel";
 import RcaReportSummary from "../components/rca/RcaReportSummary";
 import RcaRootCauseTable from "../components/rca/RcaRootCauseTable";
 import RcaAnomalyPanels from "../components/rca/RcaAnomalyPanels";
+import RcaDistributionStatsPanel from "../components/rca/RcaDistributionStatsPanel";
 import RcaClusterPanel from "../components/rca/RcaClusterPanel";
 import RcaTopologyPanel from "../components/rca/RcaTopologyPanel";
 import RcaCausalPanel from "../components/rca/RcaCausalPanel";
@@ -30,6 +31,7 @@ const TABS = [
   { key: "summary", label: "Summary" },
   { key: "root-causes", label: "Root Causes" },
   { key: "anomalies", label: "Anomalies" },
+  { key: "statistics", label: "Statistics" },
   { key: "clusters", label: "Clusters" },
   { key: "topology", label: "Topology" },
   { key: "causal", label: "Causal" },
@@ -37,8 +39,22 @@ const TABS = [
   { key: "warnings", label: "Warnings" },
 ];
 
+function severityTextClass(severity) {
+  if (severity === "critical" || severity === "high") {
+    return "text-red-500 dark:text-red-300";
+  }
+  if (severity === "medium") return "text-sre-warning";
+  return "text-sre-success";
+}
+
 export default function RCAPage() {
   const { user } = useAuth();
+  const activeOrgScopeKey = useMemo(() => {
+    const keys = user?.api_keys || [];
+    const active =
+      keys.find((k) => k.is_enabled) || keys.find((k) => k.is_default);
+    return active?.key || user?.org_id || "";
+  }, [user]);
   const [activeTab, setActiveTab] = useLocalStorage(TAB_STORAGE_KEY, "summary");
   const [reportLookupInput, setReportLookupInput] = useState("");
   const [reportLookupId, setReportLookupId] = useState(null);
@@ -60,7 +76,7 @@ export default function RCAPage() {
     refreshJobs,
     deleteReportById,
     removeJobByReportId,
-  } = useRcaJobs();
+  } = useRcaJobs(activeOrgScopeKey);
 
   const handleView = (job) => {
     if (!job || !job.job_id) return;
@@ -91,13 +107,7 @@ export default function RCAPage() {
       {
         label: "Overall Severity",
         value: String(report.overall_severity || "UNKNOWN").toUpperCase(),
-        color:
-          report.overall_severity === "critical" ||
-          report.overall_severity === "high"
-            ? "text-sre-error"
-            : report.overall_severity === "medium"
-              ? "text-sre-warning"
-              : "text-sre-success",
+        color: severityTextClass(report.overall_severity),
       },
       {
         label: "Metric Anomalies",
@@ -270,6 +280,9 @@ export default function RCAPage() {
       anomalies: () => (
         <RcaAnomalyPanels report={report} compact={opts.compact} />
       ),
+      statistics: () => (
+        <RcaDistributionStatsPanel report={report} compact={opts.compact} />
+      ),
       clusters: () => (
         <RcaClusterPanel report={report} compact={opts.compact} />
       ),
@@ -362,8 +375,8 @@ export default function RCAPage() {
     <div className="space-y-6">
       <PageHeader
         icon="psychology"
-        title="AI Root Cause Analysis (RCA)"
-        subtitle="Generate, find, and manage tenant-scoped RCA reports through Watchdog."
+        title="Root Cause Analysis (RCA)"
+        subtitle="Heuristic and statistical RCA: generate, find, and manage tenant-scoped reports through Watchdog."
       >
         <Button variant="secondary" size="sm" onClick={refreshJobs}>
           Refresh Jobs

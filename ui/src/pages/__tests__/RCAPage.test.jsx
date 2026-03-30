@@ -1,6 +1,7 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import RCAPage from "../RCAPage";
+import { ToastProvider } from "../../contexts/ToastContext";
 
 const createJobMock = vi.fn(async () => ({
   job_id: "job-1",
@@ -73,7 +74,11 @@ describe("RCAPage", () => {
   });
 
   it("submits a create job request from composer", () => {
-    const { getByText } = render(<RCAPage />);
+    const { getByText } = render(
+      <ToastProvider>
+        <RCAPage />
+      </ToastProvider>,
+    );
     fireEvent.click(getByText("Generate Report"));
     expect(createJobMock).toHaveBeenCalledTimes(1);
     const payload = createJobMock.mock.calls[0][0];
@@ -95,7 +100,11 @@ describe("RCAPage", () => {
     reportState.reportMeta = fakeReport;
     reportState.hasReport = true;
 
-    const { queryByText, getByText } = render(<RCAPage />);
+    const { queryByText, getByText } = render(
+      <ToastProvider>
+        <RCAPage />
+      </ToastProvider>,
+    );
     expect(queryByText("Test summary")).not.toBeInTheDocument();
     expect(getByText("Overall Severity")).toBeInTheDocument();
     expect(getByText("HIGH")).toBeInTheDocument();
@@ -111,7 +120,11 @@ describe("RCAPage", () => {
     reportState.reportError = "Report not found";
     reportState.reportErrorStatus = 404;
 
-    render(<RCAPage />);
+    render(
+      <ToastProvider>
+        <RCAPage />
+      </ToastProvider>,
+    );
     await waitFor(() => {
       expect(localStorage.getItem("rcaPage.reportLookupId")).toBeNull();
     });
@@ -120,7 +133,11 @@ describe("RCAPage", () => {
     localStorage.setItem("rcaPage.selectedJobId", "stored-job");
     jobsState.jobs = [{ job_id: "stored-job" }];
 
-    render(<RCAPage />);
+    render(
+      <ToastProvider>
+        <RCAPage />
+      </ToastProvider>,
+    );
     expect(setSelectedJobIdMock).toHaveBeenCalledWith("stored-job");
   });
 
@@ -128,7 +145,11 @@ describe("RCAPage", () => {
     localStorage.setItem("rcaPage.selectedJobId", "gone-job");
     jobsState.jobs = [{ job_id: "other-job" }];
 
-    render(<RCAPage />);
+    render(
+      <ToastProvider>
+        <RCAPage />
+      </ToastProvider>,
+    );
     await waitFor(() => {
       expect(localStorage.getItem("rcaPage.selectedJobId")).toBeNull();
     });

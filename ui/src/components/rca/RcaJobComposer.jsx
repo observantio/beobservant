@@ -1,7 +1,13 @@
 import { useRef, useState } from "react";
 import PropTypes from "prop-types";
+import YAML from "yaml";
 import { Card, Button, Input, Select } from "../ui";
+import HelpTooltip from "../HelpTooltip";
 import { TIME_RANGES } from "../../utils/constants";
+import {
+  mergeMetricQueries,
+  RCA_DEFAULT_METRIC_QUERIES_FROM_DASHBOARDS,
+} from "../grafana/dashboardTemplates/metricCatalog";
 
 export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating }) {
   const [timeRangeMinutes, setTimeRangeMinutes] = useState(60);
@@ -30,7 +36,25 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
     setDownloadingTemplate(true);
     try {
       const response = await onDownloadTemplate();
-      const templateYaml = String(response?.template_yaml || "");
+      const defaults =
+        response?.defaults && typeof response.defaults === "object"
+          ? JSON.parse(JSON.stringify(response.defaults))
+          : null;
+      if (defaults) {
+        const existingQueries = Array.isArray(
+          defaults?.constants?.default_metric_queries,
+        )
+          ? defaults.constants.default_metric_queries
+          : [];
+        defaults.constants = defaults.constants || {};
+        defaults.constants.default_metric_queries = mergeMetricQueries(
+          existingQueries,
+          RCA_DEFAULT_METRIC_QUERIES_FROM_DASHBOARDS,
+        );
+      }
+      const templateYaml = defaults
+        ? YAML.stringify(defaults)
+        : String(response?.template_yaml || "");
       if (!templateYaml) return;
       const blob = new Blob([templateYaml], { type: "application/x-yaml" });
       const url = window.URL.createObjectURL(blob);
@@ -49,7 +73,12 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Select
-            label={<span className="text-sm font-medium">Time Window</span>}
+            label={
+              <span className="inline-flex items-center text-sm font-medium">
+                Time Window
+                <HelpTooltip text="Select how far back Resolver should analyze telemetry. Larger windows improve historical context but increase analysis time." />
+              </span>
+            }
             value={timeRangeMinutes}
             onChange={(e) => setTimeRangeMinutes(Number(e.target.value))}
             className="px-3 py-2 text-sm rounded-lg"
@@ -61,7 +90,12 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
             ))}
           </Select>
           <Input
-            label={<span className="text-sm font-medium">Resolution</span>}
+            label={
+              <span className="inline-flex items-center text-sm font-medium">
+                Resolution
+                <HelpTooltip text="Sampling step used for metric/log queries (for example 15s, 30s, 1m). Smaller steps give finer detail and higher query cost." />
+              </span>
+            }
             value={step}
             onChange={(e) => setStep(e.target.value)}
             className="px-3 py-2 text-sm rounded-lg"
@@ -71,7 +105,10 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
         <section className="mt-5 space-y-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-sre-text">RCA YAML Overrides</h3>
+              <h3 className="inline-flex items-center text-sm font-semibold text-sre-text">
+                RCA YAML Overrides
+                <HelpTooltip text="Override thresholds, weights, built-in queries, and analyzer tuning for this job only. Uploaded values are merged for the current run and do not change server defaults." />
+              </h3>
               <p className="mt-1 text-xs leading-relaxed text-sre-text-muted">
                 Upload a YAML file to override RCA thresholds, weights,
                 built-in queries, and analyzer tuning for this job only. When
@@ -96,7 +133,10 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
             </Button>
           </div>
           <div className="space-y-2">
-            <div className="text-sm font-medium text-sre-text">YAML File</div>
+            <div className="inline-flex items-center text-sm font-medium text-sre-text">
+              YAML File
+              <HelpTooltip text="Optional. Upload a `.yaml` or `.yml` file generated from the default template and edit only the values you want to override." />
+            </div>
             <input
               id="rca-config-yaml-upload"
               ref={fileInputRef}
@@ -105,53 +145,59 @@ export default function RcaJobComposer({ onCreate, onDownloadTemplate, creating 
               onChange={(e) => setConfigFile(e.target.files?.[0] || null)}
               className="sr-only p-3"
             />
-            <div className="flex items-center gap-3 rounded-xl bg-sre-surface/40">
-              <label htmlFor="rca-config-yaml-upload" className="w-max">
-                <span className="inline-flex cursor-pointer items-center rounded-lg border border-sre-border bg-sre-surface px-3 py-2 text-sm font-medium text-sre-text transition-all duration-200 hover:border-sre-primary hover:bg-sre-surface-light">
-                  <span
-                    className="material-icons mr-1 text-base leading-none"
-                    aria-hidden="true"
-                  >
-                    upload_file
-                  </span>
-                  Choose YAML File
-                </span>
-              </label>
-              <div className="flex min-w-0 flex-1 items-center text-sm text-sre-text-muted">
+            <div className="rounded-xl border-2 border-dashed border-sre-border bg-sre-surface/30 p-6 text-center transition-colors duration-200 hover:border-sre-primary/70 hover:bg-sre-surface/50">
+              <label
+                htmlFor="rca-config-yaml-upload"
+                className="flex cursor-pointer flex-col items-center justify-center gap-2"
+              >
                 <span
-                  className="material-icons mr-1 text-base leading-none"
+                  className="material-icons text-3xl text-sre-text-muted"
                   aria-hidden="true"
                 >
-                  {configFile ? "description" : "insert_drive_file"}
+                  upload_file
                 </span>
-                <span className="truncate">
-                  {configFile ? configFile.name : "No file chosen"}
+                <span className="inline-flex items-center rounded-lg border border-sre-border bg-sre-surface px-3 py-1.5 text-sm font-medium text-sre-text">
+                  Choose YAML File
                 </span>
-              </div>
-              {configFile && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="w-max"
-                  onClick={() => {
-                    setConfigFile(null);
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                >
+                <span className="inline-flex min-w-0 items-center gap-1 text-sm text-sre-text-muted">
                   <span
-                    className="material-icons mr-1 text-base leading-none"
+                    className="material-icons text-base leading-none"
                     aria-hidden="true"
                   >
-                    close
+                    {configFile ? "description" : "insert_drive_file"}
                   </span>
-                  Clear
-                </Button>
+                  <span className="max-w-[28rem] truncate">
+                    {configFile ? configFile.name : "No file chosen"}
+                  </span>
+                </span>
+              </label>
+              {configFile && (
+                <div className="mt-3 flex justify-center">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-max"
+                    onClick={() => {
+                      setConfigFile(null);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
+                  >
+                    <span
+                      className="material-icons mr-1 text-base leading-none"
+                      aria-hidden="true"
+                    >
+                      close
+                    </span>
+                    Clear
+                  </Button>
+                </div>
               )}
             </div>
             <p className="text-xs text-sre-text-muted">
               Optional. Upload a file generated from the default template and
-              edit only the values you want to change.
+              edit only the values you want to change. If no file is uploaded,
+              Resolver runs with server defaults.
             </p>
           </div>
         </section>

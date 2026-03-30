@@ -184,7 +184,7 @@ exporters:
 | Symptom | Likely Cause | What To Check |
 | --- | --- | --- |
 | UI loads but login fails | Auth/bootstrap mismatch | `.env`, auth provider, bootstrap values |
-| No logs/traces | Wrong token or wrong OTLP endpoint | `x-otlp-token`, `http://localhost:4320/*` |
+| No logs/traces/metrics | Wrong token or wrong OTLP endpoint | `x-otlp-token`, `http://localhost:4320/*` |
 | `/ready` stays not ready | Downstream service not healthy | `docker compose ps` + `docker compose logs` |
 | Grafana proxy access fails | Auth/proxy mismatch | browser session + `grafana-proxy` logs |
 | Alerts not firing | Rule/scope/data mismatch | org/product scope + expression + metric presence |
@@ -203,7 +203,7 @@ exporters:
 
 If docs and runtime differ, trust in this order:
 
-1. `docker-compose.yml`
+1. `docker-compose.yml` and `docker-compose.prod.yml`
 2. `.env.example`
 3. service `config.py` and route code (`watchdog`, `gatekeeper`, `notifier`, `resolver`)
 4. UI API client/route behavior

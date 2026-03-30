@@ -13,7 +13,7 @@ import secrets
 from typing import List, Optional, Set, TYPE_CHECKING
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import joinedload, Session
 
 from config import config
@@ -225,7 +225,7 @@ def create_user(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Only administrators can assign admin role",
                 )
-            if (getattr(user_create, "group_ids", None) or []):
+            if getattr(user_create, "group_ids", None):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Only administrators can assign initial group memberships",
@@ -322,7 +322,14 @@ def create_user(
         return UserSchema.model_validate(service._to_user_schema(user))
 
 
-def list_users(service: "DatabaseAuthService", tenant_id: str, *, limit: Optional[int] = None, offset: int = 0) -> List[UserSchema]:
+def list_users(
+    service: "DatabaseAuthService",
+    tenant_id: str,
+    *,
+    limit: Optional[int] = None,
+    offset: int = 0,
+    q: Optional[str] = None,
+) -> List[UserSchema]:
     service._lazy_init()
     try:
         requested_limit = int(limit) if limit is not None else int(getattr(config, "DEFAULT_QUERY_LIMIT", 100))
@@ -333,14 +340,22 @@ def list_users(service: "DatabaseAuthService", tenant_id: str, *, limit: Optiona
         raise ValueError("limit and offset must be integers") from exc
 
     with get_db_session() as db:
-        users = (
+        query = (
             db.query(User)
             .options(joinedload(User.groups), joinedload(User.api_keys))
             .filter_by(tenant_id=tenant_id)
-            .limit(limit)
-            .offset(offset)
-            .all()
         )
+        query_text = str(q or "").strip()
+        if query_text:
+            pattern = f"%{query_text.lower()}%"
+            query = query.filter(
+                or_(
+                    func.lower(func.coalesce(User.username, "")).like(pattern),
+                    func.lower(func.coalesce(User.email, "")).like(pattern),
+                    func.lower(func.coalesce(User.full_name, "")).like(pattern),
+                )
+            )
+        users = query.limit(limit).offset(offset).all()
         return [service._to_user_schema(u) for u in users]
 
 

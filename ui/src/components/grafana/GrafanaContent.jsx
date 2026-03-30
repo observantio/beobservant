@@ -25,7 +25,10 @@ export default function GrafanaContent({
   openDatasourceEditor,
   onDeleteDatasource,
   onToggleDatasourceHidden,
+  onViewDatasourceMetrics,
   getDatasourceIcon,
+  getDatasourceKeyName,
+  dashboardKeyNamesByUid,
   onCreateFolder,
   onEditFolder,
   onDeleteFolder,
@@ -56,6 +59,7 @@ export default function GrafanaContent({
         onOpenGrafana={onOpenGrafana}
         onDeleteDashboard={onDeleteDashboard}
         onToggleHidden={onToggleDashboardHidden}
+        dashboardKeyNamesByUid={dashboardKeyNamesByUid}
       />
     );
   }
@@ -65,6 +69,8 @@ export default function GrafanaContent({
       <DatasourcesTab
         datasources={datasources}
         groups={groups}
+        query={query}
+        setQuery={setQuery}
         filters={filters}
         setFilters={setFilters}
         onSearch={onSearch}
@@ -73,7 +79,9 @@ export default function GrafanaContent({
         openDatasourceEditor={openDatasourceEditor}
         onDeleteDatasource={onDeleteDatasource}
         onToggleHidden={onToggleDatasourceHidden}
+        onViewMetrics={onViewDatasourceMetrics}
         getDatasourceIcon={getDatasourceIcon}
+        getDatasourceKeyName={getDatasourceKeyName}
       />
     );
   }
@@ -115,8 +123,11 @@ GrafanaContent.propTypes = {
   openDatasourceEditor: PropTypes.func.isRequired,
   onDeleteDatasource: PropTypes.func.isRequired,
   onToggleDatasourceHidden: PropTypes.func,
+  onViewDatasourceMetrics: PropTypes.func,
   onEditDatasourceLabels: PropTypes.func,
   getDatasourceIcon: PropTypes.func.isRequired,
+  getDatasourceKeyName: PropTypes.func,
+  dashboardKeyNamesByUid: PropTypes.object,
   onCreateFolder: PropTypes.func.isRequired,
   onEditFolder: PropTypes.func.isRequired,
   onDeleteFolder: PropTypes.func.isRequired,

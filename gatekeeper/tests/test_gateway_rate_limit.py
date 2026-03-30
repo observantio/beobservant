@@ -41,6 +41,18 @@ class GatewayRateLimitTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             limiter.enforce("client-a")
 
+    def test_in_memory_gateway_limiter_allows_exact_threshold(self):
+        limiter = TokenRateLimiter(limit_per_minute=2)
+        limiter.enforce("client-threshold")
+        limiter.enforce("client-threshold")
+
+    def test_in_memory_gateway_limiter_isolated_per_token(self):
+        limiter = TokenRateLimiter(limit_per_minute=1)
+        limiter.enforce("client-a")
+        limiter.enforce("client-b")
+        with self.assertRaises(HTTPException):
+            limiter.enforce("client-a")
+
     def test_hybrid_gateway_limiter_falls_back_to_memory(self):
         fallback = TokenRateLimiter(limit_per_minute=1)
         limiter = HybridTokenRateLimiter(_BrokenPrimaryRateLimiter(), fallback)
@@ -68,7 +80,6 @@ class GatewayRateLimitTests(unittest.TestCase):
             os.environ["GATEWAY_ALLOWLIST_FAIL_OPEN"] = "true"
             importlib.reload(__import__("config", fromlist=["*"]))
             importlib.reload(__import__("services.gateway_service", fromlist=["*"]))
-            from services.gateway_service import GatewayAuthService
             service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
             service.enforce_ip_allowlist(_request("198.51.100.1"))
         finally:
@@ -83,7 +94,7 @@ class GatewayRateLimitTests(unittest.TestCase):
         service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
         from services import gateway_service as gw_mod
 
-        def boom(self, token):
+        def boom(_self, _token):
             raise gw_mod.DatabaseUnavailable("api down")
 
         prev = GatewayAuthService._fetch_org_from_api
@@ -133,7 +144,7 @@ class GatewayRateLimitTests(unittest.TestCase):
         service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
         calls: list[str] = []
 
-        def fetch(self, token):
+        def fetch(_self, token):
             calls.append(token)
             return "org42"
 
@@ -151,9 +162,8 @@ class GatewayRateLimitTests(unittest.TestCase):
         service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
         calls: list[str] = []
 
-        def fetch(self, token):
+        def fetch(_self, token):
             calls.append(token)
-            return None
 
         prev = GatewayAuthService._fetch_org_from_api
         try:
@@ -186,7 +196,7 @@ class GatewayRateLimitTests(unittest.TestCase):
 
         orig_init = RedisTokenRateLimiter.__init__
         try:
-            def fail(self, *args, **kwargs):
+            def fail(self, *_args, **_kwargs):
                 raise RuntimeError("no redis")
 
             RedisTokenRateLimiter.__init__ = fail
@@ -194,7 +204,7 @@ class GatewayRateLimitTests(unittest.TestCase):
                 make_default_rate_limiter(1, backend="redis", redis_url=None)
             with self.assertRaises(RuntimeError):
                 make_default_rate_limiter(1, backend="redis", redis_url="redis://localhost")
-            def ok_init(self, limit, url, *args, **kwargs):
+            def ok_init(self, limit, _url, *_args, **_kwargs):
                 self._limit = limit
                 self.enforce = lambda key: None
 

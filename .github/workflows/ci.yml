@@ -29,7 +29,10 @@ jobs:
 
       - run: npm run lint
       - run: npm run build
-      - run: npm test -- --run
+      - run: npm test -- --run --coverage
+      - name: Enforce UI coverage = 100%
+        run: |
+          node -e "const j=require('./coverage/coverage-summary.json'); const bad=[]; for(const [k,v] of Object.entries(j)){ for(const m of ['lines','branches','functions','statements']){ if(v[m].pct!==100){ bad.push({scope:k,metric:m,pct:v[m].pct}); } } } if(bad.length){ console.error('Coverage must be exactly 100% for all metrics.'); console.error(JSON.stringify(bad,null,2)); process.exit(1);} console.log('Coverage gate passed: 100% for all metrics.');"
 
   gateway:
     name: Gateway tests (pytest)
@@ -50,10 +53,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          python -m pip install pytest pytest-asyncio
+          python -m pip install pytest pytest-asyncio pytest-cov
 
       - name: Run Gateway tests
-        run: pytest -q
+        run: |
+          pytest -c "${{ github.workspace }}/pyproject.toml" \
+            --cov=. \
+            --cov-branch \
+            --cov-report=term-missing:skip-covered \
+            --cov-fail-under=100 \
+            -q tests
 
   server:
     name: Server tests (pytest)
@@ -72,10 +81,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          python -m pip install pytest pytest-asyncio
+          python -m pip install pytest pytest-asyncio pytest-cov
 
       - name: Run server tests
-        run: pytest -q
+        run: |
+          pytest -c "${{ github.workspace }}/pyproject.toml" \
+            --cov=. \
+            --cov-branch \
+            --cov-report=term-missing:skip-covered \
+            --cov-fail-under=100 \
+            -q tests
 
   backend-quality:
     name: ${{ matrix.name }} quality (mypy, pylint)
@@ -87,14 +102,11 @@ jobs:
           - name: Gateway
             service: gatekeeper
             requirements: gatekeeper/requirements.txt
-            mypy_config: mypy.ini
             extra_packages: ""
             run_pylint: "false"
           - name: Watchdog
             service: watchdog
             requirements: watchdog/requirements.txt
-            mypy_config: mypy.ini
-            pylint_config: .pylintrc
             extra_packages: "types-psutil"
             run_pylint: "true"
     env:
@@ -138,7 +150,7 @@ jobs:
 
       - name: Run mypy
         working-directory: ${{ matrix.service }}
-        run: mypy --config-file "${{ matrix.mypy_config }}" .
+        run: mypy --config-file "${{ github.workspace }}/pyproject.toml" .
 
       - name: Run pylint
         if: matrix.run_pylint == 'true'
@@ -154,4 +166,4 @@ jobs:
             ! -name dist \
             ! -name tmp \
             ! -name vendor | sort)"
-          pylint --rcfile "${{ github.workspace }}/${{ matrix.service }}/${{ matrix.pylint_config }}" $TARGETS
+          pylint --rcfile "${{ github.workspace }}/pyproject.toml" $TARGETS

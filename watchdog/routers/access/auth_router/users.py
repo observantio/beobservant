@@ -79,8 +79,24 @@ async def list_users(
             "auth",
         )
     ),
+    q: str | None = Query(None),
 ) -> List[UserResponse]:
-    users = await rtp(auth_service.list_users, current_user.tenant_id, limit=limit, offset=offset)
+    query_text = str(q or "").strip()
+    if query_text:
+        users = await rtp(
+            auth_service.list_users,
+            current_user.tenant_id,
+            limit=limit,
+            offset=offset,
+            q=query_text,
+        )
+    else:
+        users = await rtp(
+            auth_service.list_users,
+            current_user.tenant_id,
+            limit=limit,
+            offset=offset,
+        )
     return [await rtp(auth_service.build_user_response, user, role_permission_strings(user.role)) for user in users]
 
 

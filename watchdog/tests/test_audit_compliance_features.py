@@ -66,13 +66,19 @@ class AuditComplianceFeatureTests(unittest.TestCase):
         os.environ["DATABASE_URL"] = "sqlite:///:memory:"
         import database
         from services import database_auth_service as das_mod
+        from services.internal_service import InternalService
         with patch.object(database, "init_database", lambda *args, **kwargs: None), patch.object(
             database, "init_db", lambda *args, **kwargs: None
         ), patch.object(das_mod.DatabaseAuthService, "_lazy_init", lambda self: None), patch.object(
             das_mod.DatabaseAuthService, "_ensure_default_setup", lambda self: None
-        ), patch.object(das_mod.DatabaseAuthService, "backfill_otlp_tokens", lambda self: None):
+        ), patch.object(das_mod.DatabaseAuthService, "backfill_otlp_tokens", lambda self: None), patch.object(
+            InternalService,
+            "_get_internal_token",
+            lambda self: "internal-test-token",
+        ):
             # reload main in case it has been imported earlier by other tests
             sys.modules.pop("main", None)
+            sys.modules.pop("watchdog.main", None)
             from main import app
 
             client = TestClient(app)

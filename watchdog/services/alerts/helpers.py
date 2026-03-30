@@ -1,5 +1,5 @@
 """
-Utility functions for alert-related operations, including permission checks, silence handling, and proxying to Be Notified.
+Utility functions for alert-related operations, including permission checks, silence handling, and proxying to Notifier.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
@@ -72,7 +72,7 @@ def required_permissions(path: str, method: str) -> Optional[Set[str]]:
             return {Permission.READ_INCIDENTS.value, Permission.UPDATE_INCIDENTS.value, Permission.READ_CHANNELS.value}
         return {Permission.UPDATE_INCIDENTS.value}
 
-    if p == "/metrics/names":
+    if p in {"/metrics/names", "/metrics/query", "/metrics/labels"} or p.startswith("/metrics/label-values/"):
         return {Permission.READ_METRICS.value, Permission.CREATE_RULES.value, Permission.UPDATE_RULES.value, Permission.WRITE_ALERTS.value}
 
     if p == "/public/rules":
@@ -87,7 +87,7 @@ def check_permissions(current_user: TokenData, required: Set[str]) -> None:
     if not set(current_user.permissions or []).intersection(required):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"You do not have permission to communicate with Be Notified. Required permissions: {', '.join(required)}",
+            detail=f"You do not have permission to communicate with Notifier. Required permissions: {', '.join(required)}",
         )
 
 

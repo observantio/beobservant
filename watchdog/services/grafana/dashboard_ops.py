@@ -589,7 +589,7 @@ async def create_dashboard(
                 status_code=403,
                 detail="Missing permission to create dashboards",
             )
-        if visibility != "private" or (shared_group_ids or []):
+        if visibility != "private" or shared_group_ids:
             raise HTTPException(
                 status_code=403,
                 detail="Delegated folder dashboard creation only supports private visibility",
@@ -624,7 +624,6 @@ async def create_dashboard(
                 service._raise_http_from_grafana_error(retry_exc)
         else:
             service._raise_http_from_grafana_error(exc)
-        return None
 
     if not result:
         return None

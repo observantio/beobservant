@@ -24,7 +24,7 @@ from services.tempo_service import TempoService
 tempo_service = TempoService()
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     yield
     await tempo_service.aclose()
 

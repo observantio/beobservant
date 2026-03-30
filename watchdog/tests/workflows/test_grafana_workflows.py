@@ -62,7 +62,10 @@ def test_grafana_proxy_folder_and_dashboard_workflows(client, monkeypatch: pytes
 
     bootstrap_response = client.post("/api/grafana/bootstrap-session", headers=admin_headers, json={"next": "/d/overview"})
     assert bootstrap_response.status_code == 200
-    assert bootstrap_response.json() == {"launch_url": "/grafana/d/overview"}
+    assert bootstrap_response.json() == {
+        "launch_url": "/grafana/d/overview?org-key=observantio-default",
+        "org_key": "observantio-default",
+    }
 
     private_folder = client.post("/api/grafana/folders?visibility=private", headers=admin_headers, json={"title": "Private Folder", "allowDashboardWrites": False})
     group_folder = client.post(f"/api/grafana/folders?visibility=group&shared_group_ids={group_id}", headers=admin_headers, json={"title": "Group Folder", "allowDashboardWrites": True})
@@ -167,6 +170,7 @@ def test_grafana_datasource_query_and_visibility_workflow(client, monkeypatch: p
     monkeypatch.setattr(datasources.proxy, "get_datasources", state.get_datasources)
     monkeypatch.setattr(datasources.proxy, "get_datasource", state.get_datasource)
     monkeypatch.setattr(datasources.proxy, "create_datasource", state.create_datasource)
+    monkeypatch.setattr(datasources.proxy, "build_datasource_list_context", state.build_datasource_list_context)
     monkeypatch.setattr(datasources.proxy, "update_datasource", state.update_datasource)
     monkeypatch.setattr(datasources.proxy, "delete_datasource", state.delete_datasource)
     monkeypatch.setattr(datasources.proxy, "toggle_datasource_hidden", state.toggle_datasource_hidden)
@@ -230,3 +234,553 @@ def test_grafana_datasource_query_and_visibility_workflow(client, monkeypatch: p
 
     delete_ds_response = client.delete(f"/api/grafana/datasources/{group_ds_uid}", headers=admin_headers)
     assert delete_ds_response.status_code == 200
+
+
+def test_grafana_permission_denials_for_read_only_user_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    monkeypatch.setattr(dashboards, "parse_dashboard_create_payload", lambda raw: raw)
+    monkeypatch.setattr(dashboards, "parse_dashboard_update_payload", lambda raw: raw)
+    monkeypatch.setattr(dashboards.proxy, "get_dashboard_metadata", state.get_dashboard_metadata)
+    monkeypatch.setattr(dashboards.proxy, "build_dashboard_search_context", state.build_dashboard_search_context)
+    monkeypatch.setattr(dashboards.proxy, "create_dashboard", state.create_dashboard)
+    monkeypatch.setattr(dashboards.proxy, "update_dashboard", state.update_dashboard)
+    monkeypatch.setattr(dashboards.proxy, "delete_dashboard", state.delete_dashboard)
+    monkeypatch.setattr(dashboards.proxy, "toggle_dashboard_hidden", state.toggle_dashboard_hidden)
+    monkeypatch.setattr(dashboards.proxy, "search_dashboards", state.search_dashboards)
+    monkeypatch.setattr(dashboards.proxy, "get_dashboard", state.get_dashboard)
+    monkeypatch.setattr(folders.proxy, "create_folder", state.create_folder)
+    monkeypatch.setattr(folders.proxy, "update_folder", state.update_folder)
+    monkeypatch.setattr(folders.proxy, "delete_folder", state.delete_folder)
+    monkeypatch.setattr(folders.proxy, "toggle_folder_hidden", state.toggle_folder_hidden)
+    monkeypatch.setattr(folders.proxy, "get_folders", state.get_folders)
+    monkeypatch.setattr(datasources.proxy, "query_datasource", state.query_datasource)
+    monkeypatch.setattr(datasources.proxy, "create_datasource", state.create_datasource)
+    monkeypatch.setattr(datasources.proxy, "update_datasource", state.update_datasource)
+    monkeypatch.setattr(datasources.proxy, "delete_datasource", state.delete_datasource)
+    monkeypatch.setattr(datasources.proxy, "toggle_datasource_hidden", state.toggle_datasource_hidden)
+    monkeypatch.setattr(datasources.proxy, "get_datasources", state.get_datasources)
+    monkeypatch.setattr(datasources.proxy, "build_datasource_list_context", state.build_datasource_list_context)
+
+    admin_headers = state.auth_header("token-u-admin")
+
+    seeded_folder_response = client.post(
+        "/api/grafana/folders?visibility=tenant",
+        headers=admin_headers,
+        json={"title": "Seed Folder", "allowDashboardWrites": True},
+    )
+    assert seeded_folder_response.status_code == 200
+    seeded_folder_id = seeded_folder_response.json()["id"]
+
+    seeded_dashboard_response = client.post(
+        "/api/grafana/dashboards?visibility=tenant",
+        headers=admin_headers,
+        json={"dashboard": {"uid": "ro-seeded-dash", "title": "RO Seed"}, "folderId": seeded_folder_id},
+    )
+    assert seeded_dashboard_response.status_code == 200
+
+    seeded_datasource_response = client.post(
+        "/api/grafana/datasources?visibility=tenant",
+        headers=admin_headers,
+        json={"name": "seeded-ds", "type": "prometheus", "url": "http://prom-seeded"},
+    )
+    assert seeded_datasource_response.status_code == 200
+    seeded_datasource_uid = seeded_datasource_response.json()["uid"]
+    seeded_folder_uid = seeded_folder_response.json()["uid"]
+
+    read_only_user_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={
+            "username": "grafana-readonly",
+            "email": "grafana-readonly@example.com",
+            "password": "password123",
+            "role": "viewer",
+        },
+    )
+    assert read_only_user_response.status_code == 200
+    read_only_user_id = read_only_user_response.json()["id"]
+
+    grant_read_permissions_response = client.put(
+        f"/api/auth/users/{read_only_user_id}/permissions",
+        headers=admin_headers,
+        json=["read:dashboards", "read:folders", "read:datasources"],
+    )
+    assert grant_read_permissions_response.status_code == 200
+    read_only_headers = state.auth_header(f"token-{read_only_user_id}")
+
+    assert client.get("/api/grafana/dashboards/search", headers=read_only_headers).status_code == 200
+    assert client.get("/api/grafana/folders", headers=read_only_headers).status_code == 200
+    assert client.get("/api/grafana/datasources", headers=read_only_headers).status_code == 200
+
+    assert client.post(
+        "/api/grafana/folders?visibility=tenant",
+        headers=read_only_headers,
+        json={"title": "Blocked Folder", "allowDashboardWrites": True},
+    ).status_code == 403
+
+    assert client.post(
+        "/api/grafana/dashboards?visibility=tenant",
+        headers=read_only_headers,
+        json={"dashboard": {"uid": "blocked-dash", "title": "Blocked"}, "folderId": seeded_folder_id},
+    ).status_code == 403
+
+    assert client.put(
+        "/api/grafana/dashboards/ro-seeded-dash?visibility=tenant",
+        headers=read_only_headers,
+        json={"dashboard": {"uid": "ro-seeded-dash", "title": "Blocked Update"}, "folderId": seeded_folder_id},
+    ).status_code == 403
+
+    assert client.post(
+        "/api/grafana/dashboards/db",
+        headers=read_only_headers,
+        json={"dashboard": {"uid": "ro-seeded-dash", "title": "Blocked Save"}, "folderId": seeded_folder_id},
+    ).status_code == 403
+
+    assert client.delete("/api/grafana/dashboards/ro-seeded-dash", headers=read_only_headers).status_code == 403
+
+    assert client.post(
+        "/api/grafana/dashboards/ro-seeded-dash/hide",
+        headers=read_only_headers,
+        json={"hidden": True},
+    ).status_code == 403
+
+    assert client.put(
+        f"/api/grafana/folders/{seeded_folder_uid}?visibility=tenant",
+        headers=read_only_headers,
+        json={"title": "Blocked Folder Update", "allowDashboardWrites": True},
+    ).status_code == 403
+
+    assert client.delete(f"/api/grafana/folders/{seeded_folder_uid}", headers=read_only_headers).status_code == 403
+
+    assert client.post(
+        f"/api/grafana/folders/{seeded_folder_uid}/hide",
+        headers=read_only_headers,
+        json={"hidden": True},
+    ).status_code == 403
+
+    assert client.post(
+        "/api/grafana/datasources?visibility=tenant",
+        headers=read_only_headers,
+        json={"name": "blocked-ds", "type": "prometheus", "url": "http://prom"},
+    ).status_code == 403
+
+    assert client.put(
+        f"/api/grafana/datasources/{seeded_datasource_uid}?visibility=tenant",
+        headers=read_only_headers,
+        json={"name": "blocked-ds-update", "url": "http://prom-updated"},
+    ).status_code == 403
+
+    assert client.delete(f"/api/grafana/datasources/{seeded_datasource_uid}", headers=read_only_headers).status_code == 403
+
+    assert client.post(
+        f"/api/grafana/datasources/{seeded_datasource_uid}/hide",
+        headers=read_only_headers,
+        json={"hidden": True},
+    ).status_code == 403
+
+    assert client.post(
+        "/api/grafana/ds/query",
+        headers=read_only_headers,
+        json={"queries": [{"expr": "sum(rate(http_requests_total[5m]))"}]},
+    ).status_code == 403
+
+
+def test_grafana_group_datasource_access_tracks_membership_changes_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    monkeypatch.setattr(datasources.proxy, "get_datasources", state.get_datasources)
+    monkeypatch.setattr(datasources.proxy, "get_datasource", state.get_datasource)
+    monkeypatch.setattr(datasources.proxy, "create_datasource", state.create_datasource)
+    monkeypatch.setattr(datasources.proxy, "build_datasource_list_context", state.build_datasource_list_context)
+
+    admin_headers = state.auth_header("token-u-admin")
+
+    group_response = client.post(
+        "/api/auth/groups",
+        headers=admin_headers,
+        json={"name": "membership-ds", "description": "Datasource membership gate"},
+    )
+    assert group_response.status_code == 200
+    group_id = group_response.json()["id"]
+
+    user_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "member-ds", "email": "member-ds@example.com", "password": "password123"},
+    )
+    assert user_response.status_code == 200
+    user_id = user_response.json()["id"]
+    user_headers = state.auth_header(f"token-{user_id}")
+
+    grant_permissions_response = client.put(
+        f"/api/auth/users/{user_id}/permissions",
+        headers=admin_headers,
+        json=["read:datasources"],
+    )
+    assert grant_permissions_response.status_code == 200
+
+    add_member_response = client.put(
+        f"/api/auth/groups/{group_id}/members",
+        headers=admin_headers,
+        json={"user_ids": [user_id]},
+    )
+    assert add_member_response.status_code == 200
+
+    create_ds_response = client.post(
+        f"/api/grafana/datasources?visibility=group&shared_group_ids={group_id}",
+        headers=admin_headers,
+        json={"name": "membership-tempo", "type": "tempo", "url": "http://tempo-membership"},
+    )
+    assert create_ds_response.status_code == 200
+    datasource_uid = create_ds_response.json()["uid"]
+
+    before_removal_list = client.get("/api/grafana/datasources", headers=user_headers)
+    assert before_removal_list.status_code == 200
+    assert {item["uid"] for item in before_removal_list.json()} == {datasource_uid}
+    assert client.get(f"/api/grafana/datasources/{datasource_uid}", headers=user_headers).status_code == 200
+
+    remove_member_response = client.put(
+        f"/api/auth/groups/{group_id}/members",
+        headers=admin_headers,
+        json={"user_ids": []},
+    )
+    assert remove_member_response.status_code == 200
+
+    after_removal_list = client.get("/api/grafana/datasources", headers=user_headers)
+    assert after_removal_list.status_code == 200
+    assert after_removal_list.json() == []
+    assert client.get(f"/api/grafana/datasources/{datasource_uid}", headers=user_headers).status_code == 404
+
+    restore_member_response = client.put(
+        f"/api/auth/groups/{group_id}/members",
+        headers=admin_headers,
+        json={"user_ids": [user_id]},
+    )
+    assert restore_member_response.status_code == 200
+
+    after_restore_list = client.get("/api/grafana/datasources", headers=user_headers)
+    assert after_restore_list.status_code == 200
+    assert {item["uid"] for item in after_restore_list.json()} == {datasource_uid}
+
+
+def test_grafana_dashboard_and_folder_hide_unhide_roundtrip_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    monkeypatch.setattr(dashboards, "parse_dashboard_create_payload", lambda raw: raw)
+    monkeypatch.setattr(dashboards.proxy, "build_dashboard_search_context", state.build_dashboard_search_context)
+    monkeypatch.setattr(dashboards.proxy, "search_dashboards", state.search_dashboards)
+    monkeypatch.setattr(dashboards.proxy, "create_dashboard", state.create_dashboard)
+    monkeypatch.setattr(dashboards.proxy, "toggle_dashboard_hidden", state.toggle_dashboard_hidden)
+    monkeypatch.setattr(folders.proxy, "create_folder", state.create_folder)
+    monkeypatch.setattr(folders.proxy, "get_folders", state.get_folders)
+    monkeypatch.setattr(folders.proxy, "toggle_folder_hidden", state.toggle_folder_hidden)
+
+    admin_headers = state.auth_header("token-u-admin")
+
+    user_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "hide-user", "email": "hide-user@example.com", "password": "password123"},
+    )
+    assert user_response.status_code == 200
+    user_id = user_response.json()["id"]
+    user_headers = state.auth_header(f"token-{user_id}")
+
+    permission_response = client.put(
+        f"/api/auth/users/{user_id}/permissions",
+        headers=admin_headers,
+        json=[
+            "read:dashboards",
+            "update:dashboards",
+            "read:folders",
+            "create:folders",
+            "delete:folders",
+        ],
+    )
+    assert permission_response.status_code == 200
+
+    folder_response = client.post(
+        "/api/grafana/folders?visibility=tenant",
+        headers=admin_headers,
+        json={"title": "Hide Roundtrip Folder", "allowDashboardWrites": True},
+    )
+    assert folder_response.status_code == 200
+    folder_uid = folder_response.json()["uid"]
+    folder_id = folder_response.json()["id"]
+
+    dashboard_response = client.post(
+        "/api/grafana/dashboards?visibility=tenant",
+        headers=admin_headers,
+        json={"dashboard": {"uid": "hide-roundtrip-dash", "title": "Hide Roundtrip Dash"}, "folderId": folder_id},
+    )
+    assert dashboard_response.status_code == 200
+
+    hide_folder_response = client.post(
+        f"/api/grafana/folders/{folder_uid}/hide",
+        headers=user_headers,
+        json={"hidden": True},
+    )
+    assert hide_folder_response.status_code == 200
+
+    hide_dashboard_response = client.post(
+        "/api/grafana/dashboards/hide-roundtrip-dash/hide",
+        headers=user_headers,
+        json={"hidden": True},
+    )
+    assert hide_dashboard_response.status_code == 200
+
+    folders_default = client.get("/api/grafana/folders", headers=user_headers)
+    assert folders_default.status_code == 200
+    assert all(item["uid"] != folder_uid for item in folders_default.json())
+
+    dashboards_default = client.get("/api/grafana/dashboards/search", headers=user_headers)
+    assert dashboards_default.status_code == 200
+    assert all(item["uid"] != "hide-roundtrip-dash" for item in dashboards_default.json())
+
+    folders_hidden = client.get("/api/grafana/folders?show_hidden=true", headers=user_headers)
+    assert folders_hidden.status_code == 200
+    assert any(item["uid"] == folder_uid and item["isHidden"] is True for item in folders_hidden.json())
+
+    dashboards_hidden = client.get("/api/grafana/dashboards/search?show_hidden=true", headers=user_headers)
+    assert dashboards_hidden.status_code == 200
+    assert any(item["uid"] == "hide-roundtrip-dash" and item["is_hidden"] is True for item in dashboards_hidden.json())
+
+    unhide_folder_response = client.post(
+        f"/api/grafana/folders/{folder_uid}/hide",
+        headers=user_headers,
+        json={"hidden": False},
+    )
+    assert unhide_folder_response.status_code == 200
+
+    unhide_dashboard_response = client.post(
+        "/api/grafana/dashboards/hide-roundtrip-dash/hide",
+        headers=user_headers,
+        json={"hidden": False},
+    )
+    assert unhide_dashboard_response.status_code == 200
+
+    folders_after_unhide = client.get("/api/grafana/folders", headers=user_headers)
+    assert folders_after_unhide.status_code == 200
+    assert any(item["uid"] == folder_uid for item in folders_after_unhide.json())
+
+    dashboards_after_unhide = client.get("/api/grafana/dashboards/search", headers=user_headers)
+    assert dashboards_after_unhide.status_code == 200
+    assert any(item["uid"] == "hide-roundtrip-dash" for item in dashboards_after_unhide.json())
+
+
+def test_grafana_hide_visibility_is_user_specific_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    monkeypatch.setattr(dashboards, "parse_dashboard_create_payload", lambda raw: raw)
+    monkeypatch.setattr(dashboards.proxy, "build_dashboard_search_context", state.build_dashboard_search_context)
+    monkeypatch.setattr(dashboards.proxy, "search_dashboards", state.search_dashboards)
+    monkeypatch.setattr(dashboards.proxy, "create_dashboard", state.create_dashboard)
+    monkeypatch.setattr(dashboards.proxy, "toggle_dashboard_hidden", state.toggle_dashboard_hidden)
+    monkeypatch.setattr(folders.proxy, "create_folder", state.create_folder)
+    monkeypatch.setattr(folders.proxy, "get_folders", state.get_folders)
+    monkeypatch.setattr(folders.proxy, "toggle_folder_hidden", state.toggle_folder_hidden)
+
+    admin_headers = state.auth_header("token-u-admin")
+
+    user_a = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "hide-a", "email": "hide-a@example.com", "password": "password123"},
+    )
+    user_b = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "hide-b", "email": "hide-b@example.com", "password": "password123"},
+    )
+    assert user_a.status_code == 200
+    assert user_b.status_code == 200
+    user_a_id = user_a.json()["id"]
+    user_b_id = user_b.json()["id"]
+    user_a_headers = state.auth_header(f"token-{user_a_id}")
+    user_b_headers = state.auth_header(f"token-{user_b_id}")
+
+    for uid in (user_a_id, user_b_id):
+        perm_response = client.put(
+            f"/api/auth/users/{uid}/permissions",
+            headers=admin_headers,
+            json=[
+                "read:dashboards",
+                "update:dashboards",
+                "read:folders",
+                "create:folders",
+                "delete:folders",
+            ],
+        )
+        assert perm_response.status_code == 200
+
+    folder_response = client.post(
+        "/api/grafana/folders?visibility=tenant",
+        headers=admin_headers,
+        json={"title": "Per User Hide Folder", "allowDashboardWrites": True},
+    )
+    assert folder_response.status_code == 200
+    folder_uid = folder_response.json()["uid"]
+    folder_id = folder_response.json()["id"]
+
+    dashboard_response = client.post(
+        "/api/grafana/dashboards?visibility=tenant",
+        headers=admin_headers,
+        json={"dashboard": {"uid": "per-user-hide-dash", "title": "Per User Hide Dash"}, "folderId": folder_id},
+    )
+    assert dashboard_response.status_code == 200
+
+    hide_for_a_folder = client.post(
+        f"/api/grafana/folders/{folder_uid}/hide",
+        headers=user_a_headers,
+        json={"hidden": True},
+    )
+    hide_for_a_dashboard = client.post(
+        "/api/grafana/dashboards/per-user-hide-dash/hide",
+        headers=user_a_headers,
+        json={"hidden": True},
+    )
+    assert hide_for_a_folder.status_code == 200
+    assert hide_for_a_dashboard.status_code == 200
+
+    folders_for_a = client.get("/api/grafana/folders", headers=user_a_headers)
+    folders_for_b = client.get("/api/grafana/folders", headers=user_b_headers)
+    assert folders_for_a.status_code == 200
+    assert folders_for_b.status_code == 200
+    assert all(item["uid"] != folder_uid for item in folders_for_a.json())
+    assert any(item["uid"] == folder_uid for item in folders_for_b.json())
+
+    dashboards_for_a = client.get("/api/grafana/dashboards/search", headers=user_a_headers)
+    dashboards_for_b = client.get("/api/grafana/dashboards/search", headers=user_b_headers)
+    assert dashboards_for_a.status_code == 200
+    assert dashboards_for_b.status_code == 200
+    assert all(item["uid"] != "per-user-hide-dash" for item in dashboards_for_a.json())
+    assert any(item["uid"] == "per-user-hide-dash" for item in dashboards_for_b.json())
+
+
+def test_grafana_hidden_datasource_default_and_show_hidden_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    monkeypatch.setattr(datasources.proxy, "get_datasources", state.get_datasources)
+    monkeypatch.setattr(datasources.proxy, "get_datasource", state.get_datasource)
+    monkeypatch.setattr(datasources.proxy, "create_datasource", state.create_datasource)
+    monkeypatch.setattr(datasources.proxy, "toggle_datasource_hidden", state.toggle_datasource_hidden)
+    monkeypatch.setattr(datasources.proxy, "build_datasource_list_context", state.build_datasource_list_context)
+
+    admin_headers = state.auth_header("token-u-admin")
+
+    user_response = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "hidden-ds-user", "email": "hidden-ds-user@example.com", "password": "password123"},
+    )
+    assert user_response.status_code == 200
+    user_id = user_response.json()["id"]
+    user_headers = state.auth_header(f"token-{user_id}")
+
+    permission_response = client.put(
+        f"/api/auth/users/{user_id}/permissions",
+        headers=admin_headers,
+        json=["read:datasources", "create:datasources", "update:datasources"],
+    )
+    assert permission_response.status_code == 200
+
+    ds_response = client.post(
+        "/api/grafana/datasources?visibility=tenant",
+        headers=admin_headers,
+        json={"name": "hidden-ds", "type": "prometheus", "url": "http://hidden-ds"},
+    )
+    assert ds_response.status_code == 200
+    ds_uid = ds_response.json()["uid"]
+
+    hide_response = client.post(
+        f"/api/grafana/datasources/{ds_uid}/hide",
+        headers=user_headers,
+        json={"hidden": True},
+    )
+    assert hide_response.status_code == 200
+
+    default_list = client.get("/api/grafana/datasources", headers=user_headers)
+    show_hidden_list = client.get("/api/grafana/datasources?show_hidden=true", headers=user_headers)
+    assert default_list.status_code == 200
+    assert show_hidden_list.status_code == 200
+    assert all(item["uid"] != ds_uid for item in default_list.json())
+    assert any(item["uid"] == ds_uid and item["is_hidden"] is True for item in show_hidden_list.json())
+
+    direct_get_hidden = client.get(f"/api/grafana/datasources/{ds_uid}", headers=user_headers)
+    assert direct_get_hidden.status_code == 404
+
+
+def test_grafana_datasource_hide_unhide_is_user_specific_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+
+    monkeypatch.setattr(datasources.proxy, "get_datasources", state.get_datasources)
+    monkeypatch.setattr(datasources.proxy, "create_datasource", state.create_datasource)
+    monkeypatch.setattr(datasources.proxy, "toggle_datasource_hidden", state.toggle_datasource_hidden)
+    monkeypatch.setattr(datasources.proxy, "build_datasource_list_context", state.build_datasource_list_context)
+
+    admin_headers = state.auth_header("token-u-admin")
+
+    user_a = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "dshide-a", "email": "dshide-a@example.com", "password": "password123"},
+    )
+    user_b = client.post(
+        "/api/auth/users",
+        headers=admin_headers,
+        json={"username": "dshide-b", "email": "dshide-b@example.com", "password": "password123"},
+    )
+    assert user_a.status_code == 200
+    assert user_b.status_code == 200
+    user_a_id = user_a.json()["id"]
+    user_b_id = user_b.json()["id"]
+    user_a_headers = state.auth_header(f"token-{user_a_id}")
+    user_b_headers = state.auth_header(f"token-{user_b_id}")
+
+    for uid in (user_a_id, user_b_id):
+        perm_response = client.put(
+            f"/api/auth/users/{uid}/permissions",
+            headers=admin_headers,
+            json=["read:datasources", "create:datasources", "update:datasources"],
+        )
+        assert perm_response.status_code == 200
+
+    ds_response = client.post(
+        "/api/grafana/datasources?visibility=tenant",
+        headers=admin_headers,
+        json={"name": "per-user-ds-hide", "type": "tempo", "url": "http://tempo-ds"},
+    )
+    assert ds_response.status_code == 200
+    ds_uid = ds_response.json()["uid"]
+
+    hide_for_a = client.post(
+        f"/api/grafana/datasources/{ds_uid}/hide",
+        headers=user_a_headers,
+        json={"hidden": True},
+    )
+    assert hide_for_a.status_code == 200
+
+    list_for_a = client.get("/api/grafana/datasources", headers=user_a_headers)
+    list_for_b = client.get("/api/grafana/datasources", headers=user_b_headers)
+    assert list_for_a.status_code == 200
+    assert list_for_b.status_code == 200
+    assert all(item["uid"] != ds_uid for item in list_for_a.json())
+    assert any(item["uid"] == ds_uid for item in list_for_b.json())
+
+    unhide_for_a = client.post(
+        f"/api/grafana/datasources/{ds_uid}/hide",
+        headers=user_a_headers,
+        json={"hidden": False},
+    )
+    assert unhide_for_a.status_code == 200
+
+    list_for_a_after_unhide = client.get("/api/grafana/datasources", headers=user_a_headers)
+    assert list_for_a_after_unhide.status_code == 200
+    assert any(item["uid"] == ds_uid for item in list_for_a_after_unhide.json())

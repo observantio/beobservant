@@ -131,7 +131,8 @@ def test_resolve_actor_api_key_id_prefers_default_enabled(monkeypatch):
         type("Key", (), {"id": "fallback", "is_enabled": True, "is_default": False})(),
         type("Key", (), {"id": "default", "is_enabled": True, "is_default": True})(),
     ]
-    monkeypatch.setattr("services.notifier_proxy_service.auth_service.list_api_keys", lambda *_: keys)
+    auth_service_obj = svc._resolve_actor_api_key_id.__globals__["auth_service"]
+    monkeypatch.setattr(auth_service_obj, "list_api_keys", lambda *_: keys)
 
     assert svc._resolve_actor_api_key_id(user) == "default"
 
@@ -148,10 +149,11 @@ def test_resolve_actor_api_key_id_handles_errors(monkeypatch):
 
         raise SQLAlchemyError("db down")
 
-    monkeypatch.setattr("services.notifier_proxy_service.auth_service.list_api_keys", db_boom)
+    auth_service_obj = svc._resolve_actor_api_key_id.__globals__["auth_service"]
+    monkeypatch.setattr(auth_service_obj, "list_api_keys", db_boom)
     assert svc._resolve_actor_api_key_id(user) is None
 
-    monkeypatch.setattr("services.notifier_proxy_service.auth_service.list_api_keys", lambda *_: [])
+    monkeypatch.setattr(auth_service_obj, "list_api_keys", lambda *_: [])
     assert svc._resolve_actor_api_key_id(user) is None
 
 
@@ -165,8 +167,10 @@ def test_sign_context_token_uses_live_group_ids_and_falls_back(monkeypatch):
         return "jwt"
 
     monkeypatch.setattr(config, "get_secret", lambda key: "signing-key")
+    auth_service_obj = svc._sign_context_token.__globals__["auth_service"]
     monkeypatch.setattr(
-        "services.notifier_proxy_service.auth_service.get_user_by_id_in_tenant",
+        auth_service_obj,
+        "get_user_by_id_in_tenant",
         lambda *_: type("LiveUser", (), {"group_ids": ["g2", " ", "g3"]})(),
     )
     monkeypatch.setattr(svc, "_encode_jwt", fake_encode)
@@ -197,7 +201,8 @@ def test_sign_context_token_handles_missing_key_and_sql_errors(monkeypatch):
         raise SQLAlchemyError("db down")
 
     captured = {}
-    monkeypatch.setattr("services.notifier_proxy_service.auth_service.get_user_by_id_in_tenant", db_boom)
+    auth_service_obj = svc._sign_context_token.__globals__["auth_service"]
+    monkeypatch.setattr(auth_service_obj, "get_user_by_id_in_tenant", db_boom)
     monkeypatch.setattr(svc, "_encode_jwt", fake_encode)
 
     assert svc._sign_context_token(current_user=user, api_key_id=None) == "jwt"

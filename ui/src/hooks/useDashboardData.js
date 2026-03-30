@@ -47,13 +47,15 @@ export function useDashboardData() {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const requestOpts = { signal: controller.signal, maxRetries: 0 };
     const nowMs = Date.now();
     const endNs = nowMs * 1000000;
     const startNs = endNs - 60 * 60 * 1000000000;
 
     (async () => {
       try {
-        const res = await fetchHealth();
+        const res = await fetchHealth(requestOpts);
         if (active) setHealth(res);
       } catch {
         if (active) setHealth(null);
@@ -68,7 +70,7 @@ export function useDashboardData() {
         return;
       }
       try {
-        const data = await getAlerts();
+        const data = await getAlerts(requestOpts);
         if (active) setAlertCount(Array.isArray(data) ? data.length : 0);
       } catch {
         if (active) setAlertCount(0);
@@ -91,6 +93,7 @@ export function useDashboardData() {
           start: Math.floor(startNs),
           end: Math.floor(endNs),
           step: 60,
+          signal: controller.signal,
         });
         let total = 0;
         try {
@@ -124,7 +127,7 @@ export function useDashboardData() {
         return;
       }
       try {
-        const data = await searchDashboards();
+        const data = await searchDashboards(requestOpts);
         if (active) setDashboardCount(Array.isArray(data) ? data.length : 0);
       } catch {
         if (active) setDashboardCount(0);
@@ -139,7 +142,7 @@ export function useDashboardData() {
         return;
       }
       try {
-        const data = await getSilences();
+        const data = await getSilences(requestOpts);
         if (active) setSilenceCount(Array.isArray(data) ? data.length : 0);
       } catch {
         if (active) setSilenceCount(0);
@@ -154,7 +157,7 @@ export function useDashboardData() {
         return;
       }
       try {
-        const data = await getDatasources();
+        const data = await getDatasources(requestOpts);
         if (active) setDatasourceCount(Array.isArray(data) ? data.length : 0);
       } catch {
         if (active) setDatasourceCount(0);
@@ -165,7 +168,7 @@ export function useDashboardData() {
 
     (async () => {
       try {
-        const data = await fetchSystemMetrics();
+        const data = await fetchSystemMetrics(requestOpts);
         if (active) setSystemMetrics(data);
       } catch {
         if (active) setSystemMetrics(null);
@@ -176,6 +179,7 @@ export function useDashboardData() {
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, [canReadAlerts, canReadDashboards, canReadLogs]);
 

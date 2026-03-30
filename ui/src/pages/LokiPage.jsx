@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAutoRefresh } from "../hooks";
 import PageHeader from "../components/ui/PageHeader";
 import AutoRefreshControl from "../components/ui/AutoRefreshControl";
@@ -13,6 +13,7 @@ import LogLabels from "../components/loki/LogLabels";
 import { formatNsToIso } from "../utils/formatters";
 import { LOKI_REFRESH_INTERVALS } from "../utils/constants";
 import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
 import HelpTooltip from "../components/HelpTooltip";
 import {
   normalizeLabelValues,
@@ -20,56 +21,48 @@ import {
   getVolumeValues,
   buildFallbackVolume,
   buildSelectorFromFilters,
-  escapeLogQLValue,
+  buildCaseInsensitiveTextFilterClause,
 } from "../utils/lokiQueryUtils";
 
 const LABEL_PREFETCH_LIMIT = 12;
 const LABEL_PREFETCH_BATCH = 4;
 
 export default function LokiPage() {
-  const STORAGE_KEY = "lokiPageState";
-  const loadSaved = () => {
-    try {
-      if (typeof localStorage === "undefined") return {};
-      const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      return s && typeof s === "object" && !Array.isArray(s) ? s : {};
-    } catch {
-      return {};
-    }
-  };
-  const saved = useMemo(() => loadSaved(), []);
-  const savedSelectedFilters = useMemo(
-    () => saved.selectedFilters || [],
-    [saved.selectedFilters],
-  );
-  const savedSelectedLabel = saved.selectedLabel || "";
-
+  const { user } = useAuth();
   const [labels, setLabels] = useState([]);
   const [labelValuesCache, setLabelValuesCache] = useState({});
   const [loadingValues, setLoadingValues] = useState({});
-  const [selectedFilters, setSelectedFilters] = useState(savedSelectedFilters);
-  const [selectedLabel, setSelectedLabel] = useState(savedSelectedLabel);
-  const [selectedValue, setSelectedValue] = useState(saved.selectedValue || "");
-  const [pattern, setPattern] = useState(saved.pattern || "");
-  const [rangeMinutes, setRangeMinutes] = useState(saved.rangeMinutes || 60);
+  const [selectedFilters, setSelectedFilters] = useState([]);
+  const [selectedLabel, setSelectedLabel] = useState("");
+  const [selectedValue, setSelectedValue] = useState("");
+  const [pattern, setPattern] = useState("");
+  const [rangeMinutes, setRangeMinutes] = useState(60);
   const [searchLimit, setSearchLimit] = useState(
-    saved.searchLimit || DEFAULT_QUERY_LIMITS.logs || 100,
+    DEFAULT_QUERY_LIMITS.logs || 100,
   );
   const [pageSize, setPageSize] = useState(
-    saved.pageSize || Math.min(...MAX_LOG_OPTIONS) || 20,
+    Math.min(...MAX_LOG_OPTIONS) || 20,
   );
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(30);
-  const [viewMode, setViewMode] = useState(saved.viewMode || "table");
-  const [expandedLogs, setExpandedLogs] = useState(saved.expandedLogs || {});
-  const [searchText, setSearchText] = useState(saved.searchText || "");
-  const [queryMode, setQueryMode] = useState(saved.queryMode || "builder");
-  const [customLogQL, setCustomLogQL] = useState(saved.customLogQL || "");
+  const [viewMode, setViewMode] = useState("table");
+  const [expandedLogs, setExpandedLogs] = useState({});
+  const [searchText, setSearchText] = useState("");
+  const [queryMode, setQueryMode] = useState("builder");
+  const [customLogQL, setCustomLogQL] = useState("");
 
   const [queryResult, setQueryResult] = useState(null);
   const [volume, setVolume] = useState([]);
   const [loading, setLoading] = useState(false);
   const [topTerms, setTopTerms] = useState([]);
+  const queryRunIdRef = useRef(0);
+  const activeQueryControllerRef = useRef(null);
+  const previousActiveApiKeyIdRef = useRef(null);
+  const activeApiKeyId = useMemo(() => {
+    const keys = user?.api_keys || [];
+    const active = keys.find((k) => k.is_enabled) || keys.find((k) => k.is_default);
+    return active?.id || active?.key || user?.org_id || "";
+  }, [user]);
 
   const logStats = useMemo(() => {
     const res = queryResult?.data?.result || [];
@@ -111,54 +104,6 @@ export default function LokiPage() {
 
   const toast = useToast();
   useAutoRefresh(() => executeQuery(), refreshInterval * 1000, autoRefresh);
-  // Run once on mount to restore a saved query snapshot, without retriggering on later state updates.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    try {
-      const toSave = {
-        selectedFilters,
-        rangeMinutes,
-        searchLimit,
-        pageSize,
-        viewMode,
-        expandedLogs,
-        searchText,
-        queryMode,
-        ...(selectedLabel ? { selectedLabel } : {}),
-        ...(selectedValue ? { selectedValue } : {}),
-        ...(pattern ? { pattern } : {}),
-        ...(customLogQL ? { customLogQL } : {}),
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-    } catch {
-      // ignore
-    }
-  }, [
-    selectedFilters,
-    selectedLabel,
-    selectedValue,
-    pattern,
-    rangeMinutes,
-    searchLimit,
-    pageSize,
-    viewMode,
-    expandedLogs,
-    searchText,
-    queryMode,
-    customLogQL,
-  ]);
-
-  useEffect(() => {
-    if (
-      saved.selectedFilters?.length ||
-      saved.pattern ||
-      saved.customLogQL ||
-      saved.selectedLabel ||
-      saved.selectedValue
-    ) {
-      executeQuery();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadInitialData = useCallback(async () => {
     try {
@@ -197,58 +142,47 @@ export default function LokiPage() {
           });
         }
       }
-      if (
-        savedSelectedLabel &&
-        labelsArray &&
-        !labelsArray.includes(savedSelectedLabel)
-      ) {
-        setSelectedLabel("");
-        setSelectedValue("");
-        try {
-          const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-          let changed = false;
-          if (
-            s.selectedLabel === savedSelectedLabel ||
-            Object.prototype.hasOwnProperty.call(s, "selectedLabel")
-          ) {
-            delete s.selectedLabel;
-            changed = true;
-          }
-          if (Object.prototype.hasOwnProperty.call(s, "selectedValue")) {
-            delete s.selectedValue;
-            changed = true;
-          }
-          if (changed) {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-          }
-        } catch {
-          // ignore malformed storage
-        }
-      }
-
-      if (Array.isArray(savedSelectedFilters) && savedSelectedFilters.length) {
-        const validFilters = savedSelectedFilters.filter((filter) =>
-          labelsArray.includes(filter.label),
-        );
-        if (validFilters.length !== savedSelectedFilters.length) {
-          setSelectedFilters(validFilters);
-          try {
-            const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-            s.selectedFilters = validFilters;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-          } catch {
-            // ignore malformed storage
-          }
-        }
-      }
     } catch {
       setLabels([]);
     }
-  }, [savedSelectedFilters, savedSelectedLabel]);
+  }, []);
 
   useEffect(() => {
+    const previous = previousActiveApiKeyIdRef.current;
+    const changed = previous !== null && previous !== activeApiKeyId;
+    previousActiveApiKeyIdRef.current = activeApiKeyId;
+
+    if (changed) {
+      if (activeQueryControllerRef.current) {
+        activeQueryControllerRef.current.abort();
+      }
+      setLabels([]);
+      setLabelValuesCache({});
+      setLoadingValues({});
+      setSelectedFilters([]);
+      setSelectedLabel("");
+      setSelectedValue("");
+      setPattern("");
+      setQueryResult(null);
+      setVolume([]);
+      setTopTerms([]);
+      setExpandedLogs({});
+      setSearchText("");
+      setQueryMode("builder");
+      setCustomLogQL("");
+    }
+
     loadInitialData();
-  }, [loadInitialData]);
+  }, [activeApiKeyId, loadInitialData]);
+
+  useEffect(
+    () => () => {
+      if (activeQueryControllerRef.current) {
+        activeQueryControllerRef.current.abort();
+      }
+    },
+    [],
+  );
 
   async function loadLabelValues(label) {
     if (!label || labelValuesCache[label]) return;
@@ -350,12 +284,14 @@ export default function LokiPage() {
     endNs,
     totalLogs,
     res,
+    signal,
   ) {
     try {
       const volRes = await getLogVolume(volumeQuery, {
         start: Math.round(startNs),
         end: Math.round(endNs),
         step: Math.max(60, Math.floor((rangeMinutes * 60) / 60)),
+        signal,
       });
       const vals = getVolumeValues(volRes);
       if (vals.some((v) => v > 0)) {
@@ -369,6 +305,13 @@ export default function LokiPage() {
   }
 
   async function executeQuery(overrideFilters, overridePattern) {
+    const queryRunId = queryRunIdRef.current + 1;
+    queryRunIdRef.current = queryRunId;
+    if (activeQueryControllerRef.current) {
+      activeQueryControllerRef.current.abort();
+    }
+    const queryController = new AbortController();
+    activeQueryControllerRef.current = queryController;
     setLoading(true);
 
     const effectivePattern =
@@ -394,9 +337,9 @@ export default function LokiPage() {
         selectorForVolume = selector;
         q = selector;
         if (effectivePattern) {
-          const escaped = escapeLogQLValue(effectivePattern);
-          q += ` |= "${escaped}"`;
-          selectorForVolume = `${selector} |= "${escaped}"`;
+          const clause = buildCaseInsensitiveTextFilterClause(effectivePattern);
+          q += clause;
+          selectorForVolume = `${selector}${clause}`;
         }
       }
 
@@ -409,7 +352,9 @@ export default function LokiPage() {
         start: Math.round(startNs),
         end: Math.round(endNs),
         limit: normalizedLimit,
+        signal: queryController.signal,
       });
+      if (queryRunId !== queryRunIdRef.current) return;
       const safeResult = res || { data: { result: [] } };
       setQueryResult(safeResult);
 
@@ -430,11 +375,20 @@ export default function LokiPage() {
         endNs,
         totalLogs,
         safeResult,
+        queryController.signal,
       );
+      if (queryRunId !== queryRunIdRef.current) return;
     } catch (e) {
+      const aborted =
+        e?.name === "AbortError" ||
+        e?.code === "REQUEST_ABORTED" ||
+        e?.code === "REQUEST_TIMEOUT";
+      if (aborted) return;
       toast.error(e?.message || "Failed to query logs");
     } finally {
-      setLoading(false);
+      if (queryRunId === queryRunIdRef.current) {
+        setLoading(false);
+      }
     }
   }
 
@@ -573,18 +527,18 @@ export default function LokiPage() {
             title="Log Results"
             subtitle={
               queryResult?.data?.result?.length
-                ? "Showing results"
+                ? `Showing ${queryResult.data.result.length} stream${queryResult.data.result.length === 1 ? "" : "s"}`
                 : "Run a query"
             }
           >
             <div className="mb-4 flex items-center justify-between pb-4 border-b border-sre-border">
-              <div className="flex items-center gap-4">
-                <div className="flex gap-1 bg-sre-bg-alt rounded-lg p-1">
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex gap-1 bg-sre-bg-alt rounded-lg p-1 border border-sre-border/60">
                   {["table", "compact", "raw"].map((mode) => (
                     <button
                       key={mode}
                       onClick={() => setViewMode(mode)}
-                      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${viewMode === mode ? "bg-sre-primary text-white" : "text-sre-text-muted hover:text-sre-text"}`}
+                      className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${viewMode === mode ? "bg-sre-primary text-white" : "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface"}`}
                     >
                       {mode.charAt(0).toUpperCase() + mode.slice(1)}
                     </button>
@@ -596,7 +550,7 @@ export default function LokiPage() {
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   placeholder="Filter displayed logs..."
-                  className="px-3 py-1 bg-sre-surface border border-sre-border rounded text-sm text-sre-text w-full md:w-72 max-w-md"
+                  className="px-3 py-1.5 bg-sre-surface border border-sre-border rounded-lg text-sm text-sre-text w-full md:w-72 max-w-md focus:outline-none focus:ring-2 focus:ring-sre-primary/50"
                 />
                 <HelpTooltip text="Filter the displayed log results by searching within the log content. Supports multiple keywords separated by spaces." />
               </div>

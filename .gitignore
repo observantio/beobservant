@@ -24,10 +24,16 @@ coverage/
 *.tmp
 *.zip
 *.tar.gz
-*.log
 *.venv/
 .mypy_cache/
 .ruff_cache/
 resolver/
 notifier/
 showcase/
+.pre-commit-cache/
+.pylint-cache/
+configs/generated/*.yaml
+.vitest/
+.coveragerc
+coverage.xml
+test-reports/

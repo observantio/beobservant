@@ -1,5 +1,10 @@
 """
-Vault client for fetching secrets from HashiCorp Vault, supporting both token-based and AppRole authentication methods, with caching of secrets to reduce load on Vault and improve performance. This module provides a VaultSecretProvider class that can be used to retrieve secrets from Vault based on a specified key, with support for both KV version 1 and version 2 secret engines. The client handles authentication, secret retrieval, error handling, and caching of secrets with a configurable time-to-live (TTL) to ensure efficient access to secrets while minimizing the number of requests made to Vault.
+Vault client for fetching secrets from HashiCorp Vault.
+
+Supports both token-based and AppRole authentication methods, and caches
+secrets to reduce load on Vault. The module provides `VaultSecretProvider`
+for retrieving secrets from KV v1/v2 engines with robust authentication and
+error handling.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 

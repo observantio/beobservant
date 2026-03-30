@@ -1,5 +1,6 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
+import { useLayoutMode } from "../../contexts/LayoutModeContext";
 import { Card } from "../ui";
 import { AgentActivitySection } from "./AgentActivitySection";
 import { DataVolume } from "./DataVolume";
@@ -7,12 +8,15 @@ import { SystemMetricsCard } from "./SystemMetricsCard";
 import { usePersistentOrder } from "../../hooks";
 
 export function DashboardLayout({ dashboardData, agentData }) {
+  const { sidebarMode } = useLayoutMode();
   const [draggedIndex, setDraggedIndex] = useState(null);
 
   const layoutComponents = [
     {
       id: "notice",
-      className: "lg:col-span-1",
+      className: sidebarMode
+        ? "sm:col-span-2 xl:col-span-full min-w-0"
+        : "lg:col-span-1",
       renderAsNotice: true,
       content: (
         <div className="space-y-4">
@@ -21,7 +25,7 @@ export function DashboardLayout({ dashboardData, agentData }) {
               Welcome to Observantio
             </h2>
             <p className="text-sm text-sre-text-muted mt-1 leading-relaxed">
-              Observantio is an open-source observability tool that provides a unified platform for monitoring, alerting, and log management. It is designed to be user-friendly and customizable, allowing you to easily visualize and analyze your system's performance and health. Powered by LGTM, Alert manager, Resolver and Be Notifed
+              Observantio is an open-source observability tool that provides a unified platform for monitoring, alerting, and log management. It is designed to be user-friendly and customizable, allowing you to easily visualize and analyze your system's performance and health. Powered by LGTM, Alert manager, Resolver and Notifier
             </p>
             <p className="text-xs text-sre-text-muted mt-3">
               Licensed under Apache License 2.0. You are free to use, modify,
@@ -60,7 +64,7 @@ export function DashboardLayout({ dashboardData, agentData }) {
       subtitle:
         dashboardData.systemMetrics?.stress?.message ||
         "Process resource utilization",
-      className: "",
+      className: sidebarMode ? "sm:col-span-2 xl:col-span-1" : "",
       content: (
         <SystemMetricsCard
           loading={dashboardData.loadingSystemMetrics}
@@ -119,8 +123,12 @@ export function DashboardLayout({ dashboardData, agentData }) {
     setDraggedIndex(null);
   };
 
+  const gridClass = sidebarMode
+    ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(280px,0.95fr)_minmax(320px,1.1fr)_minmax(420px,1.95fr)] gap-6"
+    : "grid grid-cols-1 lg:grid-cols-4 gap-6";
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <div className={gridClass}>
       {sanitizedLayoutOrder.map((layoutIndex, displayIndex) => {
         const component = layoutComponents[layoutIndex];
         if (!component) return null;

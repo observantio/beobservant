@@ -7,6 +7,7 @@ export default function RuleEditorWizard({
   onNext,
   onPrevious,
   onSubmit,
+  onStepClick,
   canProceed,
   isSubmitting,
   hasErrors,
@@ -49,10 +50,10 @@ export default function RuleEditorWizard({
   const isFirstStep = currentStep === 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Progress Indicator */}
       {showIndicator && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           {steps.map((step, index) => {
             const isActive = index === currentStep;
             const isCompleted = index < currentStep;
@@ -62,26 +63,33 @@ export default function RuleEditorWizard({
                 key={step.key || step.label || index}
                 className="flex flex-col items-center"
               >
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
-                    isCompleted
-                      ? "bg-sre-success text-white shadow-lg"
-                      : isActive
-                        ? "bg-sre-primary text-white shadow-lg ring-4 ring-sre-primary/20"
-                        : "bg-sre-surface border-2 border-sre-border text-sre-text-muted"
-                  }`}
+                <button
+                  type="button"
+                  onClick={() => onStepClick?.(index)}
+                  className="group"
+                  aria-label={`Go to ${step.label}`}
                 >
-                  {isCompleted ? (
-                    <span className="material-icons text-lg">check</span>
-                  ) : (
-                    <span className="material-icons text-base">
-                      {step.icon}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-2 text-center min-w-0 flex-1">
                   <div
-                    className={`text-xs font-medium ${isActive ? "text-sre-primary" : isCompleted ? "text-sre-success" : "text-sre-text-muted"}`}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
+                      isCompleted
+                        ? "bg-sre-success text-white shadow-lg"
+                        : isActive
+                          ? "bg-sre-primary text-white shadow-lg ring-2 ring-sre-primary/20"
+                          : "bg-sre-surface border-2 border-sre-border text-sre-text-muted group-hover:border-sre-primary/70 group-hover:text-sre-text"
+                    }`}
+                  >
+                    {isCompleted ? (
+                      <span className="material-icons text-lg">check</span>
+                    ) : (
+                      <span className="material-icons text-sm">
+                        {step.icon}
+                      </span>
+                    )}
+                  </div>
+                </button>
+                <div className="mt-1 text-center min-w-0 flex-1">
+                  <div
+                    className={`text-[11px] font-medium ${isActive ? "text-sre-primary" : isCompleted ? "text-sre-success" : "text-sre-text-muted"}`}
                   >
                     {step.label}
                   </div>
@@ -93,7 +101,7 @@ export default function RuleEditorWizard({
                 </div>
                 {index < steps.length - 1 && (
                   <div
-                    className={`flex-1 h-0.5 mx-4 transition-colors duration-300 ${
+                    className={`flex-1 h-0.5 mx-2 transition-colors duration-300 ${
                       isCompleted ? "bg-sre-success" : "bg-sre-border"
                     }`}
                   />
@@ -106,7 +114,7 @@ export default function RuleEditorWizard({
 
       {/* Navigation Buttons */}
       {showButtons && (
-        <div className="flex justify-between items-center  border-sre-border p-2">
+        <div className="flex justify-between items-center border-sre-border p-1">
           <Button
             type="button"
             variant="ghost"
@@ -168,6 +176,7 @@ RuleEditorWizard.propTypes = {
   onNext: PropTypes.func.isRequired,
   onPrevious: PropTypes.func.isRequired,
   onSubmit: PropTypes.func.isRequired,
+  onStepClick: PropTypes.func,
   canProceed: PropTypes.bool.isRequired,
   isSubmitting: PropTypes.bool,
   hasErrors: PropTypes.bool.isRequired,

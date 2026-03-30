@@ -26,6 +26,8 @@ else
 fi
 
 cd "${ROOT_DIR}"
+chmod +x ./scripts/run_optimal_config.sh
+./scripts/run_optimal_config.sh
 echo ""
 "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml down
 echo ""

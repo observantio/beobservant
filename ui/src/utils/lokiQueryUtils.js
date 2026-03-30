@@ -7,6 +7,45 @@ export function escapeLogQLValue(value) {
   return JSON.stringify(s).slice(1, -1);
 }
 
+export function wildcardToRegexPattern(value) {
+  const text = String(value ?? "");
+  const regexMeta = new Set([
+    "\\",
+    ".",
+    "^",
+    "$",
+    "+",
+    "(",
+    ")",
+    "[",
+    "]",
+    "{",
+    "}",
+    "|",
+  ]);
+  let out = "";
+  for (const ch of text) {
+    if (ch === "*") {
+      out += ".*";
+      continue;
+    }
+    if (ch === "?") {
+      out += ".";
+      continue;
+    }
+    out += regexMeta.has(ch) ? `\\${ch}` : ch;
+  }
+  return out;
+}
+
+export function buildCaseInsensitiveTextFilterClause(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const regexBody = wildcardToRegexPattern(raw);
+  const escaped = escapeLogQLValue(`(?i)${regexBody}`);
+  return ` |~ "${escaped}"`;
+}
+
 export function normalizeLabelValue(label, value) {
   if (value === null || value === undefined) return "";
   const raw = String(value).trim();

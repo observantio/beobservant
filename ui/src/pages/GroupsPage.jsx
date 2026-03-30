@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { usePermissions } from "../hooks/usePermissions";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useLayoutMode } from "../contexts/LayoutModeContext";
 import HelpTooltip from "../components/HelpTooltip";
 import MemberList from "../components/groups/MemberList";
 import RuleEditorWizard from "../components/alertmanager/RuleEditorWizard";
@@ -27,6 +28,7 @@ import * as api from "../api";
 export default function GroupsPage() {
   const { canManageGroups } = usePermissions();
   const { user } = useAuth();
+  const { sidebarMode } = useLayoutMode();
   const toast = useToast();
   const navigate = useNavigate();
   const [groups, setGroups] = useState([]);
@@ -35,6 +37,7 @@ export default function GroupsPage() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [serverSearchQuery, setServerSearchQuery] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -64,15 +67,21 @@ export default function GroupsPage() {
   const handlePrevious = () => {
     if (currentStep > 0) setCurrentStep((s) => s - 1);
   };
+  const handleStepClick = (stepIndex) => {
+    if (typeof stepIndex !== "number") return;
+    if (stepIndex < 0 || stepIndex > totalSteps - 1) return;
+    setCurrentStep(stepIndex);
+  };
   const handleWizardSubmit = async () => {
     await createGroup();
   };
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (queryText = serverSearchQuery) => {
     setLoading(true);
     try {
+      const searchText = String(queryText || "").trim();
       const [groupsData, permsData] = await Promise.all([
-        api.getGroups(),
+        api.getGroups(searchText ? { q: searchText } : {}),
         api.getPermissions(),
       ]);
       setGroups(groupsData);
@@ -84,11 +93,15 @@ export default function GroupsPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [serverSearchQuery, toast]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchData(serverSearchQuery);
+  }, [fetchData, serverSearchQuery]);
+
+  const applyServerSearch = useCallback(() => {
+    setServerSearchQuery(String(searchQuery || "").trim());
+  }, [searchQuery]);
 
   const createGroup = async () => {
     if (!formData.name.trim()) {
@@ -267,7 +280,13 @@ export default function GroupsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div
+      className={
+        sidebarMode
+          ? "w-full min-w-0 space-y-6"
+          : "mx-auto max-w-7xl space-y-6"
+      }
+    >
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -303,8 +322,23 @@ export default function GroupsPage() {
             placeholder="Search groups by name or description..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyServerSearch();
+              }
+            }}
             className="flex-1"
           />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={applyServerSearch}
+            title="Search groups"
+            aria-label="Search groups"
+          >
+            <span className="material-icons text-base">search</span>
+          </Button>
           <HelpTooltip text="Search groups by their name or description. The search is case-insensitive and matches partial strings." />
         </div>
       </Card>
@@ -392,6 +426,7 @@ export default function GroupsPage() {
                 onNext={handleNext}
                 onPrevious={handlePrevious}
                 onSubmit={handleWizardSubmit}
+                onStepClick={handleStepClick}
                 canProceed={canProceedToNextStep()}
                 isSubmitting={saving}
                 hasErrors={false}
@@ -408,6 +443,7 @@ export default function GroupsPage() {
             onNext={handleNext}
             onPrevious={handlePrevious}
             onSubmit={handleWizardSubmit}
+            onStepClick={handleStepClick}
             canProceed={canProceedToNextStep()}
             isSubmitting={saving}
             hasErrors={false}

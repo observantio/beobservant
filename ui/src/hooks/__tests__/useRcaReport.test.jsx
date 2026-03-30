@@ -193,4 +193,116 @@ describe("useRcaReport", () => {
     expect(api.getRcaReportById).toHaveBeenCalledTimes(1);
     expect(api.getRcaJobResult).toHaveBeenCalledTimes(2);
   });
+
+  it("resets and sets error for terminal failed jobs", async () => {
+    const selectedJob = {
+      job_id: "job-failed",
+      status: "failed",
+      error: "boom",
+    };
+
+    const { result } = renderHook(() =>
+      useRcaReport("job-failed", selectedJob, null, {
+        enableInsights: false,
+        activeInsightTab: "summary",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.loadingPrimaryReport).toBe(false);
+      expect(result.current.hasReport).toBe(false);
+      expect(result.current.reportError).toBe("boom");
+    });
+
+    expect(api.getRcaJobResult).not.toHaveBeenCalled();
+  });
+
+  it("loads by reportId override and keeps polling disabled", async () => {
+    api.getRcaReportById.mockResolvedValue({
+      job_id: "job-o",
+      report_id: "rep-o",
+      status: "completed",
+      tenant_id: "tenant-o",
+      requested_by: "u1",
+      result: {
+        start: "2026-03-08T00:00:00Z",
+        end: "2026-03-08T00:05:00Z",
+        service_latency: [{ service: "api" }],
+        error_propagation: [],
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useRcaReport(null, null, "rep-o", {
+        enableInsights: false,
+        activeInsightTab: "summary",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.hasReport).toBe(true);
+      expect(result.current.reportMeta?.report_id).toBe("rep-o");
+    });
+
+    expect(api.getRcaReportById).toHaveBeenCalledWith("rep-o");
+    expect(api.getRcaJob).not.toHaveBeenCalled();
+    expect(api.getRcaJobResult).not.toHaveBeenCalled();
+  });
+
+  it("loads insight tabs and records insight fetch errors", async () => {
+    api.getRcaJob.mockResolvedValue({
+      job_id: "job-insights",
+      report_id: "rep-insights",
+      status: "completed",
+      tenant_id: "tenant-a",
+      requested_by: "u1",
+    });
+    api.getRcaReportById.mockResolvedValue({
+      job_id: "job-insights",
+      report_id: "rep-insights",
+      status: "completed",
+      tenant_id: "tenant-a",
+      requested_by: "u1",
+      result: {
+        start: "2026-03-08T00:00:00Z",
+        end: "2026-03-08T00:05:00Z",
+        service_latency: [{ service: "api" }],
+        error_propagation: [{ source_service: "api" }],
+      },
+    });
+    api.fetchRcaCorrelate.mockRejectedValue(new Error("corr failed"));
+    api.fetchRcaGranger.mockResolvedValue({ edges: [] });
+    api.fetchRcaBayesian.mockResolvedValue({ posteriors: [] });
+    api.getRcaMlWeights.mockResolvedValue({ weights: {} });
+    api.getRcaDeployments.mockResolvedValue([]);
+    api.fetchRcaTopology.mockResolvedValue({ root_service: "api" });
+
+    const { result, rerender } = renderHook(
+      ({ tab }) =>
+        useRcaReport(
+          "job-insights",
+          { job_id: "job-insights", status: "completed", report_id: "rep-insights" },
+          null,
+          { enableInsights: true, activeInsightTab: tab },
+        ),
+      { initialProps: { tab: "causal" } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.hasReport).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(api.fetchRcaCorrelate).toHaveBeenCalled();
+      expect(api.fetchRcaGranger).toHaveBeenCalled();
+      expect(api.fetchRcaBayesian).toHaveBeenCalled();
+      expect(api.getRcaMlWeights).toHaveBeenCalled();
+      expect(api.getRcaDeployments).toHaveBeenCalled();
+    });
+
+    rerender({ tab: "topology" });
+    await waitFor(() => {
+      expect(api.fetchRcaTopology).toHaveBeenCalled();
+    });
+  });
 });

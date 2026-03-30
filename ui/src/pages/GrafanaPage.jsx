@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useLocalStorage } from "../hooks";
 import {
   searchDashboards,
   createDashboard,
@@ -19,8 +18,9 @@ import {
   toggleDatasourceHidden,
   getDashboard,
   createGrafanaBootstrapSession,
+  listMetricNames,
 } from "../api";
-import { Button, ConfirmDialog } from "../components/ui";
+import { Button, ConfirmDialog, Modal, Spinner } from "../components/ui";
 import PageHeader from "../components/ui/PageHeader";
 import DashboardEditorModal from "../components/grafana/DashboardEditorModal";
 import DatasourceEditorModal from "../components/grafana/DatasourceEditorModal";
@@ -29,27 +29,76 @@ import { useToast } from "../contexts/ToastContext";
 import GrafanaTabs from "../components/grafana/GrafanaTabs";
 import GrafanaContent from "../components/grafana/GrafanaContent";
 import { useAuth } from "../contexts/AuthContext";
-import { MIMIR_PROMETHEUS_URL } from "../utils/constants";
+import { APP_ORG_KEY, MIMIR_PROMETHEUS_URL } from "../utils/constants";
 import {
   GRAFANA_DATASOURCE_TYPES as DATASOURCE_TYPES,
   overrideDashboardDatasource,
+  resolveToUid,
 } from "../utils/grafanaUtils";
 import { buildGrafanaLaunchUrl } from "../utils/grafanaLaunchUtils";
 
+function collectDatasourceReferences(node, refs) {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    node.forEach((item) => collectDatasourceReferences(item, refs));
+    return;
+  }
+
+  Object.entries(node).forEach(([key, value]) => {
+    if (key === "datasourceUid" && value) {
+      refs.add(String(value));
+    }
+
+    if (key === "datasource" && value) {
+      if (typeof value === "string") {
+        refs.add(value);
+      } else if (typeof value === "object") {
+        if (value.uid) refs.add(String(value.uid));
+        if (value.value) refs.add(String(value.value));
+        if (value.name) refs.add(String(value.name));
+        if (value.text) refs.add(String(value.text));
+      }
+    }
+
+    if (value && typeof value === "object") {
+      collectDatasourceReferences(value, refs);
+    }
+  });
+}
+
+function getDatasourceJsonData(datasource) {
+  if (!datasource || typeof datasource !== "object") return {};
+  if (datasource.jsonData && typeof datasource.jsonData === "object") {
+    return datasource.jsonData;
+  }
+  if (datasource.json_data && typeof datasource.json_data === "object") {
+    return datasource.json_data;
+  }
+  return {};
+}
+
+function findApiKeyById(apiKeys, candidateId) {
+  const id = String(candidateId || "").trim();
+  if (!id) return null;
+  return (
+    (Array.isArray(apiKeys) ? apiKeys : []).find(
+      (k) => String(k?.id || "").trim() === id,
+    ) || null
+  );
+}
+
 export default function GrafanaPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useLocalStorage(
-    "grafana-active-tab",
-    "dashboards",
-  );
+  const [activeTab, setActiveTab] = useState("dashboards");
   const [dashboards, setDashboards] = useState([]);
   const [datasources, setDatasources] = useState([]);
   const [folders, setFolders] = useState([]);
   const [groups, setGroups] = useState([]);
-  const [query, setQuery] = useLocalStorage("grafana-query", "");
+  const [dashboardQuery, setDashboardQuery] = useState("");
+  const [datasourceQuery, setDatasourceQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [filters, setFilters] = useLocalStorage("grafana-filters", {
+  const [filters, setFilters] = useState({
     teamId: "",
     folderKey: "__general__",
     showHidden: false,
@@ -58,6 +107,38 @@ export default function GrafanaPage() {
   const toast = useToast();
   const lastErrorToastRef = useRef({ key: "", ts: 0 });
   const isMountedRef = useRef(true);
+  const query =
+    activeTab === "datasources"
+      ? datasourceQuery
+      : activeTab === "dashboards"
+        ? dashboardQuery
+        : "";
+  const queryRef = useRef(query);
+  const filtersRef = useRef(filters);
+
+  const setQuery = useCallback(
+    (nextValue) => {
+      if (activeTab !== "dashboards" && activeTab !== "datasources") return;
+      const prevValue =
+        activeTab === "dashboards" ? dashboardQuery : datasourceQuery;
+      const resolved =
+        typeof nextValue === "function" ? nextValue(prevValue) : nextValue;
+      const finalValue = String(resolved ?? "");
+
+      if (activeTab === "dashboards") {
+        setDashboardQuery(finalValue);
+      } else {
+        setDatasourceQuery(finalValue);
+      }
+    },
+    [
+      activeTab,
+      dashboardQuery,
+      datasourceQuery,
+      setDashboardQuery,
+      setDatasourceQuery,
+    ],
+  );
 
   useEffect(
     () => () => {
@@ -65,6 +146,14 @@ export default function GrafanaPage() {
     },
     [],
   );
+
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
+
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
 
   const handleApiError = useCallback(
     (e) => {
@@ -135,15 +224,27 @@ export default function GrafanaPage() {
     isOpen: false,
     title: "",
     message: "",
+    messageTone: "default",
     onConfirm: null,
+    onCancel: null,
     variant: "danger",
     confirmText: "Delete",
+    cancelText: "Cancel",
   });
 
   const [grafanaConfirmDialog, setGrafanaConfirmDialog] = useState({
     isOpen: false,
     path: null,
   });
+  const [datasourceMetricsDialog, setDatasourceMetricsDialog] = useState({
+    isOpen: false,
+    datasourceName: "",
+    keyName: "",
+    loading: false,
+    error: "",
+    metrics: [],
+  });
+  const [dashboardKeyNamesByUid, setDashboardKeyNamesByUid] = useState({});
 
   function openInGrafana(path) {
     setGrafanaConfirmDialog({
@@ -188,7 +289,93 @@ export default function GrafanaPage() {
     }
   }, []);
 
+  const resolveDatasourceKeyMeta = useCallback(
+    (datasource) => {
+      if (!datasource) return { key: "", keyName: "" };
+
+      const rawOrg = String(datasource?.orgId || datasource?.org_id || "").trim();
+      const apiKeys = Array.isArray(user?.api_keys) ? user.api_keys : [];
+      const jsonData = getDatasourceJsonData(datasource);
+      const selectedApiKeyId = String(jsonData.watchdogApiKeyId || "").trim();
+      const selectedScopeKey = String(jsonData.watchdogScopeKey || "").trim();
+      const selectedApiKeyName = String(
+        jsonData.watchdogApiKeyName || "",
+      ).trim();
+      const bySelectedId = findApiKeyById(apiKeys, selectedApiKeyId);
+      const byId = findApiKeyById(apiKeys, rawOrg);
+      const byKey = apiKeys.find((k) => String(k?.key || "") === rawOrg);
+      const byScopeKey = apiKeys.find(
+        (k) => String(k?.key || "") === selectedScopeKey,
+      );
+      const mappedKey = bySelectedId || byScopeKey || byId || byKey || null;
+      const keyCandidate =
+        mappedKey?.key ||
+        selectedScopeKey ||
+        (!/^\d+$/.test(rawOrg) ? rawOrg : "");
+      const keyNameCandidate = mappedKey?.name || selectedApiKeyName || "";
+
+      return {
+        key: String(keyCandidate || "").trim(),
+        keyName: String(keyNameCandidate || "").trim(),
+      };
+    },
+    [user?.api_keys],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboardKeyNames() {
+      if (activeTab !== "dashboards" || dashboards.length === 0) {
+        setDashboardKeyNamesByUid((prev) => {
+          if (prev && Object.keys(prev).length === 0) {
+            return prev;
+          }
+          return {};
+        });
+        return;
+      }
+
+      const entries = await Promise.all(
+        dashboards.map(async (dashboard) => {
+          try {
+            const payload = await getDashboard(dashboard.uid);
+            const refs = new Set();
+            collectDatasourceReferences(payload?.dashboard || payload || {}, refs);
+
+            const keyNames = Array.from(refs)
+              .map((ref) => resolveToUid(ref, datasources) || String(ref))
+              .map((uid) =>
+                datasources.find(
+                  (datasource) => String(datasource?.uid || "") === String(uid),
+                ),
+              )
+              .filter(Boolean)
+              .map((datasource) => resolveDatasourceKeyMeta(datasource).keyName)
+              .filter(Boolean);
+
+            return [dashboard.uid, Array.from(new Set(keyNames)).sort()];
+          } catch {
+            return [dashboard.uid, []];
+          }
+        }),
+      );
+
+      if (!cancelled) {
+        setDashboardKeyNamesByUid(Object.fromEntries(entries));
+      }
+    }
+
+    loadDashboardKeyNames();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, dashboards, datasources, resolveDatasourceKeyMeta]);
+
   const loadData = useCallback(async () => {
+    const currentQuery = queryRef.current;
+    const currentFilters = filtersRef.current || {};
     if (isMountedRef.current) {
       setLoading(true);
     }
@@ -197,18 +384,18 @@ export default function GrafanaPage() {
         const [dashboardsData, foldersData, datasourcesData] =
           await Promise.all([
             searchDashboards({
-              query: query || undefined,
-              teamId: filters.teamId || undefined,
+              query: currentQuery || undefined,
+              teamId: currentFilters.teamId || undefined,
               folderId:
-                filters.folderKey === "__general__" ? 0 : undefined,
+                currentFilters.folderKey === "__general__" ? 0 : undefined,
               folderUid:
-                filters.folderKey &&
-                filters.folderKey !== "__general__"
-                  ? filters.folderKey
+                currentFilters.folderKey &&
+                currentFilters.folderKey !== "__general__"
+                  ? currentFilters.folderKey
                   : undefined,
-              showHidden: filters.showHidden,
+              showHidden: currentFilters.showHidden,
             }).catch(() => []),
-            getFolders({ showHidden: filters.showHidden }).catch(() => []),
+            getFolders({ showHidden: currentFilters.showHidden }).catch(() => []),
             getDatasources().catch(() => []),
           ]);
         if (!isMountedRef.current) return;
@@ -218,15 +405,16 @@ export default function GrafanaPage() {
       } else if (activeTab === "datasources") {
         const [datasourcesData] = await Promise.all([
           getDatasources({
-            teamId: filters.teamId || undefined,
-            showHidden: filters.showHidden,
+            query: currentQuery || undefined,
+            teamId: currentFilters.teamId || undefined,
+            showHidden: currentFilters.showHidden,
           }).catch(() => []),
         ]);
         if (!isMountedRef.current) return;
         setDatasources(datasourcesData);
       } else if (activeTab === "folders") {
         const foldersData = await getFolders({
-          showHidden: filters.showHidden,
+          showHidden: currentFilters.showHidden,
         }).catch(() => []);
         if (!isMountedRef.current) return;
         setFolders(foldersData);
@@ -238,12 +426,12 @@ export default function GrafanaPage() {
         setLoading(false);
       }
     }
-  }, [activeTab, query, filters, handleApiError]);
+  }, [activeTab, handleApiError]);
 
   useEffect(() => {
     loadData();
     loadGroups();
-  }, [loadData, loadGroups]);
+  }, [activeTab, loadData, loadGroups]);
 
   async function onSearch(e) {
     e.preventDefault();
@@ -252,7 +440,11 @@ export default function GrafanaPage() {
 
   function clearFilters() {
     setFilters({ teamId: "", folderKey: "__general__", showHidden: false });
-    setQuery("");
+    if (activeTab === "dashboards") {
+      setDashboardQuery("");
+    } else if (activeTab === "datasources") {
+      setDatasourceQuery("");
+    }
   }
 
   async function handleToggleDashboardHidden(dashboard) {
@@ -366,9 +558,70 @@ export default function GrafanaPage() {
     setShowDashboardEditor(true);
   }
 
-  async function saveDashboard(jsonOverride = null) {
+  async function saveDashboard(jsonOverride = null, options = {}) {
+    const selectedDatasource = datasources.find(
+      (ds) => ds.uid === dashboardForm.datasourceUid,
+    );
+    const canSyncDatasourceVisibility =
+      Boolean(selectedDatasource?.is_owned) && !Boolean(selectedDatasource?.isDefault);
+    const normalizeGroupIds = (ids) =>
+      Array.from(
+        new Set((Array.isArray(ids) ? ids : []).map((id) => String(id).trim()).filter(Boolean)),
+      ).sort();
+    const dashboardGroupIds = normalizeGroupIds(dashboardForm.sharedGroupIds);
+    const datasourceVisibility = String(
+      selectedDatasource?.visibility || "private",
+    ).trim();
+    const datasourceGroupIds = normalizeGroupIds(
+      selectedDatasource?.sharedGroupIds || selectedDatasource?.shared_group_ids,
+    );
+    const visibilityNeedsSync =
+      canSyncDatasourceVisibility &&
+      (dashboardForm.visibility !== datasourceVisibility ||
+        (dashboardForm.visibility === "group" &&
+          JSON.stringify(dashboardGroupIds) !== JSON.stringify(datasourceGroupIds)));
+
+    const {
+      syncDatasourceVisibility = false,
+      skipVisibilitySyncPrompt = false,
+    } = options;
+
     if (!dashboardForm.datasourceUid) {
       toast.error("Select a default datasource before saving the dashboard");
+      return;
+    }
+
+    if (!skipVisibilitySyncPrompt && visibilityNeedsSync) {
+      const visibilityLabel = (visibility) =>
+        visibility === "group"
+          ? "Group Shared Workspace"
+          : visibility === "tenant"
+            ? "Tenant Public Workspace"
+            : "Personal Workspace";
+      setConfirmDialog({
+        isOpen: true,
+        title: "Sync Datasource Visibility?",
+        message: `Dashboard visibility is set to "${visibilityLabel(
+          dashboardForm.visibility,
+        )}". Do you want to apply the same visibility to datasource "${
+          selectedDatasource?.name || "selected datasource"
+        }" as well?`,
+        variant: "primary",
+        confirmText: "Yes, sync datasource",
+        cancelText: "No, dashboard only",
+        onConfirm: async () => {
+          await saveDashboard(jsonOverride, {
+            syncDatasourceVisibility: true,
+            skipVisibilitySyncPrompt: true,
+          });
+        },
+        onCancel: async () => {
+          await saveDashboard(jsonOverride, {
+            syncDatasourceVisibility: false,
+            skipVisibilitySyncPrompt: true,
+          });
+        },
+      });
       return;
     }
 
@@ -447,10 +700,6 @@ export default function GrafanaPage() {
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean);
-
-        const selectedDatasource = datasources.find(
-          (ds) => ds.uid === dashboardForm.datasourceUid,
-        );
 
         payload = {
           dashboard: {
@@ -536,6 +785,29 @@ export default function GrafanaPage() {
         toast.success("Dashboard created successfully");
       }
 
+      if (syncDatasourceVisibility && selectedDatasource?.uid) {
+        const dsParams = new URLSearchParams({
+          visibility: dashboardForm.visibility,
+        });
+        if (
+          dashboardForm.visibility === "group" &&
+          dashboardForm.sharedGroupIds?.length > 0
+        ) {
+          dashboardForm.sharedGroupIds.forEach((gid) =>
+            dsParams.append("shared_group_ids", gid),
+          );
+        }
+        try {
+          await updateDatasource(selectedDatasource.uid, {}, dsParams.toString());
+          toast.success("Datasource visibility synced with dashboard");
+        } catch (syncErr) {
+          toast.error(
+            "Dashboard saved, but datasource visibility sync did not complete.",
+          );
+          handleApiError(syncErr);
+        }
+      }
+
       setShowDashboardEditor(false);
       loadData();
     } catch (e) {
@@ -563,13 +835,17 @@ export default function GrafanaPage() {
 
   function openDatasourceEditor(datasource = null) {
     if (datasource) {
+      const jsonData = getDatasourceJsonData(datasource);
+      const selectedApiKeyId = String(jsonData.watchdogApiKeyId || "").trim();
+      const selectedScopeKey = String(jsonData.watchdogScopeKey || "").trim();
       const currentOrg = datasource.orgId || datasource.org_id || "";
+      const byScopeKey = (user?.api_keys || []).find(
+        (k) => String(k.key || "") === selectedScopeKey,
+      );
       const matchedKey = (user?.api_keys || []).find(
         (k) => String(k.key) === String(currentOrg),
       );
-      const defaultKey =
-        (user?.api_keys || []).find((k) => k.is_default) ||
-        (user?.api_keys || [])[0];
+      const matchedById = findApiKeyById(user?.api_keys || [], currentOrg);
       setEditingDatasource(datasource);
       setDatasourceForm({
         name: datasource.name || "",
@@ -580,7 +856,12 @@ export default function GrafanaPage() {
         visibility: datasource.visibility || datasource.visibility || "private",
         sharedGroupIds:
           datasource.sharedGroupIds || datasource.shared_group_ids || [],
-        apiKeyId: matchedKey?.id || defaultKey?.id || "",
+        apiKeyId:
+          selectedApiKeyId ||
+          byScopeKey?.id ||
+          matchedKey?.id ||
+          matchedById?.id ||
+          "",
       });
     } else {
       const dk =
@@ -624,9 +905,15 @@ export default function GrafanaPage() {
 
       if (isMultiTenantType) {
         const selectedKey = (user?.api_keys || []).find(
-          (k) => k.id === datasourceForm.apiKeyId,
+          (k) => String(k?.id || "") === String(datasourceForm.apiKeyId || ""),
         );
         payload.org_id = selectedKey?.key || user?.org_id || "default";
+        payload.jsonData = {
+          ...payload.jsonData,
+          watchdogApiKeyId: datasourceForm.apiKeyId,
+          watchdogApiKeyName: String(selectedKey?.name || "").trim(),
+          watchdogScopeKey: payload.org_id,
+        };
       }
 
       const params = new URLSearchParams({
@@ -660,11 +947,69 @@ export default function GrafanaPage() {
     }
   }
 
-  function handleDeleteDatasource(datasource) {
+  async function findDatasourceLinkedDashboards(datasource) {
+    const targetUid = String(datasource?.uid || "");
+    if (!targetUid) return [];
+
+    const dashboardSummaries = await searchDashboards({
+      showHidden: true,
+    }).catch(() => []);
+    if (!Array.isArray(dashboardSummaries) || dashboardSummaries.length === 0) {
+      return [];
+    }
+
+    const details = await Promise.allSettled(
+      dashboardSummaries
+        .filter((dashboard) => dashboard?.uid)
+        .map(async (dashboard) => {
+          const full = await getDashboard(dashboard.uid);
+          const dashboardBody = full?.dashboard || full;
+          const refs = new Set();
+          collectDatasourceReferences(dashboardBody, refs);
+          const normalizedRefs = new Set(
+            Array.from(refs).map(
+              (ref) => resolveToUid(ref, datasources) || String(ref),
+            ),
+          );
+
+          if (!normalizedRefs.has(targetUid)) return null;
+
+          return {
+            uid: dashboard.uid,
+          };
+        }),
+    );
+
+    return details
+      .filter((result) => result.status === "fulfilled" && result.value)
+      .map((result) => result.value);
+  }
+
+  async function handleDeleteDatasource(datasource) {
+    let linkedDashboards = [];
+    let linkageCheckFailed = false;
+
+    try {
+      linkedDashboards = await findDatasourceLinkedDashboards(datasource);
+    } catch {
+      linkageCheckFailed = true;
+    }
+
+    const linkedCount = linkedDashboards.length;
+
     setConfirmDialog({
       isOpen: true,
-      title: "Delete Datasource",
-      message: `Are you sure you want to delete "${datasource.name}"? This will affect all dashboards using this datasource.`,
+      title:
+        linkedCount > 0
+          ? "Datasource Linked to Dashboards"
+          : "Delete Datasource",
+      confirmText: linkedCount > 0 ? "Delete Anyway" : "Delete",
+      message: linkageCheckFailed
+        ? `Could not verify whether "${datasource.name}" is linked to dashboards. Dashboards will not be deleted, but they may become dangling and queries may fail. Do you still want to continue?`
+        : linkedCount > 0
+          ? `"${datasource.name}" is linked to dashboard${linkedCount !== 1 ? "s" : ""}. Dashboards won't be deleted, but they will be dangling and queries can break. Do you still want to continue?`
+          : `Are you sure you want to delete "${datasource.name}"? This action cannot be undone.`,
+      messageTone: linkedCount > 0 || linkageCheckFailed ? "danger" : "default",
       variant: "danger",
       onConfirm: async () => {
         try {
@@ -676,6 +1021,42 @@ export default function GrafanaPage() {
         }
       },
     });
+  }
+
+  async function handleViewDatasourceMetrics(datasource) {
+    const datasourceName = String(datasource?.name || "Datasource");
+    const { key: resolvedKey, keyName } = resolveDatasourceKeyMeta(datasource);
+    const resolvedKeyName = keyName || "Default";
+
+    setDatasourceMetricsDialog({
+      isOpen: true,
+      datasourceName,
+      keyName: resolvedKeyName,
+      loading: true,
+      error: "",
+      metrics: [],
+    });
+
+    try {
+      const resp = await listMetricNames(resolvedKey || undefined);
+      const metrics = Array.isArray(resp?.metrics) ? resp.metrics : [];
+      setDatasourceMetricsDialog((prev) => ({
+        ...prev,
+        loading: false,
+        metrics: metrics.slice().sort((a, b) => a.localeCompare(b)),
+      }));
+    } catch (e) {
+      const msg =
+        e?.body?.detail ||
+        e?.body?.message ||
+        e?.message ||
+        "Failed to load metric names";
+      setDatasourceMetricsDialog((prev) => ({
+        ...prev,
+        loading: false,
+        error: msg,
+      }));
+    }
   }
 
   function openFolderEditor(folder = null) {
@@ -788,11 +1169,11 @@ export default function GrafanaPage() {
   const hasActiveFilters = filters.teamId || filters.folderKey || filters.showHidden;
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in grafana-page">
       <PageHeader
-        icon="dashboard"
+        icon="stacked_bar_chart"
         title="Grafana"
-        subtitle="Create and manage dashboards, datasources, and folders"
+        subtitle={`Create and manage dashboards, datasources, and folders.`}
       >
         <Button
           onClick={() => openInGrafana("/")}
@@ -828,7 +1209,12 @@ export default function GrafanaPage() {
         openDatasourceEditor={openDatasourceEditor}
         onDeleteDatasource={handleDeleteDatasource}
         onToggleDatasourceHidden={handleToggleDatasourceHidden}
+        onViewDatasourceMetrics={handleViewDatasourceMetrics}
         getDatasourceIcon={getDatasourceIcon}
+        getDatasourceKeyName={(datasource) =>
+          resolveDatasourceKeyMeta(datasource).keyName
+        }
+        dashboardKeyNamesByUid={dashboardKeyNamesByUid}
         onCreateFolder={() => openFolderEditor(null)}
         onEditFolder={openFolderEditor}
         onDeleteFolder={handleDeleteFolder}
@@ -891,13 +1277,25 @@ export default function GrafanaPage() {
 
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
-        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onClose={() => {
+          const onCancel = confirmDialog.onCancel;
+          setConfirmDialog((prev) => ({
+            ...prev,
+            isOpen: false,
+            onConfirm: null,
+            onCancel: null,
+          }));
+          if (typeof onCancel === "function") {
+            void onCancel();
+          }
+        }}
         onConfirm={confirmDialog.onConfirm || (() => {})}
         title={confirmDialog.title}
         message={confirmDialog.message}
+        messageTone={confirmDialog.messageTone || "default"}
         variant={confirmDialog.variant || "danger"}
         confirmText={confirmDialog.confirmText || "Delete"}
-        cancelText="Cancel"
+        cancelText={confirmDialog.cancelText || "Cancel"}
       />
 
       <ConfirmDialog
@@ -910,6 +1308,91 @@ export default function GrafanaPage() {
         confirmText="Continue to Grafana"
         cancelText="Cancel"
       />
+
+      <Modal
+        isOpen={datasourceMetricsDialog.isOpen}
+        onClose={() =>
+          setDatasourceMetricsDialog({
+            isOpen: false,
+            datasourceName: "",
+            keyName: "",
+            loading: false,
+            error: "",
+            metrics: [],
+          })
+        }
+        title={`Metrics: ${datasourceMetricsDialog.datasourceName}`}
+        size="md"
+        footer={
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              onClick={() =>
+                setDatasourceMetricsDialog({
+                  isOpen: false,
+                  datasourceName: "",
+                  keyName: "",
+                  loading: false,
+                  error: "",
+                  metrics: [],
+                })
+              }
+            >
+              Close
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-400/45 bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-300">
+              <span className="material-icons text-[13px] leading-none">
+                key
+              </span>
+              Key: {datasourceMetricsDialog.keyName || "Default"}
+            </span>
+          </div>
+          {datasourceMetricsDialog.loading ? (
+            <div className="py-6">
+              <Spinner size="md" />
+            </div>
+          ) : datasourceMetricsDialog.error ? (
+            <div className="text-sm text-red-500">{datasourceMetricsDialog.error}</div>
+          ) : datasourceMetricsDialog.metrics.length === 0 ? (
+            <div className="text-sm text-sre-text-muted">No metrics found.</div>
+          ) : (
+            <div className="max-h-80 overflow-auto border border-sre-border rounded-lg bg-sre-bg-alt">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-sre-surface border-b border-sre-border">
+                  <tr>
+                    <th className="text-left px-3 py-2 text-sre-text-muted font-semibold w-16">
+                      #
+                    </th>
+                    <th className="text-left px-3 py-2 text-sre-text-muted font-semibold">
+                      Metric Name
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {datasourceMetricsDialog.metrics.map((name, index) => (
+                    <tr
+                      key={name}
+                      className="border-b border-sre-border/40 hover:bg-sre-surface/50"
+                    >
+                      <td className="px-3 py-2 text-sre-text-subtle tabular-nums">
+                        {index + 1}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-sre-text break-all">
+                        {name}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

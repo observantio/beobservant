@@ -29,18 +29,19 @@ from services.grafana_proxy_service import GrafanaProxyService
 
 
 def _request(headers: list[tuple[bytes, bytes]] | None = None, cookies: dict[str, str] | None = None) -> Request:
+    header_list: list[tuple[bytes, bytes]] = list(headers or [])
+    if cookies:
+        header_list.append((b"cookie", "; ".join(f"{k}={v}" for k, v in cookies.items()).encode("utf-8")))
     scope = {
         "type": "http",
         "http_version": "1.1",
         "method": "GET",
         "path": "/grafana",
-        "headers": headers or [],
+        "headers": header_list,
         "client": ("127.0.0.1", 1234),
         "scheme": "http",
         "query_string": b"",
     }
-    if cookies:
-        scope["headers"] = scope["headers"] + [(b"cookie", "; ".join(f"{k}={v}" for k, v in cookies.items()).encode("utf-8"))]
     return Request(scope)
 
 
@@ -152,7 +153,7 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
     assert svc._normalize_group_ids([" g1 ", "g1", "", None, "g2"]) == ["g1", "g2"]
 
     monkeypatch.setattr(svc, "_effective_group_ids", lambda *_args, **_kwargs: ["live"])
-    monkeypatch.setattr("services.grafana_proxy_service.search_dashboards", lambda *_args, **_kwargs: [{"uid": "d1"}])
+    monkeypatch.setitem(svc.search_dashboards.__globals__, "search_dashboards", lambda *_args, **_kwargs: [{"uid": "d1"}])
 
     async def fake_search(*args, **kwargs):
         return [{"uid": "d1", "groups": args[4]}]
@@ -166,17 +167,17 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
     async def fake_get_folder(*args, **kwargs):
         return {"uid": args[2], "groups": args[5]}
 
-    monkeypatch.setattr("services.grafana_proxy_service.search_dashboards", fake_search)
-    monkeypatch.setattr("services.grafana_proxy_service.get_dashboard", fake_get_dashboard)
-    monkeypatch.setattr("services.grafana_proxy_service.get_datasources", fake_get_datasources)
-    monkeypatch.setattr("services.grafana_proxy_service.get_folder", fake_get_folder)
-    monkeypatch.setattr("services.grafana_proxy_service.get_dashboard_metadata", lambda *_args: {1: "one"})
-    monkeypatch.setattr("services.grafana_proxy_service.get_datasource_metadata", lambda *_args: {2: "two"})
-    monkeypatch.setattr("services.grafana_proxy_service.toggle_dashboard_hidden", lambda *_args: True)
-    monkeypatch.setattr("services.grafana_proxy_service.toggle_datasource_hidden", lambda *_args: True)
-    monkeypatch.setattr("services.grafana_proxy_service.toggle_folder_hidden", lambda *_args: True)
-    monkeypatch.setattr("services.grafana_proxy_service.check_folder_access", lambda *_args, **_kwargs: "folder")
-    monkeypatch.setattr("services.grafana_proxy_service.is_folder_accessible", lambda *_args, **_kwargs: True)
+    monkeypatch.setitem(svc.search_dashboards.__globals__, "search_dashboards", fake_search)
+    monkeypatch.setitem(svc.get_dashboard.__globals__, "get_dashboard", fake_get_dashboard)
+    monkeypatch.setitem(svc.get_datasources.__globals__, "get_datasources", fake_get_datasources)
+    monkeypatch.setitem(svc.get_folder.__globals__, "get_folder", fake_get_folder)
+    monkeypatch.setitem(svc.get_dashboard_metadata.__globals__, "get_dashboard_metadata", lambda *_args: {1: "one"})
+    monkeypatch.setitem(svc.get_datasource_metadata.__globals__, "get_datasource_metadata", lambda *_args: {2: "two"})
+    monkeypatch.setitem(svc.toggle_dashboard_hidden.__globals__, "toggle_dashboard_hidden", lambda *_args: True)
+    monkeypatch.setitem(svc.toggle_datasource_hidden.__globals__, "toggle_datasource_hidden", lambda *_args: True)
+    monkeypatch.setitem(svc.toggle_folder_hidden.__globals__, "toggle_folder_hidden", lambda *_args: True)
+    monkeypatch.setitem(svc.check_folder_access.__globals__, "check_folder_access", lambda *_args, **_kwargs: "folder")
+    monkeypatch.setitem(svc.is_folder_accessible.__globals__, "is_folder_accessible", lambda *_args, **_kwargs: True)
 
     assert await svc.search_dashboards("db", "u1", "tenant", ["stale"]) == [{"uid": "d1", "groups": ["live"]}]
     assert await svc.get_dashboard("db", "dash-1", "u1", "tenant", ["stale"]) == {"uid": "dash-1", "groups": ["live"]}
@@ -218,7 +219,8 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
         token_data,
     )
     assert response.status_code == 200
-    assert response.body == b'{"launch_url":"/grafana/explore"}'
+    assert b'"launch_url":"/grafana/explore?org-key=' in response.body
+    assert b'"org_key":"' in response.body
 
     response = await proxy_router.bootstrap_grafana_session(
         _request(cookies={"watchdog_token": "jwt-2"}),

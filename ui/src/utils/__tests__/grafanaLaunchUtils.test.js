@@ -8,9 +8,9 @@ import {
 describe("grafana launch utilities", () => {
   it("normalizes absolute grafana URLs into a safe path", () => {
     const path = normalizeGrafanaPath(
-      "https://example.com/grafana/d/abc123?orgId=1",
+      "https://example.com/grafana/d/abc123?orgId=1&var-service=api",
     );
-    expect(path).toBe("/d/abc123?orgId=1");
+    expect(path).toBe("/d/abc123?var-service=api");
   });
 
   it("keeps default fallback path for invalid input", () => {
@@ -26,6 +26,8 @@ describe("grafana launch utilities", () => {
     });
     expect(url.startsWith("http://localhost:8080")).toBe(true);
     expect(url).toContain("/d/xyz?var-service=api");
+    expect(url).toContain("org-key=");
+    expect(url).not.toContain("orgId=");
   });
 
   it("builds grafana bootstrap URL without exposing token", () => {

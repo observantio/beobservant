@@ -71,6 +71,12 @@ def _build_internal_name(display_name: str, user_id: str) -> str:
     return f"{display_name}__bo_{str(user_id)[:8]}_{suffix}"
 
 
+def _merge_json_payload(existing: Optional[JSONDict], incoming: Optional[JSONDict]) -> JSONDict:
+    base = dict(existing or {})
+    base.update(dict(incoming or {}))
+    return base
+
+
 def _db_datasource_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[GrafanaDatasource]:
     return (
         db.query(GrafanaDatasource)
@@ -262,7 +268,7 @@ def check_datasource_access_by_id(
 
 
 def get_accessible_datasource_uids(
-    service: GrafanaProxyService,
+    _service: GrafanaProxyService,
     db: Session,
     user_id: str,
     tenant_id: str,
@@ -287,7 +293,7 @@ def get_accessible_datasource_uids(
 
 
 def build_datasource_list_context(
-    service: GrafanaProxyService,
+    _service: GrafanaProxyService,
     db: Session,
     *,
     tenant_id: str,
@@ -382,6 +388,7 @@ async def get_datasources(
     tenant_id: str,
     group_ids: List[str],
     uid: Optional[str] = None,
+    query: Optional[str] = None,
     team_id: Optional[str] = None,
     show_hidden: bool = False,
     limit: Optional[int] = None,
@@ -389,6 +396,7 @@ async def get_datasources(
     datasource_context: Optional[DatasourceListContext] = None,
 ) -> List[Datasource]:
     capped_limit, capped_offset = _cap(limit, offset)
+    query_lc = str(query or "").strip().lower()
 
     if uid:
         datasource = await service.grafana_service.get_datasource(uid)
@@ -429,6 +437,20 @@ async def get_datasources(
             if not db_ds:
                 continue
             if str(team_id) not in {str(g.id) for g in (db_ds.shared_groups or [])}:
+                continue
+        if query_lc:
+            name_value = str(
+                (db_ds.name if db_ds and db_ds.name else getattr(d, "name", "")) or "",
+            ).lower()
+            type_value = str(getattr(d, "type", "") or "").lower()
+            url_value = str(getattr(d, "url", "") or "").lower()
+            uid_value = uid_val.lower()
+            if (
+                query_lc not in name_value
+                and query_lc not in type_value
+                and query_lc not in url_value
+                and query_lc not in uid_value
+            ):
                 continue
         payload = _enrich_datasource_payload(d.model_dump(), db_ds=db_ds, user_id=user_id, is_unregistered_safe_system=is_unregistered_safe)
         out.append(Datasource.model_validate(payload))
@@ -504,6 +526,8 @@ async def create_datasource(
         json_data = dict(getattr(datasource_create, "json_data", None) or {})
         secure_json_data = dict(getattr(datasource_create, "secure_json_data", None) or {})
         json_data.setdefault("httpHeaderName1", "X-Scope-OrgID")
+        json_data["watchdogScopeKey"] = org_id
+        json_data.setdefault("watchdogApiKeyName", str(json_data.get("watchdogApiKeyName") or "").strip())
         secure_json_data.setdefault("httpHeaderValue1", org_id)
         datasource_create = datasource_create.model_copy(
             update={"org_id": org_id, "json_data": json_data, "secure_json_data": secure_json_data}
@@ -588,18 +612,28 @@ async def update_datasource(
         raise HTTPException(status_code=403, detail="Default/read-only datasources cannot be modified")
 
     if db_ds.type in {"prometheus", "loki", "tempo"}:
-        org_id = getattr(datasource_update, "org_id", None)
-        if org_id is not None:
-            validated_org_id = _resolve_datasource_org_scope(
-                db, requested_org_id=org_id, user_id=user_id, tenant_id=tenant_id,
-            )
-            json_data = dict(getattr(datasource_update, "json_data", None) or {})
-            secure_json_data = dict(getattr(datasource_update, "secure_json_data", None) or {})
-            json_data.setdefault("httpHeaderName1", "X-Scope-OrgID")
-            secure_json_data["httpHeaderValue1"] = validated_org_id
-            datasource_update = datasource_update.model_copy(
-                update={"org_id": validated_org_id, "json_data": json_data, "secure_json_data": secure_json_data}
-            )
+        requested_org_id = getattr(datasource_update, "org_id", None)
+        incoming_json = dict(getattr(datasource_update, "json_data", None) or {})
+        existing_json = dict(getattr(existing, "json_data", None) or {})
+        scoped_org_candidate = (
+            requested_org_id
+            or incoming_json.get("watchdogScopeKey")
+            or existing_json.get("watchdogScopeKey")
+            or None
+        )
+        validated_org_id = _resolve_datasource_org_scope(
+            db, requested_org_id=scoped_org_candidate, user_id=user_id, tenant_id=tenant_id,
+        )
+        json_data = _merge_json_payload(existing_json, incoming_json)
+        secure_json_data = dict(getattr(datasource_update, "secure_json_data", None) or {})
+        json_data.setdefault("httpHeaderName1", "X-Scope-OrgID")
+        json_data["watchdogScopeKey"] = validated_org_id
+        if "watchdogApiKeyName" in json_data:
+            json_data["watchdogApiKeyName"] = str(json_data.get("watchdogApiKeyName") or "").strip()
+        secure_json_data["httpHeaderValue1"] = validated_org_id
+        datasource_update = datasource_update.model_copy(
+            update={"org_id": validated_org_id, "json_data": json_data, "secure_json_data": secure_json_data}
+        )
 
     requested_name: Optional[str] = None
     if getattr(datasource_update, "name", None) is not None:

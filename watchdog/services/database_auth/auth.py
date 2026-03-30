@@ -98,7 +98,7 @@ def login(service: DatabaseAuthService, username: str, password: str, mfa_code: 
             return None
 
         mfa_result = _mfa_gate(service, user, mfa_code)
-        if mfa_result is None or isinstance(mfa_result, dict) or isinstance(mfa_result, Token):
+        if mfa_result is None or isinstance(mfa_result, (Token, dict)):
             return mfa_result
 
         token = service.create_access_token(user)
@@ -109,7 +109,7 @@ def login(service: DatabaseAuthService, username: str, password: str, mfa_code: 
         return None
 
     mfa_result = _mfa_gate(service, user, mfa_code)
-    if mfa_result is None or isinstance(mfa_result, dict) or isinstance(mfa_result, Token):
+    if mfa_result is None or isinstance(mfa_result, (Token, dict)):
         return mfa_result
 
     token = service.create_access_token(user)

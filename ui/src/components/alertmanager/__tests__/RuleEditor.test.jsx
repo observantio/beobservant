@@ -1,10 +1,15 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi, describe, it, beforeEach, expect } from "vitest";
 import { useAuth } from "../../../contexts/AuthContext";
 
 vi.mock("../../ui", () => ({
-  Button: ({ children, ...props }) => <button {...props}>{children}</button>,
+  Button: ({ children, loading, ...props }) => (
+    <button {...props} disabled={loading || props.disabled}>
+      {children}
+    </button>
+  ),
   Input: (props) => <input {...props} />,
+  Textarea: (props) => <textarea {...props} />,
   Select: ({ children, onChange, ...props }) => (
     <select {...props} onChange={onChange}>
       {children}
@@ -14,6 +19,14 @@ vi.mock("../../ui", () => ({
 vi.mock("../../HelpTooltip", () => ({ default: () => <span /> }));
 vi.mock("../../../contexts/AuthContext", () => ({
   useAuth: vi.fn(() => ({ hasPermission: vi.fn(), user: null })),
+}));
+vi.mock("../../../api", () => ({
+  evaluatePromql: vi.fn().mockResolvedValue({}),
+  getGroups: vi.fn().mockResolvedValue([]),
+  listMetricLabelValues: vi.fn().mockResolvedValue([]),
+  listMetricLabels: vi.fn().mockResolvedValue([]),
+  listMetricNames: vi.fn().mockResolvedValue({ metrics: [] }),
+  testAlertRule: vi.fn().mockResolvedValue({}),
 }));
 
 import RuleEditor from "../RuleEditor";
@@ -39,6 +52,12 @@ const defaultProps = {
   onSave: noop,
   onCancel: noop,
 };
+const renderRuleEditor = async (props = {}) => {
+  render(<RuleEditor {...defaultProps} {...props} />);
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /Next/i })).toBeInTheDocument();
+  });
+};
 
 const advanceToStep4 = () => {
   fireEvent.click(screen.getByRole("button", { name: /Next/i }));
@@ -51,10 +70,10 @@ describe("RuleEditor notification channel section", () => {
     vi.clearAllMocks();
   });
 
-  it('displays "No channels configured" message and manage link when user has read permission', () => {
+  it('displays "No channels configured" message and manage link when user has read permission', async () => {
     useAuth.mockReturnValue({ hasPermission: () => true });
 
-    render(<RuleEditor {...defaultProps} channels={[]} />);
+    await renderRuleEditor({ channels: [] });
     advanceToStep4();
 
     expect(
@@ -64,10 +83,10 @@ describe("RuleEditor notification channel section", () => {
     expect(link).toHaveAttribute("href", "/integrations");
   });
 
-  it("shows permission warning when user lacks read:channels", () => {
+  it("shows permission warning when user lacks read:channels", async () => {
     useAuth.mockReturnValue({ hasPermission: () => false });
 
-    render(<RuleEditor {...defaultProps} channels={[]} />);
+    await renderRuleEditor({ channels: [] });
     advanceToStep4();
 
     expect(screen.getByText(/don't have permission/i)).toBeInTheDocument();
@@ -87,9 +106,9 @@ describe("RuleEditor API key selector", () => {
     { id: "2", key: "ubuntu", name: "ubuntu", is_default: false, is_enabled: true },
   ];
 
-  it("starts with auto scope active and individual options disabled", () => {
+  it("starts with auto scope active and individual options disabled", async () => {
     useAuth.mockReturnValue({ hasPermission: () => true, user: { id: "u-1" } });
-    render(<RuleEditor {...defaultProps} apiKeys={apiKeys} />);
+    await renderRuleEditor({ apiKeys });
 
     const autoBtn = screen.getByRole("button", { name: /auto scope/i });
     expect(autoBtn).toBeInTheDocument();
@@ -102,9 +121,9 @@ describe("RuleEditor API key selector", () => {
     expect(ubuntuBtn).toBeDisabled();
   });
 
-  it("can toggle an explicit key then return to auto when deselected", () => {
+  it("can toggle an explicit key then return to auto when deselected", async () => {
     useAuth.mockReturnValue({ hasPermission: () => true, user: { id: "u-1" } });
-    render(<RuleEditor {...defaultProps} apiKeys={apiKeys} />);
+    await renderRuleEditor({ apiKeys });
 
     const autoBtn = screen.getByRole("button", { name: /auto scope/i });
     let ubuntuBtn = screen.getByRole("button", { name: /ubuntu/i });
@@ -125,30 +144,24 @@ describe("RuleEditor API key selector", () => {
     expect(ubuntuBtn.querySelector("input")).not.toBeChecked();
   });
 
-  it("shows owner-key visibility hint for non-owner when scope is auto/unknown", () => {
+  it("shows owner-key visibility hint for non-owner when scope is auto/unknown", async () => {
     useAuth.mockReturnValue({ hasPermission: () => true, user: { id: "viewer-1" } });
-    render(
-      <RuleEditor
-        {...defaultProps}
-        apiKeys={apiKeys}
-        rule={{ ...baseRule, createdBy: "owner-1", orgId: "" }}
-      />,
-    );
+    await renderRuleEditor({
+      apiKeys,
+      rule: { ...baseRule, createdBy: "owner-1", orgId: "" },
+    });
 
     expect(
       screen.getByText(/api key selected for this rule has not been shared/i),
     ).toBeInTheDocument();
   });
 
-  it("shows owner-key visibility hint for non-owner when selected scope is not visible", () => {
+  it("shows owner-key visibility hint for non-owner when selected scope is not visible", async () => {
     useAuth.mockReturnValue({ hasPermission: () => true, user: { id: "viewer-1" } });
-    render(
-      <RuleEditor
-        {...defaultProps}
-        apiKeys={apiKeys}
-        rule={{ ...baseRule, createdBy: "owner-1", orgId: "unshared-scope-id" }}
-      />,
-    );
+    await renderRuleEditor({
+      apiKeys,
+      rule: { ...baseRule, createdBy: "owner-1", orgId: "unshared-scope-id" },
+    });
 
     expect(
       screen.getByText(/api key selected for this rule has not been shared/i),
@@ -163,15 +176,12 @@ describe("RuleEditor correlation ID generator", () => {
     vi.clearAllMocks();
   });
 
-  it("switches to custom mode and fills generated value", () => {
+  it("switches to custom mode and fills generated value", async () => {
     useAuth.mockReturnValue({ hasPermission: () => true });
-    render(
-      <RuleEditor
-        {...defaultProps}
-        apiKeys={[]}
-        rule={{ ...baseRule, group: "custom-seed" }}
-      />,
-    );
+    await renderRuleEditor({
+      apiKeys: [],
+      rule: { ...baseRule, group: "custom-seed" },
+    });
 
     // Correlation UI is in Alert Condition step.
     fireEvent.click(screen.getByRole("button", { name: /Next/i }));

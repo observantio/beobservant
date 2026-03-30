@@ -75,13 +75,16 @@ def _session():
 
 def _payload(folder_id: int) -> DashboardCreate:
     return DashboardCreate(
-        dashboard=Dashboard(
-            title="Team Dashboard",
-            tags=["ops"],
-            panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds-1"}}],
+        dashboard=Dashboard.model_validate(
+            {
+                "title": "Team Dashboard",
+                "tags": ["ops"],
+                "panels": [{"targets": [{"expr": "up"}], "datasource": {"uid": "ds-1"}}],
+            }
         ),
         folderId=folder_id,
         overwrite=False,
+        message=None,
     )
 
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from types import SimpleNamespace
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -45,7 +46,7 @@ def _user(**kwargs) -> TokenData:
         "is_superuser": False,
     }
     payload.update(kwargs)
-    return TokenData(**payload)
+    return TokenData(**cast(dict[str, Any], payload))
 
 
 class Query:

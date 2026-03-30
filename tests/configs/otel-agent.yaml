@@ -5,10 +5,12 @@ receivers:
       cpu:
       memory:
       process:
+      processes:
       disk:
       filesystem:
       network:
       paging:
+      load:
 
   otlp:
     protocols:

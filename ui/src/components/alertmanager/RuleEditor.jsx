@@ -1,10 +1,17 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
-import { Button, Input, Select } from "../ui";
+import { Button, Input, Select, Textarea } from "../ui";
 import RuleEditorWizard from "./RuleEditorWizard";
 import HelpTooltip from "../HelpTooltip";
 import { useAuth } from "../../contexts/AuthContext";
-import { getGroups, listMetricNames, testAlertRule } from "../../api";
+import {
+  evaluatePromql,
+  getGroups,
+  listMetricLabelValues,
+  listMetricLabels,
+  listMetricNames,
+  testAlertRule,
+} from "../../api";
 import {
   DEFAULT_FORM,
   RULE_TEMPLATES,
@@ -12,6 +19,9 @@ import {
   createLabelPairsFromRule,
 } from "./ruleEditorUtils";
 import { normalizeRuleOrgId } from "../../utils/alertmanagerRuleUtils";
+
+const CONDITION_OPERATORS = [">", ">=", "<", "<=", "==", "!="];
+const CONDITION_JOIN_OPERATORS = ["and", "or"];
 
 export default function RuleEditor({
   rule,
@@ -32,9 +42,20 @@ export default function RuleEditor({
     new Set(rule?.sharedGroupIds || rule?.shared_group_ids || []),
   );
   const [metricNames, setMetricNames] = useState([]);
+  const [metricLabels, setMetricLabels] = useState([]);
   const [metricFilter, setMetricFilter] = useState("");
   const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [metricsError, setMetricsError] = useState(null);
+  const [promqlPreview, setPromqlPreview] = useState({
+    loading: false,
+    valid: null,
+    error: "",
+    currentValue: null,
+    sampleCount: 0,
+    resultType: null,
+  });
+  const [promqlSuggestions, setPromqlSuggestions] = useState([]);
+  const [labelValuesCache, setLabelValuesCache] = useState({});
   const [labelPairs, setLabelPairs] = useState(() =>
     createLabelPairsFromRule(rule),
   );
@@ -48,6 +69,18 @@ export default function RuleEditor({
   const totalSteps = 4;
   const [issuesCollapsed, setIssuesCollapsed] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [queryMode, setQueryMode] = useState("promql");
+  const [builderUseRate, setBuilderUseRate] = useState(false);
+  const [builderRateWindow, setBuilderRateWindow] = useState("5m");
+  const [builderConditions, setBuilderConditions] = useState([
+    {
+      id: Math.random().toString(36).slice(2, 9),
+      joinWithPrev: "and",
+      metric: "",
+      operator: ">",
+      value: "",
+    },
+  ]);
   const [correlationMode, setCorrelationMode] = useState("existing");
   // helper to generate random correlation IDs (uses crypto.randomUUID when available)
   const generateCorrelationId = () => {
@@ -60,6 +93,8 @@ export default function RuleEditor({
     setFormData((prev) => ({ ...prev, group: id }));
   };
   const [selectedApiScopes, setSelectedApiScopes] = useState([AUTO_SCOPE]);
+  const isMountedRef = useRef(true);
+  const metricsLoadRequestRef = useRef(0);
   const visibleApiKeys = useMemo(
     () =>
       (apiKeys || []).filter(
@@ -91,6 +126,128 @@ export default function RuleEditor({
       !isRuleOwner &&
       (!hasExplicitApiScope || hasHiddenSelectedApiScope),
   );
+  const activeApiScope = useMemo(() => {
+    const visible = (apiKeys || []).filter((k) => !(k?.is_hidden || k?.isHidden));
+    const enabled = visible.find((k) => k?.is_enabled);
+    const fallbackDefault = visible.find((k) => k?.is_default);
+    const fallbackFirst = visible[0];
+    return String(
+      enabled?.key || fallbackDefault?.key || fallbackFirst?.key || "",
+    ).trim();
+  }, [apiKeys]);
+  const metricsOrgScope = useMemo(() => {
+    const explicitScope = selectedExplicitApiScopes[0];
+    if (explicitScope) return String(explicitScope).trim();
+    const normalizedRuleOrg = normalizeRuleOrgId(formData.orgId);
+    if (normalizedRuleOrg) return normalizedRuleOrg;
+    return activeApiScope || undefined;
+  }, [selectedExplicitApiScopes, formData.orgId, activeApiScope]);
+  const metricsScopeLabel = useMemo(() => {
+    if (!metricsOrgScope) return "default";
+    const matched = (apiKeys || []).find(
+      (k) => String(k?.key || "").trim() === String(metricsOrgScope || "").trim(),
+    );
+    return matched?.name || `${String(metricsOrgScope).slice(0, 8)}...`;
+  }, [metricsOrgScope, apiKeys]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+  const promqlFunctionHints = useMemo(
+    () => [
+      "rate(",
+      "irate(",
+      "increase(",
+      "sum(",
+      "sum by (",
+      "avg(",
+      "avg by (",
+      "max(",
+      "min(",
+      "topk(",
+      "bottomk(",
+      "histogram_quantile(",
+      "clamp_min(",
+      "absent_over_time(",
+    ],
+    [],
+  );
+  const promqlAutocompleteContext = useMemo(() => {
+    const expr = String(formData.expr || "");
+    const cursor = expr.length;
+    const beforeCursor = expr.slice(0, cursor);
+    const tokenMatch = beforeCursor.match(/([a-zA-Z_:][a-zA-Z0-9_:]*)$/);
+    const defaultToken = String(tokenMatch?.[1] || "");
+    const openBraceIndex = beforeCursor.lastIndexOf("{");
+    const closeBraceIndex = beforeCursor.lastIndexOf("}");
+
+    if (openBraceIndex <= closeBraceIndex) {
+      return {
+        mode: "metricOrFunction",
+        token: defaultToken,
+        segmentStart: cursor - defaultToken.length,
+      };
+    }
+
+    const selectorStart = openBraceIndex + 1;
+    const selectorText = beforeCursor.slice(selectorStart);
+    const lastCommaInSelector = selectorText.lastIndexOf(",");
+    const segmentStart = selectorStart + (lastCommaInSelector >= 0 ? lastCommaInSelector + 1 : 0);
+    const rawSegment = beforeCursor.slice(segmentStart);
+    const leadingWhitespace = rawSegment.length - rawSegment.trimStart().length;
+    const segmentTrimmedStart = segmentStart + leadingWhitespace;
+    const segmentText = rawSegment.trimStart();
+
+    const metricMatch = beforeCursor
+      .slice(0, openBraceIndex)
+      .match(/([a-zA-Z_:][a-zA-Z0-9_:]*)\s*$/);
+    const metricName = String(metricMatch?.[1] || "");
+
+    const previousSegments = selectorText
+      .slice(0, Math.max(lastCommaInSelector, 0))
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const existingLabelKeys = new Set(
+      previousSegments
+        .map((part) => {
+          const m = part.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(=|!=|=~|!~)/);
+          return m ? m[1] : "";
+        })
+        .filter(Boolean),
+    );
+
+    const opMatch = segmentText.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(=~|!~|=|!=)\s*(.*)$/);
+    if (opMatch) {
+      const labelKey = opMatch[1];
+      const operator = opMatch[2];
+      const rawValue = String(opMatch[3] || "");
+      const valueToken = rawValue
+        .replace(/^"/, "")
+        .replace(/".*$/, "")
+        .trim();
+      return {
+        mode: "labelValue",
+        token: valueToken,
+        segmentStart: segmentTrimmedStart,
+        labelKey,
+        operator,
+        metricName,
+      };
+    }
+
+    const keyTokenMatch = segmentText.match(/^([a-zA-Z_][a-zA-Z0-9_]*)?$/);
+    const keyToken = String(keyTokenMatch?.[1] || "");
+    return {
+      mode: "labelKey",
+      token: keyToken,
+      segmentStart: segmentTrimmedStart,
+      metricName,
+      existingLabelKeys,
+    };
+  }, [formData.expr]);
 
   useEffect(() => {
     loadGroups();
@@ -106,6 +263,51 @@ export default function RuleEditor({
         : [];
     setSelectedGroups(new Set(incomingGroups));
   }, [rule]);
+
+  const buildCompositeExprFromBuilder = useCallback((
+    conditions = [],
+    useRate = false,
+    rateWindow = "5m",
+  ) => {
+    const normalized = (conditions || [])
+      .map((row) => ({
+        ...row,
+        metric: String(row?.metric || "").trim(),
+        operator: String(row?.operator || ">").trim(),
+        value: String(row?.value || "").trim(),
+        joinWithPrev: String(row?.joinWithPrev || "and").trim().toLowerCase(),
+      }))
+      .filter((row) => row.metric && row.operator && row.value);
+
+    if (!normalized.length) return "";
+
+    const safeWindow = String(rateWindow || "").trim() || "5m";
+
+    return normalized
+      .map((row, index) => {
+        const metricExpr = useRate
+          ? `rate(${row.metric}[${safeWindow}])`
+          : row.metric;
+        const exprPart = `(${metricExpr} ${row.operator} ${row.value})`;
+        if (index === 0) return exprPart;
+        const joiner = CONDITION_JOIN_OPERATORS.includes(row.joinWithPrev)
+          ? row.joinWithPrev.toUpperCase()
+          : "AND";
+        return `${joiner} ${exprPart}`;
+      })
+      .join(" ");
+  }, []);
+
+  useEffect(() => {
+    if (queryMode !== "builder") return;
+    const nextExpr = buildCompositeExprFromBuilder(
+      builderConditions,
+      builderUseRate,
+      builderRateWindow,
+    );
+    if (!nextExpr) return;
+    setFormData((prev) => (prev.expr === nextExpr ? prev : { ...prev, expr: nextExpr }));
+  }, [queryMode, builderConditions, builderUseRate, builderRateWindow, buildCompositeExprFromBuilder]);
 
   useEffect(() => {
     const rawOrg = String((rule || DEFAULT_FORM)?.orgId || "").trim();
@@ -159,19 +361,195 @@ export default function RuleEditor({
     setValidationWarnings(warnings);
   }, [formData, labelPairs]);
 
-  const loadMetrics = async () => {
+  const loadMetrics = useCallback(async () => {
+    const requestId = metricsLoadRequestRef.current + 1;
+    metricsLoadRequestRef.current = requestId;
     setLoadingMetrics(true);
     setMetricsError(null);
     try {
-      const resp = await listMetricNames(normalizeRuleOrgId(formData.orgId));
+      const resp = await listMetricNames(metricsOrgScope);
+      if (!isMountedRef.current || requestId !== metricsLoadRequestRef.current) return;
       setMetricNames(Array.isArray(resp.metrics) ? resp.metrics : []);
     } catch (e) {
+      if (!isMountedRef.current || requestId !== metricsLoadRequestRef.current) return;
       setMetricsError(e.message || "Failed to load metrics from Mimir");
       setMetricNames([]);
     } finally {
-      setLoadingMetrics(false);
+      if (isMountedRef.current && requestId === metricsLoadRequestRef.current) {
+        setLoadingMetrics(false);
+      }
     }
-  };
+  }, [metricsOrgScope]);
+
+  useEffect(() => {
+    if (queryMode !== "promql") return;
+    if (metricNames.length > 0 || loadingMetrics || metricsError) return;
+    if (!metricsOrgScope) return;
+    loadMetrics();
+  }, [queryMode, metricNames.length, loadingMetrics, metricsError, metricsOrgScope, loadMetrics]);
+
+  useEffect(() => {
+    if (queryMode !== "promql") return;
+    if (metricLabels.length > 0 || !metricsOrgScope) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await listMetricLabels(metricsOrgScope);
+        if (cancelled) return;
+        setMetricLabels(Array.isArray(resp?.labels) ? resp.labels : []);
+      } catch {
+        if (!cancelled) setMetricLabels([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [queryMode, metricLabels.length, metricsOrgScope]);
+
+  useEffect(() => {
+    if (queryMode !== "promql") return;
+    if (promqlAutocompleteContext.mode !== "labelValue") return;
+    if (!metricsOrgScope || !promqlAutocompleteContext.labelKey) return;
+    const cacheKey = `${promqlAutocompleteContext.labelKey}::${promqlAutocompleteContext.metricName || "*"}`;
+    if (labelValuesCache[cacheKey]) return;
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const resp = await listMetricLabelValues(
+          promqlAutocompleteContext.labelKey,
+          metricsOrgScope,
+          { metricName: promqlAutocompleteContext.metricName || undefined },
+        );
+        if (cancelled) return;
+        setLabelValuesCache((prev) => ({
+          ...prev,
+          [cacheKey]: Array.isArray(resp?.values) ? resp.values : [],
+        }));
+      } catch {
+        if (cancelled) return;
+        setLabelValuesCache((prev) => ({ ...prev, [cacheKey]: [] }));
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [queryMode, promqlAutocompleteContext, metricsOrgScope, labelValuesCache]);
+
+  useEffect(() => {
+    if (queryMode !== "promql") {
+      setPromqlSuggestions([]);
+      return;
+    }
+
+    const token = String(promqlAutocompleteContext.token || "").toLowerCase();
+
+    if (promqlAutocompleteContext.mode === "labelKey") {
+      const usedKeys = promqlAutocompleteContext.existingLabelKeys || new Set();
+      const keyHints = metricLabels
+        .filter((label) => {
+          const v = String(label || "");
+          if (!v || v === "__name__") return false;
+          if (usedKeys.has(v)) return false;
+          return token.length === 0 || v.toLowerCase().startsWith(token);
+        })
+        .slice(0, 12)
+        .map((value) => ({ value, type: "labelKey" }));
+      setPromqlSuggestions(keyHints);
+      return;
+    }
+
+    if (promqlAutocompleteContext.mode === "labelValue") {
+      const cacheKey = `${promqlAutocompleteContext.labelKey}::${promqlAutocompleteContext.metricName || "*"}`;
+      const values = labelValuesCache[cacheKey] || [];
+      const valueHints = values
+        .filter((value) => {
+          const v = String(value || "");
+          return token.length === 0 || v.toLowerCase().startsWith(token);
+        })
+        .slice(0, 12)
+        .map((value) => ({ value, type: "labelValue" }));
+      setPromqlSuggestions(valueHints);
+      return;
+    }
+
+    if (!token || token.length < 2) {
+      setPromqlSuggestions([]);
+      return;
+    }
+    const metricHints = metricNames
+      .filter((name) => name.toLowerCase().startsWith(token))
+      .slice(0, 8)
+      .map((value) => ({ value, type: "metric" }));
+    const fnHints = promqlFunctionHints
+      .filter((hint) => hint.toLowerCase().startsWith(token))
+      .slice(0, 4)
+      .map((value) => ({ value, type: "function" }));
+    const merged = Array.from(new Map([...metricHints, ...fnHints].map((s) => [s.value, s])).values()).slice(0, 10);
+    setPromqlSuggestions(merged);
+  }, [queryMode, promqlAutocompleteContext, metricLabels, labelValuesCache, metricNames, promqlFunctionHints]);
+
+  useEffect(() => {
+    if (queryMode !== "promql") {
+      setPromqlPreview({
+        loading: false,
+        valid: null,
+        error: "",
+        currentValue: null,
+        sampleCount: 0,
+        resultType: null,
+      });
+      return;
+    }
+    const expr = String(formData.expr || "").trim();
+    if (!expr || expr.length < 3 || !metricsOrgScope) {
+      setPromqlPreview({
+        loading: false,
+        valid: null,
+        error: "",
+        currentValue: null,
+        sampleCount: 0,
+        resultType: null,
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setPromqlPreview((prev) => ({ ...prev, loading: true }));
+      try {
+        const res = await evaluatePromql(expr, metricsOrgScope, {
+          sampleLimit: 5,
+          signal: controller.signal,
+        });
+        setPromqlPreview({
+          loading: false,
+          valid: Boolean(res?.valid),
+          error: String(res?.error || ""),
+          currentValue: res?.currentValue ?? null,
+          sampleCount: Number(res?.sampleCount || 0),
+          resultType: String(res?.resultType || ""),
+        });
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        setPromqlPreview({
+          loading: false,
+          valid: false,
+          error: String(e?.message || "Failed to validate query"),
+          currentValue: null,
+          sampleCount: 0,
+          resultType: null,
+        });
+      }
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [formData.expr, metricsOrgScope, queryMode]);
 
   const filteredMetricNames = useMemo(() => {
     if (!metricFilter) return metricNames;
@@ -181,9 +559,15 @@ export default function RuleEditor({
 
   useEffect(() => {
     const explicitScopes = selectedApiScopes.filter((id) => id !== AUTO_SCOPE);
+    const hasAutoScope = selectedApiScopes.includes(AUTO_SCOPE);
     setFormData((prev) => {
-      const nextOrgId = explicitScopes[0] || "";
-      const nextOrgIds = explicitScopes;
+      const autoResolvedScope = hasAutoScope ? String(activeApiScope || "").trim() : "";
+      const nextOrgId = explicitScopes[0] || autoResolvedScope || "";
+      const nextOrgIds = explicitScopes.length > 0
+        ? explicitScopes
+        : autoResolvedScope
+          ? [autoResolvedScope]
+          : [];
       const prevOrgId = String(prev.orgId || "");
       const prevOrgIds = Array.isArray(prev.orgIds) ? prev.orgIds : [];
       const sameOrgId = prevOrgId === nextOrgId;
@@ -193,7 +577,7 @@ export default function RuleEditor({
       if (sameOrgId && sameOrgIds) return prev;
       return { ...prev, orgId: nextOrgId, orgIds: nextOrgIds };
     });
-  }, [selectedApiScopes]);
+  }, [selectedApiScopes, activeApiScope]);
 
   const correlationIdOptions = useMemo(
     () => {
@@ -278,7 +662,75 @@ export default function RuleEditor({
         description: template.description,
       },
     }));
+    setQueryMode("promql");
     setSelectedTemplate(template.id);
+  };
+
+  const applyPromqlSuggestion = (suggestion) => {
+    const suggestionValue = String(suggestion?.value || "");
+    if (!suggestionValue) return;
+    const currentExpr = String(formData.expr || "");
+    if (promqlAutocompleteContext.mode === "labelKey") {
+      const nextSegment = `${suggestionValue}=""`;
+      const nextExpr = `${currentExpr.slice(0, promqlAutocompleteContext.segmentStart)}${nextSegment}`;
+      setFormData((prev) => ({ ...prev, expr: nextExpr }));
+      return;
+    }
+    if (promqlAutocompleteContext.mode === "labelValue") {
+      const key = String(promqlAutocompleteContext.labelKey || "").trim();
+      const op = String(promqlAutocompleteContext.operator || "=").trim() || "=";
+      if (key) {
+        const nextSegment = `${key}${op}"${suggestionValue}"`;
+        const nextExpr = `${currentExpr.slice(0, promqlAutocompleteContext.segmentStart)}${nextSegment}`;
+        setFormData((prev) => ({ ...prev, expr: nextExpr }));
+        return;
+      }
+    }
+
+    const tokenMatch = currentExpr.match(/([a-zA-Z_:][a-zA-Z0-9_:]*)$/);
+    if (tokenMatch?.[1]) {
+      const nextExpr = currentExpr.replace(/([a-zA-Z_:][a-zA-Z0-9_:]*)$/, suggestionValue);
+      setFormData((prev) => ({ ...prev, expr: nextExpr }));
+      return;
+    }
+    const spacer = currentExpr && !/\s$/.test(currentExpr) ? " " : "";
+    setFormData((prev) => ({ ...prev, expr: `${currentExpr}${spacer}${suggestionValue}` }));
+  };
+
+  const addBuilderCondition = () => {
+    setBuilderConditions((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(36).slice(2, 9),
+        joinWithPrev: "and",
+        metric: "",
+        operator: ">",
+        value: "",
+      },
+    ]);
+  };
+
+  const updateBuilderCondition = (id, field, value) => {
+    setBuilderConditions((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)),
+    );
+  };
+
+  const removeBuilderCondition = (id) => {
+    setBuilderConditions((prev) => {
+      if (prev.length <= 1) {
+        return [
+          {
+            id: Math.random().toString(36).slice(2, 9),
+            joinWithPrev: "and",
+            metric: "",
+            operator: ">",
+            value: "",
+          },
+        ];
+      }
+      return prev.filter((row) => row.id !== id);
+    });
   };
 
   const handleTestRule = async () => {
@@ -325,6 +777,12 @@ export default function RuleEditor({
     }
   };
 
+  const handleStepClick = (stepIndex) => {
+    if (typeof stepIndex !== "number") return;
+    if (stepIndex < 0 || stepIndex > totalSteps - 1) return;
+    setCurrentStep(stepIndex);
+  };
+
   const handleWizardSubmit = async () => {
     const { errors } = validateRuleForm(formData, labelPairs);
     if (Object.keys(errors).length > 0) return;
@@ -349,33 +807,34 @@ export default function RuleEditor({
   const hasErrors = Object.keys(validationErrors).length > 0;
 
   return (
-    <div className="max-w-6xl mx-auto overflow-hidden">
-      <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
+    <div className="max-w-5xl mx-auto overflow-hidden">
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
         <RuleEditorWizard
           currentStep={currentStep}
           totalSteps={totalSteps}
           onNext={handleNext}
           onPrevious={handlePrevious}
           onSubmit={handleWizardSubmit}
+          onStepClick={handleStepClick}
           canProceed={canProceedToNextStep()}
           isSubmitting={saving}
           hasErrors={hasErrors}
           showButtons={false}
         />
-        <div className="min-h-[500px] py-3 overflow-hidden">
+        <div className="min-h-[420px] py-1 overflow-hidden">
           {currentStep === 0 && (
             <>
-              <div className="space-y-8 p-2">
-                <div className="text-left mb-6">
-                  <h2 className="text-xl font-bold text-sre-text mb-2">
+              <div className="space-y-5 p-1">
+                <div className="text-left mb-3">
+                  <h2 className="text-lg font-bold text-sre-text mb-1">
                     Basic Setup
                   </h2>
-                  <p className="text-sm text-sre-text-muted">
+                  <p className="text-xs text-sre-text-muted">
                     Configure the fundamental properties of your alert rule
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-sre-text">
                       Rule Name{" "}
@@ -388,7 +847,7 @@ export default function RuleEditor({
                       }
                       required
                       placeholder="CPU Alert"
-                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                      className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                     />
                     {validationErrors.name && (
                       <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
@@ -407,7 +866,7 @@ export default function RuleEditor({
                       onChange={(e) =>
                         setFormData({ ...formData, severity: e.target.value })
                       }
-                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                      className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                     >
                       <option value="info">Info</option>
                       <option value="warning">Warning</option>
@@ -428,11 +887,11 @@ export default function RuleEditor({
                       Product / API Key{" "}
                       <HelpTooltip text="Select one or more API keys to target specific products. Auto scope selects all visible API keys." />
                     </label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                       <button
                         type="button"
                         onClick={() => toggleApiScope(AUTO_SCOPE)}
-                        className={`text-left p-3 rounded-lg border transition-colors ${
+                          className={`text-left p-2.5 rounded-lg border transition-colors ${
                           selectedApiScopes.includes(AUTO_SCOPE)
                             ? "border-sre-primary bg-sre-primary/10"
                             : "border-sre-border bg-sre-surface hover:border-sre-primary/50"
@@ -464,7 +923,7 @@ export default function RuleEditor({
                             type="button"
                             onClick={() => toggleApiScope(String(k.key || ""))}
                             disabled={isAuto}
-                            className={`text-left p-3 rounded-lg border transition-colors ${
+                            className={`text-left p-2.5 rounded-lg border transition-colors ${
                               isSelected
                                 ? "border-sre-primary bg-sre-primary/10"
                                 : "border-sre-border bg-sre-surface hover:border-sre-primary/50"
@@ -497,21 +956,21 @@ export default function RuleEditor({
 
                 {/* Quick Templates */}
                 <div>
-                  <div className="mb-4">
+                  <div className="mb-3">
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="material-icons text-2xl text-sre-primary">
+                      <span className="material-icons text-xl text-sre-primary">
                         auto_awesome
                       </span>
-                      <h4 className="text-base font-semibold text-sre-text">
+                      <h4 className="text-sm font-semibold text-sre-text">
                         Quick Templates
                       </h4>
                     </div>
-                    <p className="text-sm text-sre-text-muted">
+                    <p className="text-xs text-sre-text-muted">
                       Start from a known-good template, then tune the expression
                       and thresholds for your environment.
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-80 scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-sre-bg-alt scrollbar-thumb-rounded overflow-y-auto pr-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-sre-bg-alt scrollbar-thumb-rounded overflow-y-auto pr-1">
                     {RULE_TEMPLATES.map((template) => {
                       const isSelected = selectedTemplate === template.id;
                       return (
@@ -519,7 +978,7 @@ export default function RuleEditor({
                           key={template.id}
                           type="button"
                           onClick={() => applyTemplate(template)}
-                          className={`text-left p-4 rounded-lg border-2 transition-all duration-200 group shadow-sm hover:shadow-md h-auto relative ${
+                          className={`text-left p-3 rounded-lg border transition-all duration-200 group shadow-sm hover:shadow-md h-auto relative ${
                             isSelected
                               ? "border-sre-primary bg-sre-primary/10 shadow-md"
                               : "border-sre-border bg-sre-surface hover:border-sre-primary hover:bg-sre-primary/5"
@@ -527,13 +986,13 @@ export default function RuleEditor({
                         >
                           {isSelected && (
                             <div className="absolute top-2 right-2">
-                              <span className="material-icons text-lg text-sre-primary">
+                              <span className="material-icons text-base text-sre-primary">
                                 auto_awesome
                               </span>
                             </div>
                           )}
                           <div
-                            className={`text-base font-semibold transition-colors mb-2 text-left ${
+                            className={`text-sm font-semibold transition-colors mb-1.5 text-left ${
                               isSelected
                                 ? "text-sre-primary"
                                 : "text-sre-text group-hover:text-sre-primary"
@@ -541,10 +1000,10 @@ export default function RuleEditor({
                           >
                             {template.name}
                           </div>
-                          <div className="text-sm text-sre-text-muted mb-3 line-clamp-2 text-left">
+                          <div className="text-xs text-sre-text-muted mb-2 line-clamp-2 text-left">
                             {template.summary}
                           </div>
-                          <div className="text-xs font-mono text-sre-text-muted bg-sre-bg-alt p-3 rounded border text-left whitespace-pre-wrap break-words leading-relaxed min-h-[80px] overflow-hidden">
+                          <div className="text-[11px] font-mono text-sre-text-muted bg-sre-bg-alt p-2.5 rounded border text-left whitespace-pre-wrap break-words leading-relaxed min-h-[70px] overflow-hidden">
                             {template.expr}
                           </div>
                         </button>
@@ -559,31 +1018,352 @@ export default function RuleEditor({
           {currentStep === 1 && (
             <>
               {/* Alert Condition */}
-              <div className="space-y-8 p-2">
-                <div className="text-left mb-6">
-                  <h2 className="text-xl font-bold text-sre-text mb-2">
+              <div className="space-y-5 p-1">
+                <div className="text-left mb-3">
+                  <h2 className="text-lg font-bold text-sre-text mb-1">
                     Alert Condition
                   </h2>
-                  <p className="text-sre-text-muted">
+                  <p className="text-xs text-sre-text-muted">
                     Define when this alert should trigger
                   </p>
                 </div>
 
-                <div className="space-y-6">
-                  <div className="space-y-3">
-                    <label className="block text-sm font-semibold text-sre-text">
-                      PromQL Expression{" "}
-                      <HelpTooltip text="Write a PromQL query that defines when this alert should fire. Use the metric explorer below to help build your query." />
-                    </label>
-                    <Input
-                      value={formData.expr}
-                      onChange={(e) =>
-                        setFormData({ ...formData, expr: e.target.value })
-                      }
-                      required
-                      placeholder="rate(requests_total[5m]) > 100"
-                      className="w-full font-mono text-base py-3 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors min-h-[60px]"
-                    />
+                <div className="space-y-4">
+                  {/* Metric Explorer */}
+                  <div className="bg-gradient-to-r from-sre-surface to-sre-surface/80 rounded-lg p-4 border border-sre-border">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="material-icons text-xl text-sre-primary">
+                            functions
+                          </span>
+                          <h4 className="text-base font-semibold text-sre-text">
+                            Metric Explorer
+                          </h4>
+                        </div>
+                        <p className="text-sm text-sre-text-muted leading-relaxed">
+                          Load metric names from Mimir for the selected product.
+                          Click a metric to {queryMode === "builder"
+                            ? "fill the latest builder row"
+                            : "insert it into PromQL"}.
+                        </p>
+                        <div className="mt-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-indigo-400/45 bg-indigo-500/15 px-2 py-0.5 text-[11px] font-semibold text-indigo-300">
+                            <span className="material-icons text-[13px] leading-none">
+                              key
+                            </span>
+                            Scope: {metricsScopeLabel || "Default"}
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={loadMetrics}
+                        disabled={loadingMetrics}
+                        className="p-1.5 min-w-0 h-8 w-8"
+                        title="Load metrics"
+                        aria-label="Load metrics"
+                      >
+                        <span
+                          className={`material-icons text-base ${loadingMetrics ? "animate-spin" : ""}`}
+                        >
+                          {loadingMetrics ? "progress_activity" : "refresh"}
+                        </span>
+                      </Button>
+                    </div>
+
+                    {metricsError && (
+                      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300 font-medium">
+                        <span className="material-icons text-base mr-1 align-middle">
+                          error
+                        </span>
+                        {metricsError}
+                      </div>
+                    )}
+
+                    {metricNames.length > 0 && (
+                      <>
+                        <div className="mb-4">
+                          <label className="block text-sm font-semibold text-sre-text mb-2">
+                            Filter metrics
+                          </label>
+                          <Input
+                            value={metricFilter}
+                            onChange={(e) => setMetricFilter(e.target.value)}
+                            placeholder="http_requests_total"
+                            className="w-full py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
+                          />
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {filteredMetricNames.length ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {filteredMetricNames.map((name) => (
+                                <button
+                                  key={name}
+                                  type="button"
+                                  onClick={() => {
+                                    if (queryMode === "builder") {
+                                      setBuilderConditions((prev) => {
+                                        if (!prev.length) {
+                                          return [
+                                            {
+                                              id: Math.random().toString(36).slice(2, 9),
+                                              joinWithPrev: "and",
+                                              metric: name,
+                                              operator: ">",
+                                              value: "",
+                                            },
+                                          ];
+                                        }
+                                        const next = [...prev];
+                                        let targetIndex = 0;
+                                        for (let i = next.length - 1; i >= 0; i -= 1) {
+                                          if (!String(next[i]?.metric || "").trim()) {
+                                            targetIndex = i;
+                                            break;
+                                          }
+                                        }
+                                        next[targetIndex] = {
+                                          ...next[targetIndex],
+                                          metric: name,
+                                        };
+                                        return next;
+                                      });
+                                      return;
+                                    }
+                                    const base = formData.expr || "";
+                                    const template = base ? `${base}\n${name}` : name;
+                                    setFormData({ ...formData, expr: template });
+                                  }}
+                                  className="px-2.5 py-1 text-xs rounded-full border border-sre-border/80 bg-sre-bg-card/80 hover:bg-sre-primary/10 hover:border-sre-primary/60 text-sre-text transition-all duration-150 break-words max-w-full text-left"
+                                  title={name}
+                                >
+                                  {name}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-sre-text-muted italic">
+                              No metrics match this filter.
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="block text-sm font-semibold text-sre-text">
+                        Alert Query{" "}
+                        <HelpTooltip text="Use PromQL mode for direct query input, or Builder mode to compose conditions with AND/OR logic." />
+                      </label>
+                      <div className="inline-flex rounded-lg border border-sre-border bg-sre-bg-alt p-1">
+                        <button
+                          type="button"
+                          onClick={() => setQueryMode("promql")}
+                          className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                            queryMode === "promql"
+                              ? "bg-sre-primary text-white"
+                              : "text-sre-text-muted hover:text-sre-text"
+                          }`}
+                        >
+                          PromQL
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQueryMode("builder")}
+                          className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                            queryMode === "builder"
+                              ? "bg-sre-primary text-white"
+                              : "text-sre-text-muted hover:text-sre-text"
+                          }`}
+                        >
+                          Builder
+                        </button>
+                      </div>
+                    </div>
+
+                    {queryMode === "promql" ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          value={formData.expr}
+                          onChange={(e) =>
+                            setFormData({ ...formData, expr: e.target.value })
+                          }
+                          required
+                          placeholder="rate(requests_total[5m]) > 100"
+                          rows={6}
+                          className="w-full font-mono text-sm py-2.5 px-3 border border-sre-border focus:border-sre-primary transition-colors whitespace-pre leading-relaxed"
+                        />
+                        {promqlSuggestions.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {promqlSuggestions.map((suggestion) => (
+                              <button
+                                key={`${suggestion.type || "hint"}-${suggestion.value}`}
+                                type="button"
+                                onClick={() => applyPromqlSuggestion(suggestion)}
+                                className="rounded-full border border-sre-border/80 bg-sre-bg-alt/70 px-2 py-0.5 text-[11px] font-mono text-sre-text hover:border-sre-primary/40 hover:text-sre-primary transition-colors"
+                              >
+                                {suggestion.value}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <div className="rounded-md border border-sre-border/70 bg-sre-bg-alt/60 px-3 py-2">
+                          {promqlPreview.loading ? (
+                            <p className="text-xs text-sre-text-muted">Validating query...</p>
+                          ) : promqlPreview.valid === true ? (
+                            <div className="text-xs text-sre-text">
+                              <span className="text-green-600 dark:text-green-400 font-semibold">
+                                Query valid.
+                              </span>{" "}
+                              {promqlPreview.currentValue !== null && (
+                                <span>
+                                  Current value: <span className="font-mono">{String(promqlPreview.currentValue)}</span>
+                                </span>
+                              )}{" "}
+                              {promqlPreview.resultType && (
+                                <span className="text-sre-text-muted">
+                                  ({promqlPreview.resultType}, {promqlPreview.sampleCount} samples)
+                                </span>
+                              )}
+                            </div>
+                          ) : promqlPreview.valid === false ? (
+                            <p className="text-xs text-red-500 dark:text-red-400">
+                              {promqlPreview.error || "Query is invalid or returned an error."}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-sre-text-muted">
+                              Type a PromQL expression to validate it and preview current values.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 rounded-lg border border-sre-border bg-sre-surface p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-sre-border/70 bg-sre-bg-alt/60 px-2.5 py-2">
+                          <label className="inline-flex items-center gap-2 text-xs text-sre-text">
+                            <input
+                              type="checkbox"
+                              checked={builderUseRate}
+                              onChange={(e) => setBuilderUseRate(e.target.checked)}
+                              className="rounded border-sre-border bg-sre-surface"
+                            />
+                            Apply <span className="font-mono">rate()</span> to metrics
+                          </label>
+                          {builderUseRate && (
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-sre-text-muted">
+                                Window
+                              </label>
+                              <Input
+                                value={builderRateWindow}
+                                onChange={(e) => setBuilderRateWindow(e.target.value)}
+                                placeholder="5m"
+                                className="w-20 text-xs py-1.5 px-2 border border-sre-border"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        {builderConditions.map((row, index) => (
+                          <div
+                            key={row.id}
+                            className="grid grid-cols-1 md:grid-cols-[auto_1.8fr_auto_1fr_auto] gap-2 items-center"
+                          >
+                            {index === 0 ? (
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted px-2">
+                                Start
+                              </span>
+                            ) : (
+                              <Select
+                                value={row.joinWithPrev}
+                                onChange={(e) =>
+                                  updateBuilderCondition(
+                                    row.id,
+                                    "joinWithPrev",
+                                    e.target.value,
+                                  )
+                                }
+                                className="text-xs px-2 py-1 border border-sre-border"
+                              >
+                                <option value="and">AND</option>
+                                <option value="or">OR</option>
+                              </Select>
+                            )}
+
+                            <Input
+                              value={row.metric}
+                              onChange={(e) =>
+                                updateBuilderCondition(
+                                  row.id,
+                                  "metric",
+                                  e.target.value,
+                                )
+                              }
+                              placeholder="Metric name"
+                              list="rule-metric-suggestions"
+                              className="w-full text-sm py-2 px-3 border border-sre-border"
+                            />
+                            <Select
+                              value={row.operator}
+                              onChange={(e) =>
+                                updateBuilderCondition(
+                                  row.id,
+                                  "operator",
+                                  e.target.value,
+                                )
+                              }
+                              className="text-sm px-2 py-2 border border-sre-border"
+                            >
+                              {CONDITION_OPERATORS.map((op) => (
+                                <option key={op} value={op}>
+                                  {op}
+                                </option>
+                              ))}
+                            </Select>
+                            <Input
+                              value={row.value}
+                              onChange={(e) =>
+                                updateBuilderCondition(row.id, "value", e.target.value)
+                              }
+                              placeholder="Value"
+                              className="w-full text-sm py-2 px-3 border border-sre-border"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeBuilderCondition(row.id)}
+                              className="h-9 w-9 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              title="Remove condition"
+                            >
+                              <span className="material-icons text-base">close</span>
+                            </Button>
+                          </div>
+                        ))}
+
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={addBuilderCondition}
+                          >
+                            <span className="material-icons text-sm mr-1.5">add</span>
+                            Add Rule
+                          </Button>
+                        </div>
+                        <datalist id="rule-metric-suggestions">
+                          {filteredMetricNames.map((metric) => (
+                            <option key={metric} value={metric} />
+                          ))}
+                        </datalist>
+                      </div>
+                    )}
+
                     {validationErrors.expr && (
                       <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
                         <span className="material-icons text-sm">error</span>
@@ -592,7 +1372,7 @@ export default function RuleEditor({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-3">
                       <label className="block text-sm font-semibold text-sre-text">
                         Duration{" "}
@@ -604,7 +1384,7 @@ export default function RuleEditor({
                           setFormData({ ...formData, duration: e.target.value })
                         }
                         placeholder="5m, 1h"
-                        className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                        className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                       />
                       {validationErrors.duration && (
                         <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
@@ -634,7 +1414,7 @@ export default function RuleEditor({
                               }));
                             }
                           }}
-                          className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                          className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                         >
                           <option value="existing">Select existing</option>
                           <option value="custom">Create new</option>
@@ -650,7 +1430,7 @@ export default function RuleEditor({
                             onChange={(e) =>
                               setFormData({ ...formData, group: e.target.value })
                             }
-                            className="w-full text-lg px-4 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                            className="w-full text-sm px-3 border border-sre-border focus:border-sre-primary transition-colors"
                           >
                             {correlationIdOptions.length === 0 ? (
                               <option value={formData.group || "default"}>
@@ -679,7 +1459,7 @@ export default function RuleEditor({
                               }
                               placeholder="default"
                               maxLength={MAX_CORRELATION_ID_LENGTH}
-                              className="w-full text-lg px-4 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                              className="w-full text-sm px-3 border border-sre-border focus:border-sre-primary transition-colors"
                             />
                             <Button
                               size="xs"
@@ -698,103 +1478,6 @@ export default function RuleEditor({
                     </div>
                   </div>
 
-                  {/* Metric Explorer */}
-                  <div className="bg-gradient-to-r from-sre-surface to-sre-surface/80 rounded-xl p-6 border border-sre-border">
-                    <div className="flex items-start justify-between gap-4 mb-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="material-icons text-xl text-sre-primary">
-                            functions
-                          </span>
-                          <h4 className="text-base font-semibold text-sre-text">
-                            Metric Explorer
-                          </h4>
-                        </div>
-                        <p className="text-sm text-sre-text-muted leading-relaxed">
-                          Load metric names from Mimir for the selected product
-                          and click to insert them into your PromQL expression.
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="lg"
-                        onClick={loadMetrics}
-                        disabled={loadingMetrics}
-                      >
-                        {loadingMetrics ? (
-                          <>
-                            <span className="material-icons text-base mr-2 animate-spin">
-                              progress_activity
-                            </span>
-                            Loading…
-                          </>
-                        ) : (
-                          <>
-                            <span className="material-icons text-base mr-2">
-                              refresh
-                            </span>
-                            Load metrics
-                          </>
-                        )}
-                      </Button>
-                    </div>
-
-                    {metricsError && (
-                      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300 font-medium">
-                        <span className="material-icons text-base mr-1 align-middle">
-                          error
-                        </span>
-                        {metricsError}
-                      </div>
-                    )}
-
-                    {metricNames.length > 0 && (
-                      <>
-                        <div className="mb-4">
-                          <label className="block text-sm font-semibold text-sre-text mb-2">
-                            Filter metrics
-                          </label>
-                          <Input
-                            value={metricFilter}
-                            onChange={(e) => setMetricFilter(e.target.value)}
-                            placeholder="http_requests_total"
-                            className="w-full py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
-                          />
-                        </div>
-                        <div className="max-h-48 overflow-y-auto border border-sre-border rounded-lg p-4 bg-sre-bg-alt">
-                          {filteredMetricNames.length ? (
-                            <div className="flex flex-wrap gap-2">
-                              {filteredMetricNames.map((name) => (
-                                <button
-                                  key={name}
-                                  type="button"
-                                  onClick={() => {
-                                    const base = formData.expr || "";
-                                    const template = base
-                                      ? `${base}\n${name}`
-                                      : name;
-                                    setFormData({
-                                      ...formData,
-                                      expr: template,
-                                    });
-                                  }}
-                                  className="px-3 py-2 text-sm rounded-full border border-sre-border bg-sre-bg-card hover:bg-sre-primary/10 hover:border-sre-primary text-sre-text transition-all duration-200 break-words max-w-full shadow-sm hover:shadow-md text-left"
-                                  title={name}
-                                >
-                                  {name}
-                                </button>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-sre-text-muted italic">
-                              No metrics match this filter.
-                            </p>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
                 </div>
               </div>
             </>
@@ -803,17 +1486,17 @@ export default function RuleEditor({
           {currentStep === 2 && (
             <>
               {/* Alert Details */}
-              <div className="space-y-8 p-2">
-                <div className="text-left mb-6">
-                  <h2 className="text-xl font-bold text-sre-text mb-2">
+              <div className="space-y-5 p-1">
+                <div className="text-left mb-3">
+                  <h2 className="text-lg font-bold text-sre-text mb-1">
                     Alert Details
                   </h2>
-                  <p className="text-sre-text-muted">
+                  <p className="text-xs text-sre-text-muted">
                     Add context and labels to make your alerts more informative
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-3">
                     <label className="block text-sm font-semibold text-sre-text">
                       Summary{" "}
@@ -831,7 +1514,7 @@ export default function RuleEditor({
                         })
                       }
                       placeholder="Brief alert summary"
-                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                      className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                     />
                   </div>
                   <div className="space-y-3">
@@ -851,14 +1534,14 @@ export default function RuleEditor({
                         })
                       }
                       placeholder="Detailed description"
-                      className="w-full text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                      className="w-full text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                     />
                   </div>
                 </div>
 
                 {/* Alert Labels */}
-                <div className="pt-4">
-                  <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="pt-2">
+                  <div className="flex items-center justify-between gap-3 mb-3">
                     <div>
                       <h4 className="text-base font-semibold text-sre-text">
                         Alert Labels
@@ -893,11 +1576,11 @@ export default function RuleEditor({
                       No labels added yet.
                     </p>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-2.5">
                       {labelPairs.map((pair, idx) => (
                         <div
                           key={pair.id}
-                          className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-center"
+                          className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-center"
                         >
                           <Input
                             value={pair.key}
@@ -951,26 +1634,26 @@ export default function RuleEditor({
 
                 {/* Rule Preview */}
                 <div>
-                  <h4 className="text-lg font-semibold text-sre-text mb-4 flex items-center gap-2">
+                  <h4 className="text-base font-semibold text-sre-text mb-2 flex items-center gap-2">
                     Rule Preview
                   </h4>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <div className="space-y-2">
                       <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">
                         Expression
                       </div>
-                      <div className="text-sm font-mono text-sre-text break-words bg-sre-surface p-4 rounded-lg border border-sre-border shadow-inner max-h-24 overflow-y-auto">
+                      <div className="text-xs font-mono text-sre-text break-words bg-sre-surface p-3 rounded-lg border border-sre-border shadow-inner max-h-24 overflow-y-auto">
                         {formData.expr || "No expression set"}
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                       <div className="space-y-2">
                         <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">
                           Duration
                         </div>
-                        <div className="text-base text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border">
+                        <div className="text-sm text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border">
                           {formData.duration || "1m"}
                         </div>
                       </div>
@@ -978,7 +1661,7 @@ export default function RuleEditor({
                         <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">
                           Group
                         </div>
-                        <div className="text-base text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border">
+                        <div className="text-sm text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border">
                           {formData.group || "default"}
                         </div>
                       </div>
@@ -986,7 +1669,7 @@ export default function RuleEditor({
                         <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">
                           Target Org
                         </div>
-                        <div className="text-base text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border break-words">
+                        <div className="text-sm text-sre-text font-mono bg-sre-surface px-3 py-2 rounded border border-sre-border break-words">
                           {formData.orgId || "default org"}
                         </div>
                       </div>
@@ -996,15 +1679,19 @@ export default function RuleEditor({
                       <div className="text-sm text-sre-text-muted font-medium uppercase tracking-wide">
                         Labels
                       </div>
-                      <div className="flex flex-wrap gap-2 min-h-[3rem]">
+                      <div className="flex flex-wrap items-center gap-2 min-h-[3rem]">
                         {Object.entries(effectiveLabels).length > 0 ? (
                           Object.entries(effectiveLabels).map(
                             ([key, value]) => (
                               <span
                                 key={key}
-                                className="text-sm px-5 py-3 bg-sre-primary/10  rounded-full text-sre-text break-words text-left"
+                                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-sre-primary/25 bg-sre-primary/10 text-sre-text break-all leading-none"
                               >
-                                {key}={value}
+                                <span className="font-semibold text-sre-primary">
+                                  {key}
+                                </span>
+                                <span className="text-sre-text-muted">=</span>
+                                <span className="font-medium">{value}</span>
                               </span>
                             ),
                           )
@@ -1024,18 +1711,18 @@ export default function RuleEditor({
           {currentStep === 3 && (
             <>
               {/* Advanced Settings */}
-              <div className="space-y-8 p-2">
-                <div className="text-left mb-6">
-                  <h2 className="text-xl font-bold text-sre-text mb-2">
+              <div className="space-y-5 p-1">
+                <div className="text-left mb-3">
+                  <h2 className="text-lg font-bold text-sre-text mb-1">
                     Advanced Settings
                   </h2>
-                  <p className="text-sre-text-muted">
+                  <p className="text-xs text-sre-text-muted">
                     Configure notifications and rule visibility
                   </p>
                 </div>
 
                 {/* Notification Channels */}
-                <div className="space-y-6">
+                <div className="space-y-4">
                   <div className="flex items-center gap-3">
                     <span className="material-icons text-xl text-sre-primary">
                       notifications
@@ -1052,7 +1739,7 @@ export default function RuleEditor({
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {channels?.length > 0 ? (
                       <>
                         {/* All Channels Option */}
@@ -1072,7 +1759,7 @@ export default function RuleEditor({
                               notificationChannels: newChannels,
                             });
                           }}
-                          className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                          className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
                             !formData.notificationChannels ||
                             formData.notificationChannels.length === 0
                               ? "border-sre-primary bg-sre-primary/5 shadow-md"
@@ -1107,7 +1794,7 @@ export default function RuleEditor({
                         </div>
 
                         {/* Individual Channels */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           {channels.map((channel) => {
                             const isSelected =
                               formData.notificationChannels?.includes(
@@ -1127,7 +1814,7 @@ export default function RuleEditor({
                                     notificationChannels: newChannels,
                                   });
                                 }}
-                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                                className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
                                   isSelected
                                     ? "border-sre-primary bg-sre-primary/5 shadow-md"
                                     : "border-sre-border bg-sre-surface hover:border-sre-primary/50 hover:bg-sre-primary/5"
@@ -1246,7 +1933,7 @@ export default function RuleEditor({
                 </div>
 
                 {/* Enable Rule */}
-                <div className="flex items-center gap-8">
+                <div className="flex items-center gap-4">
                   <input
                     type="checkbox"
                     id="enabled"
@@ -1254,11 +1941,11 @@ export default function RuleEditor({
                     onChange={(e) =>
                       setFormData({ ...formData, enabled: e.target.checked })
                     }
-                    className="w-5 h-5 text-sre-primary border-2 border-sre-border rounded focus:ring-sre-primary"
+                    className="w-4 h-4 text-sre-primary border border-sre-border rounded focus:ring-sre-primary"
                   />
                   <label
                     htmlFor="enabled"
-                    className="text-base text-sre-text cursor-pointer"
+                    className="text-sm text-sre-text cursor-pointer"
                   >
                     <span className="font-semibold">Enable this rule</span>{" "}
                     <HelpTooltip text="Only enabled rules will trigger alerts. Disabled rules are saved but won't fire." />
@@ -1266,7 +1953,7 @@ export default function RuleEditor({
                 </div>
 
                 {/* Visibility Settings */}
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <label
                     htmlFor="rule-visibility"
                     className="block text-sm font-semibold text-sre-text"
@@ -1287,7 +1974,7 @@ export default function RuleEditor({
                         setSelectedGroups(new Set());
                       }
                     }}
-                    className="w-full max-w-md text-base py-2 px-3 border-2 border-sre-border focus:border-sre-primary transition-colors"
+                    className="w-full max-w-md text-sm py-2 px-3 border border-sre-border focus:border-sre-primary transition-colors"
                   >
                     <option value="private">
                       Private - Only visible to me
@@ -1299,7 +1986,7 @@ export default function RuleEditor({
                       Tenant - Visible to all users in tenant
                     </option>
                   </Select>
-                  <p className="text-sm text-sre-text-muted leading-relaxed">
+                  <p className="text-xs text-sre-text-muted leading-relaxed">
                     {formData.visibility === "private" &&
                       "Only you can view and edit this rule"}
                     {formData.visibility === "group" &&
@@ -1311,7 +1998,7 @@ export default function RuleEditor({
 
                 {/* Group Sharing */}
                 {formData.visibility === "group" && groups?.length > 0 && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <label
                       htmlFor="rule-groups"
                       className="block text-sm font-semibold text-sre-text"
@@ -1321,25 +2008,25 @@ export default function RuleEditor({
                     </label>
                     <div
                       id="rule-groups"
-                      className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto"
+                      className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto"
                     >
                       {groups.map((group) => (
                         <label
                           key={group.id}
-                          className="flex items-center gap-4 p-4 bg-sre-surface border border-sre-border rounded-lg cursor-pointer hover:bg-sre-primary/5 hover:border-sre-primary transition-all duration-200 shadow-sm hover:shadow-md"
+                          className="flex items-center gap-3 p-2.5 bg-sre-surface border border-sre-border rounded-lg cursor-pointer hover:bg-sre-primary/5 hover:border-sre-primary transition-all duration-200"
                         >
                           <input
                             type="checkbox"
                             checked={selectedGroups.has(group.id)}
                             onChange={() => toggleGroup(group.id)}
-                            className="w-5 h-5 text-sre-primary border-2 border-sre-border rounded focus:ring-sre-primary"
+                            className="w-4 h-4 text-sre-primary border border-sre-border rounded focus:ring-sre-primary"
                           />
                           <div className="flex-1 min-w-0">
                             <div className="font-semibold text-sre-text truncate">
                               {group.name}
                             </div>
                             {group.description && (
-                              <div className="text-sm text-sre-text-muted truncate">
+                              <div className="text-xs text-sre-text-muted truncate">
                                 {group.description}
                               </div>
                             )}
@@ -1347,7 +2034,7 @@ export default function RuleEditor({
                         </label>
                       ))}
                     </div>
-                    <p className="text-sm text-sre-text-muted">
+                    <p className="text-xs text-sre-text-muted">
                       {selectedGroups.size} group
                       {selectedGroups.size === 1 ? "" : "s"} selected
                     </p>
@@ -1364,6 +2051,7 @@ export default function RuleEditor({
           onNext={handleNext}
           onPrevious={handlePrevious}
           onSubmit={handleWizardSubmit}
+          onStepClick={handleStepClick}
           canProceed={canProceedToNextStep()}
           isSubmitting={saving}
           hasErrors={hasErrors}

@@ -16,7 +16,7 @@ from typing import List, Optional, Set, Tuple, TYPE_CHECKING
 
 import httpx
 from fastapi import HTTPException, status
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from config import config
@@ -222,6 +222,7 @@ def list_groups(
     actor_user_id: Optional[str] = None,
     actor_role: Optional[str] = None,
     actor_is_superuser: bool = False,
+    q: Optional[str] = None,
 ) -> List[GroupSchema]:
     with get_db_session() as db:
         query = (
@@ -229,6 +230,15 @@ def list_groups(
             .options(joinedload(Group.permissions), joinedload(Group.members))
             .filter_by(tenant_id=tenant_id)
         )
+        query_text = str(q or "").strip()
+        if query_text:
+            pattern = f"%{query_text.lower()}%"
+            query = query.filter(
+                or_(
+                    func.lower(func.coalesce(Group.name, "")).like(pattern),
+                    func.lower(func.coalesce(Group.description, "")).like(pattern),
+                )
+            )
         if not _is_admin_actor(actor_role=actor_role, actor_is_superuser=actor_is_superuser):
             actor_id = str(actor_user_id or "").strip()
             if not actor_id:

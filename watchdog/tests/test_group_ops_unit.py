@@ -100,8 +100,11 @@ def test_create_list_get_update_and_delete_group(monkeypatch):
 
     with pytest.raises(ValueError, match="already exists"):
         group_ops.create_group(service, GroupCreate(name="ops", description=None), "t1", creator_id=admin.id)
+    group_ops.create_group(service, GroupCreate(name="Platform", description="Platform owners"), "t1", creator_id=admin.id)
 
-    assert len(group_ops.list_groups(service, "t1", actor_user_id=admin.id, actor_role="admin")) == 1
+    assert len(group_ops.list_groups(service, "t1", actor_user_id=admin.id, actor_role="admin")) == 2
+    assert len(group_ops.list_groups(service, "t1", actor_user_id=admin.id, actor_role="admin", q="ops")) == 1
+    assert len(group_ops.list_groups(service, "t1", actor_user_id=admin.id, actor_role="admin", q="platform")) == 1
     assert group_ops.list_groups(service, "t1", actor_user_id=None, actor_role="user") == []
     assert group_ops.get_group(service, created_group.id, "t1", actor_user_id=other.id, actor_role="user") is None
     assert group_ops.get_group(service, created_group.id, "t1", actor_user_id=admin.id, actor_role="admin").id == created_group.id

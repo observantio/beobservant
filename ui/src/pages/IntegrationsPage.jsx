@@ -22,9 +22,27 @@ import ConfirmModal from "../components/ConfirmModal";
 import ChannelEditor from "../components/alertmanager/ChannelEditor";
 
 const VISIBILITY_TABS = [
-  { key: "private", label: "Private", icon: "lock" },
-  { key: "tenant", label: "Shared By Organization", icon: "public" },
-  { key: "group", label: "Shared By Groups", icon: "groups" },
+  {
+    key: "private",
+    label: "Private",
+    icon: "lock",
+    workspaceLabel: "Personal Workspace",
+    scopeTag: "Private",
+  },
+  {
+    key: "tenant",
+    label: "Shared By Organization",
+    icon: "public",
+    workspaceLabel: "Tenant Public Workspace",
+    scopeTag: "Public",
+  },
+  {
+    key: "group",
+    label: "Shared By Groups",
+    icon: "groups",
+    workspaceLabel: "Group Shared Workspace",
+    scopeTag: "Groups",
+  },
 ];
 
 function JiraIntegrationForm({ value, onChange, canUseSso = false }) {
@@ -290,6 +308,23 @@ export default function IntegrationsPage() {
   const visibleJiraIntegrations = useMemo(
     () => jiraIntegrations.filter((item) => item.visibility === activeTab),
     [jiraIntegrations, activeTab]
+  );
+  const tabIntegrationCounts = useMemo(() => {
+    const counts = {};
+    VISIBILITY_TABS.forEach((tab) => {
+      const channelsCount = channels.filter((channel) => channel.visibility === tab.key).length;
+      const jiraCount = jiraIntegrations.filter((integration) => integration.visibility === tab.key).length;
+      counts[tab.key] = {
+        total: channelsCount + jiraCount,
+        channels: channelsCount,
+        jira: jiraCount,
+      };
+    });
+    return counts;
+  }, [channels, jiraIntegrations]);
+  const activeVisibilityMeta = useMemo(
+    () => VISIBILITY_TABS.find((tab) => tab.key === activeTab) || VISIBILITY_TABS[0],
+    [activeTab]
   );
 
   const channelIconForType = (type) => {
@@ -739,22 +774,43 @@ export default function IntegrationsPage() {
         subtitle="Manage notification channels and Jira integrations with private, group, and organization scopes."
       />
 
-      <div className="flex gap-2 border-b border-sre-border justify-center items-center">
-        {VISIBILITY_TABS.map((tab) => (
-          <button
-            type="button"
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`pl-4 pr-4 py-2 text-sm flex items-center justify-center gap-2 border-b-2 transition-colors ${
-              activeTab === tab.key
-                ? "border-sre-primary text-sre-primary"
-                : "border-transparent text-sre-text-muted hover:text-sre-text"
-            }`}
-          >
-            <span className="material-icons text-sm">{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
+      <div className="rounded-xl bg-sre-surface/40 p-2">
+        <div className="flex flex-wrap justify-center items-center gap-2">
+          {VISIBILITY_TABS.map((tab) => {
+            // Show total integrations in scope (channels + Jira integrations).
+            const tabCount = tabIntegrationCounts[tab.key] || {
+              total: 0,
+              channels: 0,
+              jira: 0,
+            };
+            return (
+            <button
+              type="button"
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2.5 text-sm rounded-lg flex items-center justify-center gap-2 transition-colors ${
+                activeTab === tab.key
+                  ? "bg-sre-primary/10 text-sre-primary"
+                  : "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface"
+              }`}
+            >
+              <span className="material-icons text-sm">{tab.icon}</span>
+              {tab.label}
+              <span
+                aria-label={`${tab.label} integrations count`}
+                title={`${tabCount.total} total (${tabCount.channels} channels, ${tabCount.jira} Jira)`}
+                className={`inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                  activeTab === tab.key
+                    ? "bg-sre-primary/20 text-sre-primary"
+                    : "bg-sre-surface border border-sre-border text-sre-text-muted"
+                }`}
+              >
+                {tabCount.total}
+              </span>
+            </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="flex items-center justify-end">
@@ -765,12 +821,22 @@ export default function IntegrationsPage() {
             onChange={(e) => setShowHidden(e.target.checked)}
             className="rounded border-sre-border"
           />
-          Show hidden
+          Unhide
         </label>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-sre-border bg-sre-surface/70 px-3 py-1 text-xs font-medium text-sre-text">
+          <span className="material-icons text-sm leading-none">{activeVisibilityMeta.icon}</span>
+          {activeVisibilityMeta.workspaceLabel}
+        </span>
+        <span className="inline-flex items-center rounded-full border border-sre-border/80 bg-sre-bg-alt px-2.5 py-1 text-xs text-sre-text-muted">
+          {activeVisibilityMeta.scopeTag}
+        </span>
+      </div>
+
       <div className="space-y-6">
-        <Card className="py-6 px-0">
+        <Card className="p-6">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <h2 className="text-xl font-semibold text-sre-text">Notification Channels</h2>
@@ -779,12 +845,18 @@ export default function IntegrationsPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-sre-border bg-sre-surface/70 px-2.5 py-1 text-xs text-sre-text-muted">
+                <span className="material-icons text-sm leading-none">
+                  {activeVisibilityMeta.icon}
+                </span>
+                {activeVisibilityMeta.label}
+              </span>
               <Button
                 onClick={openCreateChannel}
                 aria-label="Add channel"
                 size="sm"
                 variant="primary"
-                className="h-9 w-9 p-0 text-white border border-sre-primary/40 shadow-md hover:shadow-lg"
+                className="h-10 w-10 p-0 text-white border border-sre-primary/40 shadow-md hover:shadow-lg"
               >
                 <span className="material-icons text-lg leading-none">add</span>
               </Button>
@@ -794,7 +866,7 @@ export default function IntegrationsPage() {
           <div className="space-y-4">
             {visibleChannels.length === 0 ? (
               <div className="text-center py-12">
-                <div className="mx-auto w-36 h-36 rounded-full bg-gradient-to-br from-sre-surface/50 to-sre-surface/30 flex items-center justify-center mb-4 shadow-inner">
+                <div className="mx-auto w-36 h-36 rounded-full border-2 border-sre-border bg-gradient-to-br from-sre-surface/50 to-sre-surface/30 flex items-center justify-center mb-4 shadow-inner">
                   <span className="material-icons text-5xl text-sre-text-muted">
                     notifications_off
                   </span>
@@ -822,7 +894,7 @@ export default function IntegrationsPage() {
 
         <hr className="border-sre-border" />
 
-        <Card className="py-6 px-0">
+        <Card className="p-6">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <h2 className="text-xl font-semibold text-sre-text">Jira Integrations</h2>
@@ -831,12 +903,18 @@ export default function IntegrationsPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-sre-border bg-sre-surface/70 px-2.5 py-1 text-xs text-sre-text-muted">
+                <span className="material-icons text-sm leading-none">
+                  {activeVisibilityMeta.icon}
+                </span>
+                {activeVisibilityMeta.label}
+              </span>
               <Button
                 onClick={openCreateJira}
                 aria-label="Add Jira integration"
                 size="sm"
                 variant="primary"
-                className="h-9 w-9 p-0 text-white border border-sre-primary/40 shadow-md hover:shadow-lg"
+                className="h-10 w-10 p-0 text-white border border-sre-primary/40 shadow-md hover:shadow-lg"
               >
                 <span className="material-icons text-lg leading-none">add</span>
               </Button>
@@ -846,7 +924,7 @@ export default function IntegrationsPage() {
           <div className="space-y-4">
             {visibleJiraIntegrations.length === 0 ? (
               <div className="text-center py-12">
-                <div className="mx-auto w-32 h-32 bg-sre-surface/60 flex items-center justify-center mb-4">
+                <div className="mx-auto w-36 h-36 rounded-full border-2 border-sre-border bg-gradient-to-br from-sre-surface/50 to-sre-surface/30 flex items-center justify-center mb-4 shadow-inner">
                   <span className="material-icons text-4xl text-sre-text-muted">
                     integration_instructions
                   </span>

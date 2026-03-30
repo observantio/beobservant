@@ -11,6 +11,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -81,6 +82,7 @@ def _ctx(db):
 
 
 def _pem_pair(key_type: str) -> tuple[str, str]:
+    private_key: Any
     if key_type == "rsa":
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     else:

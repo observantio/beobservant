@@ -108,7 +108,7 @@ export default function TraceTimeline({ trace, onClose, onCopyTraceId }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/45 p-4 backdrop-blur-xl animate-fade-in dark:bg-black/55"
       role="dialog"
       aria-modal="true"
       aria-labelledby={`trace-timeline-title-${traceId}`}

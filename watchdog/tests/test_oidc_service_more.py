@@ -9,6 +9,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 from __future__ import annotations
 
 import asyncio
+import importlib
 from concurrent.futures import Future
 from types import SimpleNamespace
 
@@ -20,6 +21,9 @@ from tests._env import ensure_test_env
 ensure_test_env()
 
 from services.auth.oidc_service import OIDCService, _json_dict, _looks_like_jwt
+
+
+_oidc_module = importlib.import_module(OIDCService.__module__)
 
 
 class ResponseStub:
@@ -82,10 +86,10 @@ def test_oidc_well_known_jwks_and_exchange_paths(monkeypatch):
             return None
 
     monkeypatch.setattr(service, "_http", HttpStub())
-    monkeypatch.setattr("services.auth.oidc_service.config.OIDC_ISSUER_URL", "https://issuer")
-    monkeypatch.setattr("services.auth.oidc_service.config.OIDC_CLIENT_ID", "client")
-    monkeypatch.setattr("services.auth.oidc_service.config.OIDC_SCOPES", "openid profile")
-    monkeypatch.setattr("services.auth.oidc_service.config.OIDC_CLIENT_SECRET", "secret")
+    monkeypatch.setattr(_oidc_module.config, "OIDC_ISSUER_URL", "https://issuer")
+    monkeypatch.setattr(_oidc_module.config, "OIDC_CLIENT_ID", "client")
+    monkeypatch.setattr(_oidc_module.config, "OIDC_SCOPES", "openid profile")
+    monkeypatch.setattr(_oidc_module.config, "OIDC_CLIENT_SECRET", "secret")
 
     wk = service._get_well_known()
     assert wk["issuer"] == "https://issuer"
@@ -121,8 +125,8 @@ def test_oidc_exchange_and_fetch_error_paths(monkeypatch):
 def test_oidc_transaction_error_paths(monkeypatch):
     service = OIDCService()
     monkeypatch.setattr(service, "_get_well_known", lambda: {"authorization_endpoint": "https://issuer/auth"})
-    monkeypatch.setattr("services.auth.oidc_service.config.OIDC_CLIENT_ID", "client")
-    monkeypatch.setattr("services.auth.oidc_service.config.OIDC_SCOPES", "openid")
+    monkeypatch.setattr(_oidc_module.config, "OIDC_CLIENT_ID", "client")
+    monkeypatch.setattr(_oidc_module.config, "OIDC_SCOPES", "openid")
 
     created = asyncio.run(
         service.start_authorization_transaction_async(
@@ -175,17 +179,17 @@ def test_oidc_sync_runtime_helpers(monkeypatch):
     monkeypatch.setattr(service, "_ensure_bg_loop", lambda: SimpleNamespace())
     future = Future()
     future.set_result({"ok": True})
-    monkeypatch.setattr("services.auth.oidc_service.asyncio.run_coroutine_threadsafe", lambda coro, loop: (coro.close(), future)[1])
+    monkeypatch.setattr(_oidc_module.asyncio, "run_coroutine_threadsafe", lambda coro, loop: (coro.close(), future)[1])
     assert service._run_async(asyncio.sleep(0, result={"ok": True})) == {"ok": True}
 
 
 def test_oidc_admin_token_and_keycloak_user_paths(monkeypatch):
     service = OIDCService()
-    monkeypatch.setattr("services.auth.oidc_service.config.KEYCLOAK_ADMIN_URL", "https://kc")
-    monkeypatch.setattr("services.auth.oidc_service.config.KEYCLOAK_ADMIN_REALM", "master")
-    monkeypatch.setattr("services.auth.oidc_service.config.KEYCLOAK_ADMIN_CLIENT_ID", "cid")
-    monkeypatch.setattr("services.auth.oidc_service.config.KEYCLOAK_ADMIN_CLIENT_SECRET", "secret")
-    monkeypatch.setattr("services.auth.oidc_service.config.KEYCLOAK_USER_PROVISIONING_ENABLED", True)
+    monkeypatch.setattr(_oidc_module.config, "KEYCLOAK_ADMIN_URL", "https://kc")
+    monkeypatch.setattr(_oidc_module.config, "KEYCLOAK_ADMIN_REALM", "master")
+    monkeypatch.setattr(_oidc_module.config, "KEYCLOAK_ADMIN_CLIENT_ID", "cid")
+    monkeypatch.setattr(_oidc_module.config, "KEYCLOAK_ADMIN_CLIENT_SECRET", "secret")
+    monkeypatch.setattr(_oidc_module.config, "KEYCLOAK_USER_PROVISIONING_ENABLED", True)
 
     calls = []
 

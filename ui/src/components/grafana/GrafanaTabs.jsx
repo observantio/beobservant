@@ -62,21 +62,32 @@ export default function GrafanaTabs({ activeTab, onChange }) {
   ];
 
   return (
-    <div className="flex gap-2 mb-6 border-b border-sre-border justify-center items-center">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => onChange(tab.id)}
-          className={`pl-4 pr-4 py-2 font-medium text-sm transition-colors relative flex items-center gap-2 ${
-            activeTab === tab.id
-              ? "text-sre-primary border-b-2 border-sre-primary"
-              : "text-sre-text-muted hover:text-sre-text"
-          }`}
-        >
-          <span className="flex items-center">{tab.icon}</span>
-          {tab.label}
-        </button>
-      ))}
+    <div className="grafana-main-tabs mb-6 w-full border-b border-sre-border">
+      <nav
+        className="mx-auto flex w-fit max-w-full flex-wrap justify-center gap-x-1 gap-y-1 sm:gap-x-2"
+        role="tablist"
+        aria-label="Grafana sections"
+      >
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            onClick={() => onChange(tab.id)}
+            className={`inline-flex items-center justify-center gap-2 whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === tab.id
+                ? "-mb-px border-b-2 border-sre-primary text-sre-primary"
+                : "text-sre-text-muted hover:text-sre-text"
+            }`}
+          >
+            <span className="inline-flex shrink-0 items-center justify-center leading-none">
+              {tab.icon}
+            </span>
+            {tab.label}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

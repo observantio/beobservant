@@ -3,11 +3,14 @@ import TempoPage from "../TempoPage";
 import * as api from "../../api";
 
 vi.mock("../../hooks", () => ({ useAutoRefresh: () => {} }));
+let authState = {
+  user: { id: "u1", username: "me", org_id: "org-a", api_keys: [] },
+  isAuthenticated: true,
+  loading: false,
+  hasPermission: () => true,
+};
 vi.mock("../../contexts/AuthContext", () => ({
-  useAuth: () => ({
-    user: { id: "u1", username: "me" },
-    hasPermission: () => true,
-  }),
+  useAuth: () => authState,
 }));
 vi.mock("../../contexts/ToastContext", () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),
@@ -20,14 +23,24 @@ vi.mock("../../components/ui/AutoRefreshControl", () => ({
 }));
 vi.mock("../../components/ui", () => ({
   Card: ({ children }) => <div>{children}</div>,
-  Button: ({ children }) => <button>{children}</button>,
+  Button: ({ children, loading, ...props }) => (
+    <button {...props} disabled={loading || props.disabled}>
+      {children}
+    </button>
+  ),
   Input: (props) => <input {...props} />,
-  Select: ({ children }) => <select>{children}</select>,
+  Select: ({ children, ...props }) => <select {...props}>{children}</select>,
   Spinner: () => <div>Loading</div>,
   Badge: ({ children }) => <span>{children}</span>,
   Alert: ({ children }) => <div>{children}</div>,
 }));
 vi.mock("../../components/HelpTooltip", () => ({ default: () => <span /> }));
+vi.mock("../../components/tempo/TraceResults", () => ({
+  default: ({ traces }) => <div>Trace results: {traces?.length || 0}</div>,
+}));
+vi.mock("../../components/tempo/TraceTimeline", () => ({
+  default: () => <div>Trace timeline</div>,
+}));
 
 vi.mock("../../api");
 
@@ -35,6 +48,12 @@ describe("TempoPage — fetch limit and pagination", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    authState = {
+      user: { id: "u1", username: "me", org_id: "org-a", api_keys: [] },
+      isAuthenticated: true,
+      loading: false,
+      hasPermission: () => true,
+    };
   });
 
   it("allows a separate search limit (max traces) and sends it to the API", async () => {
@@ -62,57 +81,127 @@ describe("TempoPage — fetch limit and pagination", () => {
     
     const fakeTraces = Array.from({ length: 45 }, (_, i) => ({
       traceID: `t${i}`,
+      spans: [{ duration: 1000, operationName: "op", attributes: [] }],
     }));
     api.searchTraces.mockResolvedValue({ data: fakeTraces });
 
-    const { getByText } = render(<TempoPage />);
+    const { getByText, findByText } = render(<TempoPage />);
     const searchBtn = getByText(/Search Traces/i);
     fireEvent.click(searchBtn);
 
     await waitFor(() => expect(api.searchTraces).toHaveBeenCalled());
 
-    
+    const pageInfo = await findByText(/Page\s*1\s*of\s*3/i);
+    expect(pageInfo).toBeInTheDocument();
+  });
+
+  it("does not restore filters or auto-search from localStorage on mount", async () => {
+    localStorage.setItem(
+      "tempoPageState",
+      JSON.stringify({
+        service: "svc",
+        viewMode: "list",
+      }),
+    );
+    api.fetchTempoServices.mockResolvedValue([]);
+    api.searchTraces.mockResolvedValue({ data: [] });
+
+    const { getByText } = render(<TempoPage />);
+    expect(api.searchTraces).not.toHaveBeenCalled();
+
+    fireEvent.click(getByText(/Search Traces/i));
+    await waitFor(() => expect(api.searchTraces).toHaveBeenCalledTimes(1));
+    const call = api.searchTraces.mock.calls[0][0];
+    expect(call.service).toBe("");
+  });
+
+  it("does not auto-lookup saved trace ids from localStorage", async () => {
+    localStorage.setItem(
+      "tempoPageState",
+      JSON.stringify({ selectedTrace: "missing" }),
+    );
+    api.fetchTempoServices.mockResolvedValue([]);
+    api.searchTraces.mockResolvedValue({ data: [] });
+    api.getTrace.mockResolvedValue({ traceID: "missing", spans: [] });
+
+    render(<TempoPage />);
+    await waitFor(() => expect(api.fetchTempoServices).toHaveBeenCalled());
+    expect(api.getTrace).not.toHaveBeenCalled();
+  });
+
+  it("re-fetches tempo services when the active API key changes", async () => {
+    api.fetchTempoServices
+      .mockResolvedValueOnce(["svc-a"])
+      .mockResolvedValueOnce(["svc-b"]);
+    api.searchTraces.mockResolvedValue({ data: [] });
+
+    const { rerender } = render(<TempoPage />);
     await waitFor(() => {
-      expect(getByText(/Page 1 of 3/)).toBeInTheDocument();
+      expect(api.fetchTempoServices).toHaveBeenCalledTimes(1);
+    });
+
+    authState = {
+      ...authState,
+      user: {
+        ...authState.user,
+        api_keys: [
+          { id: "key-a", key: "org-a", is_enabled: false },
+          { id: "key-b", key: "org-b", is_enabled: true },
+        ],
+      },
+    };
+    rerender(<TempoPage />);
+
+    await waitFor(() => {
+      expect(api.fetchTempoServices).toHaveBeenCalledTimes(2);
     });
   });
 
-  it("restores filters and triggers search from localStorage on mount", async () => {
-    
-    const saved = {
-      service: "svc",
-      viewMode: "list",
-    };
-    localStorage.setItem("tempoPageState", JSON.stringify(saved));
-
+  it("shows suggested traces in dependency map mode when no map trace is selected", async () => {
     api.fetchTempoServices.mockResolvedValue([]);
-    api.searchTraces.mockResolvedValue({ data: [] });
+    api.searchTraces.mockResolvedValue({
+      data: [
+        {
+          traceID: "trace-a",
+          spans: [
+            {
+              duration: 1000,
+              operationName: "GET /checkout",
+              attributes: [{ key: "service.name", value: { stringValue: "checkout" } }],
+              startTime: 1000,
+            },
+          ],
+        },
+      ],
+    });
+    api.getTrace.mockResolvedValue({
+      traceID: "trace-a",
+      spans: [
+        {
+          spanId: "1",
+          duration: 1000,
+          operationName: "GET /checkout",
+          attributes: [{ key: "service.name", value: { stringValue: "checkout" } }],
+          startTime: 1000,
+        },
+      ],
+    });
 
-    render(<TempoPage />);
+    const { getByText, findByText, findByRole, queryByText } = render(<TempoPage />);
 
-    
+    fireEvent.click(getByText(/Search Traces/i));
     await waitFor(() => expect(api.searchTraces).toHaveBeenCalled());
-    const call = api.searchTraces.mock.calls[0][0];
-    expect(call.service).toBe("svc");
-  });
 
-  it("silently clears a saved trace id if the trace no longer exists", async () => {
-    
-    const saved = { selectedTrace: "missing" };
-    localStorage.setItem("tempoPageState", JSON.stringify(saved));
+    fireEvent.click(getByText(/Dependency Map/i));
 
-    api.fetchTempoServices.mockResolvedValue([]);
-    api.searchTraces.mockResolvedValue({ data: [] });
-    const err = new Error("not found");
-    err.status = 404;
-    api.getTrace.mockRejectedValue(err);
+    expect(await findByText(/Pick a Trace to Inspect/i)).toBeInTheDocument();
+    expect(await findByText(/Open on dependency map/i)).toBeInTheDocument();
+    expect(queryByText(/No Traces Found/i)).not.toBeInTheDocument();
 
-    const { queryByText } = render(<TempoPage />);
-    
-    await waitFor(() => expect(api.getTrace).toHaveBeenCalledWith("missing"));
-    expect(queryByText(/Failed to load trace/)).not.toBeInTheDocument();
+    fireEvent.click(await findByRole("button", { name: /trace-a/i }));
 
-    const stored = JSON.parse(localStorage.getItem("tempoPageState") || "{}");
-    expect(stored.selectedTrace).toBeFalsy();
+    await waitFor(() => {
+      expect(api.getTrace).toHaveBeenCalledWith("trace-a");
+    });
   });
 });

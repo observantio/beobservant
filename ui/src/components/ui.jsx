@@ -118,7 +118,7 @@ export function Card({
   return (
     <Component
       className={clsx(
-        "bg-sre-surface/50 rounded-xl",
+        "w-full bg-sre-surface/50 rounded-xl border border-sre-border/60 p-4",
         "transition-all duration-300",
         "hover:border-sre-border/80",
         className,
@@ -208,7 +208,7 @@ CardTitle.propTypes = {
  * Badge component for status indicators
  * @param {object} props - Component props
  * @param {React.ReactNode} props.children - Badge content
- * @param {'default'|'success'|'warning'|'error'|'info'|'neon'} props.variant - Badge variant
+ * @param {'default'|'success'|'warning'|'error'|'info'|'neon'|'ghost'} props.variant - Badge variant
  * @param {string} props.className - Additional CSS classes
  */
 export function Badge({ children, variant = "default", className, ...props }) {
@@ -219,6 +219,7 @@ export function Badge({ children, variant = "default", className, ...props }) {
     error: "bg-sre-error/10 text-sre-error border-sre-error/20",
     info: "bg-sre-primary/10 text-sre-primary border-sre-primary/20",
     neon: "bg-sre-neon/10 text-sre-neon border-sre-neon/20 glow",
+    ghost: "bg-transparent text-sre-text-muted border-sre-border/50",
   };
 
   return (
@@ -244,6 +245,7 @@ Badge.propTypes = {
     "error",
     "info",
     "neon",
+    "ghost",
   ]),
   className: PropTypes.string,
 };
@@ -351,25 +353,40 @@ export function MetricCard({ label, value, trend, status, icon, className }) {
         "bg-gradient-to-br from-sre-surface to-sre-surface/80 border-2 border-sre-border/50",
         "hover:border-sre-primary/30 hover:shadow-lg transition-all duration-200 backdrop-blur-sm",
         "rounded-lg p-4 relative overflow-visible",
+        "flex h-full min-h-0 flex-col",
         className,
       )}
     >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-sm text-sre-text-muted mb-1">{label}</p>
+      <div className="flex min-h-0 flex-1 items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p
+            className="mb-1 truncate whitespace-nowrap text-sm text-sre-text-muted"
+            title={label}
+          >
+            {label}
+          </p>
           <div
             className={clsx(
-              "text-2xl font-mono font-bold",
+              "text-2xl font-mono font-bold leading-tight line-clamp-2 break-words",
               status ? statusColors[status] : "text-sre-text",
             )}
           >
             {value}
           </div>
-          {trend && (
-            <p className="text-xs text-sre-text-subtle mt-1">{trend}</p>
-          )}
+          {trend ? (
+            <p
+              className="mt-1 truncate whitespace-nowrap text-xs leading-tight text-sre-text-subtle"
+              title={trend}
+            >
+              {trend}
+            </p>
+          ) : null}
         </div>
-        {icon && <div className="ml-3 text-sre-text-muted">{icon}</div>}
+        {icon && (
+          <div className="ml-1 shrink-0 text-sre-text-muted [&_svg]:shrink-0">
+            {icon}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -483,6 +500,7 @@ AlertDescription.propTypes = {
  */
 export function Spinner({ size = "md", className }) {
   const sizes = {
+    xs: "w-3 h-3",
     sm: "w-4 h-4",
     md: "w-8 h-8",
     lg: "w-12 h-12",
@@ -515,7 +533,7 @@ export function Spinner({ size = "md", className }) {
 }
 
 Spinner.propTypes = {
-  size: PropTypes.oneOf(["sm", "md", "lg"]),
+  size: PropTypes.oneOf(["xs", "sm", "md", "lg"]),
   className: PropTypes.string,
 };
 
@@ -531,18 +549,22 @@ export function Sparkline({
   fill = "none",
   className,
 }) {
+  const noDataMessage =
+    "We are not getting any data points for this metric. Please check your configuration and ensure that your application is emitting metrics correctly.";
+  const renderNoData = () => (
+    <div
+      className={clsx(
+        "flex h-full w-full items-center justify-center px-6 text-center text-xs text-sre-text-muted",
+        className,
+      )}
+      style={{ minHeight: height }}
+    >
+      <div className="mx-auto max-w-md">{noDataMessage}</div>
+    </div>
+  );
+
   if (!data?.length) {
-    return (
-      <div
-        className={clsx(
-          "flex items-center justify-center text-xs text-sre-text-muted",
-          className,
-        )}
-        style={{ width, height }}
-      >
-        no data
-      </div>
-    );
+    return renderNoData();
   }
 
   const values = data
@@ -551,17 +573,7 @@ export function Sparkline({
     .filter((v) => Number.isFinite(v));
 
   if (!values.length) {
-    return (
-      <div
-        className={clsx(
-          "flex items-center justify-center text-xs text-sre-text-muted",
-          className,
-        )}
-        style={{ width, height }}
-      >
-        no data
-      </div>
-    );
+    return renderNoData();
   }
 
   const safeValues = values.length === 1 ? [values[0], values[0]] : values;
@@ -742,12 +754,11 @@ export function Modal({
 
   const content = (
     <div
-      className="fixed inset-0 flex items-center justify-center animate-fade-in bg-transparent overflow-y-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center animate-fade-in overflow-y-auto bg-black/35 backdrop-blur-xl dark:bg-black/50"
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "modal-title" : undefined}
       onClick={handleOverlayClick}
-      style={{ zIndex: 9999 }}
     >
       <div
         className={clsx(
@@ -815,7 +826,7 @@ export function Modal({
 
 Modal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
+  onClose: PropTypes.func,
   title: PropTypes.string,
   children: PropTypes.node.isRequired,
   footer: PropTypes.node,
@@ -837,6 +848,7 @@ export function ConfirmDialog({
   confirmText = "Confirm",
   cancelText = "Cancel",
   variant = "danger",
+  messageTone = "default",
   loading = false,
 }) {
   const handleConfirm = async () => {
@@ -867,9 +879,24 @@ export function ConfirmDialog({
         </div>
       }
     >
-      <div className="py-4">
-        <p className="text-sre-text">{message}</p>
-      </div>
+      {messageTone === "danger" ? (
+        <div className="py-3">
+          <div className="rounded-lg border border-sre-error/55 bg-sre-error/14 px-3 py-2.5">
+            <div className="flex items-start gap-2">
+              <span className="material-icons text-base leading-5 text-sre-error">
+                warning
+              </span>
+              <p className="text-sm font-medium text-sre-error leading-relaxed">
+                {message}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="py-4">
+          <p className="text-sre-text">{message}</p>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -882,6 +909,7 @@ ConfirmDialog.propTypes = {
   message: PropTypes.string.isRequired,
   confirmText: PropTypes.string,
   cancelText: PropTypes.string,
+  messageTone: PropTypes.oneOf(["default", "danger"]),
   variant: PropTypes.oneOf([
     "primary",
     "secondary",

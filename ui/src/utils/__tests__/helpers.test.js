@@ -66,6 +66,7 @@ describe("helpers", () => {
     } else {
       vi.spyOn(URL, "createObjectURL").mockReturnValue("blob://x");
     }
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     const append = vi.spyOn(document.body, "appendChild");
     expect(() => downloadFile("hello", "file.txt", "text/plain")).not.toThrow();
     append.mockRestore();

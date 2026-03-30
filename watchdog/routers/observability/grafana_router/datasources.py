@@ -22,6 +22,7 @@ from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, TokenData
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from models.observability.grafana_request_models import GrafanaDatasourceQueryRequest, GrafanaHiddenToggleRequest
+from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.route_payloads import validate_visibility
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
@@ -43,7 +44,11 @@ async def datasource_query(
         tenant_id=tenant_id,
         group_ids=group_ids,
     )
-    return await proxy.query_datasource(payload.model_dump(exclude_none=True))
+    try:
+        return await proxy.query_datasource(payload.model_dump(exclude_none=True))
+    except GrafanaAPIError as exc:
+        proxy._raise_http_from_grafana_error(exc)
+        raise HTTPException(status_code=500, detail="Unexpected Grafana proxy error") from exc
 
 
 @router.get("/datasources/meta/filters")
@@ -76,6 +81,7 @@ async def get_datasource_by_name(
 @router.get("/datasources", response_model=List[Datasource])
 async def get_datasources(
     uid: Optional[str] = Query(None),
+    query: Optional[str] = Query(None),
     team_id: Optional[str] = Query(None),
     show_hidden: bool = Query(False),
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
@@ -91,6 +97,7 @@ async def get_datasources(
         tenant_id=tenant_id,
         group_ids=group_ids,
         uid=uid,
+        query=query,
         team_id=team_id,
         show_hidden=show_hidden,
         limit=limit,

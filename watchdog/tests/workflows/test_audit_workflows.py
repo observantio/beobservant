@@ -21,7 +21,7 @@ from .helpers import WorkflowState, patch_auth_service
 
 
 class FakeAuditQuery:
-    def __init__(self, rows: list[tuple[object, str, str]]):
+    def __init__(self, rows: list[tuple[Any, str, str]]):
         self.rows = rows
 
     def filter_by_fields(

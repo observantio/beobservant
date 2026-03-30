@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { Card, Spinner } from "../components/ui";
+import { Spinner } from "../components/ui";
 
 const readParams = () => {
   const url = new URL(globalThis.location.href);
@@ -53,7 +53,7 @@ export default function OIDCCallbackPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4">
-      <Card className="w-full max-w-md p-6">
+      <div className="w-full max-w-md rounded-2xl bg-white/90 p-6 backdrop-blur-sm dark:bg-transparent dark:p-0 dark:shadow-none dark:backdrop-blur-none">
         {!error ? (
           <div className="flex flex-col items-center gap-3 text-center">
             <Spinner size="lg" />
@@ -63,6 +63,13 @@ export default function OIDCCallbackPage() {
             <p className="text-sre-text-muted text-sm">
               Completing secure OIDC authentication…
             </p>
+            <button
+              type="button"
+              className="text-xs text-sre-primary hover:text-sre-primary-light"
+              onClick={() => globalThis.location.reload()}
+            >
+              Refresh page
+            </button>
           </div>
         ) : (
           <div className="text-center">
@@ -79,7 +86,7 @@ export default function OIDCCallbackPage() {
             </button>
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

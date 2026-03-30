@@ -164,61 +164,61 @@ services:
 
   loki:
     image: grafana/loki:3.6.5
-    command: -config.file=/etc/loki/loki.yaml
+    command: -config.file=/etc/loki/loki.yaml -config.expand-env=true
     volumes:
-      - ./configs/loki.yaml:/etc/loki/loki.yaml:ro
+      - ${LOKI_CONFIG_FILE:-./configs/generated/loki.yaml}:/etc/loki/loki.yaml:ro
       - loki_data:/loki
-    cpus: "1.0"
-    mem_limit: 768m
+    cpus: "${LOKI_CPUS:-1.0}"
+    mem_limit: ${LOKI_MEM_LIMIT:-768m}
     stop_grace_period: 45s
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 768M
+          cpus: '${LOKI_CPUS:-1.0}'
+          memory: ${LOKI_MEM_LIMIT:-768m}
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '${LOKI_DEPLOY_RESERVATION_CPUS:-0.25}'
+          memory: ${LOKI_DEPLOY_RESERVATION_MEMORY:-256M}
     networks: [obs]
     restart: unless-stopped
 
   tempo:
     image: grafana/tempo:2.4.1
-    command: -config.file=/etc/tempo/tempo.yaml
+    command: -config.file=/etc/tempo/tempo.yaml -config.expand-env=true
     volumes:
-      - ./configs/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - ${TEMPO_CONFIG_FILE:-./configs/generated/tempo.yaml}:/etc/tempo/tempo.yaml:ro
       - tempo_data:/tmp/tempo
-    cpus: "1.0"
-    mem_limit: 768m
+    cpus: "${TEMPO_CPUS:-1.0}"
+    mem_limit: ${TEMPO_MEM_LIMIT:-768m}
     stop_grace_period: 45s
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 768M
+          cpus: '${TEMPO_CPUS:-1.0}'
+          memory: ${TEMPO_MEM_LIMIT:-768m}
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '${TEMPO_DEPLOY_RESERVATION_CPUS:-0.25}'
+          memory: ${TEMPO_DEPLOY_RESERVATION_MEMORY:-256M}
     networks: [obs]
     restart: unless-stopped
 
   mimir:
     image: grafana/mimir:2.12.0
-    command: ["-config.file=/etc/mimir/mimir.yaml"]
+    command: ["-config.file=/etc/mimir/mimir.yaml", "-config.expand-env=true"]
     volumes:
-      - ${MIMIR_CONFIG_FILE:-./configs/mimir.yaml}:/etc/mimir/mimir.yaml:ro
+      - ${MIMIR_CONFIG_FILE:-./configs/generated/mimir.yaml}:/etc/mimir/mimir.yaml:ro
       - mimir_data:/data
-    cpus: "1.5"
-    mem_limit: 1536m
+    cpus: "${MIMIR_CPUS:-1.5}"
+    mem_limit: ${MIMIR_MEM_LIMIT:-1536m}
     stop_grace_period: 60s
     deploy:
       resources:
         limits:
-          cpus: '1.5'
-          memory: 1536M
+          cpus: '${MIMIR_CPUS:-1.5}'
+          memory: ${MIMIR_MEM_LIMIT:-1536m}
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '${MIMIR_DEPLOY_RESERVATION_CPUS:-0.25}'
+          memory: ${MIMIR_DEPLOY_RESERVATION_MEMORY:-256M}
     depends_on:
       - alertmanager
     networks: [obs]
@@ -267,6 +267,7 @@ services:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:4319}
         VITE_OTLP_GATEWAY_HOST: ${VITE_OTLP_GATEWAY_HOST:-http://localhost:4320}
         VITE_OIDC_PROVIDER_LABEL: ${VITE_OIDC_PROVIDER_LABEL:-Microsoft SSO / Keycloak}
+        VITE_APP_ORG_KEY: ${VITE_APP_ORG_KEY:-${APP_ORG_KEY:-observantio-default}}
     env_file:
       - .env
     networks: [obs]

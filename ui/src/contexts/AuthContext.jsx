@@ -198,21 +198,28 @@ export function AuthProvider({ children }) {
         throw new Error("Invalid OIDC state");
       if (!txId) throw new Error("Missing OIDC transaction");
 
+      setLoading(true);
+
       const redirectUri = getOidcRedirectUri();
-      const resp = await api.exchangeOIDCCode(code, redirectUri, {
-        state,
-        transaction_id: txId,
-        code_verifier: verifier,
-      });
+      try {
+        const resp = await api.exchangeOIDCCode(code, redirectUri, {
+          state,
+          transaction_id: txId,
+          code_verifier: verifier,
+        });
 
-      const accessToken = resp?.access_token || null;
+        const accessToken = resp?.access_token || null;
 
-      clearOidcSession();
-      setToken(accessToken);
-      api.setAuthToken(accessToken);
+        clearOidcSession();
+        setToken(accessToken);
+        api.setAuthToken(accessToken);
 
-      await loadUser();
-      return resp;
+        await loadUser();
+        return resp;
+      } catch (error) {
+        setLoading(false);
+        throw error;
+      }
     },
     [loadUser],
   );

@@ -99,7 +99,6 @@ import {
   listJiraIssueTypes,
   listIncidentJiraComments,
   listJiraIntegrations,
-  getIncidentsSummary,
   getAlertsByFilter,
 } from "../api";
 import {
@@ -114,6 +113,7 @@ import {
 } from "../components/ui";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useSharedIncidentSummary } from "../contexts/IncidentSummaryContext";
 import HelpTooltip from "../components/HelpTooltip";
 import { useIncidentsData, useLocalStorage } from "../hooks";
 
@@ -143,11 +143,14 @@ const IncidentCard = memo(function IncidentCard({
   droppingState,
   compact = false,
 }) {
+  const [expanded, setExpanded] = useState(false);
   const assigneeLabel = getIncidentAssigneeLabel(incident, userById, currentUser);
   const correlationId = getIncidentCorrelationId(incident);
-  const previewLabels = getIncidentLabelEntries(incident).slice(0, 3);
+  const labelEntries = getIncidentLabelEntries(incident);
+  const previewLabels = labelEntries.slice(0, compact ? 1 : 2);
   const isHiddenResolvedIncident =
     incident.status === "resolved" && !!incident.hideWhenResolved;
+  const showExpandedDetails = expanded && !isHiddenResolvedIncident;
   const priorityLabel =
     incident.severity === "critical"
       ? "P1"
@@ -172,7 +175,7 @@ const IncidentCard = memo(function IncidentCard({
         e.currentTarget.classList.remove("opacity-50", "scale-95", "rotate-2");
       }}
       className={`group bg-gradient-to-br from-sre-bg to-sre-surface border border-sre-border/50 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 cursor-move relative overflow-hidden backdrop-blur-sm ${
-        compact ? "min-h-[140px]" : ""
+        compact ? "min-h-[120px]" : ""
       }`}
     >
       <div
@@ -185,10 +188,10 @@ const IncidentCard = memo(function IncidentCard({
         }`}
       />
 
-      <div className={compact ? "p-3" : "p-5"}>
+      <div className={compact ? "p-3" : "p-3.5"}>
         {!isHiddenResolvedIncident ? (
           <>
-            <div className={`flex items-start justify-between gap-4 ${compact ? "mb-2" : "mb-4"}`}>
+            <div className="flex items-start justify-between gap-3 mb-2">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div
                   className={`w-3 h-3 rounded-full flex-shrink-0 ${
@@ -199,7 +202,7 @@ const IncidentCard = memo(function IncidentCard({
                         : "bg-blue-500 shadow-blue-500/50 shadow-lg"
                   }`}
                 />
-                <h3 className={`font-semibold text-sre-text leading-tight flex-1 min-w-0 truncate ${compact ? "text-sm" : "text-base"}`}>
+                <h3 className={`font-semibold text-sre-text leading-tight flex-1 min-w-0 truncate ${compact ? "text-sm" : "text-[15px]"}`}>
                   {incident.alertName}
                 </h3>
               </div>
@@ -207,14 +210,25 @@ const IncidentCard = memo(function IncidentCard({
               <div className="flex items-center gap-2 flex-shrink-0">
                 <Badge
                   variant={incident.status === "resolved" ? "success" : "warning"}
-                  className="text-xs px-3 py-1.5 rounded-full font-medium shadow-sm"
+                  className="text-xs px-2.5 py-1 rounded-full font-medium shadow-sm"
                 >
                   {incident.status}
                 </Badge>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setExpanded((prev) => !prev)}
+                  className="transition-all duration-200 p-1.5 h-7 w-7 hover:bg-sre-surface/50"
+                  title={showExpandedDetails ? "Show less" : "Show more"}
+                >
+                  <span className="material-icons text-sm">
+                    {showExpandedDetails ? "unfold_less" : "unfold_more"}
+                  </span>
+                </Button>
               </div>
             </div>
 
-            <div className={`${compact ? "space-y-2 mb-2" : "space-y-3 mb-4"}`}>
+            <div className="space-y-2 mb-2.5">
               {(correlationId || previewLabels.length > 0) && (
                 <div className="flex items-center gap-2 text-xs flex-wrap">
                   {correlationId && (
@@ -222,8 +236,7 @@ const IncidentCard = memo(function IncidentCard({
                       Correlation: {correlationId}
                     </Badge>
                   )}
-                  {!compact &&
-                    previewLabels.map(([key, value]) => (
+                  {previewLabels.map(([key, value]) => (
                     <Badge
                       key={`${incident.id}-label-${key}`}
                       variant="ghost"
@@ -235,45 +248,55 @@ const IncidentCard = memo(function IncidentCard({
                 </div>
               )}
 
-              <div className="flex items-center gap-3 text-sm text-sre-text-muted">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 text-xs text-sre-text-muted min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
                   <span className="material-icons text-base text-sre-primary/70">
                     schedule
                   </span>
-                  <span className="font-medium">
+                  <span className="font-medium truncate">
                     {new Date(incident.lastSeenAt).toLocaleString()}
                   </span>
                 </div>
-              </div>
-
-              {!compact && (
-                <div className="flex items-center gap-3 text-sm text-sre-text-muted min-w-0">
-                  <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
                     <span className="material-icons text-base text-sre-primary/70">
                       person
                     </span>
-                    <span className="font-medium truncate min-w-0 max-w-full">
+                  <span className="font-medium truncate min-w-0 max-w-[12rem]">
                       {assigneeLabel}
                     </span>
-                  </div>
                 </div>
-              )}
+              </div>
 
-              {!compact && incident.jiraTicketKey && (
-                <div className="flex items-center gap-3 text-sm text-sre-text-muted">
-                  <div className="flex items-center gap-2">
-                    <span className="material-icons text-base text-sre-primary/70">
-                      link
-                    </span>
-                    <span className="font-medium text-sre-primary hover:text-sre-primary/80 transition-colors truncate">
-                      {incident.jiraTicketKey}
-                    </span>
-                  </div>
+              {showExpandedDetails && (
+                <div className="space-y-1.5 pt-0.5">
+                  {incident.jiraTicketKey && (
+                    <div className="flex items-center gap-2 text-xs text-sre-text-muted">
+                      <span className="material-icons text-sm text-sre-primary/70">
+                        link
+                      </span>
+                      <span className="font-medium text-sre-primary truncate">
+                        {incident.jiraTicketKey}
+                      </span>
+                    </div>
+                  )}
+                  {labelEntries.length > previewLabels.length && (
+                    <div className="flex items-center gap-2 text-xs flex-wrap">
+                      {labelEntries.slice(previewLabels.length, previewLabels.length + 6).map(([key, value]) => (
+                        <Badge
+                          key={`${incident.id}-extra-label-${key}`}
+                          variant="ghost"
+                          className="max-w-full truncate"
+                        >
+                          {key}: {String(value)}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            <div className={`flex items-center justify-between ${compact ? "mb-2" : "mb-4"}`}>
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge
                   variant={
@@ -294,6 +317,11 @@ const IncidentCard = memo(function IncidentCard({
                   </span>
                   {incident.severity}
                 </Badge>
+                {!compact && (
+                  <Badge variant="ghost" className="text-xs px-2 py-1">
+                    {priorityLabel}
+                  </Badge>
+                )}
               </div>
 
               <div className="flex items-center gap-1">
@@ -305,7 +333,7 @@ const IncidentCard = memo(function IncidentCard({
                       onOpenModal(incident);
                       onSetModalTab("assignment");
                     }}
-                    className="transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
+                    className="transition-all duration-200 p-1.5 h-7 w-7 hover:bg-sre-surface/50"
                     title="Quick assign"
                   >
                     <span className="material-icons text-sm">person_add</span>
@@ -319,7 +347,7 @@ const IncidentCard = memo(function IncidentCard({
                       size="sm"
                       variant="ghost"
                       onClick={() => onQuickResolve(incident)}
-                      className="transition-all duration-200 p-2 h-8 w-8 hover:bg-sre-surface/50"
+                      className="transition-all duration-200 p-1.5 h-7 w-7 hover:bg-sre-surface/50"
                       title="Quick resolve"
                     >
                       <span className="material-icons text-sm">task_alt</span>
@@ -352,7 +380,6 @@ const IncidentCard = memo(function IncidentCard({
                     </Button>
                   )}
 
-                {!compact && (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -365,9 +392,7 @@ const IncidentCard = memo(function IncidentCard({
                 >
                   <span className="material-icons text-sm">link</span>
                 </Button>
-                )}
 
-                {!compact && (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -377,15 +402,14 @@ const IncidentCard = memo(function IncidentCard({
                   }}
                   className={`${quickButtonClass} relative`}
                   title="View notes"
-                >
-                  <span className="material-icons text-sm">notes</span>
-                  {Array.isArray(incident.notes) && incident.notes.length > 0 && (
+                  >
+                    <span className="material-icons text-sm">notes</span>
+                    {Array.isArray(incident.notes) && incident.notes.length > 0 && (
                     <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs rounded-full bg-sre-primary text-white">
                       {incident.notes.length}
                     </span>
-                  )}
+                    )}
                 </Button>
-                )}
 
                 {!isHiddenResolvedIncident && (
                   <Button
@@ -544,6 +568,7 @@ const Column = memo(function Column({
                 onUnhide={handleUnhideIncident}
                 onHide={handleHideIncident}
                 droppingState={!!dropping[it.id]}
+                compact
               />
             ))
           ) : icon === "resolved" && hiddenResolvedItems.length > 0 ? null : (
@@ -633,7 +658,7 @@ export default function IncidentBoardPage() {
   const [jiraIssueTypes, setJiraIssueTypes] = useState([]);
   const [jiraComments, setJiraComments] = useState([]);
   const [jiraCommentsLoading, setJiraCommentsLoading] = useState(false);
-  const [incidentSummary, setIncidentSummary] = useState(null);
+  const incidentSummary = useSharedIncidentSummary();
   const toast = useToast();
 
   const canReadUsers =
@@ -703,21 +728,6 @@ export default function IncidentBoardPage() {
   useEffect(() => {
     loadJiraIntegrations();
   }, []);
-
-  const loadIncidentSummary = useCallback(async () => {
-    try {
-      const summary = await getIncidentsSummary();
-      setIncidentSummary(summary || null);
-    } catch {
-      setIncidentSummary(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadIncidentSummary();
-    const timer = setInterval(loadIncidentSummary, 30000);
-    return () => clearInterval(timer);
-  }, [loadIncidentSummary]);
 
   async function loadJiraIntegrations() {
     try {
@@ -903,7 +913,7 @@ export default function IncidentBoardPage() {
       }
       return true;
     },
-    [toast],
+    [setError, toast],
   );
 
   
@@ -1243,7 +1253,6 @@ export default function IncidentBoardPage() {
     async (incident) => {
       const draft = incidentDrafts[incident.id] || {};
       const payload = {
-        assignee: draft.assignee || null,
         status: draft.status || incident.status,
         note: draft.note || null,
         jiraTicketKey: draft.jiraTicketKey || null,
@@ -1255,6 +1264,9 @@ export default function IncidentBoardPage() {
             ? draft.hideWhenResolved
             : incident.hideWhenResolved || false,
       };
+      if (Object.prototype.hasOwnProperty.call(draft, "assignee")) {
+        payload.assignee = draft.assignee ? draft.assignee : null;
+      }
 
       if (payload.status === "resolved") {
         const canResolve = await ensureCanResolveIncident(incident, {
@@ -1469,18 +1481,15 @@ export default function IncidentBoardPage() {
             <div className="flex flex-col gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-sre-text">
-                  <span className="material-icons text-3xl text-sre-primary">
-                    assignment
-                  </span>{" "}
-                  InOps
+                  Incident Board
                 </h1>
                 <p className="text-sre-text-muted mt-1">
                   Manage and track incident response workflows
                 </p>
               </div>
 
-              <div className="mb-5">
-                <div className="flex mt-0 items-center gap-2 p-1 bg-sre-surface rounded-lg border border-sre-border w-fit">
+              <div className="mb-3">
+                <div className="flex mt-0 items-center gap-1 p-0.5 bg-sre-surface rounded-md border border-sre-border w-fit">
                   <Button
                     variant={
                       incidentVisibilityTab === "public" ? "primary" : "ghost"
@@ -1490,11 +1499,11 @@ export default function IncidentBoardPage() {
                       setIncidentVisibilityTab("public");
                       setSelectedGroup("");
                     }}
-                    className="relative px-5 py-2 pr-8"
+                    className="relative h-8 px-3 py-1 pr-5 text-xs"
                   >
-                    <span className="material-icons text-sm mr-2">public</span>
+                    <span className="material-icons text-[13px] mr-1">public</span>
                     Public
-                    <span className="absolute -top-2 -right-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-blue-400 text-[10px] font-semibold px-1 shadow-sm">
+                    <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-blue-400 text-[9px] font-semibold px-1 shadow-sm">
                       {incidentSummary?.by_visibility?.public ?? 0}
                     </span>
                   </Button>
@@ -1507,11 +1516,11 @@ export default function IncidentBoardPage() {
                       setIncidentVisibilityTab("private");
                       setSelectedGroup("");
                     }}
-                    className="relative px-5 py-2 pr-8"
+                    className="relative h-8 px-3 py-1 pr-5 text-xs"
                   >
-                    <span className="material-icons text-sm mr-2">lock</span>
+                    <span className="material-icons text-[13px] mr-1">lock</span>
                     Private
-                    <span className="absolute -top-2 -right-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-amber-400 text-[10px] font-semibold px-1 shadow-sm">
+                    <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-amber-400 text-[9px] font-semibold px-1 shadow-sm">
                       {incidentSummary?.by_visibility?.private ?? 0}
                     </span>
                   </Button>
@@ -1521,11 +1530,11 @@ export default function IncidentBoardPage() {
                     }
                     size="sm"
                     onClick={() => setIncidentVisibilityTab("group")}
-                    className="relative px-5 py-2 pr-8"
+                    className="relative h-8 px-3 py-1 pr-5 text-xs"
                   >
-                    <span className="material-icons text-sm mr-2">group</span>
+                    <span className="material-icons text-[13px] mr-1">group</span>
                     Group
-                    <span className="absolute -top-2 -right-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-emerald-400 text-[10px] font-semibold px-1 shadow-sm">
+                    <span className="absolute -top-1.5 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-emerald-400 text-[9px] font-semibold px-1 shadow-sm">
                       {incidentSummary?.by_visibility?.group ?? 0}
                     </span>
                   </Button>
@@ -1556,61 +1565,61 @@ export default function IncidentBoardPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
               {/* Stats */}
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-2 px-3 py-2 bg-sre-surface rounded-lg border border-sre-border">
-                  <span className="material-icons text-base text-orange-500">
+              <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-1 px-2 py-1 bg-sre-surface rounded-md border border-sre-border">
+                  <span className="material-icons text-[13px] text-orange-500">
                     warning
                   </span>
-                  <span className="font-medium text-sre-text">
+                  <span className="font-medium text-sre-text text-xs">
                     {stats.unresolved}
                   </span>
-                  <span className="text-sre-text-muted">unresolved</span>
+                  <span className="text-sre-text-muted text-xs">unresolved</span>
                   <HelpTooltip text="Number of incidents that are still open and require attention." />
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 bg-sre-surface rounded-lg border border-sre-border">
-                  <span className="material-icons text-base text-blue-500">
+                <div className="flex items-center gap-1 px-2 py-1 bg-sre-surface rounded-md border border-sre-border">
+                  <span className="material-icons text-[13px] text-blue-500">
                     person_off
                   </span>
-                  <span className="font-medium text-sre-text">
+                  <span className="font-medium text-sre-text text-xs">
                     {stats.unassigned}
                   </span>
-                  <span className="text-sre-text-muted">unassigned</span>
+                  <span className="text-sre-text-muted text-xs">unassigned</span>
                   <HelpTooltip text="Number of open incidents that haven't been assigned to anyone yet." />
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 bg-sre-surface rounded-lg border border-sre-border">
-                  <span className="material-icons text-base text-gray-500">
+                <div className="flex items-center gap-1 px-2 py-1 bg-sre-surface rounded-md border border-sre-border">
+                  <span className="material-icons text-[13px] text-gray-500">
                     assignment_turned_in
                   </span>
-                  <span className="font-medium text-sre-text">
+                  <span className="font-medium text-sre-text text-xs">
                     {stats.totalIncidents}
                   </span>
-                  <span className="text-sre-text-muted">total</span>
+                  <span className="text-sre-text-muted text-xs">total</span>
                   <HelpTooltip text="Total number of incidents currently visible based on your filters." />
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 bg-sre-surface rounded-lg border border-sre-border">
-                  <span className="material-icons text-base text-green-500">
+                <div className="flex items-center gap-1 px-2 py-1 bg-sre-surface rounded-md border border-sre-border">
+                  <span className="material-icons text-[13px] text-green-500">
                     person
                   </span>
-                  <span className="font-medium text-sre-text">
+                  <span className="font-medium text-sre-text text-xs">
                     {stats.assignedToMe}
                   </span>
                   <HelpTooltip text="Open incidents currently assigned to you." />
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <label className="inline-flex items-center gap-2 text-sm text-sre-text-muted">
+              <div className="flex items-center gap-1.5">
+                <label className="inline-flex items-center gap-1.5 text-sm text-sre-text-muted">
                   <input
                     type="checkbox"
-                    className="form-checkbox h-4 w-4"
+                    className="form-checkbox h-3.5 w-3.5 rounded-sm"
                     checked={showHiddenResolved}
                     onChange={(e) => {
                       setShowHiddenResolved(e.target.checked);
                     }}
                   />
-                  <span>Show hidden</span>
+                  <span>Unhide</span>
                 </label>
               </div>
             </div>

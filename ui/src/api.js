@@ -3,6 +3,80 @@ import { API_BASE } from "./utils/constants";
 let authToken = null;
 let setupToken = null;
 let userOrgIds = [];
+const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+const LOKI_TEMPO_TIMEOUT_MS = 30000;
+const RESOLVER_TIMEOUT_MS = 45000;
+const GRAFANA_TIMEOUT_MS = 20000;
+const DEFAULT_IDEMPOTENT_RETRY_COUNT = 1;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getPathTimeoutMs(path) {
+  if (path.includes("/api/resolver")) return RESOLVER_TIMEOUT_MS;
+  if (path.includes("/api/loki") || path.includes("/api/tempo")) {
+    return LOKI_TEMPO_TIMEOUT_MS;
+  }
+  if (path.includes("/api/grafana")) return GRAFANA_TIMEOUT_MS;
+  return DEFAULT_REQUEST_TIMEOUT_MS;
+}
+
+function createTimeoutSignal(signal, timeoutMs) {
+  const controller = new AbortController();
+  let timeoutId = null;
+  let onAbort = null;
+  let timedOut = false;
+
+  if (typeof timeoutMs === "number" && timeoutMs > 0) {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+  }
+
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+    } else {
+      onAbort = () => controller.abort(signal.reason);
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
+function normalizeMethod(opts) {
+  return String(opts?.method || "GET").toUpperCase();
+}
+
+function isIdempotentMethod(method) {
+  return method === "GET" || method === "HEAD" || method === "OPTIONS";
+}
+
+function shouldRetryRequest({
+  method,
+  attempt,
+  maxRetries,
+  isTimeout,
+  isAbort,
+  status,
+}) {
+  if (attempt >= maxRetries) return false;
+  if (!isIdempotentMethod(method)) return false;
+  if (isAbort && !isTimeout) return false;
+  if (isTimeout) return true;
+  if (status === 429 || status === 503 || status === 504) return true;
+  return false;
+}
 
 export function setSetupToken(token) {
   setupToken = token;
@@ -31,15 +105,97 @@ export function getUserOrgIds() {
 }
 
 async function requestWithHeaders(path, opts = {}, headers = {}) {
-  const merged = { ...headers, ...opts.headers };
+  const {
+    timeoutMs,
+    dispatchApiErrors = true,
+    handleSessionExpiry = true,
+    signal: externalSignal,
+    maxRetries,
+    ...fetchOpts
+  } = opts;
+  const merged = { ...headers, ...fetchOpts.headers };
   if (authToken) {
     merged["Authorization"] = `Bearer ${authToken}`;
   }
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...opts,
-    credentials: "include",
-    headers: merged,
-  });
+  const timeout = timeoutMs ?? getPathTimeoutMs(path);
+  const method = normalizeMethod(fetchOpts);
+  const allowedRetries =
+    maxRetries === undefined
+      ? isIdempotentMethod(method)
+        ? DEFAULT_IDEMPOTENT_RETRY_COUNT
+        : 0
+      : Math.max(0, Number(maxRetries) || 0);
+  let res;
+  let attempt = 0;
+  while (true) {
+    const requestSignal = createTimeoutSignal(externalSignal, timeout);
+    try {
+      res = await fetch(`${API_BASE}${path}`, {
+        ...fetchOpts,
+        method,
+        credentials: "include",
+        headers: merged,
+        signal: requestSignal.signal,
+      });
+      requestSignal.cleanup();
+    } catch (error) {
+      const timedOut = requestSignal.didTimeout();
+      requestSignal.cleanup();
+      const isAbort = error?.name === "AbortError";
+      if (
+        shouldRetryRequest({
+          method,
+          attempt,
+          maxRetries: allowedRetries,
+          isTimeout: timedOut,
+          isAbort,
+        })
+      ) {
+        attempt += 1;
+        await sleep(120 * attempt);
+        continue;
+      }
+
+      const message = timedOut
+        ? `Request timed out after ${timeout}ms`
+        : error?.message || "Network request failed";
+      const err = new Error(message);
+      err.cause = error;
+      err.status = timedOut ? 408 : undefined;
+      err.code = timedOut
+        ? "REQUEST_TIMEOUT"
+        : isAbort
+          ? "REQUEST_ABORTED"
+          : "NETWORK_ERROR";
+      if (dispatchApiErrors) {
+        globalThis.window?.dispatchEvent(
+          new CustomEvent("api-error", {
+            detail: {
+              status: err.status || 0,
+              body: { message },
+              path,
+              shouldExpireSession: false,
+            },
+          }),
+        );
+      }
+      throw err;
+    }
+
+    if (
+      res.ok ||
+      !shouldRetryRequest({
+        method,
+        attempt,
+        maxRetries: allowedRetries,
+        status: res.status,
+      })
+    ) {
+      break;
+    }
+    attempt += 1;
+    await sleep(120 * attempt);
+  }
   if (!res.ok) {
     const text = await res.text();
     let body;
@@ -54,21 +210,26 @@ async function requestWithHeaders(path, opts = {}, headers = {}) {
     const shouldExpireSessionOn401 =
       path === "/api/auth/me" || path === "/api/auth/refresh";
 
-    globalThis.window.dispatchEvent(
-      new CustomEvent("api-error", {
-        detail: {
-          status: res.status,
-          body,
-          path,
-          shouldExpireSession: res.status === 401 && shouldExpireSessionOn401,
-        },
-      }),
-    );
+    if (dispatchApiErrors) {
+      globalThis.window?.dispatchEvent(
+        new CustomEvent("api-error", {
+          detail: {
+            status: res.status,
+            body,
+            path,
+            shouldExpireSession:
+              res.status === 401 &&
+              shouldExpireSessionOn401 &&
+              handleSessionExpiry,
+          },
+        }),
+      );
+    }
 
-    if (res.status === 401 && !isAuthLoginEndpoint) {
+    if (res.status === 401 && !isAuthLoginEndpoint && handleSessionExpiry) {
       if (shouldExpireSessionOn401) {
         authToken = null;
-        globalThis.window.dispatchEvent(
+        globalThis.window?.dispatchEvent(
           new CustomEvent("session-expired", {
             detail: { status: 401, path, shouldExpireSession: true },
           }),
@@ -80,6 +241,7 @@ async function requestWithHeaders(path, opts = {}, headers = {}) {
       body?.message || body?.detail || text || res.statusText,
     );
     err.status = res.status;
+    err.code = `HTTP_${res.status}`;
     err.body = body;
     throw err;
   }
@@ -123,12 +285,23 @@ function requestJson(
 export async function fetchInfo() {
   return request(`/`);
 }
-export async function fetchHealth() {
-  return request(`/health`);
+export async function fetchHealth(opts = {}) {
+  return request(`/health`, opts);
 }
 
-export async function fetchSystemMetrics() {
-  return request("/api/system/metrics");
+export async function fetchSystemMetrics(opts = {}) {
+  return request("/api/system/metrics", opts);
+}
+
+export async function getSystemQuotas(orgId = null) {
+  const params = new URLSearchParams();
+  if (orgId) params.set("orgId", String(orgId));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return request(`/api/system/quotas${qs}`);
+}
+
+export async function getOjoReleases(opts = {}) {
+  return request("/api/system/ojo/releases", opts);
 }
 
 export async function login(username, password, mfa_code) {
@@ -144,25 +317,14 @@ export async function refreshSession() {
 export async function enrollMFA() {
   if (authToken) return requestJson("/api/auth/mfa/enroll", { method: "POST" });
   if (!setupToken) throw new Error("Not authenticated");
-  const res = await fetch(`${API_BASE}/api/auth/mfa/enroll`, {
-    method: "POST",
-    credentials: "include",
-    headers: { Authorization: `Bearer ${setupToken}` },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    let body;
-    try {
-      body = text?.startsWith("{") ? JSON.parse(text) : { message: text };
-    } catch {
-      body = { message: text };
-    }
-    const msg = body.message || body.detail || text || res.statusText;
-    const err = new Error(msg);
-    err.body = body;
-    throw err;
-  }
-  return await res.json();
+  return requestWithHeaders(
+    "/api/auth/mfa/enroll",
+    {
+      method: "POST",
+      handleSessionExpiry: false,
+    },
+    { Authorization: `Bearer ${setupToken}` },
+  );
 }
 
 export async function verifyMFA(code) {
@@ -172,29 +334,23 @@ export async function verifyMFA(code) {
       payload: { code },
     });
   if (!setupToken) throw new Error("Not authenticated");
-  const res = await fetch(`${API_BASE}/api/auth/mfa/verify`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      Authorization: `Bearer ${setupToken}`,
-      "Content-Type": "application/json",
+  return requestWithHeaders(
+    "/api/auth/mfa/verify",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+      handleSessionExpiry: false,
     },
-    body: JSON.stringify({ code }),
+    { Authorization: `Bearer ${setupToken}` },
+  );
+}
+
+export async function getCurrentUserNoRedirect() {
+  return requestWithHeaders("/api/auth/me", {
+    dispatchApiErrors: false,
+    handleSessionExpiry: false,
   });
-  if (!res.ok) {
-    const text = await res.text();
-    let body;
-    try {
-      body = text?.startsWith("{") ? JSON.parse(text) : { message: text };
-    } catch {
-      body = { message: text };
-    }
-    const msg = body.message || body.detail || text || res.statusText;
-    const err = new Error(msg);
-    err.body = body;
-    throw err;
-  }
-  return await res.json();
 }
 
 export async function disableMFA({ current_password, code } = {}) {
@@ -263,30 +419,6 @@ export async function register(username, email, password, full_name) {
 
 export async function getCurrentUser() {
   return request("/api/auth/me");
-}
-
-export async function getCurrentUserNoRedirect() {
-  const res = await fetch(`${API_BASE}/api/auth/me`, {
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    let body;
-    try {
-      body = text?.startsWith("{") ? JSON.parse(text) : { message: text };
-    } catch {
-      body = { message: text || res.statusText };
-    }
-    const err = new Error(
-      body?.message || body?.detail || text || res.statusText,
-    );
-    err.status = res.status;
-    err.body = body;
-    throw err;
-  }
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) return await res.json();
-  return await res.text();
 }
 
 export async function updateCurrentUser(updates) {
@@ -371,8 +503,15 @@ export async function exportAuditLogs(params = {}) {
   return res;
 }
 
-export async function getUsers() {
-  return request("/api/auth/users");
+export async function getUsers(params = {}) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && `${value}` !== "") {
+      search.set(key, String(value));
+    }
+  });
+  const qs = search.toString();
+  return request(`/api/auth/users${qs ? `?${qs}` : ""}`);
 }
 
 export async function createUser(user) {
@@ -392,8 +531,15 @@ export async function deleteUser(userId) {
   });
 }
 
-export async function getGroups() {
-  return request("/api/auth/groups");
+export async function getGroups(params = {}) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && `${value}` !== "") {
+      search.set(key, String(value));
+    }
+  });
+  const qs = search.toString();
+  return request(`/api/auth/groups${qs ? `?${qs}` : ""}`);
 }
 
 export async function createGroup(group) {
@@ -449,8 +595,27 @@ export async function updateUserPassword(userId, passwords) {
   });
 }
 
-export async function getActiveAgents() {
-  return request("/api/agents/active");
+export async function getActiveAgents(opts = {}) {
+  return request("/api/agents/active", opts);
+}
+
+export async function getAgents(opts = {}) {
+  return request("/api/agents/", opts);
+}
+
+export async function getAgentMetricVolume({
+  tenantId,
+  minutes,
+  stepSeconds,
+  signal,
+  maxRetries,
+} = {}) {
+  const params = new URLSearchParams();
+  if (String(tenantId || "").trim()) params.set("tenant_id", String(tenantId).trim());
+  if (Number.isFinite(minutes)) params.set("minutes", String(minutes));
+  if (Number.isFinite(stepSeconds)) params.set("step_seconds", String(stepSeconds));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return request(`/api/agents/volume${qs}`, { signal, maxRetries });
 }
 
 export const updatePassword = updateUserPassword;
@@ -460,6 +625,8 @@ export async function getAlerts({
   severity,
   correlationId,
   label,
+  signal,
+  maxRetries,
 } = {}) {
   const params = new URLSearchParams();
   if (showHidden) params.set("show_hidden", "true");
@@ -469,7 +636,7 @@ export async function getAlerts({
   }
   if (String(label || "").trim()) params.set("label", String(label).trim());
   const qs = params.toString() ? `?${params.toString()}` : "";
-  return request(`/api/alertmanager/alerts${qs}`);
+  return request(`/api/alertmanager/alerts${qs}`, { signal, maxRetries });
 }
 
 export async function getAlertsByFilter(filter = {}, active = true) {
@@ -485,11 +652,15 @@ export async function getAlertsByFilter(filter = {}, active = true) {
 export async function getAlertGroups() {
   return request("/api/alertmanager/alerts/groups");
 }
-export async function getSilences({ showHidden = false } = {}) {
+export async function getSilences({
+  showHidden = false,
+  signal,
+  maxRetries,
+} = {}) {
   const params = new URLSearchParams();
   if (showHidden) params.set("show_hidden", "true");
   const qs = params.toString() ? `?${params.toString()}` : "";
-  return request(`/api/alertmanager/silences${qs}`);
+  return request(`/api/alertmanager/silences${qs}`, { signal, maxRetries });
 }
 export async function createSilence(payload) {
   return requestJson("/api/alertmanager/silences", { payload });
@@ -556,8 +727,8 @@ export async function getIncidents(status, visibility, groupId) {
   const qs = params.toString() ? `?${params.toString()}` : "";
   return request(`/api/alertmanager/incidents${qs}`);
 }
-export async function getIncidentsSummary() {
-  return request("/api/alertmanager/incidents/summary");
+export async function getIncidentsSummary({ signal, maxRetries } = {}) {
+  return request("/api/alertmanager/incidents/summary", { signal, maxRetries });
 }
 export async function updateIncident(incidentId, payload) {
   return requestJson(
@@ -719,6 +890,35 @@ export async function listMetricNames(orgId) {
   return request(path);
 }
 
+export async function evaluatePromql(query, orgId, { sampleLimit = 5, signal } = {}) {
+  const params = new URLSearchParams();
+  params.append("query", query);
+  if (orgId) params.append("orgId", orgId);
+  if (sampleLimit) params.append("sampleLimit", String(sampleLimit));
+  return request(`/api/alertmanager/metrics/query?${params.toString()}`, { signal });
+}
+
+export async function listMetricLabels(orgId, { signal } = {}) {
+  const params = new URLSearchParams();
+  if (orgId) params.append("orgId", orgId);
+  const qs = params.toString();
+  const path = qs
+    ? `/api/alertmanager/metrics/labels?${qs}`
+    : "/api/alertmanager/metrics/labels";
+  return request(path, { signal });
+}
+
+export async function listMetricLabelValues(label, orgId, { metricName, signal } = {}) {
+  const params = new URLSearchParams();
+  if (orgId) params.append("orgId", orgId);
+  if (metricName) params.append("metricName", metricName);
+  const qs = params.toString();
+  const path = qs
+    ? `/api/alertmanager/metrics/label-values/${encodeURIComponent(label)}?${qs}`
+    : `/api/alertmanager/metrics/label-values/${encodeURIComponent(label)}`;
+  return request(path, { signal });
+}
+
 export async function queryLogs({
   query,
   limit = 100,
@@ -726,6 +926,7 @@ export async function queryLogs({
   end,
   direction = "backward",
   step,
+  signal,
 }) {
   const normalizedLimit = Math.max(1, Number(limit) || 100);
   const params = new URLSearchParams();
@@ -735,7 +936,7 @@ export async function queryLogs({
   if (end) params.append("end", end);
   if (direction) params.append("direction", direction);
   if (step) params.append("step", step);
-  return request(`/api/loki/query?${params.toString()}`);
+  return request(`/api/loki/query?${params.toString()}`, { signal });
 }
 export async function getLabels() {
   return request("/api/loki/labels");
@@ -769,13 +970,16 @@ export async function aggregateLogs(query, { start, end, step = 60 } = {}) {
   if (end) params.append("end", end);
   return request(`/api/loki/aggregate?${params.toString()}`);
 }
-export async function getLogVolume(query, { start, end, step = 300 } = {}) {
+export async function getLogVolume(
+  query,
+  { start, end, step = 300, signal } = {},
+) {
   const params = new URLSearchParams();
   params.append("query", query);
   params.append("step", step.toString());
   if (start) params.append("start", start);
   if (end) params.append("end", end);
-  return request(`/api/loki/volume?${params.toString()}`);
+  return request(`/api/loki/volume?${params.toString()}`, { signal });
 }
 
 export async function searchTraces({
@@ -787,6 +991,7 @@ export async function searchTraces({
   end,
   limit = 100,
   fetchFull = false,
+  signal,
 }) {
   const qs = [];
   if (service) qs.push(`service=${encodeURIComponent(service)}`);
@@ -797,13 +1002,13 @@ export async function searchTraces({
   if (end) qs.push(`end=${end}`);
   qs.push(`limit=${limit}`);
   qs.push(`fetchFull=${fetchFull ? "true" : "false"}`);
-  return request(`/api/tempo/traces/search?${qs.join("&")}`);
+  return request(`/api/tempo/traces/search?${qs.join("&")}`, { signal });
 }
-export async function fetchTempoServices() {
-  return request("/api/tempo/services");
+export async function fetchTempoServices({ signal } = {}) {
+  return request("/api/tempo/services", { signal });
 }
-export async function getTrace(traceID) {
-  return request(`/api/tempo/traces/${encodeURIComponent(traceID)}`);
+export async function getTrace(traceID, { signal } = {}) {
+  return request(`/api/tempo/traces/${encodeURIComponent(traceID)}`, { signal });
 }
 
 export async function createRcaAnalyzeJob(payload) {
@@ -939,6 +1144,8 @@ export async function searchDashboards({
   showHidden = false,
   tag,
   starred,
+  signal,
+  maxRetries,
 } = {}) {
   const params = new URLSearchParams();
   if (query) params.append("query", query);
@@ -958,6 +1165,7 @@ export async function searchDashboards({
     qs
       ? `/api/grafana/dashboards/search?${qs}`
       : "/api/grafana/dashboards/search",
+    { signal, maxRetries },
   );
 }
 export async function getDashboard(uid) {
@@ -999,21 +1207,26 @@ export async function getDashboardFilterMeta() {
 
 export async function getDatasources({
   uid,
+  query,
   labelKey,
   labelValue,
   teamId,
   showHidden = false,
+  signal,
+  maxRetries,
 } = {}) {
   const params = new URLSearchParams();
   if (uid) params.append("uid", uid);
+  if (query) params.append("query", query);
   if (labelKey) params.append("label_key", labelKey);
   if (labelValue) params.append("label_value", labelValue);
   if (teamId) params.append("team_id", teamId);
   if (showHidden) params.append("show_hidden", "true");
   const qs = params.toString();
-  return request(
-    qs ? `/api/grafana/datasources?${qs}` : "/api/grafana/datasources",
-  );
+  return request(qs ? `/api/grafana/datasources?${qs}` : "/api/grafana/datasources", {
+    signal,
+    maxRetries,
+  });
 }
 export async function getDatasource(uid) {
   return request(`/api/grafana/datasources/uid/${encodeURIComponent(uid)}`);

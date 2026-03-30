@@ -84,7 +84,7 @@ async def test_resolver_proxy_timeout_maps_to_504(monkeypatch):
         "get_secret",
         lambda key: {
             "RESOLVER_SERVICE_TOKEN": "service-token",
-            "RESOLVER_CONTEXT_SIGNING_KEY": "signing-key",
+            "RESOLVER_CONTEXT_SIGNING_KEY": "resolver-context-signing-key-32chars",
         }.get(key),
     )
 
@@ -102,6 +102,7 @@ async def test_resolver_proxy_timeout_maps_to_504(monkeypatch):
             tenant_id="tenant-a",
         )
     assert exc.value.status_code == 504
+    assert exc.value.headers.get("X-Request-ID")
 
 
 @pytest.mark.asyncio
@@ -109,7 +110,7 @@ async def test_resolver_proxy_missing_service_token_and_generic_error(monkeypatc
     service = ResolverProxyService()
     audits = []
     monkeypatch.setattr(service, "write_audit", lambda **kwargs: audits.append(kwargs))
-    monkeypatch.setattr(config, "get_secret", lambda key: {"RESOLVER_CONTEXT_SIGNING_KEY": "signing-key"}.get(key))
+    monkeypatch.setattr(config, "get_secret", lambda key: {"RESOLVER_CONTEXT_SIGNING_KEY": "resolver-context-signing-key-32chars"}.get(key))
 
     with pytest.raises(HTTPException, match="service token not configured"):
         await service.request_json(
@@ -124,7 +125,7 @@ async def test_resolver_proxy_missing_service_token_and_generic_error(monkeypatc
         "get_secret",
         lambda key: {
             "RESOLVER_SERVICE_TOKEN": "service-token",
-            "RESOLVER_CONTEXT_SIGNING_KEY": "signing-key",
+            "RESOLVER_CONTEXT_SIGNING_KEY": "resolver-context-signing-key-32chars",
         }.get(key),
     )
 
@@ -158,7 +159,7 @@ async def test_resolver_proxy_upstream_error_passthrough(monkeypatch):
         "get_secret",
         lambda key: {
             "RESOLVER_SERVICE_TOKEN": "service-token",
-            "RESOLVER_CONTEXT_SIGNING_KEY": "signing-key",
+            "RESOLVER_CONTEXT_SIGNING_KEY": "resolver-context-signing-key-32chars",
         }.get(key),
     )
 
@@ -184,7 +185,7 @@ async def test_resolver_proxy_upstream_error_passthrough(monkeypatch):
             tenant_id="tenant-a",
         )
     assert exc.value.status_code == 502
-    assert "upstream failed" in str(exc.value.detail)
+    assert "Resolver upstream error" in str(exc.value.detail)
 
 
 @pytest.mark.asyncio
@@ -200,7 +201,7 @@ async def test_resolver_proxy_does_not_cache_job_reads(monkeypatch):
         "get_secret",
         lambda key: {
             "RESOLVER_SERVICE_TOKEN": "service-token",
-            "RESOLVER_CONTEXT_SIGNING_KEY": "signing-key",
+            "RESOLVER_CONTEXT_SIGNING_KEY": "resolver-context-signing-key-32chars",
         }.get(key),
     )
 
@@ -261,7 +262,7 @@ async def test_resolver_proxy_cache_hit_and_invalid_json(monkeypatch):
         "get_secret",
         lambda key: {
             "RESOLVER_SERVICE_TOKEN": "service-token",
-            "RESOLVER_CONTEXT_SIGNING_KEY": "signing-key",
+            "RESOLVER_CONTEXT_SIGNING_KEY": "resolver-context-signing-key-32chars",
         }.get(key),
     )
 
@@ -317,7 +318,7 @@ async def test_resolver_proxy_collapses_inflight_reads(monkeypatch):
         "get_secret",
         lambda key: {
             "RESOLVER_SERVICE_TOKEN": "service-token",
-            "RESOLVER_CONTEXT_SIGNING_KEY": "signing-key",
+            "RESOLVER_CONTEXT_SIGNING_KEY": "resolver-context-signing-key-32chars",
         }.get(key),
     )
 
@@ -368,7 +369,7 @@ async def test_resolver_proxy_collapses_inflight_reads(monkeypatch):
 @pytest.mark.asyncio
 async def test_resolver_proxy_uses_existing_inflight_future_and_locked_cache(monkeypatch):
     service = ResolverProxyService()
-    monkeypatch.setattr(config, "get_secret", lambda key: "service-token" if key == "RESOLVER_SERVICE_TOKEN" else "signing-key")
+    monkeypatch.setattr(config, "get_secret", lambda key: "service-token" if key == "RESOLVER_SERVICE_TOKEN" else "resolver-context-signing-key-32chars")
     monkeypatch.setattr(service, "_sign_context_token", lambda **_: "ctx")
     monkeypatch.setattr(service, "write_audit", lambda **_kwargs: None)
 

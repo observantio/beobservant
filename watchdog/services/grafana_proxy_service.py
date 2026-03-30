@@ -124,16 +124,18 @@ class GrafanaProxyService:
 
     @staticmethod
     def _raise_http_from_grafana_error(exc: Exception) -> None:
-        from services.grafana.grafana_service import GrafanaAPIError
-        if not isinstance(exc, GrafanaAPIError):
+        status = getattr(exc, "status", None)
+        body = getattr(exc, "body", None)
+        if status is None and body is None:
             raise exc
-        body = exc.body
+
         message = (
             (isinstance(body, dict) and (body.get("message") or body.get("error") or body.get("detail")))
             or (isinstance(body, str) and body)
             or "Grafana API error"
         )
-        raise HTTPException(status_code=exc.status if 400 <= exc.status < 600 else 500, detail=message)
+        normalized_status = int(status) if isinstance(status, int) else 500
+        raise HTTPException(status_code=normalized_status if 400 <= normalized_status < 600 else 500, detail=message)
 
     def _validate_group_visibility(
         self,
@@ -323,6 +325,7 @@ class GrafanaProxyService:
         tenant_id: str,
         group_ids: List[str],
         uid: Optional[str] = None,
+        query: Optional[str] = None,
         team_id: Optional[str] = None,
         show_hidden: bool = False,
         limit: Optional[int] = None,
@@ -334,7 +337,7 @@ class GrafanaProxyService:
         )
         return await get_datasources(
             self, db, user_id, tenant_id, effective_group_ids,
-            uid, team_id, show_hidden, limit, offset, datasource_context,
+            uid, query, team_id, show_hidden, limit, offset, datasource_context,
         )
 
     async def get_datasource(

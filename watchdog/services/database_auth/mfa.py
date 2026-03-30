@@ -62,7 +62,7 @@ def _is_recent_totp_reuse(user_id: str, code: str) -> bool:
         return True
 
 
-def _get_fernet(service: DatabaseAuthService) -> Optional[Fernet]:
+def _get_fernet(_service: DatabaseAuthService) -> Optional[Fernet]:
     from config import config as cfg
 
     if not cfg.DATA_ENCRYPTION_KEY:
@@ -92,18 +92,18 @@ def _decrypt_mfa_secret(service: DatabaseAuthService, token: str) -> str:
         raise ValueError("Cannot decrypt TOTP secret") from exc
 
 
-def _generate_recovery_codes(service: DatabaseAuthService, count: int = 10) -> List[str]:
+def _generate_recovery_codes(_service: DatabaseAuthService, count: int = 10) -> List[str]:
     return [secrets.token_urlsafe(10) for _ in range(count)]
 
 
-def _hash_recovery_codes(service: DatabaseAuthService, codes: List[str]) -> List[str]:
+def _hash_recovery_codes(_service: DatabaseAuthService, codes: List[str]) -> List[str]:
     return [
         bcrypt.hashpw(code.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         for code in codes
     ]
 
 
-def _consume_recovery_code(service: DatabaseAuthService, db_user: User, code: str) -> bool:
+def _consume_recovery_code(_service: DatabaseAuthService, db_user: User, code: str) -> bool:
     hashes: List[str] = list(getattr(db_user, "mfa_recovery_hashes", None) or [])
     for i, h in enumerate(hashes):
         try:

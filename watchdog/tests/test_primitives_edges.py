@@ -376,7 +376,11 @@ def test_main_startup_initializes_database_and_auth(monkeypatch):
     monkeypatch.setattr(config_module.config, "SKIP_STARTUP_DB_INIT", False)
     monkeypatch.setattr(config_module.config, "DATABASE_URL", "postgresql://safeuser:safePass_123@db:5432/watchdog")
     monkeypatch.setattr(config_module.config, "LOG_LEVEL", "debug")
-    monkeypatch.setattr(database_module, "init_database", lambda url, debug: calls.append(("init_database", url, debug)))
+    monkeypatch.setattr(
+        database_module,
+        "init_database",
+        lambda database_url: calls.append(("init_database", database_url)),
+    )
     monkeypatch.setattr(database_module, "init_db", lambda: calls.append("init_db"))
 
     import middleware.dependencies as dependencies_module
@@ -390,7 +394,7 @@ def test_main_startup_initializes_database_and_auth(monkeypatch):
     importlib.import_module("main")
 
     assert calls == [
-        ("init_database", "postgresql://safeuser:safePass_123@db:5432/watchdog", True),
+        ("init_database", "postgresql://safeuser:safePass_123@db:5432/watchdog"),
         "init_db",
         "lazy_init",
         "backfill_otlp_tokens",
@@ -508,7 +512,12 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
             return BadResponse()
 
     result = await agent_helpers.query_key_activity("tenant-a", BadClient())
-    assert result == {"metrics_active": False, "metrics_count": 0}
+    assert result == {
+        "metrics_active": False,
+        "metrics_count": 0,
+        "agent_estimate": 0,
+        "host_estimate": 0,
+    }
 
     class BadPayloadResponse:
         def raise_for_status(self):
@@ -522,7 +531,12 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
             return BadPayloadResponse()
 
     bad_payload_result = await agent_helpers.query_key_activity("tenant-a", BadPayloadClient())
-    assert bad_payload_result == {"metrics_active": False, "metrics_count": 0}
+    assert bad_payload_result == {
+        "metrics_active": False,
+        "metrics_count": 0,
+        "agent_estimate": 0,
+        "host_estimate": 0,
+    }
 
     tokens = audit_context_service.set_request_audit_context("203.0.113.10", "pytest")
     assert audit_context_service.get_request_audit_context() == ("203.0.113.10", "pytest")
@@ -538,6 +552,43 @@ async def test_internal_and_system_router_edges(monkeypatch):
 
     monkeypatch.setattr(system_router, "system_service", types.SimpleNamespace(get_all_metrics=lambda: {"ok": True}))
     assert await system_router.get_system_metrics() == {"ok": True}
+
+    class _FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+            self.is_success = True
+
+        def json(self):
+            return self._payload
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            self.calls = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params=None, headers=None):
+            self.calls.append((url, params))
+            if "latest" in url:
+                return _FakeResponse({"tag_name": "v0.0.2"})
+            return _FakeResponse([{"tag_name": "v0.0.2"}])
+
+    fake_client = _FakeAsyncClient()
+    monkeypatch.setattr(system_router.httpx, "AsyncClient", lambda *args, **kwargs: fake_client)
+    base_time = 1_000_000.0
+    monkeypatch.setattr(system_router.time, "monotonic", lambda: base_time)
+    monkeypatch.setattr(system_router, "ojo_release_cache_payload", None)
+    monkeypatch.setattr(system_router, "ojo_release_cache_expires_at", 0.0)
+
+    first = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
+    second = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
+    assert first["latest"]["tag_name"] == "v0.0.2"
+    assert second["latest"]["tag_name"] == "v0.0.2"
+    assert len(fake_client.calls) == 2
 
 
 def test_encryption_edges(monkeypatch):

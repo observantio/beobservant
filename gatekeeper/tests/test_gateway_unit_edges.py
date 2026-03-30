@@ -112,6 +112,24 @@ def test_build_secret_provider_uses_secret_id_env(monkeypatch):
     assert captured["secret_id_fn"]() == "secret-1"
 
 
+def test_build_secret_provider_without_role_id(monkeypatch):
+    captured = {}
+
+    class FakeProvider:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setenv("VAULT_ADDR", "https://vault")
+    monkeypatch.delenv("VAULT_ROLE_ID", raising=False)
+    monkeypatch.delenv("VAULT_SECRET_ID", raising=False)
+    monkeypatch.delenv("VAULT_SECRET_ID_FILE", raising=False)
+    monkeypatch.setattr(gw_config, "VaultSecretProvider", FakeProvider)
+    provider = gw_config.build_secret_provider()
+    assert isinstance(provider, FakeProvider)
+    assert captured["role_id"] is None
+    assert captured["secret_id_fn"] is None
+
+
 def test_build_secret_provider_rejects_missing_secret_id(monkeypatch):
     monkeypatch.setenv("VAULT_ADDR", "https://vault")
     monkeypatch.setenv("VAULT_ROLE_ID", "role-1")
@@ -198,6 +216,8 @@ def test_fetch_org_from_api_variants(monkeypatch):
 
         def __init__(self, *args, **kwargs):
             calls.append((args, kwargs))
+            self.last_post = None
+            self.last_get = None
 
         def __enter__(self):
             return self
@@ -248,8 +268,9 @@ def test_fetch_org_from_api_legacy_query_variants(monkeypatch):
         response = FakeResponse(200, {"org_id": "org-2"})
         error = None
 
-        def __init__(self, *args, **kwargs):
-            pass
+        def __init__(self, *_args, **_kwargs):
+            self.url = None
+            self.headers = None
 
         def __enter__(self):
             return self
@@ -334,6 +355,24 @@ async def test_gateway_main_health_and_main_entrypoint(monkeypatch):
     assert captured["ssl_ca_certs"] == "/tmp/ca.pem"
 
 
+@pytest.mark.asyncio
+async def test_gateway_main_entrypoint_without_tls_files(monkeypatch):
+    captured = {}
+    fake_uvicorn = types.SimpleNamespace(run=lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
+    monkeypatch.delenv("GATEWAY_SSL_CERTFILE", raising=False)
+    monkeypatch.delenv("GATEWAY_SSL_KEYFILE", raising=False)
+    monkeypatch.delenv("GATEWAY_SSL_CA_CERTS", raising=False)
+    monkeypatch.setenv("GATEWAY_HOST", "127.0.0.1")
+    monkeypatch.setenv("GATEWAY_PORT", "4318")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    config_module = importlib.import_module("config")
+    importlib.reload(config_module)
+    runpy.run_module("main", run_name="__main__")
+    assert captured["ssl_certfile"] is None
+    assert captured["ssl_keyfile"] is None
+
+
 def test_gateway_service_remaining_branches(monkeypatch):
     monkeypatch.setattr(gateway_service_module.gw_config, "TRUST_PROXY_HEADERS", True)
     monkeypatch.setattr(gateway_service_module.gw_config, "TRUSTED_PROXY_CIDRS", [])
@@ -352,6 +391,19 @@ def test_gateway_service_remaining_branches(monkeypatch):
         service.validate_otlp_token("tok")
 
 
+def test_parse_networks_with_explicit_cidr_and_proxy_cidr_iteration(monkeypatch):
+    networks = gateway_service_module._parse_networks("127.0.0.0/24")
+    assert [str(net) for net in networks] == ["127.0.0.0/24"]
+
+    monkeypatch.setattr(gateway_service_module.gw_config, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(
+        gateway_service_module.gw_config,
+        "TRUSTED_PROXY_CIDRS",
+        ["10.0.0.0/8", "127.0.0.0/8"],
+    )
+    assert GatewayAuthService._trusted_proxy_peer(_request(client_host="127.0.0.1")) is True
+
+
 def test_rate_limit_remaining_branches(monkeypatch):
     import services.rate_limit as rate_limit_module
     import services.rate_limits.hybrid_token_rate_limiter as hybrid_module
@@ -359,7 +411,7 @@ def test_rate_limit_remaining_branches(monkeypatch):
     monkeypatch.setattr(rate_limit_module.gw_config, "GATEWAY_RATE_LIMIT_STRICT", True)
 
     class WorkingRedisLimiter:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args, **_kwargs):
             self.args = args
 
     monkeypatch.setattr(rate_limit_module, "RedisTokenRateLimiter", WorkingRedisLimiter)
@@ -374,7 +426,7 @@ def test_rate_limit_remaining_branches(monkeypatch):
         def __init__(self):
             self.calls = 0
 
-        def enforce(self, key):
+        def enforce(self, _key):
             self.calls += 1
 
     fallback = RecordingFallback()
@@ -387,20 +439,21 @@ def test_rate_limit_remaining_branches(monkeypatch):
 def test_vault_provider_remaining_branches(monkeypatch):
     class FakeAppRole:
         def login(self, role_id=None, secret_id=None):
+            _ = (role_id, secret_id)
             return {"auth": {"client_token": "role-token"}}  # pragma: no cover
 
     class FakeKV:
         def __init__(self):
             self.v2 = self
 
-        def read_secret_version(self, **kwargs):
+        def read_secret_version(self, **_kwargs):
             return {"data": {"data": {"value": "ok"}}}  # pragma: no cover
 
-        def read_secret(self, **kwargs):
+        def read_secret(self, **_kwargs):
             return {"data": {"key": "value"}}  # pragma: no cover
 
     class FakeClient:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *_args, **_kwargs):
             self.auth = types.SimpleNamespace(approle=FakeAppRole())
             self.secrets = types.SimpleNamespace(kv=FakeKV())
             self.token = None
@@ -423,6 +476,9 @@ def test_vault_provider_remaining_branches(monkeypatch):
     provider._approle_credentials = (None, None)
     with pytest.raises(vault_module.VaultClientError):
         provider._approle_login()
+    provider._approle_credentials = ("role-id", lambda: "secret-id")
+    provider._approle_login()
+    assert provider._client.token == "role-token"
 
 
 def test_reloadable_config_remaining_validation(monkeypatch):
@@ -434,8 +490,8 @@ def test_reloadable_config_remaining_validation(monkeypatch):
         ctx.setenv("GATEWAY_INTERNAL_SERVICE_TOKEN", "strong_internal_token_123")
         ctx.setenv("GATEWAY_STATUS_OTLP_TOKEN", "startup_probe_token_123")
         ctx.setenv("GATEWAY_STARTUP_CHECK_MODE", "invalid")
-        if "config" in sys.modules:
-            del sys.modules["config"]
+        sys.modules["config"] = importlib.import_module("config")
+        del sys.modules["config"]
         with pytest.raises(ValueError):
             importlib.import_module("config")
 
@@ -465,7 +521,7 @@ def test_hybrid_rate_limiter_warns_once(monkeypatch):
         def __init__(self):
             self.calls = 0
 
-        def enforce(self, key):
+        def enforce(self, _key):
             self.calls += 1
             raise RuntimeError("boom")
 
@@ -533,13 +589,14 @@ def test_redis_token_cache_and_rate_limiter(monkeypatch):
         def ping(self):
             return self._ping
 
-        def get(self, key):
+        def get(self, _key):
             return self._get_value
 
         def setex(self, key, ttl, value):
             self.setex_calls.append((key, ttl, value))
 
         def pipeline(self, transaction=False):
+            _ = transaction
             return FakePipeline(self._count)
 
     class FakeRedisModule:
@@ -548,7 +605,7 @@ def test_redis_token_cache_and_rate_limiter(monkeypatch):
         def __init__(self):
             self.client = FakeClient()
 
-        def from_url(self, *args, **kwargs):
+        def from_url(self, *_args, **_kwargs):
             return self.client
 
     fake_redis = FakeRedisModule()
@@ -586,7 +643,7 @@ def test_vault_provider_paths(monkeypatch):
             self.response = response
             self.error = error
 
-        def read_secret_version(self, **kwargs):
+        def read_secret_version(self, **_kwargs):
             if self.error:
                 raise self.error
             return self.response
@@ -597,7 +654,7 @@ def test_vault_provider_paths(monkeypatch):
             self._response = response
             self._error = error
 
-        def read_secret(self, **kwargs):
+        def read_secret(self, **_kwargs):
             if self._error:
                 raise self._error  # pragma: no cover
             return self._response
@@ -607,6 +664,7 @@ def test_vault_provider_paths(monkeypatch):
             self.token = token
 
         def login(self, role_id=None, secret_id=None):
+            _ = (role_id, secret_id)
             return {"auth": {"client_token": self.token}}
 
     class FakeClient:

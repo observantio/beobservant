@@ -22,8 +22,8 @@ export default {
         "sre-text": "var(--sre-text)",
         "sre-text-muted": "var(--sre-text-muted)",
         "sre-text-subtle": "var(--sre-text-subtle)",
-        "sre-primary": "#3b82f6",
-        "sre-primary-light": "#60a5fa",
+        "sre-primary": "rgb(var(--sre-primary-rgb) / <alpha-value>)",
+        "sre-primary-light": "rgb(var(--sre-primary-light-rgb) / <alpha-value>)",
         "sre-success": "#10b981",
         "sre-success-light": "#34d399",
         "sre-warning": "#f59e0b",
@@ -36,7 +36,7 @@ export default {
       },
       fontFamily: {
         mono: [
-          "Ubuntu Mono Sans",
+          "Ubuntu Mono",
           "ui-monospace",
           "SFMono-Regular",
           "Menlo",
@@ -45,7 +45,6 @@ export default {
           "monospace",
         ],
         sans: [
-          "Ubuntu Mono",
           "Ubuntu",
           "system-ui",
           "-apple-system",
@@ -57,9 +56,9 @@ export default {
         ],
       },
       boxShadow: {
-        "glow-sm": "0 0 10px rgba(59, 130, 246, 0.3)",
-        glow: "0 0 20px rgba(59, 130, 246, 0.4)",
-        "glow-lg": "0 0 30px rgba(59, 130, 246, 0.5)",
+        "glow-sm": "0 0 10px rgb(var(--sre-primary-rgb) / 0.3)",
+        glow: "0 0 20px rgb(var(--sre-primary-rgb) / 0.4)",
+        "glow-lg": "0 0 30px rgb(var(--sre-primary-rgb) / 0.5)",
         neon: "0 0 10px rgba(57, 255, 20, 0.5)",
       },
       animation: {

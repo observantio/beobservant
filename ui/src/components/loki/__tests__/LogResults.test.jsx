@@ -1,5 +1,6 @@
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { vi } from "vitest";
 import LogResults from "../LogResults";
 
 function makeStream(i) {
@@ -41,5 +42,97 @@ describe("LogResults pagination", () => {
     expect(screen.getByText(/Showing 61–65 of 65 streams/)).toBeInTheDocument();
     expect(screen.getByText("svc_61")).toBeInTheDocument();
     expect(screen.getByText("svc_65")).toBeInTheDocument();
+  });
+
+  it("renders loading and empty states", () => {
+    const { rerender } = render(
+      <LogResults
+        queryResult={{ data: { result: [] } }}
+        loading
+        searchText={""}
+        viewMode="table"
+        expandedLogs={{}}
+        toggleLogExpand={() => {}}
+        copyToClipboard={() => {}}
+      />,
+    );
+    expect(screen.getByText("Querying logs...")).toBeInTheDocument();
+
+    rerender(
+      <LogResults
+        queryResult={{ data: { result: [] } }}
+        loading={false}
+        searchText={""}
+        viewMode="table"
+        expandedLogs={{}}
+        toggleLogExpand={() => {}}
+        copyToClipboard={() => {}}
+      />,
+    );
+    expect(screen.getByText("No Logs Found")).toBeInTheDocument();
+  });
+
+  it("shows filter-empty message when search has no matching logs", () => {
+    const queryResult = {
+      data: {
+        result: [
+          {
+            stream: { service: "api" },
+            values: [[String(Date.now() * 1e6), "all good"]],
+          },
+        ],
+      },
+    };
+
+    render(
+      <LogResults
+        queryResult={queryResult}
+        loading={false}
+        searchText={"fatal error"}
+        viewMode="table"
+        expandedLogs={{}}
+        toggleLogExpand={() => {}}
+        copyToClipboard={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(/No logs match your filter/i)).toBeInTheDocument();
+  });
+
+  it("supports copy and expand controls in table mode", () => {
+    const copyToClipboard = vi.fn();
+    const toggleLogExpand = vi.fn();
+    const tsNs = String(Date.now() * 1e6);
+    const jsonPayload = JSON.stringify({
+      message: "hello",
+      a: 1,
+      b: 2,
+      c: 3,
+      d: 4,
+      e: 5,
+      f: 6,
+    });
+
+    render(
+      <LogResults
+        queryResult={{
+          data: {
+            result: [{ stream: { service: "api" }, values: [[tsNs, jsonPayload]] }],
+          },
+        }}
+        loading={false}
+        searchText={""}
+        viewMode="table"
+        expandedLogs={{}}
+        toggleLogExpand={toggleLogExpand}
+        copyToClipboard={copyToClipboard}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle("Copy log"));
+    expect(copyToClipboard).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /show 2 more fields/i }));
+    expect(toggleLogExpand).toHaveBeenCalledTimes(1);
   });
 });

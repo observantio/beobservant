@@ -159,16 +159,17 @@ class GatewayAuthService:
         try:
             with httpx.Client(timeout=2.0, verify=self._http_verify) as client:
                 resp = client.post(url, headers=headers, json={"token": token})
-            if resp.status_code == 200:
-                return self._extract_org_id(resp)
-            if resp.status_code == 404:
-                return None
-            if resp.status_code in {405}:
-                return self._fetch_org_from_api_legacy_query(token)
-            raise DatabaseUnavailable(f"unexpected status {resp.status_code}")
         except httpx.HTTPError as exc:
             logger.warning("Auth API HTTP transport failure: %s", type(exc).__name__)
             raise DatabaseUnavailable from exc
+
+        if resp.status_code == 200:
+            return self._extract_org_id(resp)
+        if resp.status_code == 404:
+            return None
+        if resp.status_code in {405}:
+            return self._fetch_org_from_api_legacy_query(token)
+        raise DatabaseUnavailable(f"unexpected status {resp.status_code}")
 
     def _fetch_org_from_api_legacy_query(self, token: str) -> Optional[str]:
         legacy_url = f"{self._auth_api_url}?token={quote(token)}"
@@ -176,14 +177,15 @@ class GatewayAuthService:
         try:
             with httpx.Client(timeout=2.0, verify=self._http_verify) as client:
                 resp = client.get(legacy_url, headers=headers)
-            if resp.status_code == 200:
-                return self._extract_org_id(resp)
-            if resp.status_code in {404, 410}:
-                return None
-            raise DatabaseUnavailable(f"unexpected status {resp.status_code}")
         except httpx.HTTPError as exc:
             logger.warning("Auth API legacy HTTP failure: %s", type(exc).__name__)
             raise DatabaseUnavailable from exc
+
+        if resp.status_code == 200:
+            return self._extract_org_id(resp)
+        if resp.status_code in {404, 410}:
+            return None
+        raise DatabaseUnavailable(f"unexpected status {resp.status_code}")
 
     def probe_auth_api(self, token: str) -> Optional[str]:
         return self._fetch_org_from_api(token)
@@ -202,7 +204,6 @@ class GatewayAuthService:
         except DatabaseUnavailable:
             raise
         except Exception as exc:
-            # Module reloads in tests can produce another DatabaseUnavailable class identity.
             if type(exc).__name__ == "DatabaseUnavailable":
                 raise exc
             logger.warning("Auth API fetch unexpected error", exc_info=True)

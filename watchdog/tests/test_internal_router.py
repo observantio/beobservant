@@ -8,16 +8,14 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 from fastapi.testclient import TestClient
 from fastapi import HTTPException, status
+from fastapi import FastAPI
 import pytest
 
 from tests._env import ensure_test_env
-from services.internal_service import InternalService
 ensure_test_env()
 
-from config import config
-config.SKIP_STARTUP_DB_INIT = True
+from services.internal_service import InternalService
 
-from main import app
 from config import config
 from routers import internal_router
 
@@ -26,36 +24,29 @@ class DummyAuthService:
     def validate_otlp_token(self, token, *, suppress_errors=True):
         return "org123" if token == "good" else None
 
-class DummyInternalService:
-    def __init__(self):
-        self._auth_service = DummyAuthService()
-
-    def verify_service_token(self, x_internal_token: str = None):
-        return None
-
-    def validate_token_or_404(self, token: str):
-        org = self._auth_service.validate_otlp_token(token, suppress_errors=False)
-        if not org:
-            raise HTTPException(status.HTTP_404_NOT_FOUND)
-        return {"org_id": org}
-
-
-
 @pytest.fixture(autouse=True)
 def patch_auth_service(monkeypatch):
-    monkeypatch.setattr(internal_router, "internal_service", DummyInternalService())
+    monkeypatch.setattr(internal_router, "internal_service", InternalService(auth_service=DummyAuthService()))
+    monkeypatch.setattr(config, "SKIP_STARTUP_DB_INIT", True)
+    monkeypatch.setattr(InternalService, "_get_internal_token", lambda self: "secret")
 
 
-def test_missing_header(monkeypatch):
+@pytest.fixture
+def client():
+    app = FastAPI()
+    app.include_router(internal_router.router)
+    return TestClient(app)
+
+
+def test_missing_header(monkeypatch, client):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
-    client = TestClient(app)
     resp = client.get("/api/internal/otlp/validate?token=good")
     assert resp.status_code == 422
 
 
-def test_service_token_not_configured(monkeypatch):
+def test_service_token_not_configured(monkeypatch, client):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", None)
-    client = TestClient(app)
+    monkeypatch.setattr(InternalService, "_get_internal_token", lambda self: "")
     resp = client.post(
         "/api/internal/otlp/validate",
         headers={"X-Internal-Token": "whatever"},
@@ -64,9 +55,8 @@ def test_service_token_not_configured(monkeypatch):
     assert resp.status_code == 500
 
 
-def test_bad_header(monkeypatch):
+def test_bad_header(monkeypatch, client):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
-    client = TestClient(app)
     resp = client.get(
         "/api/internal/otlp/validate?token=good",
         headers={"X-Internal-Token": "wrong"},
@@ -74,9 +64,8 @@ def test_bad_header(monkeypatch):
     assert resp.status_code == 403
 
 
-def test_invalid_token(monkeypatch):
+def test_invalid_token(monkeypatch, client):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
-    client = TestClient(app)
     resp = client.get(
         "/api/internal/otlp/validate?token=bad",
         headers={"X-Internal-Token": "secret"},
@@ -84,9 +73,8 @@ def test_invalid_token(monkeypatch):
     assert resp.status_code == 410
 
 
-def test_query_path_disabled(monkeypatch):
+def test_query_path_disabled(monkeypatch, client):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
-    client = TestClient(app)
     resp = client.get(
         "/api/internal/otlp/validate?token=good",
         headers={"X-Internal-Token": "secret"},
@@ -94,9 +82,8 @@ def test_query_path_disabled(monkeypatch):
     assert resp.status_code == 410
 
 
-def test_success_post_body(monkeypatch):
+def test_success_post_body(monkeypatch, client):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
-    client = TestClient(app)
     resp = client.post(
         "/api/internal/otlp/validate",
         headers={"X-Internal-Token": "secret"},
@@ -106,9 +93,8 @@ def test_success_post_body(monkeypatch):
     assert resp.json() == {"org_id": "org123"}
 
 
-def test_success_post_header_token(monkeypatch):
+def test_success_post_header_token(monkeypatch, client):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
-    client = TestClient(app)
     resp = client.post(
         "/api/internal/otlp/validate",
         headers={"X-Internal-Token": "secret", "X-OTLP-Token": "good"},
@@ -118,9 +104,8 @@ def test_success_post_header_token(monkeypatch):
     assert resp.json() == {"org_id": "org123"}
 
 
-def test_post_invalid_token(monkeypatch):
+def test_post_invalid_token(monkeypatch, client):
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
-    client = TestClient(app)
     resp = client.post(
         "/api/internal/otlp/validate",
         headers={"X-Internal-Token": "secret"},
@@ -129,14 +114,13 @@ def test_post_invalid_token(monkeypatch):
     assert resp.status_code == 404
 
 
-def test_post_db_error_maps_to_503(monkeypatch):
+def test_post_db_error_maps_to_503(monkeypatch, client):
     class FailingAuthService:
         def validate_otlp_token(self, token, *, suppress_errors=True):
             raise RuntimeError("db down")
 
     monkeypatch.setattr(internal_router, "internal_service", InternalService(auth_service=FailingAuthService()))
     monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
-    client = TestClient(app)
     resp = client.post(
         "/api/internal/otlp/validate",
         headers={"X-Internal-Token": "secret"},

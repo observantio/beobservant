@@ -120,7 +120,12 @@ function filterDeletedJobs(items, deletedReportIds) {
   });
 }
 
-export function useRcaJobs() {
+/**
+ * @param {string} [scopeKey] Active tenant/org scope (same as `X-Scope-OrgID` via
+ * `api.setUserOrgIds`). When this changes (e.g. user switches API key in the header),
+ * jobs are cleared and the list is refetched for the new scope.
+ */
+export function useRcaJobs(scopeKey = "") {
   const toast = useToast();
   const [jobs, setJobs] = useState(() => loadActiveJobsFromStorage());
   const jobsRef = useRef(jobs);
@@ -131,6 +136,7 @@ export function useRcaJobs() {
   const [creatingJob, setCreatingJob] = useState(false);
   const [deletingReport, setDeletingReport] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState(null);
+  const prevScopeKeyRef = useRef(undefined);
 
   useEffect(() => {
     jobsRef.current = jobs;
@@ -195,8 +201,30 @@ export function useRcaJobs() {
   }, [deletedReportIds, selectedJobId, toast]);
 
   useEffect(() => {
-    refreshJobs();
-  }, [refreshJobs]);
+    const prev = prevScopeKeyRef.current;
+    if (prev === undefined) {
+      prevScopeKeyRef.current = scopeKey;
+      void refreshJobs();
+      return;
+    }
+    if (prev !== scopeKey) {
+      if (
+        (prev && scopeKey && prev !== scopeKey) ||
+        (prev && !scopeKey)
+      ) {
+        setJobs([]);
+        setSelectedJobId(null);
+        try {
+          localStorage.removeItem("rcaPage.selectedJobId");
+          localStorage.removeItem(ACTIVE_JOBS_STORAGE_KEY);
+        } catch {
+          // ignore
+        }
+      }
+      prevScopeKeyRef.current = scopeKey;
+      void refreshJobs();
+    }
+  }, [scopeKey, refreshJobs]);
 
   useEffect(() => {
     persistActiveJobsToStorage(jobs);

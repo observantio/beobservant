@@ -65,6 +65,18 @@ def _looks_like_jwt(token: str) -> bool:
     return len(parts) == 3 and all(parts)
 
 
+def _issuer_candidates(issuer: Optional[str]) -> tuple[Optional[str], ...]:
+    normalized = str(issuer or "").strip().rstrip("/")
+    if not normalized:
+        return (None,)
+
+    candidates: list[Optional[str]] = [normalized]
+    # Google documents both forms of the issuer in ID token validation guidance.
+    if normalized in {"https://accounts.google.com", "accounts.google.com"}:
+        candidates = ["https://accounts.google.com", "accounts.google.com"]
+    return tuple(dict.fromkeys(candidates))
+
+
 class OIDCService:
     def __init__(self) -> None:
         self._well_known_cache: Optional[JSONDict] = None
@@ -304,14 +316,31 @@ class OIDCService:
             audience = config.OIDC_AUDIENCE or config.OIDC_CLIENT_ID
 
             verification_key = self._verification_key_for(jwk_key, header_alg, kid)
-            claims = jwt.decode(
-                token,
-                verification_key,
-                algorithms=[header_alg],
-                options={"verify_aud": bool(audience), "require": ["exp", "iat"]},
-                issuer=issuer or None,
-                audience=audience or None,
-            )
+            claims = None
+            issuer_error: Optional[jwt.InvalidIssuerError] = None
+            for issuer_candidate in _issuer_candidates(issuer):
+                try:
+                    claims = jwt.decode(
+                        token,
+                        verification_key,
+                        algorithms=[header_alg],
+                        options={"verify_aud": bool(audience), "require": ["exp", "iat"]},
+                        issuer=issuer_candidate,
+                        audience=audience or None,
+                        leeway=max(
+                            0,
+                            int(getattr(config, "OIDC_CLOCK_SKEW_LEEWAY_SECONDS", 60) or 60),
+                        ),
+                    )
+                    break
+                except jwt.InvalidIssuerError as exc:
+                    issuer_error = exc
+                    continue
+
+            if claims is None:
+                if issuer_error is not None:
+                    raise issuer_error
+                return None
             token_nonce = str(claims.get("nonce") or "")
             if require_nonce and not nonce:
                 logger.warning("OIDC token rejected: nonce required but missing")
@@ -325,8 +354,8 @@ class OIDCService:
 
             return cast(JSONDict, claims)
 
-        except jwt.PyJWTError:
-            logger.warning("OIDC token validation failed")
+        except jwt.PyJWTError as exc:
+            logger.warning("OIDC token validation failed: %s", exc)
             return None
         except (OSError, RuntimeError, ValueError):
             logger.error("OIDC token validation error")

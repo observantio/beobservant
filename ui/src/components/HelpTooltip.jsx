@@ -118,7 +118,7 @@ export default function HelpTooltip({
           ref={tooltipRef}
           role="tooltip"
           style={tooltipStyle}
-          className="px-4 py-3 bg-sre-bg-card text-sre-text text-sm rounded-lg shadow-lg border border-sre-border z-50 whitespace-normal"
+          className="px-4 py-3 bg-sre-bg-card text-sm rounded-lg shadow-lg border border-sre-border z-50 whitespace-normal"
         >
           {text}
           <div
