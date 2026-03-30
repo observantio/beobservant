@@ -85,6 +85,15 @@ To collect and ship host/service telemetry into this platform, you can run the O
 - Ojo repository: https://github.com/observantio/ojo
 - Configure Ojo (or your collector) to send OTLP data to this deployment's gateway (`http://<host>:4320`) using your `x-otlp-token`.
 
+### Ojo Agent Setup Wizard (UI)
+
+From the UI header, open **Download Ojo Agent** and follow the 5-slide wizard.
+
+- Slide 1: pick `Linux`, `Windows`, or `Extra services`.
+- Slide 2: download from GitHub releases and select a matching asset. The wizard now auto-uses the first matching asset in the install command when none is explicitly selected.
+- Slide 2 expected behavior: for the current `v0.0.2` core release flow, seeing **Matching assets (2)** for core binaries is normal.
+- Slide 3+: generate config, bind API key token, and run connectivity verification.
+
 ## Required Network Ports
 
 Open only what you actually need.

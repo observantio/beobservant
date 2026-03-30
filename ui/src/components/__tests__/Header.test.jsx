@@ -208,7 +208,9 @@ describe("Header user menu", () => {
     fireEvent.click(screen.getByRole("button", { name: /Next/i }));
 
     expect(await screen.findByText(/Matching assets \(1\)/i)).toBeInTheDocument();
-    expect(await screen.findByText(/ojo-v0\.0\.2-windows-x86_64\.exe/i)).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText(/ojo-v0\.0\.2-windows-x86_64\.exe/i)).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText(/ojo-docker-win-v0\.0\.2\.exe/i)).not.toBeInTheDocument();
   });
 

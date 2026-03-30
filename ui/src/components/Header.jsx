@@ -16,7 +16,9 @@ const NAV_ITEM_LIST = Object.values(NAV_ITEMS);
 const RELEASE_LABEL = "Wolfmegasaur v0.0.2";
 const WATCHDOG_GITHUB_URL = "https://github.com/observantio/watchdog";
 const OJO_REPO_URL = "https://github.com/observantio/ojo";
+const OJO_RECOMMENDED_RELEASE_TAG = "v0.0.2";
 const OJO_RELEASES_URL = `${OJO_REPO_URL}/releases/latest`;
+const OJO_RECOMMENDED_RELEASE_URL = `${OJO_REPO_URL}/releases/tag/${OJO_RECOMMENDED_RELEASE_TAG}`;
 const RELEASE_FETCH_TIMEOUT_MS = 8000;
 const hasWindowsMarker = (name) => String(name || "").toLowerCase().includes("windows");
 
@@ -1105,8 +1107,7 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
       const isLinux = name.includes("linux");
       const isWindows = hasWindowsMarker(name);
       const isSolaris = name.includes("solaris") || name.includes("sunos");
-      const isArchive = name.endsWith(".zip") || name.endsWith(".tar.gz");
-      return isLinux && !isWindows && !isSolaris && !isArchive;
+      return isLinux && !isWindows && !isSolaris;
     }
 
     if (selectedOs === "windows") {
@@ -1132,10 +1133,14 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
       (asset) =>
         String(asset?.browser_download_url || "") ===
         String(selectedAssetUrl || ""),
-    ) || null;
-  const binaryUrlPlaceholder =
-    selectedOs === "windows" ? "<exe-url>" : "<binary-url>";
-  const resolvedBinaryUrl = selectedAssetUrl || binaryUrlPlaceholder;
+    ) || osAssets[0] || null;
+  const binaryUrlPlaceholder = selectedOs === "windows"
+    ? `${OJO_REPO_URL}/releases/download/${OJO_RECOMMENDED_RELEASE_TAG}/ojo-${OJO_RECOMMENDED_RELEASE_TAG}-windows-x86_64.exe`
+    : selectedOs === "linux"
+      ? `${OJO_REPO_URL}/releases/download/${OJO_RECOMMENDED_RELEASE_TAG}/ojo-${OJO_RECOMMENDED_RELEASE_TAG}-linux-x86_64`
+      : "<binary-url-from-release>";
+  const resolvedBinaryUrl =
+    String(selectedAsset?.browser_download_url || "").trim() || binaryUrlPlaceholder;
   const selectedApiKey = effectiveApiKeys.find((k) => k.id === selectedApiKeyId);
   const runtimeOsName =
     selectedOs === "windows" || selectedOs === "solaris" ? selectedOs : "linux";
@@ -1198,12 +1203,13 @@ sudo mv ${selectedExtraService?.packageName || "ojo-service"} /usr/local/bin/${s
 ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigFile}`;
   const fallbackReleaseLinks = [
     { name: "Latest release", url: OJO_RELEASES_URL },
+    { name: `Recommended ${OJO_RECOMMENDED_RELEASE_TAG}`, url: OJO_RECOMMENDED_RELEASE_URL },
     { name: "All releases", url: "https://github.com/observantio/ojo/releases" },
     { name: "Tags", url: "https://github.com/observantio/ojo/tags" },
   ];
   const releaseTitleText = loadingRelease && !releaseData
     ? "Loading..."
-    : releaseData?.name || releaseData?.tag_name || "Unavailable";
+    : releaseData?.name || releaseData?.tag_name || `${OJO_RECOMMENDED_RELEASE_TAG} (recommended)`;
 
   const runConnectionCheck = async (waitUntilConnected = false) => {
     setConnectStatus("checking");
@@ -1456,11 +1462,11 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
           {step === 1 && (
             <div className="space-y-4">
               <h3 className="text-base font-semibold text-sre-text">
-                2. Download the latest package from GitHub releases
+                2. Download the package from GitHub releases
               </h3>
               <div className="rounded-lg border border-sre-border bg-sre-surface p-3 text-sm">
                 <div className="text-sre-text">
-                  Latest release:{" "}
+                  Release in use:{" "}
                   <span className="font-semibold">
                     {releaseTitleText}
                   </span>
@@ -1479,7 +1485,7 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
                 <p className="mt-2 text-xs text-sre-text-muted">
                   {selectedOs === "extras"
                     ? `Download the ${selectedExtraService?.packageName || "extension"} binary if it is published with the release. If it is missing, build it from source and use the repository config examples in the next step.`
-                    : "Download the raw binary or `.exe` asset directly. No tar extraction is required."}
+                    : "Download the raw binary or `.exe` asset directly. The suggested command auto-uses the first matching asset if you don't pick one manually."}
                 </p>
               </div>
 
@@ -1523,6 +1529,11 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
                 <p className="text-sm font-medium text-sre-text">
                   Matching assets ({osAssets.length})
                 </p>
+                {selectedOs !== "extras" && osAssets.length === 2 ? (
+                  <p className="text-xs text-sre-text-muted">
+                    This matches the expected core binary pair for the current release.
+                  </p>
+                ) : null}
                 {loadingRelease && !assets.length ? (
                   <p className="text-sm text-sre-text-muted">
                     Loading release assets...
