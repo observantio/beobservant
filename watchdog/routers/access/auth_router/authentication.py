@@ -87,7 +87,7 @@ async def oidc_authorize_url(request: Request, payload: OIDCAuthURLRequest) -> O
         return OIDCAuthURLResponse(**session)
     except ValueError as exc:
         logger.error("Failed to build OIDC authorization URL: %s", exc)
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to initialize OIDC login") from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Failed to initialize OIDC login") from exc
 
 
 @router.post("/oidc/exchange", response_model=Token)

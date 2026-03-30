@@ -128,3 +128,27 @@ def test_post_db_error_maps_to_503(monkeypatch, client):
     )
     assert resp.status_code == 503
     assert resp.json()["detail"] == "Auth database unavailable"
+
+
+def test_post_invalid_token_encoding_returns_400(monkeypatch, client):
+    monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
+    resp = client.post(
+        "/api/internal/otlp/validate",
+        headers={
+            "X-Internal-Token": "secret",
+            "Content-Type": "application/json",
+        },
+        content=b'{"token":"bad\\ud800token"}',
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Invalid token encoding"
+
+
+def test_post_rejects_unknown_payload_fields(monkeypatch, client):
+    monkeypatch.setattr(config, "GATEWAY_INTERNAL_SERVICE_TOKEN", "secret")
+    resp = client.post(
+        "/api/internal/otlp/validate",
+        headers={"X-Internal-Token": "secret"},
+        json={"token": "good", "unexpected": {}},
+    )
+    assert resp.status_code == 422

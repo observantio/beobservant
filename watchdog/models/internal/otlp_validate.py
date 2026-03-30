@@ -9,7 +9,8 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """
 
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class OtlpValidateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     token: str | None = None

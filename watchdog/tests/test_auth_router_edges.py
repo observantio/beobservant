@@ -131,7 +131,7 @@ async def test_authentication_routes_cover_success_and_error_branches(monkeypatc
     monkeypatch.setattr(auth_router.auth_service, "get_oidc_authorization_url", lambda *_args: (_ for _ in ()).throw(ValueError("bad")))
     with pytest.raises(HTTPException) as exc:
         await auth_router.oidc_authorize_url(request, oidc_request)
-    assert exc.value.status_code == 500
+    assert exc.value.status_code == 400
 
     monkeypatch.setattr(
         auth_router.auth_service,

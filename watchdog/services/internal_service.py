@@ -44,6 +44,11 @@ class InternalService:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Auth database unavailable") from exc
         except RuntimeError as exc:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Auth database unavailable") from exc
+        except (UnicodeError, ValueError, TypeError) as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid token") from exc
+        except Exception as exc:
+            logger.warning("OTLP token validation failed unexpectedly: %s", exc)
+            raise HTTPException(status.HTTP_404_NOT_FOUND) from exc
 
         if not org_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND)

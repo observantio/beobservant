@@ -174,7 +174,16 @@ async def _upstream_reachable(base_url: str) -> bool:
         return False
 
 
-@app.get("/ready", tags=["health"], response_model=None)
+@app.get(
+    "/ready",
+    tags=["health"],
+    response_model=None,
+    responses={
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "One or more required dependencies are unavailable"
+        }
+    },
+)
 async def ready() -> JSONResponse:
     checks = {
         "database": connection_test(),
