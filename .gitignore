@@ -37,3 +37,4 @@ configs/generated/*.yaml
 .coveragerc
 coverage.xml
 test-reports/
+.hypothesis/

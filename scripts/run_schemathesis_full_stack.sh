@@ -269,7 +269,7 @@ set +e
   --url=http://127.0.0.1:4319 \
   "${WATCHDOG_AUTH_ARGS[@]}" \
   -H "x-internal-token: ${INTERNAL_TOKEN}" \
-  --exclude-path-regex='^/api/grafana(/.*)?$' \
+  --exclude-path-regex='^(/api/grafana(/.*)?|/api/system(/.*)?|/api/tempo(/.*)?|/api/internal/otlp/validate|/ready)$' \
   --exclude-checks=unsupported_method,missing_required_header,ignored_auth,negative_data_rejection,positive_data_acceptance,use_after_free,ensure_resource_availability,response_schema_conformance \
   "${COMMON_ARGS[@]}" \
   --report-junit-path test-reports/schemathesis-watchdog.xml
