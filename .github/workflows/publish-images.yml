@@ -201,6 +201,7 @@ jobs:
           BUNDLE_DIR="observantio-${BUNDLE_VERSION}-linux-${ARCH}"
           mkdir -p "bundle/${BUNDLE_DIR}"
           cp -r configs "bundle/${BUNDLE_DIR}/"
+          cp -r scripts "bundle/${BUNDLE_DIR}/"
           cp docker-compose.prod.yml "bundle/${BUNDLE_DIR}/"
           cp release/install.sh "bundle/${BUNDLE_DIR}/install.sh"
           cp release/restart.sh "bundle/${BUNDLE_DIR}/restart.sh"
@@ -208,6 +209,8 @@ jobs:
           cp .env.example "bundle/${BUNDLE_DIR}/.env.example"
           cp DEPLOYMENT.md "bundle/${BUNDLE_DIR}/DEPLOYMENT.md"
           cp release/versions.json "bundle/${BUNDLE_DIR}/versions.json"
+          chmod +x "bundle/${BUNDLE_DIR}/install.sh" "bundle/${BUNDLE_DIR}/restart.sh" "bundle/${BUNDLE_DIR}/uninstall.sh"
+          chmod +x "bundle/${BUNDLE_DIR}/scripts/run_optimal_config.sh"
 
       - name: Pin bundle env metadata
         run: |

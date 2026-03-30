@@ -36,27 +36,9 @@ fi
 tar -xzf "${ASSET}"
 cd "observantio-${VERSION}-linux-${ARCH}"
 
-# Some bundles place scripts at root, others under ./release
-chmod +x install.sh restart.sh uninstall.sh 2>/dev/null || true
-chmod +x ./release/install.sh ./release/restart.sh ./release/uninstall.sh 2>/dev/null || true
-
-if [[ -x ./install.sh ]]; then
-  ./install.sh
-else
-  ./release/install.sh
-fi
+chmod +x install.sh restart.sh uninstall.sh
+./install.sh
 ```
-
-Manual install steps:
-
-1. Download the release asset, for example:
-   `observantio-vX.Y.Z-linux-amd64.tar.gz`
-2. Extract it:
-   `tar -xzf observantio-vX.Y.Z-linux-amd64.tar.gz`
-3. Enter the extracted directory:
-   `cd observantio-vX.Y.Z-linux-amd64`
-4. Run installer:
-   `chmod +x install.sh && ./install.sh` (or `chmod +x ./release/install.sh && ./release/install.sh` if scripts are packaged under `release/`)
 
 The installer will:
 - Create `.env` from `.env.example` if missing
@@ -68,13 +50,13 @@ The installer will:
 ## Day-2 Operations
 
 - Restart:
-  `./restart.sh` (or `./release/restart.sh`)
+  `./restart.sh`
 - Re-render adaptive observability sizing without restarting:
   `./scripts/run_optimal_config.sh`
 - Stop/uninstall:
-  `./uninstall.sh` (or `./release/uninstall.sh`)
+  `./uninstall.sh`
 - Uninstall and remove named volumes:
-  `./uninstall.sh --purge` (or `./release/uninstall.sh --purge`)
+  `./uninstall.sh --purge`
 
 Set `OBS_RESOURCE_PROFILE=manual` in `.env` if you want to keep hand-tuned `LOKI_*`, `TEMPO_*`, and `MIMIR_*` sizing values instead of auto-detecting from the host.
 

@@ -26,8 +26,14 @@ else
 fi
 
 cd "${ROOT_DIR}"
-chmod +x ./scripts/run_optimal_config.sh
-./scripts/run_optimal_config.sh
+RUN_OPTIMAL_SCRIPT="${ROOT_DIR}/scripts/run_optimal_config.sh"
+if [[ ! -f "${RUN_OPTIMAL_SCRIPT}" ]]; then
+  echo "Missing required script: ${RUN_OPTIMAL_SCRIPT}" >&2
+  echo "This release bundle is incomplete. Re-download the release tarball." >&2
+  exit 1
+fi
+chmod +x "${RUN_OPTIMAL_SCRIPT}"
+"${RUN_OPTIMAL_SCRIPT}"
 echo ""
 "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml down
 echo ""
