@@ -90,7 +90,7 @@ const AgentActivityContent = ({ loading, agents }) => {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="max-h-72 overflow-y-auto pr-2 space-y-3">
       {agents.map((agent) => (
         <AgentCard key={agent.name} agent={agent} />
       ))}

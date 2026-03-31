@@ -196,7 +196,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4">
-      <div className={`w-full max-w-md rounded-2xl bg-white/90 p-6 ${panelShadow} backdrop-blur-sm dark:bg-transparent dark:p-0 dark:shadow-none dark:backdrop-blur-none`}>
+      <div className={`w-full max-w-md rounded-2xl bg-white/90 p-6 border border-transparent ${panelShadow} backdrop-blur-sm dark:bg-transparent dark:border-transparent dark:p-0 dark:shadow-none dark:backdrop-blur-none`}>
         <div className="text-center mb-8">
           {showLoginLogo && (
             <img
@@ -303,7 +303,7 @@ export default function LoginPage() {
                         type="text"
                         value={setupSecret}
                         readOnly
-                        className="w-full px-3 py-2 bg-sre-bg border border-sre-border rounded text-sre-text dark:bg-transparent"
+                        className="w-full px-3 py-2 bg-sre-bg border border-transparent rounded text-sre-text dark:border-transparent dark:bg-transparent"
                       />
                     </div>
                   )}
@@ -320,7 +320,7 @@ export default function LoginPage() {
                       value={setupCode}
                       onChange={(e) => setSetupCode(e.target.value)}
                       placeholder="Enter 6-digit code"
-                      className="w-full px-3 py-2 bg-sre-bg border border-sre-border rounded text-sre-text dark:bg-transparent"
+                      className="w-full px-3 py-2 bg-sre-bg border border-transparent rounded text-sre-text dark:border-transparent dark:bg-transparent"
                       autoFocus
                     />
                   </div>
@@ -351,12 +351,12 @@ export default function LoginPage() {
                     them and store them securely.
                   </p>
 
-                  <div className="p-3 bg-sre-bg border border-sre-border rounded dark:bg-transparent">
+                  <div className="p-3 bg-sre-bg border border-transparent rounded dark:border-transparent dark:bg-transparent">
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       {setupRecoveryCodes.map((code) => (
                         <div
                           key={code}
-                          className="p-2 bg-sre-surface border border-sre-border rounded font-mono text-xs text-sre-text text-center dark:bg-transparent"
+                          className="p-2 bg-sre-surface border border-transparent rounded font-mono text-xs text-sre-text text-center dark:border-transparent dark:bg-transparent"
                         >
                           {code}
                         </div>
@@ -464,7 +464,7 @@ export default function LoginPage() {
                       ? "Enter recovery code"
                       : "Enter 6-digit code"
                   }
-                  className="w-full px-3 py-2 bg-sre-bg border border-sre-border rounded text-sre-text dark:bg-transparent"
+                  className="w-full px-3 py-2 bg-sre-bg border border-transparent rounded text-sre-text dark:border-transparent dark:bg-transparent"
                   autoFocus
                 />
                 <p className="text-xs text-sre-text-muted mt-2">

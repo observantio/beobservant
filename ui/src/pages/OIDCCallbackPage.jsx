@@ -53,7 +53,7 @@ export default function OIDCCallbackPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white/90 p-6 backdrop-blur-sm dark:bg-transparent dark:p-0 dark:shadow-none dark:backdrop-blur-none">
+      <div className="w-full max-w-md rounded-2xl bg-white/90 p-6 border border-transparent backdrop-blur-sm dark:bg-transparent dark:border-transparent dark:p-0 dark:shadow-none dark:backdrop-blur-none">
         {!error ? (
           <div className="flex flex-col items-center gap-3 text-center">
             <Spinner size="lg" />
