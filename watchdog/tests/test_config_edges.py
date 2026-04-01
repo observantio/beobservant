@@ -142,6 +142,34 @@ def test_config_vault_optional_warning_and_secret_loading_paths(monkeypatch):
         module.config._secret_provider = original_secret_provider
 
 
+def test_config_vault_secret_id_callback_path(monkeypatch):
+    class FakeVaultProvider:
+        last_secret_id: str | None = None
+
+        def __init__(self, *args, **kwargs):
+            secret_id_fn = kwargs.get("secret_id_fn")
+            if secret_id_fn is not None:
+                FakeVaultProvider.last_secret_id = secret_id_fn()
+            self.values = {}
+
+        def get(self, key):
+            return self.values.get(key)
+
+    with monkeypatch.context() as ctx:
+        for key, value in _valid_dev_env().items():
+            ctx.setenv(key, value)
+        ctx.setenv("VAULT_ENABLED", "true")
+        ctx.setenv("VAULT_ADDR", "http://vault:8200")
+        ctx.setenv("VAULT_SECRET_ID", "secret-id-123")
+        ctx.setitem(
+            sys.modules,
+            "services.secrets.vault_client",
+            types.SimpleNamespace(VaultSecretProvider=FakeVaultProvider, VaultClientError=RuntimeError),
+        )
+        _reload_config_module()
+        assert FakeVaultProvider.last_secret_id == "secret-id-123"
+
+
 def test_apply_security_defaults_unsupported_auto_key_algorithm():
     module = _reload_config_module()
     cfg = module.Config.__new__(module.Config)
