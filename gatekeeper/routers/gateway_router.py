@@ -11,6 +11,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 import logging
 
 from fastapi import APIRouter, Request, Response, HTTPException, status
+from fastapi.responses import JSONResponse
 
 from models.exceptions import DatabaseUnavailable
 from services.gateway_service import GatewayAuthService
@@ -22,9 +23,7 @@ router = APIRouter(prefix="/api/gateway", tags=["gateway"])
 service = GatewayAuthService()
 
 
-@router.api_route("/validate", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-@router.api_route("/validate/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def validate_otlp_token(request: Request, _path: str = "") -> Response:
+def _validate_otlp_token_request(request: Request) -> Response:
     service.enforce_ip_allowlist(request)
     service.enforce_rate_limit(request)
 
@@ -47,9 +46,20 @@ async def validate_otlp_token(request: Request, _path: str = "") -> Response:
         logger.warning("OTLP token validation failed – token_prefix=%s", token_prefix)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or disabled OTLP token")
 
-    response = Response(status_code=200)
+    response = JSONResponse(status_code=200, content={"org_id": org_id})
     response.headers["X-Scope-OrgID"] = org_id
     return response
+
+
+@router.api_route("/validate", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def validate_otlp_token(request: Request) -> Response:
+    return _validate_otlp_token_request(request)
+
+
+@router.api_route("/validate/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def validate_otlp_token_with_path(request: Request, path: str) -> Response:
+    _ = path
+    return _validate_otlp_token_request(request)
 
 @router.get("/health")
 async def health() -> dict[str, str]:

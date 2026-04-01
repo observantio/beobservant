@@ -19,6 +19,7 @@ import uvicorn
 from fastapi import FastAPI
 
 import config as gw_config
+from middleware.openapi import install_custom_openapi
 from models.exceptions import DatabaseUnavailable
 from routers import router as gateway_router
 from services.gateway_service import GatewayAuthService
@@ -90,6 +91,7 @@ app = FastAPI(
 )
 
 app.include_router(gateway_router)
+install_custom_openapi(app)
 
 
 @app.get("/health")

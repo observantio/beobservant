@@ -1,4 +1,5 @@
 .env
+.schemathesis_watchdog_bearer
 node_modules/
 dist/
 build/
@@ -38,3 +39,4 @@ configs/generated/*.yaml
 coverage.xml
 test-reports/
 .hypothesis/
+.schemathesis
