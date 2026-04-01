@@ -45,10 +45,26 @@ class DashboardSearchContext(TypedDict, total=False):
     db_dashboards: Dict[str, GrafanaDashboard]
 
 
+INT32_MIN = -(2 ** 31)
+INT32_MAX = (2 ** 31) - 1
+
+
 def _cap(limit: Optional[int], offset: int) -> tuple[int, int]:
     mx = int(config.MAX_QUERY_LIMIT)
     req = int(limit) if limit is not None else int(config.DEFAULT_QUERY_LIMIT)
     return max(1, min(req, mx)), max(0, int(offset))
+
+
+def _to_safe_int32(value: object) -> Optional[int]:
+    if not isinstance(value, (int, float, bool, str)):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < INT32_MIN or parsed > INT32_MAX:
+        return None
+    return parsed
 
 
 def _normalize_title(title: Optional[str]) -> str:
@@ -338,7 +354,11 @@ async def search_dashboards(
     capped_limit, capped_offset = _cap(limit, offset)
     gids = group_id_strs(group_ids)
     team_id_s = str(team_id) if team_id is not None else None
-    folder_id_set = {int(fid) for fid in (folder_ids or []) if fid is not None}
+    folder_id_set = {
+        parsed
+        for parsed in (_to_safe_int32(fid) for fid in (folder_ids or []))
+        if parsed is not None
+    }
     folder_uid_set = {str(fu) for fu in (folder_uids or []) if fu}
     dashboard_uid_set = {str(du) for du in (dashboard_uids or []) if du}
 

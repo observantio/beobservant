@@ -123,7 +123,7 @@ class GrafanaService:
             if isinstance(payload, (dict, list, str, int, float, bool)) or payload is None:
                 return payload
             return default
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, ValueError) as e:
             logger.error("Grafana %s %s failed: %s", method, path, e)
             return default
 

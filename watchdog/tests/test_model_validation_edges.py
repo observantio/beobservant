@@ -18,6 +18,9 @@ from models.access.user_models import (
     _normalize_username,
     _normalize_username_input,
 )
+from models.access import group_models
+from models.access import user_models
+from models.observability.agent_models import AgentHeartbeat, AgentInfo
 from models.observability.resolver_models import (
     AnalyzeJobCreateResponse,
     AnalyzeJobStatus,
@@ -78,3 +81,18 @@ def test_misc_model_payloads_cover_status_aliases_and_time_validation():
     assert AnalyzeJobStatus(" started ") is AnalyzeJobStatus.RUNNING
     assert AnalyzeJobStatus("unknown-status") is AnalyzeJobStatus.PENDING
     assert AnalyzeJobStatus._missing_(object()) is AnalyzeJobStatus.PENDING
+
+
+def test_datetime_serializers_and_agent_model_edges():
+    naive = datetime(2026, 1, 1, 0, 0, 0)
+    assert group_models._serialize_datetime(naive).endswith("+00:00")
+    assert user_models._serialize_datetime(naive).endswith("+00:00")
+
+    with pytest.raises(ValidationError, match="ISO-8601"):
+        AgentHeartbeat(name="agent-a", tenant_id="tenant-a", timestamp=0)
+
+    heartbeat = AgentHeartbeat(name="agent-a", tenant_id="tenant-a", timestamp="2026-01-01T00:00:00Z")
+    assert heartbeat.timestamp is not None
+
+    info = AgentInfo(id="a1", name="agent-a", tenant_id="tenant-a", last_seen=datetime.now(timezone.utc))
+    assert info.signals == []

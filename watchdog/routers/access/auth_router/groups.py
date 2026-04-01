@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, HTTPException, Query, status, Path
 
 from middleware.dependencies import auth_service, require_any_permission_with_scope, require_permission_with_scope
 from middleware.error_handlers import handle_route_errors
@@ -26,7 +26,11 @@ from .shared import GROUP_NOT_FOUND, router, rtp
 @router.get("/groups", response_model=List[Group])
 async def list_groups(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_GROUPS, "auth")),
-    q: str | None = Query(None),
+    q: str | None = Query(
+        None,
+        max_length=200,
+        pattern=r"^[^\x00-\x1F]*$",
+    ),
 ) -> List[Group]:
     query_text = str(q or "").strip()
     if query_text:
@@ -62,7 +66,7 @@ async def create_group(
 
 @router.get("/groups/{group_id}", response_model=Group)
 async def get_group(
-    group_id: str,
+    group_id: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.READ_GROUPS, Permission.MANAGE_GROUPS], "auth")
     ),
@@ -83,8 +87,8 @@ async def get_group(
 @router.put("/groups/{group_id}", response_model=Group)
 @handle_route_errors()
 async def update_group(
-    group_id: str,
     group_update: GroupUpdate,
+    group_id: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.UPDATE_GROUPS, Permission.MANAGE_GROUPS], "auth")
     ),
@@ -106,7 +110,7 @@ async def update_group(
 
 @router.delete("/groups/{group_id}")
 async def delete_group(
-    group_id: str,
+    group_id: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.DELETE_GROUPS, Permission.MANAGE_GROUPS], "auth")
     ),
@@ -125,6 +129,7 @@ async def delete_group(
 
 
 @router.put("/groups/{group_id}/permissions")
+@handle_route_errors()
 async def update_group_permissions(
     group_id: str,
     permission_names: List[str],
@@ -148,6 +153,7 @@ async def update_group_permissions(
 
 
 @router.put("/groups/{group_id}/members")
+@handle_route_errors()
 async def update_group_members(
     group_id: str,
     members: GroupMembersUpdate,

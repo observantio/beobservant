@@ -142,7 +142,7 @@ class TokenData(BaseModel):
     is_mfa_setup: bool = False
 
 class OIDCAuthURLRequest(BaseModel):
-    redirect_uri: str
+    redirect_uri: str = Field(..., min_length=1)
     state: Optional[str] = None
     nonce: Optional[str] = None
     code_challenge: Optional[str] = None

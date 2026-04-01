@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import Body, Depends, HTTPException, Query
+from fastapi import Body, Depends, HTTPException, Query, Path
+from pydantic import StrictBool
 from sqlalchemy.orm import Session
 
 from config import config
@@ -60,8 +61,9 @@ async def get_datasource_filter_metadata(
 
 
 @router.get("/datasources/name/{name}", response_model=Datasource)
+@handle_route_errors()
 async def get_datasource_by_name(
-    name: str,
+    name: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_.:-]+$"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),
 ) -> Datasource:
@@ -80,10 +82,10 @@ async def get_datasource_by_name(
 
 @router.get("/datasources", response_model=List[Datasource])
 async def get_datasources(
-    uid: Optional[str] = Query(None),
+    uid: Optional[str] = Query(None, min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     query: Optional[str] = Query(None),
     team_id: Optional[str] = Query(None),
-    show_hidden: bool = Query(False),
+    show_hidden: StrictBool = Query(False),
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
     offset: int = Query(0, ge=0),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")),
@@ -107,8 +109,9 @@ async def get_datasources(
 
 
 @router.get("/datasources/{uid}", response_model=Datasource)
+@handle_route_errors()
 async def get_datasource_by_uid(
-    uid: str,
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),
 ) -> Datasource:

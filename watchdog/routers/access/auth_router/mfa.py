@@ -10,7 +10,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Path
 
 from middleware.dependencies import (
     auth_service,
@@ -66,7 +66,7 @@ async def mfa_disable(
 
 @router.post("/users/{user_id}/mfa/reset")
 async def admin_reset_user_mfa(
-    user_id: str,
+    user_id: str = Path(..., min_length=1, max_length=200),
     current_user: TokenData = Depends(require_any_permission_with_scope([Permission.MANAGE_USERS], "auth")),
 ) -> dict[str, str]:
     if not await rtp(auth_service.reset_totp, user_id, current_user.user_id):

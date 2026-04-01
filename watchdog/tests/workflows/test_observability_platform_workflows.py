@@ -303,6 +303,12 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
     assert heartbeat_response.status_code == 200
     assert heartbeats[0]["tenant_id"] == agent_key.key
 
+    invalid_heartbeat_response = client.post(
+        "/api/agents/heartbeat",
+        json={"name": "edge", "tenant_id": agent_key.key, "signal": "logs", "timestamp": 0},
+    )
+    assert invalid_heartbeat_response.status_code == 422
+
     analyze_job_call = next(call for call in resolver_calls if call["upstream_path"] == "/api/v1/jobs/analyze")
     assert analyze_job_call["payload"]["tenant_id"] == "org-a"
     assert any(call["upstream_path"] == "/internal/v1/api/alertmanager/channels" for call in forward_calls)

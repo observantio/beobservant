@@ -169,7 +169,7 @@ class TempoService:
                 logger.debug("Non-JSON response for trace %s", trace_id)
                 return None
             return tempo_parsers.parse_tempo_trace(trace_id, data) if isinstance(data, dict) and "batches" in data else None
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, ValueError) as e:
             logger.error("Error fetching trace %s: %s", trace_id, e)
             return None
 

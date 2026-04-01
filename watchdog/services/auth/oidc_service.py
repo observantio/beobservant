@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import binascii
 import hashlib
 import json
 import logging
@@ -63,6 +64,20 @@ def _looks_like_jwt(token: str) -> bool:
         return False
     parts = token.split(".")
     return len(parts) == 3 and all(parts)
+
+
+def _decode_jwt_header(token: str) -> Optional[JSONDict]:
+    if not _looks_like_jwt(token):
+        return None
+    header_b64 = token.split(".", 1)[0]
+    pad = "=" * ((4 - len(header_b64) % 4) % 4)
+    try:
+        raw = base64.urlsafe_b64decode(header_b64 + pad)
+        header_text = raw.decode("utf-8")
+        header = json.loads(header_text)
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return None
+    return header if isinstance(header, dict) else None
 
 
 def _issuer_candidates(issuer: Optional[str]) -> tuple[Optional[str], ...]:
@@ -272,7 +287,17 @@ class OIDCService:
             return None
 
         try:
-            unverified_header = jwt.get_unverified_header(token)
+            unverified_header = None
+            try:
+                raw_header = jwt.get_unverified_header(token)
+                if isinstance(raw_header, dict):
+                    unverified_header = cast(JSONDict, raw_header)
+            except jwt.PyJWTError:
+                unverified_header = None
+            if not unverified_header:
+                unverified_header = _decode_jwt_header(token)
+            if not unverified_header:
+                return None
             header_alg = str(unverified_header.get("alg") or "").strip()
             if not header_alg or header_alg.lower() == "none":
                 logger.warning("OIDC token rejected: missing/none alg")

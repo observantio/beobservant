@@ -10,9 +10,9 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status, Path
 
 from config import config
 from middleware.dependencies import require_permission_with_scope, resolve_tenant_id
@@ -116,7 +116,7 @@ async def list_analyze_jobs(
 
 @router.get("/analyze/jobs/{job_id}", response_model=AnalyzeJobSummary)
 async def get_analyze_job(
-    job_id: str,
+    job_id: Annotated[str, Path(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$")],
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> AnalyzeJobSummary:
@@ -134,7 +134,7 @@ async def get_analyze_job(
 
 @router.get("/analyze/jobs/{job_id}/result", response_model=AnalyzeJobResultResponse)
 async def get_analyze_job_result(
-    job_id: str,
+    job_id: Annotated[str, Path(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$")],
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> AnalyzeJobResultResponse:
@@ -170,7 +170,7 @@ async def get_analyze_job_result(
 
 @router.get("/reports/{report_id}", response_model=AnalyzeReportResponse)
 async def get_report_by_id(
-    report_id: str,
+    report_id: Annotated[str, Path(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$")],
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> AnalyzeReportResponse:
@@ -188,7 +188,7 @@ async def get_report_by_id(
 
 @router.delete("/reports/{report_id}", response_model=AnalyzeReportDeleteResponse)
 async def delete_report_by_id(
-    report_id: str,
+    report_id: Annotated[str, Path(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$")],
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_RCA, "resolver")),
 ) -> AnalyzeReportDeleteResponse:

@@ -15,6 +15,7 @@ import sys
 import types
 
 import pytest
+from datetime import datetime
 
 from tests._env import ensure_test_env
 
@@ -140,3 +141,11 @@ def test_dunder_main_runs_uvicorn(monkeypatch):
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 4319
     assert captured["loop"] == "uvloop"
+
+
+def test_encode_datetime_rfc3339_handles_naive_and_aware(monkeypatch):
+    main_module = _load_main(monkeypatch)
+    naive = datetime(2026, 1, 1, 0, 0, 0)
+    aware = datetime.fromisoformat("2026-01-01T00:00:00+00:00")
+    assert main_module._encode_datetime_rfc3339(naive).endswith("+00:00")
+    assert main_module._encode_datetime_rfc3339(aware) == "2026-01-01T00:00:00+00:00"

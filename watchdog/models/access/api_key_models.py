@@ -10,14 +10,26 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """
 
 from typing import Optional, List
-from datetime import datetime
-from pydantic import BaseModel, Field
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field, field_serializer
+
+
+def _serialize_datetime(value: datetime) -> str:
+    if getattr(value, "tzinfo", None) is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
 
 class ApiKeyBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(..., min_length=1, max_length=100, pattern=r"^[^\x00-\x1F]+$")
 
 class ApiKeyCreate(ApiKeyBase):
-    key: Optional[str] = Field(None, min_length=3, max_length=200, description="Optional custom API key value (org_id / X-Scope-OrgID)")
+    key: Optional[str] = Field(
+        None,
+        min_length=3,
+        max_length=100,
+        pattern=r"^[^\x00-\x1F]+$",
+        description="Optional custom API key value (org_id / X-Scope-OrgID)",
+    )
 
 class ApiKeyUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -30,6 +42,10 @@ class ApiKeyShareUser(BaseModel):
     email: Optional[str] = None
     can_use: bool = True
     created_at: datetime
+
+    @field_serializer("created_at", when_used="json")
+    def _serialize_created_at(self, value: datetime) -> str:
+        return _serialize_datetime(value)
 
 class ApiKeyShareUpdateRequest(BaseModel):
     user_ids: List[str] = Field(default_factory=list)
@@ -49,3 +65,9 @@ class ApiKey(ApiKeyBase):
     is_hidden: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+    @field_serializer("created_at", "updated_at", when_used="json")
+    def _serialize_datetimes(self, value: Optional[datetime]) -> Optional[str]:
+        if value is None:
+            return None
+        return _serialize_datetime(value)

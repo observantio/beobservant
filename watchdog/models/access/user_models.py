@@ -1,14 +1,20 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, field_validator, field_serializer
 
 from config import config
 from .api_key_models import ApiKey
 from .auth_models import Permission, Role
 
 _USERNAME_RE = re.compile(r'^[a-z0-9._-]{3,50}$')
+
+
+def _serialize_datetime(value: datetime) -> str:
+    if getattr(value, "tzinfo", None) is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
 
 
 def _normalize_username(v: str, *, full_check: bool = True) -> str:
@@ -39,7 +45,7 @@ class UserBase(BaseModel):
     org_id: str = Field(default=config.DEFAULT_ORG_ID, max_length=100, description="Organization ID for multi-tenant observability")
     role: Role = Role.USER
     group_ids: List[str] = Field(default_factory=list)
-    is_active: bool = True
+    is_active: StrictBool = True
 
     @field_validator('username', mode='before')
     @classmethod
@@ -48,7 +54,8 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: Optional[str] = Field(None, min_length=8)
-    must_setup_mfa: Optional[bool] = False
+    must_setup_mfa: Optional[StrictBool] = None
+    model_config = ConfigDict(extra="forbid")
 
 class UserUpdate(BaseModel):
     username: Optional[str] = Field(None, min_length=3, max_length=50)
@@ -57,8 +64,9 @@ class UserUpdate(BaseModel):
     org_id: Optional[str] = None
     role: Optional[Role] = None
     group_ids: Optional[List[str]] = None
-    is_active: Optional[bool] = None
-    must_setup_mfa: Optional[bool] = None
+    is_active: Optional[StrictBool] = None
+    must_setup_mfa: Optional[StrictBool] = None
+    model_config = ConfigDict(extra="forbid")
 
     @field_validator("username", mode="before")
     @classmethod
@@ -109,6 +117,16 @@ class UserResponse(BaseModel):
     mfa_enabled: bool = False
     must_setup_mfa: bool = False
     auth_provider: Optional[str] = "local"
+
+    @field_serializer(
+        "created_at",
+        "last_login",
+        when_used="json",
+    )
+    def _serialize_datetimes(self, value: Optional[datetime]) -> Optional[str]:
+        if value is None:
+            return None
+        return _serialize_datetime(value)
 
 class LoginRequest(BaseModel):
     username: str

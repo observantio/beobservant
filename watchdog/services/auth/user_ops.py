@@ -378,6 +378,10 @@ def update_user(
             if k in MUTABLE_USER_FIELDS or k == "group_ids"
         }
 
+        for field in ("username", "email", "org_id", "role", "is_active", "must_setup_mfa", "needs_password_change"):
+            if field in update_data and update_data[field] is None:
+                update_data.pop(field, None)
+
         if updater_id and user_id == updater_id:
             if update_data.get("is_active") is False:
                 raise HTTPException(

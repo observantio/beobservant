@@ -10,13 +10,16 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 from __future__ import annotations
 
+import re
 from typing import List
 
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, HTTPException, Query, status, Path, Body
 
 from config import config
 from middleware.dependencies import (
+    apply_scoped_rate_limit,
     auth_service,
+    require_any_permission,
     require_any_permission_with_scope,
     require_authenticated_with_scope,
 )
@@ -31,6 +34,14 @@ from services.auth.helper import (
 )
 
 from .shared import USER_NOT_FOUND, notification_service, router, rtp
+
+
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F]")
+
+
+def _sanitize_query_text(value: str | None) -> str:
+    cleaned = _CONTROL_CHARS_RE.sub("", str(value or "")).strip()
+    return cleaned[:200]
 
 
 def _string_value(value: object) -> str:
@@ -48,6 +59,7 @@ async def get_current_user_info(current_user: TokenData = Depends(require_authen
 
 
 @router.put("/me", response_model=UserResponse)
+@handle_route_errors()
 async def update_current_user_info(
     user_update: UserUpdate,
     current_user: TokenData = Depends(require_authenticated_with_scope("auth")),
@@ -72,7 +84,7 @@ async def update_current_user_info(
 @router.get("/users", response_model=List[UserResponse])
 async def list_users(
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000),
     current_user: TokenData = Depends(
         require_any_permission_with_scope(
             [Permission.READ_USERS, Permission.MANAGE_USERS, Permission.MANAGE_TENANTS],
@@ -81,7 +93,7 @@ async def list_users(
     ),
     q: str | None = Query(None),
 ) -> List[UserResponse]:
-    query_text = str(q or "").strip()
+    query_text = _sanitize_query_text(q)
     if query_text:
         users = await rtp(
             auth_service.list_users,
@@ -105,9 +117,10 @@ async def list_users(
 async def create_user(
     user_create: UserCreate,
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.CREATE_USERS, Permission.MANAGE_USERS], "auth")
+        require_any_permission([Permission.CREATE_USERS, Permission.MANAGE_USERS])
     ),
 ) -> UserResponse:
+    apply_scoped_rate_limit(current_user, "auth")
     user = await rtp(
         auth_service.create_user,
         user_create,
@@ -128,9 +141,10 @@ async def create_user(
 
 
 @router.put("/users/{user_id}", response_model=UserResponse)
+@handle_route_errors()
 async def update_user(
-    user_id: str,
-    user_update: UserUpdate,
+    user_id: str = Path(..., min_length=1, max_length=200),
+    user_update: UserUpdate = Body(...),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.UPDATE_USERS, Permission.MANAGE_USERS, Permission.MANAGE_TENANTS], "auth")
     ),
@@ -161,8 +175,8 @@ async def update_user(
 @router.put("/users/{user_id}/password")
 @handle_route_errors()
 async def update_user_password(
-    user_id: str,
     password_update: UserPasswordUpdate,
+    user_id: str = Path(..., min_length=1, max_length=200),
     current_user: TokenData = Depends(require_authenticated_with_scope("auth")),
 ) -> dict[str, str]:
     if current_user.user_id != user_id:
@@ -180,7 +194,7 @@ async def update_user_password(
 
 @router.post("/users/{user_id}/password/reset-temp", response_model=TempPasswordResetResponse)
 async def reset_user_password_temp(
-    user_id: str,
+    user_id: str = Path(..., min_length=1, max_length=200),
     current_user: TokenData = Depends(require_authenticated_with_scope("auth")),
 ) -> TempPasswordResetResponse:
     if not (is_admin_check(current_user) or Permission.MANAGE_USERS.value in perms_check(current_user)):
@@ -213,7 +227,7 @@ async def reset_user_password_temp(
 
 @router.delete("/users/{user_id}")
 async def delete_user(
-    user_id: str,
+    user_id: str = Path(..., min_length=1, max_length=200),
     current_user: TokenData = Depends(require_authenticated_with_scope("auth")),
 ) -> dict[str, str]:
     if not is_admin_check(current_user):
@@ -231,8 +245,8 @@ async def delete_user(
 
 @router.put("/users/{user_id}/permissions")
 async def update_user_permissions(
-    user_id: str,
-    permission_names: List[str],
+    user_id: str = Path(..., min_length=1, max_length=200),
+    permission_names: List[str] = Body(...),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.UPDATE_USER_PERMISSIONS, Permission.MANAGE_USERS], "auth")
     ),

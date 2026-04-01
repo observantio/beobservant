@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import Body, Depends, HTTPException, Query
+from fastapi import Body, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -26,6 +26,7 @@ from models.observability.grafana_request_models import (
     GrafanaUpdateFolderRequest,
 )
 from services.grafana.route_payloads import validate_visibility
+from routers.observability.grafana_router.param_helpers import show_hidden_enabled
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
 from custom_types.json import JSONDict
@@ -33,7 +34,7 @@ from custom_types.json import JSONDict
 
 @router.get("/folders", response_model=List[Folder])
 async def get_folders(
-    show_hidden: bool = Query(False),
+    show_hidden: str = Query("false", pattern=r"^(true|false)$"),
     current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ) -> List[Folder]:
@@ -43,14 +44,14 @@ async def get_folders(
         user_id=user_id,
         tenant_id=tenant_id,
         group_ids=group_ids,
-        show_hidden=show_hidden,
+        show_hidden=show_hidden_enabled(show_hidden),
         is_admin=is_admin,
     )
 
 
 @router.get("/folders/{uid}", response_model=Folder)
 async def get_folder_by_uid(
-    uid: str,
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ) -> Folder:
@@ -98,7 +99,7 @@ async def create_folder(
 @router.delete("/folders/{uid}")
 @handle_route_errors()
 async def delete_folder(
-    uid: str,
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_FOLDERS, "grafana")),
     db: Session = Depends(get_db),
 ) -> JSONDict:
@@ -119,8 +120,8 @@ async def delete_folder(
 @router.put("/folders/{uid}", response_model=Folder)
 @handle_route_errors()
 async def update_folder(
-    uid: str,
-    payload: GrafanaUpdateFolderRequest,
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
+    payload: GrafanaUpdateFolderRequest = Body(...),
     visibility: Optional[str] = Query(None),
     shared_group_ids: Optional[List[str]] = Query(None),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_FOLDERS, "grafana")),
@@ -146,8 +147,9 @@ async def update_folder(
 
 
 @router.post("/folders/{uid}/hide")
+@handle_route_errors()
 async def hide_folder(
-    uid: str,
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     payload: GrafanaHiddenToggleRequest = Body(default_factory=GrafanaHiddenToggleRequest),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.CREATE_FOLDERS, Permission.DELETE_FOLDERS], "grafana")

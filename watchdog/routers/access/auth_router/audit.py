@@ -37,18 +37,17 @@ from .shared import router, rtp
 
 AuditLogItem: TypeAlias = dict[str, object]
 
-
 @router.get("/audit-logs")
 async def list_audit_logs(
     start: Optional[datetime] = Query(None),
     end: Optional[datetime] = Query(None),
-    user_id: Optional[str] = Query(None),
-    action: Optional[str] = Query(None),
-    resource_type: Optional[str] = Query(None),
-    q: Optional[str] = Query(None),
-    tenant_id: Optional[str] = Query(None),
+    user_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    action: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    resource_type: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    q: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    tenant_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000),
     current_user: TokenData = Depends(require_admin_with_audit_permission),
 ) -> list[AuditLogItem]:
     actor = aliased(User)
@@ -114,14 +113,26 @@ async def list_audit_logs(
     return await rtp(_query)
 
 
-@router.get("/audit-logs/export")
+@router.get(
+    "/audit-logs/export",
+    responses={
+        200: {
+            "description": "CSV export of audit logs.",
+            "content": {
+                "text/csv": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            },
+        }
+    },
+)
 async def export_audit_logs_csv(
     start: Optional[datetime] = Query(None),
     end: Optional[datetime] = Query(None),
-    user_id: Optional[str] = Query(None),
-    action: Optional[str] = Query(None),
-    resource_type: Optional[str] = Query(None),
-    tenant_id: Optional[str] = Query(None),
+    user_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    action: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    resource_type: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    tenant_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
     current_user: TokenData = Depends(require_admin_with_audit_permission),
 ) -> StreamingResponse:
     actor = aliased(User)
@@ -172,10 +183,13 @@ async def export_audit_logs_csv(
         ]
     )
     for log, username, email in rows:
+        created_at = log.created_at
+        if created_at is not None and getattr(created_at, "tzinfo", None) is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
         writer.writerow(
             [
                 log.id,
-                log.created_at.isoformat() if log.created_at else "",
+                created_at.isoformat() if created_at else "",
                 log.tenant_id or "",
                 log.user_id or "",
                 username or "",

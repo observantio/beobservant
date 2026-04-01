@@ -323,6 +323,9 @@ def update_group(
             if k in MUTABLE_GROUP_FIELDS
         }
 
+        if "is_active" in update_data and update_data["is_active"] is None:
+            update_data.pop("is_active", None)
+
         if "name" in update_data:
             candidate = (update_data["name"] or "").strip()
             if not candidate:

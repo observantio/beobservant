@@ -25,7 +25,12 @@ if TYPE_CHECKING:
 def to_user_schema(service: DatabaseAuthService, user: User) -> UserSchema:
     groups = user.groups or []
     raw_api_keys = getattr(user, "api_keys", None) or []
-    api_keys = [service._to_api_key_schema(k) for k in raw_api_keys]
+    api_keys: list[ApiKey] = []
+    for key in raw_api_keys:
+        try:
+            api_keys.append(service._to_api_key_schema(key))
+        except (TypeError, ValueError):
+            continue
 
     kwargs = {
         "id": user.id,
@@ -74,17 +79,17 @@ def to_api_key_schema(key: UserApiKey) -> ApiKey:
     owner_username = None
     owner = getattr(key, "user", None)
     if owner is not None:
-        owner_username = getattr(owner, "username", None)
+        owner_username = str(getattr(owner, "username", "") or "") or None
 
     return ApiKey(
-        id=key.id,
-        name=key.name,
-        key=key.key,
-        otlp_token=getattr(key, "otlp_token", None),
-        owner_user_id=getattr(key, "user_id", None),
+        id=str(getattr(key, "id", "") or ""),
+        name=str(getattr(key, "name", "") or ""),
+        key=str(getattr(key, "key", "") or ""),
+        otlp_token=(str(getattr(key, "otlp_token", "")) or None),
+        owner_user_id=(str(getattr(key, "user_id", "")) or None),
         owner_username=owner_username,
-        is_default=key.is_default,
-        is_enabled=key.is_enabled,
+        is_default=bool(getattr(key, "is_default", False)),
+        is_enabled=bool(getattr(key, "is_enabled", True)),
         created_at=key.created_at,
         updated_at=key.updated_at,
     )

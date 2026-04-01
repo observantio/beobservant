@@ -7,10 +7,11 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
+
 import asyncio
 from typing import Awaitable, Optional, TypeVar
 
-from fastapi import APIRouter, Query, Body, Depends, Request, HTTPException, status
+from fastapi import APIRouter, Query, Body, Depends, Request, HTTPException, status, Path
 from custom_types.json import JSONDict
 from models.observability.loki_models import (
     LogQuery, LogResponse, LogLabelsResponse,
@@ -30,7 +31,6 @@ loki_service = LokiService()
 
 ResponseT = TypeVar("ResponseT")
 
-
 async def _handle_timeout(coro: Awaitable[ResponseT], detail: str) -> ResponseT:
     try:
         return await coro
@@ -39,6 +39,7 @@ async def _handle_timeout(coro: Awaitable[ResponseT], detail: str) -> ResponseT:
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=detail,
         ) from exc
+
 
 @router.get("/query", response_model=LogResponse)
 async def query_logs(
@@ -98,7 +99,7 @@ async def get_labels(
 @router.get("/label/{label}/values", response_model=LogLabelValuesResponse)
 async def get_label_values(
     request: Request,
-    label: str,
+    label: str = Path(..., min_length=1, max_length=128, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$"),
     start: Optional[int] = Query(None, description=START_TIME_DESC),
     end: Optional[int] = Query(None, description=END_TIME_DESC),
     query: Optional[str] = Query(None, description="Optional LogQL query filter"),

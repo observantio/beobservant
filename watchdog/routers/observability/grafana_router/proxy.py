@@ -26,7 +26,18 @@ from services.grafana.normalize import normalize_grafana_next_path
 from .shared import auth_service, proxy, router
 
 
-@router.get("/auth")
+@router.get(
+    "/auth",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_204_NO_CONTENT: {
+            "description": "Grafana auth_request endpoint; returns authorization headers for upstream proxying.",
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "The supplied Grafana auth token or session is missing, expired, or invalid.",
+        },
+    },
+)
 async def grafana_auth(
     request: Request,
     token: Optional[str] = Query(None),
@@ -47,7 +58,7 @@ async def grafana_auth(
 @router.post("/bootstrap-session")
 async def bootstrap_grafana_session(
     request: Request,
-    payload: GrafanaBootstrapSessionRequest = Body(default_factory=GrafanaBootstrapSessionRequest),
+    payload: GrafanaBootstrapSessionRequest = Body(...),
     _current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
 ) -> JSONResponse:
     enforce_public_endpoint_security(

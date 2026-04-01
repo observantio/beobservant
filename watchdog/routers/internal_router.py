@@ -45,7 +45,14 @@ async def validate_otlp_token_query(token: str = Query(..., min_length=1)) -> di
     )
 
 
-@router.post("/otlp/validate", dependencies=[Depends(_verify_service_token)])
+@router.post(
+    "/otlp/validate",
+    dependencies=[Depends(_verify_service_token)],
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Missing or invalid token"},
+        status.HTTP_404_NOT_FOUND: {"description": "OTLP token was not found"},
+    },
+)
 async def validate_otlp_token_post(
     payload: OtlpValidateRequest,
     x_otlp_token: str | None = Header(None),

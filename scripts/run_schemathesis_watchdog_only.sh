@@ -9,6 +9,21 @@ if [[ ! -x .venv/bin/python || ! -x .venv/bin/schemathesis ]]; then
   exit 1
 fi
 
+if [[ -z "${SCHEMATHESIS_WATCHDOG_BEARER:-}" && -f .schemathesis ]]; then
+  if [[ ! -s .schemathesis ]]; then
+    echo ".schemathesis exists but is empty. Put the raw JWT on a single line." >&2
+    exit 1
+  fi
+
+  SCHEMATHESIS_WATCHDOG_BEARER="$(tr -d '\r\n' < .schemathesis)"
+  if [[ -z "${SCHEMATHESIS_WATCHDOG_BEARER}" ]]; then
+    echo ".schemathesis contained only whitespace/newlines. Put the raw JWT on a single line." >&2
+    exit 1
+  fi
+
+  export SCHEMATHESIS_WATCHDOG_BEARER
+fi
+
 wait_for_http_ready() {
   local name="$1"
   local url="$2"
@@ -33,6 +48,7 @@ wait_for_http_ready "watchdog" "http://127.0.0.1:4319/health" 180
 AUTH_EXPORT_FILE="$(mktemp)"
 .venv/bin/python - <<'PY' > "$AUTH_EXPORT_FILE"
 import base64
+import binascii
 import json
 import os
 import time
@@ -90,13 +106,21 @@ if resp is not None and resp.status_code == 200:
   if not watchdog_token:
     raise SystemExit('Login succeeded but no access_token in response')
 elif resp is not None and resp.status_code == 403 and 'Password login is disabled' in (resp.text or ''):
-  watchdog_token = os.getenv('SCHEMATHESIS_WATCHDOG_BEARER', '')
+  watchdog_token = os.getenv('SCHEMATHESIS_WATCHDOG_BEARER', '') or (env.get('SCHEMATHESIS_WATCHDOG_BEARER') or '')
+  if not watchdog_token:
+    raise SystemExit(
+      "Password login is disabled and SCHEMATHESIS_WATCHDOG_BEARER is not set. "
+      "Provide a valid bearer token to run authenticated Schemathesis requests."
+    )
 else:
   code = resp.status_code if resp is not None else 'n/a'
   body = (resp.text[:300] if resp is not None else 'no response')
   raise SystemExit(f"Failed to obtain watchdog token: {code} {body}")
 
-claims = decode_payload(watchdog_token)
+try:
+  claims = decode_payload(watchdog_token)
+except (ValueError, UnicodeDecodeError, json.JSONDecodeError, binascii.Error):
+  claims = {}
 if not isinstance(claims, dict):
   claims = {}
 
@@ -124,23 +148,15 @@ rm -f "$AUTH_EXPORT_FILE"
 
 mkdir -p test-reports
 curl -fsS http://127.0.0.1:4319/openapi.json -o test-reports/openapi-watchdog.json
+cp -f test-reports/openapi-watchdog.json watchdog/openapi.json
 
+if [[ "${SCHEMATHESIS_PATCH_SPEC:-0}" == "1" ]]; then
+  echo "Applying compatibility patches to OpenAPI snapshot"
 .venv/bin/python - <<'PY'
 import json
 from pathlib import Path
 
 FILES = [Path('test-reports/openapi-watchdog.json')]
-
-GENERIC_RESPONSES = {
-  '400': {'description': 'Bad Request'},
-  '401': {'description': 'Unauthorized'},
-  '403': {'description': 'Forbidden'},
-  '404': {'description': 'Not Found'},
-  '409': {'description': 'Conflict'},
-  '429': {'description': 'Too Many Requests'},
-  '500': {'description': 'Internal Server Error'},
-}
-
 
 def tighten_required_strings(schema: dict) -> None:
   if not isinstance(schema, dict):
@@ -168,15 +184,19 @@ def tighten_required_strings(schema: dict) -> None:
 for file_path in FILES:
   spec = json.loads(file_path.read_text())
   paths = spec.get('paths', {})
-  for path_item in paths.values():
-    if not isinstance(path_item, dict):
-      continue
-    for operation in path_item.values():
-      if not isinstance(operation, dict):
-        continue
-      responses = operation.setdefault('responses', {})
-      for status_code, response in GENERIC_RESPONSES.items():
-        responses.setdefault(status_code, response)
+  internal_validate = paths.get('/api/internal/otlp/validate', {})
+  if isinstance(internal_validate, dict):
+    legacy_get = internal_validate.get('get')
+    if isinstance(legacy_get, dict):
+      responses = legacy_get.setdefault('responses', {})
+      responses.setdefault('410', {'description': 'Gone'})
+
+  ready_path = paths.get('/ready', {})
+  if isinstance(ready_path, dict):
+    ready_get = ready_path.get('get')
+    if isinstance(ready_get, dict):
+      responses = ready_get.setdefault('responses', {})
+      responses.setdefault('503', {'description': 'Service Unavailable'})
 
   components = spec.get('components', {})
   schemas = components.get('schemas', {}) if isinstance(components, dict) else {}
@@ -186,16 +206,25 @@ for file_path in FILES:
 
   file_path.write_text(json.dumps(spec, separators=(',', ':')))
 PY
+else
+  echo "Using raw OpenAPI snapshot (no mutations)"
+fi
 
 COMMON_ARGS=(
   --phases=examples,coverage,fuzzing,stateful
-  --checks=not_a_server_error,status_code_conformance,content_type_conformance,response_headers_conformance
+  --checks=not_a_server_error,status_code_conformance,content_type_conformance,response_headers_conformance,response_schema_conformance,negative_data_rejection,missing_required_header,ignored_auth,use_after_free,ensure_resource_availability
   --max-failures=20
-  --workers=1
-  --request-timeout=15
-  --request-retries=2
+  --continue-on-failure
+  --workers=4
+  --request-timeout=5
+  --request-retries=1
+  --max-response-time=4
+  --generation-deterministic
+  --generation-unique-inputs
+  --generation-maximize=response_time
   --suppress-health-check=filter_too_much
   --warnings=off
+  --report=junit,har,ndjson
 )
 
 WATCHDOG_AUTH_ARGS=()
@@ -208,7 +237,9 @@ set +e
   --url=http://127.0.0.1:4319 \
   "${WATCHDOG_AUTH_ARGS[@]}" \
   -H "x-internal-token: ${INTERNAL_TOKEN}" \
-  --exclude-checks=unsupported_method \
+  -H "Cookie:" \
+  --exclude-checks=unsupported_method,positive_data_acceptance \
+  --report-dir test-reports/schemathesis/watchdog \
   "${COMMON_ARGS[@]}" \
   --report-junit-path test-reports/schemathesis-watchdog.xml
 WATCHDOG_EXIT=$?

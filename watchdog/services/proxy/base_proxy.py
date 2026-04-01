@@ -99,7 +99,7 @@ class BaseProxyService:
         return jwt.encode(payload, key, algorithm=algorithm)
 
     @staticmethod
-    def _extract_error_detail(response: httpx.Response) -> str:
+    def _extract_error_detail(response: httpx.Response) -> object:
         try:
             body = response.json()
         except ValueError:
@@ -107,8 +107,11 @@ class BaseProxyService:
             return text or response.reason_phrase
         if isinstance(body, dict):
             detail = body.get("detail")
-            if isinstance(detail, str) and detail:
-                return detail
+            if detail is not None:
+                if isinstance(detail, str) and detail:
+                    return detail
+                if isinstance(detail, (list, dict)):
+                    return detail
             message = body.get("message")
             if isinstance(message, str) and message:
                 return message

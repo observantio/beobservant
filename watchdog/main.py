@@ -10,6 +10,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 import logging
 import asyncio
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from fastapi import FastAPI, status
@@ -17,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import ENCODERS_BY_TYPE
 import httpx
 
 from config import config, constants
@@ -40,12 +42,23 @@ from middleware.error_handlers import (
     validation_exception_handler,
     general_exception_handler,
 )
+from middleware.openapi import install_custom_openapi
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL.upper()),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("watchdog")
+
+
+def _encode_datetime_rfc3339(value: datetime) -> str:
+    dt = value
+    if getattr(dt, "tzinfo", None) is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
+ENCODERS_BY_TYPE[datetime] = _encode_datetime_rfc3339
 
 connection_test = database_module.connection_test
 
@@ -139,6 +152,9 @@ app.include_router(grafana_router.router)
 app.include_router(resolver_router.router)
 
 
+install_custom_openapi(app)
+
+
 @app.get("/", tags=["info"])
 async def root() -> dict[str, object]:
     return {
@@ -189,20 +205,21 @@ async def ready() -> JSONResponse:
         "database": connection_test(),
     }
 
-    upstream_targets = {
+    required_upstream_targets = {
         "tempo": config.TEMPO_URL,
         "loki": config.LOKI_URL,
         "alertmanager": config.ALERTMANAGER_URL,
         "notifier": config.NOTIFIER_URL,
-        "grafana": config.GRAFANA_URL,
         "mimir": config.MIMIR_URL,
         "resolver": config.RESOLVER_URL,
     }
 
-    results = await asyncio.gather(*(_upstream_reachable(url) for url in upstream_targets.values()))
-    checks.update(dict(zip(upstream_targets.keys(), results)))
+    required_results = await asyncio.gather(*(_upstream_reachable(url) for url in required_upstream_targets.values()))
+    checks.update(dict(zip(required_upstream_targets.keys(), required_results)))
 
-    is_ready = all(checks.values())
+    checks["grafana"] = await _upstream_reachable(config.GRAFANA_URL)
+
+    is_ready = checks["database"] and all(required_results)
     payload = {
         "status": "ready" if is_ready else "not_ready",
         "checks": checks,

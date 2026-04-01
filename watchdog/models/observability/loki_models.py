@@ -9,7 +9,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """
 
 from typing import Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 from enum import Enum
 
 from custom_types.json import JSONDict
@@ -69,13 +69,13 @@ class LogLabelValuesResponse(BaseModel):
 class LogFilterRequest(BaseModel):
     labels: Dict[str, str] = Field(..., description="Labels to filter logs by")
     filters: Optional[List[str]] = Field(None, description="Additional filter expressions")
-    start: Optional[int] = Field(None, description=TIME_NS_START_DESC)
-    end: Optional[int] = Field(None, description=TIME_NS_END_DESC)
+    start: Optional[StrictInt] = Field(None, description=TIME_NS_START_DESC)
+    end: Optional[StrictInt] = Field(None, description=TIME_NS_END_DESC)
     limit: int = Field(100, ge=1, le=5000, description=MAX_LOG_ENTRIES_DESC)
 
 class LogSearchRequest(BaseModel):
     pattern: str = Field(..., description="Search pattern or LogQL query")
     labels: Optional[Dict[str, str]] = Field(None, description="Labels to filter search results")
-    start: Optional[int] = Field(None, description=TIME_NS_START_DESC)
-    end: Optional[int] = Field(None, description=TIME_NS_END_DESC)
+    start: Optional[StrictInt] = Field(None, description=TIME_NS_START_DESC)
+    end: Optional[StrictInt] = Field(None, description=TIME_NS_END_DESC)
     limit: int = Field(100, ge=1, le=5000, description=MAX_LOG_ENTRIES_DESC)

@@ -9,15 +9,22 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """
 
 from datetime import datetime
-from typing import Dict, Optional, List
-from pydantic import BaseModel, Field
+from typing import Annotated, Dict, Optional, List, Any
+from pydantic import BaseModel, Field, field_validator
 
 class AgentHeartbeat(BaseModel):
-    name: str = Field(..., description="Agent name")
-    tenant_id: str = Field(..., description="Tenant ID (API key) associated with the agent")
+    name: Annotated[str, Field(min_length=1, description="Agent name")]
+    tenant_id: Annotated[str, Field(min_length=1, description="Tenant ID (API key) associated with the agent")]
     signal: Optional[str] = Field(None, description="Signal type (logs, traces, metrics)")
     attributes: Dict[str, str] = Field(default_factory=dict)
     timestamp: Optional[datetime] = None
+
+    @field_validator("timestamp", mode="before")
+    @classmethod
+    def _reject_numeric_timestamps(cls, value: Any) -> Any:
+        if isinstance(value, (bool, int, float)):
+            raise ValueError("timestamp must be an ISO-8601 datetime value")
+        return value
 
 class AgentInfo(BaseModel):
     id: str

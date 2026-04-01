@@ -234,11 +234,15 @@ def ensure_default_setup(service: DatabaseAuthService) -> None:
                     service.logger.info("Created default tenant")
 
                 admin_username = _norm_lower(config.DEFAULT_ADMIN_USERNAME)
+                admin_email = _norm_lower(config.DEFAULT_ADMIN_EMAIL)
                 admin_user = (
                     db.query(User)
                     .filter(
                         User.tenant_id == default_tenant.id,
-                        func.lower(User.username) == admin_username,
+                        (
+                            (func.lower(User.username) == admin_username)
+                            | (func.lower(User.email) == admin_email)
+                        ),
                     )
                     .with_for_update()
                     .first()

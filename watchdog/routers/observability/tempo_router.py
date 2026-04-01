@@ -11,9 +11,9 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 import asyncio
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, List, Optional
+from typing import Annotated, AsyncGenerator, List, Optional
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status, Path
 
 from config import config
 from middleware.dependencies import require_permission_with_scope, resolve_tenant_id
@@ -66,7 +66,7 @@ async def search_traces(
 
 @router.get("/traces/{trace_id}", response_model=Trace)
 async def get_trace(
-    trace_id: str,
+    trace_id: Annotated[str, Path(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$")],
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo")),
 ) -> Trace:

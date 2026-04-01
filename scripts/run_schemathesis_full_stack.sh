@@ -13,8 +13,13 @@ fi
 docker rm -f watchdog-resolver-port-proxy >/dev/null 2>&1 || true
 docker run -d --name watchdog-resolver-port-proxy --network watchdog_obs -p 4322:4322 alpine/socat TCP-LISTEN:4322,fork,reuseaddr TCP:resolver:4322 >/dev/null
 
+# Ensure gatekeeper is reachable from localhost via proxy container.
+docker rm -f watchdog-gatekeeper-port-proxy >/dev/null 2>&1 || true
+docker run -d --name watchdog-gatekeeper-port-proxy --network watchdog_obs -p 4321:4321 alpine/socat TCP-LISTEN:4321,fork,reuseaddr TCP:gateway-auth:4321 >/dev/null
+
 cleanup() {
   docker rm -f watchdog-resolver-port-proxy >/dev/null 2>&1 || true
+  docker rm -f watchdog-gatekeeper-port-proxy >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -40,6 +45,7 @@ wait_for_http_ready() {
 wait_for_http_ready "watchdog" "http://127.0.0.1:4319/health" 180
 wait_for_http_ready "notifier" "http://127.0.0.1:4323/health" 180
 wait_for_http_ready "resolver" "http://127.0.0.1:4322/api/v1/ready" 180
+wait_for_http_ready "gatekeeper" "http://127.0.0.1:4321/api/gateway/health" 180
 
 # Generate required auth material for all services.
 AUTH_EXPORT_FILE="$(mktemp)"
@@ -106,6 +112,11 @@ if resp is not None and resp.status_code == 200:
 elif resp is not None and resp.status_code == 403 and 'Password login is disabled' in (resp.text or ''):
   # In OIDC-only mode, allow running with x-internal-token and optional pre-provided bearer.
   watchdog_token = os.getenv('SCHEMATHESIS_WATCHDOG_BEARER', '')
+  if not watchdog_token:
+    raise SystemExit(
+      "Password login is disabled and SCHEMATHESIS_WATCHDOG_BEARER is not set. "
+      "Provide a valid bearer token to run authenticated Schemathesis requests."
+    )
 else:
   code = resp.status_code if resp is not None else 'n/a'
   body = (resp.text[:300] if resp is not None else 'no response')
@@ -156,6 +167,7 @@ values = {
     'NOTIFIER_CONTEXT_TOKEN': notifier_token,
     'RESOLVER_SERVICE_TOKEN': env.get('RESOLVER_EXPECTED_SERVICE_TOKEN', ''),
     'RESOLVER_CONTEXT_TOKEN': resolver_token,
+  'GATEKEEPER_OTLP_TOKEN': os.getenv('SCHEMATHESIS_GATEKEEPER_OTLP_TOKEN') or env.get('DEFAULT_OTLP_TOKEN') or env.get('OTEL_OTLP_TOKEN', ''),
 }
 for key, value in values.items():
     if key == 'WATCHDOG_BEARER':
@@ -179,7 +191,16 @@ rm -f "$AUTH_EXPORT_FILE"
 curl -fsS http://127.0.0.1:4319/openapi.json -o test-reports/openapi-watchdog.json
 curl -fsS http://127.0.0.1:4323/openapi.json -o test-reports/openapi-notifier.json
 curl -fsS http://127.0.0.1:4322/openapi.json -o test-reports/openapi-resolver.json
+curl -fsS http://127.0.0.1:4321/openapi.json -o test-reports/openapi-gatekeeper.json
 
+# Also publish snapshots at each service root for easier discoverability.
+cp -f test-reports/openapi-watchdog.json watchdog/openapi.json
+cp -f test-reports/openapi-notifier.json notifier/openapi.json
+cp -f test-reports/openapi-resolver.json resolver/openapi.json
+cp -f test-reports/openapi-gatekeeper.json gatekeeper/openapi.json
+
+if [[ "${SCHEMATHESIS_PATCH_SPEC:-0}" == "1" ]]; then
+  echo "Applying compatibility patches to OpenAPI snapshots"
 # Normalize generated OpenAPI docs for robust contract testing.
 .venv/bin/python - <<'PY'
 import json
@@ -189,6 +210,7 @@ FILES = [
   Path('test-reports/openapi-watchdog.json'),
   Path('test-reports/openapi-notifier.json'),
   Path('test-reports/openapi-resolver.json'),
+  Path('test-reports/openapi-gatekeeper.json'),
 ]
 
 GENERIC_RESPONSES = {
@@ -246,16 +268,25 @@ for file_path in FILES:
 
   file_path.write_text(json.dumps(spec, separators=(',', ':')))
 PY
+else
+  echo "Using raw OpenAPI snapshots (no mutations)"
+fi
 
 COMMON_ARGS=(
   --phases=examples,coverage,fuzzing,stateful
-  --checks=not_a_server_error,status_code_conformance,content_type_conformance,response_headers_conformance
-  --max-failures=5
+  --checks=not_a_server_error,status_code_conformance,content_type_conformance,response_headers_conformance,response_schema_conformance,negative_data_rejection,missing_required_header,ignored_auth,use_after_free,ensure_resource_availability
+  --max-failures=100
+  --continue-on-failure
   --workers=1
-  --request-timeout=15
+  --request-timeout=20
   --request-retries=2
+  --max-response-time=5
+  --generation-deterministic
+  --generation-unique-inputs
+  --generation-maximize=response_time
   --suppress-health-check=filter_too_much
   --warnings=off
+  --report=junit,har,ndjson
 )
 
 WATCHDOG_AUTH_ARGS=()
@@ -269,7 +300,8 @@ set +e
   --url=http://127.0.0.1:4319 \
   "${WATCHDOG_AUTH_ARGS[@]}" \
   -H "x-internal-token: ${INTERNAL_TOKEN}" \
-  --exclude-checks=unsupported_method \
+  --exclude-checks=unsupported_method,positive_data_acceptance \
+  --report-dir test-reports/schemathesis/watchdog \
   "${COMMON_ARGS[@]}" \
   --report-junit-path test-reports/schemathesis-watchdog.xml
 WATCHDOG_EXIT=$?
@@ -278,7 +310,8 @@ WATCHDOG_EXIT=$?
   --url=http://127.0.0.1:4323 \
   -H "X-Service-Token: ${NOTIFIER_SERVICE_TOKEN}" \
   -H "Authorization: Bearer ${NOTIFIER_CONTEXT_TOKEN}" \
-  --exclude-checks=unsupported_method \
+  --exclude-checks=unsupported_method,positive_data_acceptance \
+  --report-dir test-reports/schemathesis/notifier \
   "${COMMON_ARGS[@]}" \
   --report-junit-path test-reports/schemathesis-notifier.xml
 NOTIFIER_EXIT=$?
@@ -287,15 +320,25 @@ NOTIFIER_EXIT=$?
   --url=http://127.0.0.1:4322 \
   -H "X-Service-Token: ${RESOLVER_SERVICE_TOKEN}" \
   -H "Authorization: Bearer ${RESOLVER_CONTEXT_TOKEN}" \
-  --exclude-checks=unsupported_method \
+  --exclude-checks=unsupported_method,positive_data_acceptance \
+  --report-dir test-reports/schemathesis/resolver \
   "${COMMON_ARGS[@]}" \
   --report-junit-path test-reports/schemathesis-resolver.xml
 RESOLVER_EXIT=$?
 
+.venv/bin/schemathesis run test-reports/openapi-gatekeeper.json \
+  --url=http://127.0.0.1:4321 \
+  -H "x-otlp-token: ${GATEKEEPER_OTLP_TOKEN}" \
+  --exclude-checks=unsupported_method,positive_data_acceptance \
+  --report-dir test-reports/schemathesis/gatekeeper \
+  "${COMMON_ARGS[@]}" \
+  --report-junit-path test-reports/schemathesis-gatekeeper.xml
+GATEKEEPER_EXIT=$?
+
 set -e
 
-if [[ $WATCHDOG_EXIT -ne 0 || $NOTIFIER_EXIT -ne 0 || $RESOLVER_EXIT -ne 0 ]]; then
-  echo "Schemathesis completed with failures: watchdog=${WATCHDOG_EXIT}, notifier=${NOTIFIER_EXIT}, resolver=${RESOLVER_EXIT}" >&2
+if [[ $WATCHDOG_EXIT -ne 0 || $NOTIFIER_EXIT -ne 0 || $RESOLVER_EXIT -ne 0 || $GATEKEEPER_EXIT -ne 0 ]]; then
+  echo "Schemathesis completed with failures: watchdog=${WATCHDOG_EXIT}, notifier=${NOTIFIER_EXIT}, resolver=${RESOLVER_EXIT}, gatekeeper=${GATEKEEPER_EXIT}" >&2
   exit 1
 fi
 

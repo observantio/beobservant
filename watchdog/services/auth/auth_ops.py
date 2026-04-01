@@ -294,8 +294,14 @@ def validate_otlp_token(service: DatabaseAuthService, token: str, *, suppress_er
         return None
 
     default_token = getattr(config, "DEFAULT_OTLP_TOKEN", None)
-    if default_token and secrets.compare_digest(token_str, str(default_token)):
-        return config.DEFAULT_ORG_ID
+    try:
+        if default_token and secrets.compare_digest(token_str, str(default_token)):
+            return config.DEFAULT_ORG_ID
+    except TypeError as exc:
+        # compare_digest rejects non-ASCII strings for str inputs.
+        if not suppress_errors:
+            raise ValueError("Invalid token") from exc
+        return None
 
     token_hash = service._hash_otlp_token(token_str)
 

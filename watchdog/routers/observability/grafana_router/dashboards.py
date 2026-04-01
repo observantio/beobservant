@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import Body, Depends, HTTPException, Query
+from fastapi import Body, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
 
 from config import config
@@ -30,6 +30,11 @@ from services.grafana.route_payloads import (
     parse_dashboard_create_payload,
     parse_dashboard_update_payload,
     validate_visibility,
+)
+from routers.observability.grafana_router.param_helpers import (
+    is_valid_uid_query,
+    normalize_optional_param,
+    show_hidden_enabled,
 )
 
 from .shared import dashboard_payload, dashboard_uid, hidden_toggle_context, proxy, router, rtp, scope_context
@@ -55,12 +60,20 @@ async def search_dashboards(
     search_type: Optional[str] = Query(None, alias="type"),
     uid: Optional[str] = Query(None),
     team_id: Optional[str] = Query(None),
-    show_hidden: bool = Query(False),
+    show_hidden: str = Query("false", pattern=r"^(true|false)$"),
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
     offset: int = Query(0, ge=0),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DASHBOARDS, "grafana")),
     db: Session = Depends(get_db),
 ) -> List[DashboardSearchResult]:
+    query = normalize_optional_param(query)
+    tag = normalize_optional_param(tag)
+    search_type = normalize_optional_param(search_type)
+    team_id = normalize_optional_param(team_id)
+    uid = normalize_optional_param(uid)
+    if uid and not is_valid_uid_query(uid):
+        raise HTTPException(status_code=400, detail="Invalid uid format")
+
     user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     search_context = await rtp(proxy.build_dashboard_search_context, db, tenant_id=current_user.tenant_id, uid=uid)
     return await proxy.search_dashboards(
@@ -76,7 +89,7 @@ async def search_dashboards(
         dashboard_uids=dashboard_uids,
         uid=uid,
         team_id=team_id,
-        show_hidden=show_hidden,
+        show_hidden=show_hidden_enabled(show_hidden),
         limit=limit,
         offset=offset,
         search_context=search_context,
@@ -89,7 +102,7 @@ async def search_dashboards(
 
 @router.get("/dashboards/{uid}")
 async def get_dashboard(
-    uid: str,
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DASHBOARDS, "grafana")),
     db: Session = Depends(get_db),
 ) -> JSONDict:
@@ -184,8 +197,8 @@ async def save_dashboard_from_grafana_ui(
 @router.put("/dashboards/{uid}")
 @handle_route_errors()
 async def update_dashboard(
-    uid: str,
-    payload: GrafanaDashboardPayloadRequest,
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
+    payload: GrafanaDashboardPayloadRequest = Body(...),
     visibility: Optional[str] = Query(None),
     shared_group_ids: Optional[List[str]] = Query(None),
     current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
@@ -214,7 +227,7 @@ async def update_dashboard(
 @router.delete("/dashboards/{uid}")
 @handle_route_errors()
 async def delete_dashboard(
-    uid: str,
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_DASHBOARDS, "grafana")),
     db: Session = Depends(get_db),
 ) -> JSONDict:
@@ -234,7 +247,7 @@ async def delete_dashboard(
 @router.post("/dashboards/{uid}/hide")
 @handle_route_errors()
 async def hide_dashboard(
-    uid: str,
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     payload: GrafanaHiddenToggleRequest = Body(default_factory=GrafanaHiddenToggleRequest),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.UPDATE_DASHBOARDS, Permission.WRITE_DASHBOARDS], "grafana")
