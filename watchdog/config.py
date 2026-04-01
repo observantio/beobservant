@@ -344,7 +344,12 @@ class Config:
         if not self.VAULT_ADDR:
             raise ValueError("VAULT_ADDR must be set when VAULT_ENABLED=true")
 
-        secret_id_fn = (lambda: self.VAULT_SECRET_ID) if self.VAULT_SECRET_ID else None
+        secret_id_fn = None
+        if self.VAULT_SECRET_ID:
+            secret_id = self.VAULT_SECRET_ID
+            def _secret_id_fn() -> str:
+                return secret_id
+            secret_id_fn = _secret_id_fn
 
         provider: SecretProvider = VaultSecretProvider(
             address=self.VAULT_ADDR,
