@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Added service-specific Schemathesis runners for resolver, notifier, and gatekeeper to support targeted contract validation workflows.
+- Added root-level OpenAPI snapshot refresh flow so `watchdog/openapi.json`, `notifier/openapi.json`, `resolver/openapi.json`, and `gatekeeper/openapi.json` stay current for downstream contract tooling.
+
+### Changed
+
+- Updated global and service Schemathesis scripts to standardize OIDC-bearer fallback handling and consistent snapshot publication behavior.
+- Updated gateway contract handling to use middleware-based dynamic OpenAPI response inference, matching the existing cross-service pattern.
+
 ## [v0.0.2] - 2026-03-26
 
 ### Added
