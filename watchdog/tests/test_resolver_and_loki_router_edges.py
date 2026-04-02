@@ -26,6 +26,7 @@ from models.access.auth_models import Permission, Role, TokenData
 from models.observability.resolver_models import AnalyzeJobStatus, AnalyzeJobSummary, AnalyzeProxyPayload, AnalyzeRequestPayload
 from models.observability.loki_models import LogDirection, LogFilterRequest, LogSearchRequest
 from routers.observability import resolver_router, loki_router
+from pydantic import ValidationError
 
 
 def _request(path: str = "/") -> Request:
@@ -54,6 +55,19 @@ def _user() -> TokenData:
         group_ids=["g1"],
         is_superuser=True,
     )
+
+
+def test_analyze_proxy_payload_validates_time_range() -> None:
+    AnalyzeProxyPayload.model_validate({"start": 1, "end": 2})
+    AnalyzeRequestPayload.model_validate({"start": 1, "end": 2})
+    with pytest.raises(ValidationError):
+        AnalyzeProxyPayload.model_validate({"start": 2, "end": 2})
+    with pytest.raises(ValidationError):
+        AnalyzeProxyPayload.model_validate({"start": False, "end": 2})
+    with pytest.raises(ValidationError):
+        AnalyzeRequestPayload.model_validate({"start": False, "end": 2})
+    with pytest.raises(ValidationError):
+        AnalyzeProxyPayload.model_validate({"start": 1, "end": 9_007_199_254_740_992})
 
 
 @pytest.mark.asyncio

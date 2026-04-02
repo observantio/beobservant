@@ -11,16 +11,19 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 from __future__ import annotations
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Annotated, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from custom_types.json import JSONDict
 
+MAX_EPOCH_VALUE = 9_007_199_254_740_991
+EpochInt = Annotated[StrictInt, Field(ge=0, le=MAX_EPOCH_VALUE)]
+
 class AnalyzeRequestPayload(BaseModel):
     tenant_id: Optional[str] = None
-    start: int
-    end: int
+    start: EpochInt
+    end: EpochInt
     step: str = "15s"
     config_yaml: Optional[str] = None
     services: List[str] = Field(default_factory=list)
@@ -39,7 +42,15 @@ class AnalyzeRequestPayload(BaseModel):
 
 class AnalyzeProxyPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
-    tenant_id: Optional[str] = None
+    tenant_id: Optional[str] = Field(None, max_length=200, pattern=r"^[^\x00-\x1F]*$")
+    start: EpochInt | None = None
+    end: EpochInt | None = None
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> "AnalyzeProxyPayload":
+        if self.start is not None and self.end is not None and self.start >= self.end:
+            raise ValueError("start must be less than end")
+        return self
 
 class AnalyzeJobStatus(str, Enum):
     PENDING = "pending"
