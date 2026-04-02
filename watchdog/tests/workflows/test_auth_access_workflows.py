@@ -264,7 +264,7 @@ def test_user_group_role_and_permission_workflow(client, monkeypatch: pytest.Mon
         f"/api/auth/groups/{group_id}",
         headers=state.auth_header(f"token-{worker_id}"),
     )
-    assert delete_group_response.status_code == 200
+    assert delete_group_response.status_code == 204
 
     delete_user_response = client.delete(f"/api/auth/users/{viewer_id}", headers=admin_headers)
     assert delete_user_response.status_code == 200

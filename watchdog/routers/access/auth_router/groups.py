@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import Depends, HTTPException, Query, status, Path
+from fastapi import Depends, HTTPException, Query, Response, status, Path
 
 from middleware.dependencies import auth_service, require_any_permission_with_scope, require_permission_with_scope
 from middleware.error_handlers import handle_route_errors
@@ -108,13 +108,13 @@ async def update_group(
     return group
 
 
-@router.delete("/groups/{group_id}")
+@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_group(
     group_id: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.DELETE_GROUPS, Permission.MANAGE_GROUPS], "auth")
     ),
-) -> dict[str, str]:
+) -> Response:
     if not await rtp(
         auth_service.delete_group,
         group_id,
@@ -125,22 +125,26 @@ async def delete_group(
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, GROUP_NOT_FOUND)
     invalidate_grafana_proxy_auth_cache()
-    return {"message": "Group deleted successfully"}
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.put("/groups/{group_id}/permissions")
 @handle_route_errors()
 async def update_group_permissions(
     group_id: str,
-    permission_names: List[str],
+    permission_names: List[Permission],
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.UPDATE_GROUP_PERMISSIONS, Permission.MANAGE_GROUPS], "auth")
     ),
 ) -> dict[str, object]:
+    permission_values = [
+        permission.value if isinstance(permission, Permission) else str(permission)
+        for permission in permission_names
+    ]
     if not await rtp(
         auth_service.update_group_permissions,
         group_id,
-        permission_names,
+        permission_values,
         current_user.tenant_id,
         current_user.user_id,
         current_user.role,
@@ -149,7 +153,7 @@ async def update_group_permissions(
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, GROUP_NOT_FOUND)
     invalidate_grafana_proxy_auth_cache()
-    return {"success": True, "permissions": permission_names}
+    return {"success": True, "permissions": permission_values}
 
 
 @router.put("/groups/{group_id}/members")

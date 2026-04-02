@@ -201,7 +201,7 @@ def test_group_deletion_revokes_group_shared_api_key_access_workflow(client, mon
     assert {item["id"] for item in before_delete.json()} == {key_id}
 
     delete_group_response = client.delete(f"/api/auth/groups/{group_id}", headers=admin_headers)
-    assert delete_group_response.status_code == 200
+    assert delete_group_response.status_code == 204
 
     after_delete = client.get("/api/auth/api-keys", headers=user_headers)
     assert after_delete.status_code == 200
@@ -258,7 +258,7 @@ def test_group_deletion_revokes_group_folder_access_workflow(client, monkeypatch
     assert any(item["uid"] == folder_uid for item in before_delete.json())
 
     delete_group_response = client.delete(f"/api/auth/groups/{group_id}", headers=admin_headers)
-    assert delete_group_response.status_code == 200
+    assert delete_group_response.status_code == 204
 
     after_delete = client.get("/api/grafana/folders", headers=user_headers)
     assert after_delete.status_code == 200
@@ -317,7 +317,7 @@ def test_group_deletion_revokes_group_dashboard_access_workflow(client, monkeypa
     assert any(item["uid"] == "dash-group-delete" for item in before_delete.json())
 
     delete_group_response = client.delete(f"/api/auth/groups/{group_id}", headers=admin_headers)
-    assert delete_group_response.status_code == 200
+    assert delete_group_response.status_code == 204
 
     after_delete = client.get("/api/grafana/dashboards/search", headers=user_headers)
     assert after_delete.status_code == 200
@@ -376,7 +376,7 @@ def test_group_deletion_revokes_group_datasource_access_workflow(client, monkeyp
     assert before_delete.status_code == 200
 
     delete_group_response = client.delete(f"/api/auth/groups/{group_id}", headers=admin_headers)
-    assert delete_group_response.status_code == 200
+    assert delete_group_response.status_code == 204
 
     after_delete_by_name = client.get("/api/grafana/datasources/name/group-ds-delete", headers=user_headers)
     assert after_delete_by_name.status_code == 404

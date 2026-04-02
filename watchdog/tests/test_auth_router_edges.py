@@ -15,6 +15,7 @@ from typing import Any, cast
 
 import pytest
 from fastapi import HTTPException, Request, Response
+from pydantic import ValidationError
 
 try:
     from ._env import ensure_test_env
@@ -34,7 +35,11 @@ from routers.access.auth_router import mfa as mfa_router
 from routers.access.auth_router import users as users_router
 
 
-def _request(headers: list[tuple[bytes, bytes]] | None = None, cookies: dict[str, str] | None = None) -> Request:
+def _request(
+    headers: list[tuple[bytes, bytes]] | None = None,
+    cookies: dict[str, str] | None = None,
+    query_string: str = "",
+) -> Request:
     header_list: list[tuple[bytes, bytes]] = list(headers or [])
     if cookies:
         header_list.append((b"cookie", "; ".join(f"{k}={v}" for k, v in cookies.items()).encode("utf-8")))
@@ -46,7 +51,7 @@ def _request(headers: list[tuple[bytes, bytes]] | None = None, cookies: dict[str
         "headers": header_list,
         "client": ("127.0.0.1", 1234),
         "scheme": "http",
-        "query_string": b"",
+        "query_string": query_string.encode("utf-8"),
     }
     return Request(scope)
 
@@ -235,8 +240,34 @@ async def test_api_key_routes_cover_not_found_and_transformations(monkeypatch):
     now = datetime.now(timezone.utc)
     current_user = _current_user()
     api_key = ApiKey(id="k1", name="Key", key="secret", created_at=now)
+
+    async def _call_list_api_keys(*, show_hidden: bool, query_string: str = ""):
+        parameters = inspect.signature(api_keys_router.list_api_keys).parameters
+        kwargs: dict[str, Any] = {
+            "show_hidden": show_hidden,
+            "current_user": current_user,
+        }
+        if "request" in parameters:
+            kwargs["request"] = _request(query_string=query_string)
+        return await api_keys_router.list_api_keys(**kwargs)
+
+    supports_request_validation = "request" in inspect.signature(api_keys_router.list_api_keys).parameters
+
     monkeypatch.setattr(api_keys_router.auth_service, "list_api_keys", lambda *_args: [api_key])
-    assert await api_keys_router.list_api_keys(True, current_user) == [api_key]
+    assert await _call_list_api_keys(show_hidden=True) == [api_key]
+    if supports_request_validation:
+        with pytest.raises(HTTPException) as exc:
+            await _call_list_api_keys(show_hidden=True, query_string="show_hidden=true&unexpected=1")
+        assert exc.value.status_code == 422
+        with pytest.raises(HTTPException) as exc:
+            await _call_list_api_keys(show_hidden=True, query_string="show_hidden=true&show_hidden=false")
+        assert exc.value.status_code == 422
+        with pytest.raises(HTTPException) as exc:
+            await _call_list_api_keys(show_hidden=False, query_string="show_hidden=false&")
+        assert exc.value.status_code == 422
+        with pytest.raises(HTTPException) as exc:
+            await _call_list_api_keys(show_hidden=False, query_string="show_hidden=false&=null")
+        assert exc.value.status_code == 422
 
     monkeypatch.setattr(api_keys_router.auth_service, "create_api_key", lambda *_args: api_key)
     assert await api_keys_router.create_api_key(ApiKeyCreate(name="Key"), current_user) == api_key
@@ -267,6 +298,12 @@ async def test_api_key_routes_cover_not_found_and_transformations(monkeypatch):
     monkeypatch.setattr(api_keys_router.auth_service, "list_api_key_shares", lambda *_args: [share_payload])
     shares = await api_keys_router.get_api_key_shares("k1", current_user)
     assert shares[0].user_id == "u2"
+
+    monkeypatch.setattr(api_keys_router.auth_service, "list_api_keys", lambda *_args: [])
+    monkeypatch.setattr(api_keys_router.auth_service, "list_api_key_shares", lambda *_args: [])
+    with pytest.raises(HTTPException) as exc:
+        await api_keys_router.get_api_key_shares("missing", current_user)
+    assert exc.value.status_code == 404
 
     monkeypatch.setattr(api_keys_router.auth_service, "replace_api_key_shares", lambda *_args: [share_payload])
     shares = await api_keys_router.put_api_key_shares(
@@ -301,13 +338,13 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
 
     monkeypatch.setattr(users_router.auth_service, "get_user_by_id", lambda *_args: user_obj)
     monkeypatch.setattr(users_router.auth_service, "build_user_response", lambda *_args: response_obj)
-    monkeypatch.setattr(users_router.auth_service, "list_api_keys", lambda *_args: ["key"])
+    monkeypatch.setattr(users_router.auth_service, "list_api_keys", lambda *_args: [])
     result = await users_router.get_current_user_info(admin_user)
-    assert result.api_keys == ["key"]
+    assert result.api_keys == []
 
     monkeypatch.setattr(users_router.auth_service, "update_user", lambda *_args: user_obj)
     result = await users_router.update_current_user_info(UserUpdate(role=Role.ADMIN, is_active=False), admin_user)
-    assert result.api_keys == ["key"]
+    assert result.api_keys == []
 
     captured_user_list_kwargs = {}
     monkeypatch.setattr(
@@ -351,6 +388,9 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
 
     monkeypatch.setattr(users_router.auth_service, "update_user", lambda *_args: user_obj)
     assert await users_router.update_user("u2", UserUpdate(group_ids=["g1"]), admin_user) is response_obj
+
+    members = GroupMembersUpdate.model_validate({"": None})
+    assert members.user_ids == []
 
     monkeypatch.setattr(
         users_router.auth_service,
@@ -493,7 +533,8 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     assert exc.value.status_code == 404
 
     monkeypatch.setattr(groups_router.auth_service, "delete_group", lambda *_args: True)
-    assert await groups_router.delete_group("g1", admin_user) == {"message": "Group deleted successfully"}
+    delete_response = await groups_router.delete_group("g1", admin_user)
+    assert delete_response.status_code == 204
 
     monkeypatch.setattr(groups_router.auth_service, "update_group_permissions", lambda *_args: False)
     with pytest.raises(HTTPException) as exc:
