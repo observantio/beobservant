@@ -1,6 +1,22 @@
+<div align="center">
+
 # Observantio's Watchdog
 
-Watchdog is a self-hosted observability control plane built around Grafana, Loki, Tempo, Mimir, Alertmanager, and a set of application services that add tenancy, access control, alert workflows, and AI-assisted root cause analysis.
+<img src="assets/settings.png" alt="Watchdog settings preview" style="width: 100%; max-width: 200px;" />
+
+<p>
+  <img src="https://img.shields.io/badge/stack-Grafana%20%7C%20Loki%20%7C%20Tempo%20%7C%20Mimir%20%7C%20Alertmanager-1f2937?style=flat-square" alt="Stack" />
+  <img src="https://img.shields.io/badge/control%20plane-Watchdog-0f766e?style=flat-square" alt="Control Plane" />
+  <img src="https://img.shields.io/badge/RCA-AI--assisted-7c3aed?style=flat-square" alt="RCA" />
+</p>
+
+<p><strong>Self-hosted observability control plane for multi-tenant teams.</strong></p>
+
+<p>
+Watchdog is built around Grafana, Loki, Tempo, Mimir, and Alertmanager, with application services that add tenancy, access control, alert workflows, and AI-assisted root cause analysis.
+</p>
+
+</div>
 
 ![Observantio Quick Demo](assets/watchdog.gif)
 
