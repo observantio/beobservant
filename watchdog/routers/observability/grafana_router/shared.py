@@ -47,7 +47,7 @@ def hidden_toggle_context(current_user: TokenData) -> tuple[str, str]:
 
 
 def dashboard_payload(payload: GrafanaDashboardPayloadRequest) -> JSONDict:
-    raw = payload.model_dump(exclude_none=True)
+    raw = payload.model_dump(exclude_none=True, by_alias=True)
     return raw if isinstance(raw, dict) else {}
 
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from json import JSONDecodeError
-from typing import Optional
+from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from config import config
@@ -55,8 +55,16 @@ webhook_router.add_api_route(
 )
 
 
-@router.get("/public/rules")
-async def public_rules_proxy(request: Request) -> object:
+@router.get(
+    "/public/rules",
+    responses={
+        200: {
+            "description": "OK",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/JSONValue-Output"}}},
+        }
+    },
+)
+async def public_rules_proxy(request: Request) -> Any:
     enforce_public_endpoint_security(
         request,
         scope="alertmanager_public_rules",

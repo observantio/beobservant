@@ -19,7 +19,10 @@ from fastapi.responses import JSONResponse, Response
 from config import config
 from middleware.dependencies import enforce_public_endpoint_security, require_authenticated_with_scope
 from models.access.auth_models import TokenData
-from models.observability.grafana_request_models import GrafanaBootstrapSessionRequest
+from models.observability.grafana_request_models import (
+    GrafanaBootstrapSessionRequest,
+    GrafanaBootstrapSessionResponse,
+)
 from services.common.cookies import cookie_secure
 from services.grafana.normalize import normalize_grafana_next_path
 
@@ -55,7 +58,7 @@ async def grafana_auth(
     return Response(status_code=204, headers=headers)
 
 
-@router.post("/bootstrap-session")
+@router.post("/bootstrap-session", response_model=GrafanaBootstrapSessionResponse)
 async def bootstrap_grafana_session(
     request: Request,
     payload: GrafanaBootstrapSessionRequest = Body(...),

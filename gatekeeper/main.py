@@ -17,6 +17,7 @@ from typing import AsyncIterator
 
 import uvicorn
 from fastapi import FastAPI
+from pydantic import BaseModel
 
 import config as gw_config
 from middleware.openapi import install_custom_openapi
@@ -33,6 +34,11 @@ logger = logging.getLogger("gateway_auth")
 
 service = GatewayAuthService()
 STARTUP_CHECK_ERRORS = (RuntimeError, DatabaseUnavailable)
+
+
+class HealthResponse(BaseModel):
+    status: str
+    service: str
 
 
 @asynccontextmanager
@@ -94,7 +100,13 @@ app.include_router(gateway_router)
 install_custom_openapi(app)
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    summary="Service Health",
+    description="Returns a lightweight health status for gatekeeper.",
+    response_description="The current health status for gatekeeper.",
+    response_model=HealthResponse,
+)
 async def health_root() -> dict[str, str]:
     return service.health()
 

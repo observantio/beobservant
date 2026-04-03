@@ -65,7 +65,7 @@ jobs:
             -q tests
 
   server:
-    name: Server tests (pytest)
+    name: Watchdog tests (pytest)
     runs-on: ubuntu-latest
     defaults:
       run:

@@ -19,6 +19,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import ENCODERS_BY_TYPE
+from pydantic import BaseModel
 import httpx
 
 from config import config, constants
@@ -49,6 +50,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("watchdog")
+
+
+class ReadyResponse(BaseModel):
+    status: str
+    checks: dict[str, bool]
 
 
 def _encode_datetime_rfc3339(value: datetime) -> str:
@@ -155,7 +161,13 @@ app.include_router(resolver_router.router)
 install_custom_openapi(app)
 
 
-@app.get("/", tags=["info"])
+@app.get(
+    "/",
+    tags=["info"],
+    summary="Service Info",
+    description="Returns service metadata and primary API endpoint links.",
+    response_description="Service metadata and endpoint references.",
+)
 async def root() -> dict[str, object]:
     return {
         "service": constants.APP_NAME,
@@ -171,7 +183,13 @@ async def root() -> dict[str, object]:
         "health": "/health"
     }
 
-@app.get("/health", tags=["health"])
+@app.get(
+    "/health",
+    tags=["health"],
+    summary="Service Health",
+    description="Returns a lightweight health status for watchdog.",
+    response_description="The current health status for watchdog.",
+)
 async def health() -> dict[str, str]:
     return {
         "status": constants.STATUS_HEALTHY,
@@ -193,7 +211,10 @@ async def _upstream_reachable(base_url: str) -> bool:
 @app.get(
     "/ready",
     tags=["health"],
-    response_model=None,
+    summary="Service Readiness",
+    description="Runs readiness checks required for watchdog to serve traffic.",
+    response_description="The readiness result and dependency checks.",
+    response_model=ReadyResponse,
     responses={
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "One or more required dependencies are unavailable"

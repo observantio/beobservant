@@ -218,6 +218,7 @@ COMMON_ARGS=(
   --workers=4
   --request-timeout=5
   --request-retries=1
+  --rate-limit="${SCHEMATHESIS_RATE_LIMIT:-8/s}"
   --max-response-time=4
   --generation-deterministic
   --generation-unique-inputs

@@ -115,6 +115,8 @@ async def list_audit_logs(
 
 @router.get(
     "/audit-logs/export",
+    response_class=StreamingResponse,
+    response_model=None,
     responses={
         200: {
             "description": "CSV export of audit logs.",

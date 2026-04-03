@@ -13,15 +13,30 @@ from __future__ import annotations
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+from custom_types.json import JSONDict
 
 class GrafanaBootstrapSessionRequest(BaseModel):
     next: Optional[str] = None
 
+
+class GrafanaBootstrapSessionResponse(BaseModel):
+    launch_url: str
+    org_key: str
+
+
 class GrafanaDatasourceQueryRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
+
 class GrafanaDashboardPayloadRequest(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    dashboard: Optional[JSONDict] = None
+    folder_id: Optional[int] = Field(None, alias="folderId")
+    folder_uid: Optional[str] = Field(None, alias="folderUid")
+    overwrite: Optional[bool] = None
+    message: Optional[str] = None
+    inputs: Optional[list[JSONDict]] = None
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
 
 class GrafanaHiddenToggleRequest(BaseModel):
     hidden: bool = True

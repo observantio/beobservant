@@ -141,7 +141,7 @@ notifier_claims = {
     'aud': env.get('NOTIFIER_CONTEXT_AUDIENCE', 'notifier'),
     'iat': now,
     'exp': exp,
-    'jti': str(uuid.uuid4()),
+    'jti': f"schemathesis-{uuid.uuid4()}",
 }
 
 notifier_token = jwt.encode(notifier_claims, notifier_key, algorithm='HS256')
