@@ -2,7 +2,7 @@
 
 # Observantio's Watchdog
 
-<img src="assets/settings.png" alt="Watchdog settings preview" style="width: 100%; max-width: 200px;" />
+<img src="assets/settings.png" alt="Watchdog settings preview" width="150" />
 
 <p>
   <img src="https://img.shields.io/badge/stack-Grafana%20%7C%20Loki%20%7C%20Tempo%20%7C%20Mimir%20%7C%20Alertmanager-1f2937?style=flat-square" alt="Stack" />
