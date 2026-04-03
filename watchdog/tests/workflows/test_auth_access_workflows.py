@@ -270,6 +270,44 @@ def test_user_group_role_and_permission_workflow(client, monkeypatch: pytest.Mon
     assert delete_user_response.status_code == 200
 
 
+def test_auth_routes_reject_malformed_path_ids(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = WorkflowState()
+    patch_auth_service(monkeypatch, state)
+    admin_headers = state.auth_header("token-u-admin")
+
+    invalid_user_id = "bad.user"
+    invalid_key_id = "bad.key"
+    invalid_shared_user_id = "bad:share"
+
+    delete_user_response = client.delete(f"/api/auth/users/{invalid_user_id}", headers=admin_headers)
+    assert delete_user_response.status_code == 422
+
+    reset_mfa_response = client.post(
+        f"/api/auth/users/{invalid_user_id}/mfa/reset",
+        headers=admin_headers,
+    )
+    assert reset_mfa_response.status_code == 422
+
+    temp_password_response = client.post(
+        f"/api/auth/users/{invalid_user_id}/password/reset-temp",
+        headers=admin_headers,
+    )
+    assert temp_password_response.status_code == 422
+
+    update_key_response = client.patch(
+        f"/api/auth/api-keys/{invalid_key_id}",
+        headers=admin_headers,
+        json={"name": "ignored"},
+    )
+    assert update_key_response.status_code == 422
+
+    remove_share_response = client.delete(
+        f"/api/auth/api-keys/{invalid_key_id}/shares/{invalid_shared_user_id}",
+        headers=admin_headers,
+    )
+    assert remove_share_response.status_code == 422
+
+
 def test_user_management_permission_boundaries_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
     state = WorkflowState()
     patch_auth_service(monkeypatch, state)

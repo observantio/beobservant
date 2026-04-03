@@ -244,3 +244,25 @@ async def test_resolver_router_remaining_wrappers_and_helpers(monkeypatch):
         payload={"raw": True},
         audit_action="audit.test",
     ) == {}
+
+
+@pytest.mark.asyncio
+async def test_events_deployments_preserves_list_response(monkeypatch):
+    current_user = _user()
+
+    async def fake_resolve_tenant_id(_request, _user):
+        return "tenant"
+
+    async def fake_request_json(**_kwargs):
+        return [{"service": "api", "version": "1.2.3"}]
+
+    monkeypatch.setattr(resolver_router, "resolve_tenant_id", fake_resolve_tenant_id)
+    monkeypatch.setattr(resolver_router, "correlation_id", lambda _request: "corr-1")
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
+
+    result = await resolver_router.events_deployments(
+        _request("/api/resolver/events/deployments"),
+        current_user,
+    )
+    assert isinstance(result, list)
+    assert result[0]["service"] == "api"

@@ -26,15 +26,13 @@ paths:
           title: X-Internal-Token
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
                   type: string
-                title: Response Validate Otlp Token Query Api Internal Otlp Validate
-                  Get
         '410':
           description: Legacy query token validation is disabled; use POST endpoint
         '422':
@@ -71,15 +69,13 @@ paths:
               $ref: '#/components/schemas/OtlpValidateRequest'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
                   type: string
-                title: Response Validate Otlp Token Post Api Internal Otlp Validate
-                  Post
         '400':
           description: Missing or invalid token
         '404':
@@ -103,19 +99,19 @@ paths:
         in: query
         required: false
         schema:
-          type: boolean
-          default: false
+          type: string
+          pattern: ^(true|false)$
+          default: 'false'
           title: Show Hidden
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/ApiKey'
-                title: Response List Api Keys Api Auth Api Keys Get
         '422':
           description: Validation Error
           content:
@@ -143,7 +139,7 @@ paths:
               $ref: '#/components/schemas/ApiKeyCreate'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -188,7 +184,7 @@ paths:
               $ref: '#/components/schemas/ApiKeyUpdate'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -207,44 +203,6 @@ paths:
           description: Too Many Requests
         '400':
           description: Bad Request
-        '404':
-          description: Not Found
-    get:
-      tags:
-      - authentication
-      summary: Get Api Key
-      operationId: get_api_key_api_auth_api_keys__key_id__get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: key_id
-        in: path
-        required: true
-        schema:
-          type: string
-          minLength: 1
-          maxLength: 200
-          pattern: ^[A-Za-z0-9_-]+$
-          title: Key Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiKey'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '429':
-          description: Too Many Requests
         '404':
           description: Not Found
     delete:
@@ -266,14 +224,13 @@ paths:
           title: Key Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
                   type: string
-                title: Response Delete Api Key Api Auth Api Keys  Key Id  Delete
         '422':
           description: Validation Error
           content:
@@ -310,7 +267,7 @@ paths:
           title: Key Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -357,13 +314,13 @@ paths:
               $ref: '#/components/schemas/HideTogglePayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
-                title: Response Hide Api Key Api Auth Api Keys  Key Id  Hide Post
+                additionalProperties:
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -400,15 +357,13 @@ paths:
           title: Key Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/ApiKeyShareUser'
-                title: Response Get Api Key Shares Api Auth Api Keys  Key Id  Shares
-                  Get
         '422':
           description: Validation Error
           content:
@@ -448,15 +403,13 @@ paths:
               $ref: '#/components/schemas/ApiKeyShareUpdateRequest'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/ApiKeyShareUser'
-                title: Response Put Api Key Shares Api Auth Api Keys  Key Id  Shares
-                  Put
         '422':
           description: Validation Error
           content:
@@ -502,15 +455,13 @@ paths:
           title: Shared User Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
                   type: string
-                title: Response Remove Api Key Share Api Auth Api Keys  Key Id  Shares  Shared
-                  User Id  Delete
         '422':
           description: Validation Error
           content:
@@ -624,15 +575,15 @@ paths:
           title: Offset
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
                   type: object
-                  additionalProperties: true
-                title: Response List Audit Logs Api Auth Audit Logs Get
+                  additionalProperties:
+                    $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -716,8 +667,6 @@ paths:
         '200':
           description: CSV export of audit logs.
           content:
-            application/json:
-              schema: {}
             text/csv:
               schema:
                 type: string
@@ -742,7 +691,7 @@ paths:
       operationId: auth_mode_api_auth_mode_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -761,7 +710,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -792,7 +741,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -821,7 +770,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -846,14 +795,13 @@ paths:
       operationId: logout_api_auth_logout_post
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
                   type: string
                 type: object
-                title: Response Logout Api Auth Logout Post
         '400':
           description: Bad Request
   /api/auth/register:
@@ -870,7 +818,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -908,14 +856,13 @@ paths:
           title: Q
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Group'
-                title: Response List Groups Api Auth Groups Get
         '422':
           description: Validation Error
           content:
@@ -943,7 +890,7 @@ paths:
               $ref: '#/components/schemas/GroupCreate'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -982,7 +929,7 @@ paths:
           title: Group Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -1026,7 +973,7 @@ paths:
               $ref: '#/components/schemas/GroupUpdate'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -1065,15 +1012,8 @@ paths:
           pattern: ^[A-Za-z0-9_-]+$
           title: Group Id
       responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
-                title: Response Delete Group Api Auth Groups  Group Id  Delete
+        '204':
+          description: No Content
         '422':
           description: Validation Error
           content:
@@ -1116,14 +1056,13 @@ paths:
               title: Permission Names
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
-                title: Response Update Group Permissions Api Auth Groups  Group Id  Permissions
-                  Put
+                additionalProperties:
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -1163,14 +1102,13 @@ paths:
               $ref: '#/components/schemas/GroupMembersUpdate'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
-                title: Response Update Group Members Api Auth Groups  Group Id  Members
-                  Put
+                additionalProperties:
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -1195,7 +1133,7 @@ paths:
       operationId: mfa_enroll_api_auth_mfa_enroll_post
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -1224,7 +1162,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -1259,14 +1197,13 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
                   type: string
                 type: object
-                title: Response Mfa Disable Api Auth Mfa Disable Post
         '422':
           description: Validation Error
           content:
@@ -1303,15 +1240,13 @@ paths:
           title: User Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
                   type: string
-                title: Response Admin Reset User Mfa Api Auth Users  User Id  Mfa
-                  Reset Post
         '422':
           description: Validation Error
           content:
@@ -1336,7 +1271,7 @@ paths:
       operationId: get_current_user_info_api_auth_me_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -1362,7 +1297,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -1416,20 +1351,17 @@ paths:
         schema:
           anyOf:
           - type: string
-            maxLength: 200
-            pattern: ^[^\x00-\x1F]*$
           - type: 'null'
           title: Q
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/UserResponse'
-                title: Response List Users Api Auth Users Get
         '422':
           description: Validation Error
           content:
@@ -1457,7 +1389,7 @@ paths:
               $ref: '#/components/schemas/UserCreate'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -1477,44 +1409,6 @@ paths:
         '400':
           description: Bad Request
   /api/auth/users/{user_id}:
-    get:
-      tags:
-      - authentication
-      summary: Get User
-      operationId: get_user_api_auth_users__user_id__get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        schema:
-          type: string
-          minLength: 1
-          maxLength: 200
-          pattern: ^[A-Za-z0-9_-]+$
-          title: User Id
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '429':
-          description: Too Many Requests
-        '404':
-          description: Not Found
     put:
       tags:
       - authentication
@@ -1540,7 +1434,7 @@ paths:
               $ref: '#/components/schemas/UserUpdate'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -1580,14 +1474,13 @@ paths:
           title: User Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
                   type: string
-                title: Response Delete User Api Auth Users  User Id  Delete
         '422':
           description: Validation Error
           content:
@@ -1630,15 +1523,13 @@ paths:
               $ref: '#/components/schemas/UserPasswordUpdate'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
                   type: string
-                title: Response Update User Password Api Auth Users  User Id  Password
-                  Put
         '422':
           description: Validation Error
           content:
@@ -1675,7 +1566,7 @@ paths:
           title: User Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -1721,18 +1612,17 @@ paths:
             schema:
               type: array
               items:
-                $ref: '#/components/schemas/Permission'
+                type: string
               title: Permission Names
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
-                title: Response Update User Permissions Api Auth Users  User Id  Permissions
-                  Put
+                additionalProperties:
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -1757,15 +1647,15 @@ paths:
       operationId: list_all_permissions_api_auth_permissions_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 items:
-                  additionalProperties: true
+                  additionalProperties:
+                    $ref: '#/components/schemas/JSONValue'
                   type: object
                 type: array
-                title: Response List All Permissions Api Auth Permissions Get
         '401':
           description: Unauthorized
         '403':
@@ -1782,7 +1672,7 @@ paths:
       operationId: list_role_defaults_api_auth_role_defaults_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -1791,7 +1681,6 @@ paths:
                     type: string
                   type: array
                 type: object
-                title: Response List Role Defaults Api Auth Role Defaults Get
         '401':
           description: Unauthorized
         '403':
@@ -1808,15 +1697,15 @@ paths:
       operationId: list_agents_api_agents__get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 items:
-                  additionalProperties: true
+                  additionalProperties:
+                    $ref: '#/components/schemas/JSONValue'
                   type: object
                 type: array
-                title: Response List Agents Api Agents  Get
         '401':
           description: Unauthorized
         '403':
@@ -1833,15 +1722,15 @@ paths:
       operationId: list_active_agents_api_agents_active_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 items:
-                  additionalProperties: true
+                  additionalProperties:
+                    $ref: '#/components/schemas/JSONValue'
                   type: object
                 type: array
-                title: Response List Active Agents Api Agents Active Get
         '401':
           description: Unauthorized
         '403':
@@ -1887,13 +1776,13 @@ paths:
           title: Step Seconds
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
-                additionalProperties: true
-                title: Response Agent Metric Volume Api Agents Volume Get
+                additionalProperties:
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -1920,14 +1809,13 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
                   type: string
                 type: object
-                title: Response Heartbeat Api Agents Heartbeat Post
         '422':
           description: Validation Error
           content:
@@ -1944,14 +1832,13 @@ paths:
       operationId: get_system_metrics_api_system_metrics_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Get System Metrics Api System Metrics Get
         '401':
           description: Unauthorized
         '403':
@@ -1979,7 +1866,7 @@ paths:
           title: Orgid
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -2004,14 +1891,13 @@ paths:
       operationId: get_ojo_releases_api_system_ojo_releases_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Get Ojo Releases Api System Ojo Releases Get
         '401':
           description: Unauthorized
         '403':
@@ -2067,7 +1953,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: Start time in microseconds
           title: Start
@@ -2078,7 +1963,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: End time in microseconds
           title: End
@@ -2101,7 +1985,7 @@ paths:
           title: Fetchfull
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -2138,7 +2022,7 @@ paths:
           title: Trace Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -2165,14 +2049,13 @@ paths:
       operationId: get_services_api_tempo_services_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 items:
                   type: string
                 type: array
-                title: Response Get Services Api Tempo Services Get
         '401':
           description: Unauthorized
         '403':
@@ -2195,21 +2078,16 @@ paths:
         required: true
         schema:
           type: string
-          minLength: 1
-          maxLength: 200
-          pattern: ^[A-Za-z0-9_.:-]+$
           title: Service
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
                   type: string
-                title: Response Get Operations Api Tempo Services  Service  Operations
-                  Get
         '422':
           description: Validation Error
           content:
@@ -2258,7 +2136,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: Start time in nanoseconds
           title: Start
@@ -2269,7 +2146,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: End time in nanoseconds
           title: End
@@ -2288,15 +2164,13 @@ paths:
         schema:
           anyOf:
           - type: integer
-            maximum: 86400
-            minimum: 1
           - type: 'null'
           description: Query resolution step in seconds
           title: Step
         description: Query resolution step in seconds
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -2353,7 +2227,7 @@ paths:
         description: Maximum log lines to return
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -2385,7 +2259,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: Start time in nanoseconds
           title: Start
@@ -2396,14 +2269,13 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: End time in nanoseconds
           title: End
         description: End time in nanoseconds
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -2444,7 +2316,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: Start time in nanoseconds
           title: Start
@@ -2455,7 +2326,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: End time in nanoseconds
           title: End
@@ -2472,7 +2342,7 @@ paths:
         description: Optional LogQL query filter
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -2506,7 +2376,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -2542,7 +2412,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -2586,7 +2456,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: Start time in nanoseconds
           title: Start
@@ -2597,7 +2466,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: End time in nanoseconds
           title: End
@@ -2607,7 +2475,6 @@ paths:
         required: false
         schema:
           type: integer
-          maximum: 86400
           minimum: 1
           description: Query resolution step in seconds
           default: 60
@@ -2615,14 +2482,13 @@ paths:
         description: Query resolution step in seconds
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Aggregate Logs Api Loki Aggregate Get
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -2658,7 +2524,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: Start time in nanoseconds
           title: Start
@@ -2669,7 +2534,6 @@ paths:
         schema:
           anyOf:
           - type: integer
-            minimum: 0
           - type: 'null'
           description: End time in nanoseconds
           title: End
@@ -2679,7 +2543,6 @@ paths:
         required: false
         schema:
           type: integer
-          maximum: 86400
           minimum: 1
           description: Time step in seconds
           default: 300
@@ -2687,14 +2550,13 @@ paths:
         description: Time step in seconds
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Get Log Volume Api Loki Volume Get
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -2715,21 +2577,17 @@ paths:
       operationId: public_rules_proxy_api_alertmanager_public_rules_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
-                title: Response Public Rules Proxy Api Alertmanager Public Rules Get
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
+                $ref: '#/components/schemas/JSONValue'
   /api/alertmanager/{path}:
-    get:
+    delete:
       tags:
       - alertmanager
-      summary: Alertmanager Proxy Get
-      operationId: alertmanager_proxy_get
+      summary: Alertmanager Proxy
+      operationId: alertmanager_proxy_api_alertmanager__path__delete_delete_api_alertmanager_path
       security:
       - HTTPBearer: []
       parameters:
@@ -2741,46 +2599,13 @@ paths:
           title: Path
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
-                title: Response Alertmanager Proxy Get
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '429':
-          description: Too Many Requests
-        '404':
-          description: Not Found
-    post:
-      tags:
-      - alertmanager
-      summary: Alertmanager Proxy Post
-      operationId: alertmanager_proxy_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Path
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                title: Response Alertmanager Proxy Post
+                type: object
+                additionalProperties: &id001
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -2800,8 +2625,8 @@ paths:
     put:
       tags:
       - alertmanager
-      summary: Alertmanager Proxy Put
-      operationId: alertmanager_proxy_put
+      summary: Alertmanager Proxy
+      operationId: alertmanager_proxy_api_alertmanager__path__delete_put_api_alertmanager_path
       security:
       - HTTPBearer: []
       parameters:
@@ -2813,11 +2638,12 @@ paths:
           title: Path
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
-                title: Response Alertmanager Proxy Put
+                type: object
+                additionalProperties: *id001
         '422':
           description: Validation Error
           content:
@@ -2832,13 +2658,87 @@ paths:
           description: Too Many Requests
         '400':
           description: Bad Request
+        '404':
+          description: Not Found
+    post:
+      tags:
+      - alertmanager
+      summary: Alertmanager Proxy
+      operationId: alertmanager_proxy_api_alertmanager__path__delete_post_api_alertmanager_path
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Path
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: *id001
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '429':
+          description: Too Many Requests
+        '400':
+          description: Bad Request
+        '404':
+          description: Not Found
+    get:
+      tags:
+      - alertmanager
+      summary: Alertmanager Proxy
+      operationId: alertmanager_proxy_api_alertmanager__path__delete_get_api_alertmanager_path
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Path
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: *id001
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '429':
+          description: Too Many Requests
         '404':
           description: Not Found
     patch:
       tags:
       - alertmanager
-      summary: Alertmanager Proxy Patch
-      operationId: alertmanager_proxy_patch
+      summary: Alertmanager Proxy
+      operationId: alertmanager_proxy_api_alertmanager__path__delete_patch_api_alertmanager_path
       security:
       - HTTPBearer: []
       parameters:
@@ -2850,48 +2750,12 @@ paths:
           title: Path
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
-                title: Response Alertmanager Proxy Patch
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '429':
-          description: Too Many Requests
-        '400':
-          description: Bad Request
-        '404':
-          description: Not Found
-    delete:
-      tags:
-      - alertmanager
-      summary: Alertmanager Proxy Delete
-      operationId: alertmanager_proxy_delete
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Path
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                title: Response Alertmanager Proxy Delete
+                type: object
+                additionalProperties: *id001
         '422':
           description: Validation Error
           content:
@@ -2916,15 +2780,13 @@ paths:
       operationId: get_dashboard_filter_metadata_api_grafana_dashboards_meta_filters_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Get Dashboard Filter Metadata Api Grafana Dashboards
-                  Meta Filters Get
         '401':
           description: Unauthorized
         '403':
@@ -3010,9 +2872,6 @@ paths:
         schema:
           anyOf:
           - type: string
-            minLength: 1
-            maxLength: 200
-            pattern: ^[A-Za-z0-9_-]+$
           - type: 'null'
           title: Uid
       - name: team_id
@@ -3027,8 +2886,9 @@ paths:
         in: query
         required: false
         schema:
-          type: boolean
-          default: false
+          type: string
+          pattern: ^(true|false)$
+          default: 'false'
           title: Show Hidden
       - name: limit
         in: query
@@ -3049,14 +2909,13 @@ paths:
           title: Offset
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/DashboardSearchResult'
-                title: Response Search Dashboards Api Grafana Dashboards Search Get
         '422':
           description: Validation Error
           content:
@@ -3069,6 +2928,8 @@ paths:
           description: Forbidden
         '429':
           description: Too Many Requests
+        '400':
+          description: Bad Request
   /api/grafana/dashboards/{uid}:
     get:
       tags:
@@ -3089,14 +2950,13 @@ paths:
           title: Uid
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Get Dashboard Api Grafana Dashboards  Uid  Get
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -3133,7 +2993,7 @@ paths:
         required: false
         schema:
           anyOf:
-          - $ref: '#/components/schemas/Visibility'
+          - type: string
           - type: 'null'
           title: Visibility
       - name: shared_group_ids
@@ -3154,14 +3014,13 @@ paths:
               $ref: '#/components/schemas/GrafanaDashboardPayloadRequest'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Update Dashboard Api Grafana Dashboards  Uid  Put
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -3197,14 +3056,13 @@ paths:
           title: Uid
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Delete Dashboard Api Grafana Dashboards  Uid  Delete
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -3234,8 +3092,9 @@ paths:
         in: query
         required: false
         schema:
-          $ref: '#/components/schemas/Visibility'
+          type: string
           default: private
+          title: Visibility
       - name: shared_group_ids
         in: query
         required: false
@@ -3254,14 +3113,13 @@ paths:
               $ref: '#/components/schemas/GrafanaDashboardPayloadRequest'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Create Dashboard Api Grafana Dashboards Post
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -3290,15 +3148,13 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Save Dashboard From Grafana Ui Api Grafana Dashboards
-                  Db  Post
         '422':
           description: Validation Error
           content:
@@ -3329,15 +3185,13 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Save Dashboard From Grafana Ui Api Grafana Dashboards
-                  Db Post
         '422':
           description: Validation Error
           content:
@@ -3379,14 +3233,13 @@ paths:
               $ref: '#/components/schemas/GrafanaHiddenToggleRequest'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Hide Dashboard Api Grafana Dashboards  Uid  Hide Post
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -3417,11 +3270,12 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
-                title: Response Datasource Query Api Grafana Ds Query Post
+                type: object
+                additionalProperties: *id001
         '422':
           description: Validation Error
           content:
@@ -3446,15 +3300,13 @@ paths:
       operationId: get_datasource_filter_metadata_api_grafana_datasources_meta_filters_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Get Datasource Filter Metadata Api Grafana Datasources
-                  Meta Filters Get
         '401':
           description: Unauthorized
         '403':
@@ -3483,7 +3335,7 @@ paths:
           title: Name
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -3564,14 +3416,13 @@ paths:
           title: Offset
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Datasource'
-                title: Response Get Datasources Api Grafana Datasources Get
         '422':
           description: Validation Error
           content:
@@ -3596,8 +3447,9 @@ paths:
         in: query
         required: false
         schema:
-          $ref: '#/components/schemas/Visibility'
+          type: string
           default: private
+          title: Visibility
       - name: shared_group_ids
         in: query
         required: false
@@ -3616,13 +3468,11 @@ paths:
               $ref: '#/components/schemas/DatasourceCreate'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Datasource'
-        '409':
-          description: Conflict
         '422':
           description: Validation Error
           content:
@@ -3637,6 +3487,8 @@ paths:
           description: Too Many Requests
         '400':
           description: Bad Request
+        '409':
+          description: Conflict
   /api/grafana/datasources/{uid}:
     get:
       tags:
@@ -3657,7 +3509,7 @@ paths:
           title: Uid
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -3689,16 +3541,13 @@ paths:
         required: true
         schema:
           type: string
-          minLength: 1
-          maxLength: 200
-          pattern: ^[A-Za-z0-9_-]+$
           title: Uid
       - name: visibility
         in: query
         required: false
         schema:
           anyOf:
-          - $ref: '#/components/schemas/Visibility'
+          - type: string
           - type: 'null'
           title: Visibility
       - name: shared_group_ids
@@ -3719,7 +3568,7 @@ paths:
               $ref: '#/components/schemas/DatasourceUpdate'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -3753,20 +3602,16 @@ paths:
         required: true
         schema:
           type: string
-          minLength: 1
-          maxLength: 200
-          pattern: ^[A-Za-z0-9_-]+$
           title: Uid
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Delete Datasource Api Grafana Datasources  Uid  Delete
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -3797,9 +3642,6 @@ paths:
         required: true
         schema:
           type: string
-          minLength: 1
-          maxLength: 200
-          pattern: ^[A-Za-z0-9_-]+$
           title: Uid
       requestBody:
         content:
@@ -3808,15 +3650,13 @@ paths:
               $ref: '#/components/schemas/GrafanaHiddenToggleRequest'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Hide Datasource Api Grafana Datasources  Uid  Hide
-                  Post
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -3846,19 +3686,19 @@ paths:
         in: query
         required: false
         schema:
-          type: boolean
-          default: false
+          type: string
+          pattern: ^(true|false)$
+          default: 'false'
           title: Show Hidden
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Folder'
-                title: Response Get Folders Api Grafana Folders Get
         '422':
           description: Validation Error
           content:
@@ -3883,8 +3723,9 @@ paths:
         in: query
         required: false
         schema:
-          $ref: '#/components/schemas/Visibility'
+          type: string
           default: private
+          title: Visibility
       - name: shared_group_ids
         in: query
         required: false
@@ -3903,13 +3744,11 @@ paths:
               $ref: '#/components/schemas/GrafanaCreateFolderRequest'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Folder'
-        '409':
-          description: Conflict
         '422':
           description: Validation Error
           content:
@@ -3924,6 +3763,8 @@ paths:
           description: Too Many Requests
         '400':
           description: Bad Request
+        '409':
+          description: Conflict
   /api/grafana/folders/{uid}:
     get:
       tags:
@@ -3944,7 +3785,7 @@ paths:
           title: Uid
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -3982,14 +3823,13 @@ paths:
           title: Uid
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Delete Folder Api Grafana Folders  Uid  Delete
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -4028,7 +3868,7 @@ paths:
         required: false
         schema:
           anyOf:
-          - $ref: '#/components/schemas/Visibility'
+          - type: string
           - type: 'null'
           title: Visibility
       - name: shared_group_ids
@@ -4049,7 +3889,7 @@ paths:
               $ref: '#/components/schemas/GrafanaUpdateFolderRequest'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -4095,14 +3935,13 @@ paths:
               $ref: '#/components/schemas/GrafanaHiddenToggleRequest'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Hide Folder Api Grafana Folders  Uid  Hide Post
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -4146,19 +3985,21 @@ paths:
         '204':
           description: Grafana auth_request endpoint; returns authorization headers
             for upstream proxying.
-        '400':
-          description: Missing or invalid Grafana auth_request context.
         '401':
           description: The supplied Grafana auth token or session is missing, expired,
             or invalid.
-        '429':
-          description: Too Many Requests
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+        '403':
+          description: Forbidden
+        '429':
+          description: Too Many Requests
   /api/grafana/bootstrap-session:
     post:
       tags:
@@ -4173,10 +4014,11 @@ paths:
         required: true
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/GrafanaBootstrapSessionResponse'
         '422':
           description: Validation Error
           content:
@@ -4201,7 +4043,7 @@ paths:
       operationId: get_analyze_config_template_api_resolver_analyze_config_template_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -4232,7 +4074,7 @@ paths:
               $ref: '#/components/schemas/AnalyzeRequestPayload'
       responses:
         '202':
-          description: Successful Response
+          description: Accepted
           content:
             application/json:
               schema:
@@ -4288,7 +4130,7 @@ paths:
           title: Cursor
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -4327,7 +4169,7 @@ paths:
           title: Job Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -4368,7 +4210,7 @@ paths:
           title: Job Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -4409,7 +4251,7 @@ paths:
           title: Report Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -4449,7 +4291,7 @@ paths:
           title: Report Id
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
@@ -4485,14 +4327,13 @@ paths:
               $ref: '#/components/schemas/AnalyzeProxyPayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Anomalies Metrics Api Resolver Anomalies Metrics Post
         '422':
           description: Validation Error
           content:
@@ -4511,7 +4352,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/anomalies/logs/patterns:
     post:
       tags:
@@ -4525,15 +4365,13 @@ paths:
               $ref: '#/components/schemas/AnalyzeProxyPayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Anomalies Log Patterns Api Resolver Anomalies Logs
-                  Patterns Post
         '422':
           description: Validation Error
           content:
@@ -4552,7 +4390,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/anomalies/logs/bursts:
     post:
       tags:
@@ -4566,15 +4403,13 @@ paths:
               $ref: '#/components/schemas/AnalyzeProxyPayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Anomalies Log Bursts Api Resolver Anomalies Logs Bursts
-                  Post
         '422':
           description: Validation Error
           content:
@@ -4593,7 +4428,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/anomalies/traces:
     post:
       tags:
@@ -4607,14 +4441,13 @@ paths:
               $ref: '#/components/schemas/AnalyzeProxyPayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Anomalies Traces Api Resolver Anomalies Traces Post
         '422':
           description: Validation Error
           content:
@@ -4633,7 +4466,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/correlate:
     post:
       tags:
@@ -4647,14 +4479,13 @@ paths:
               $ref: '#/components/schemas/AnalyzeProxyPayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Correlate Signals Api Resolver Correlate Post
         '422':
           description: Validation Error
           content:
@@ -4673,7 +4504,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/topology/blast-radius:
     post:
       tags:
@@ -4687,15 +4517,13 @@ paths:
               $ref: '#/components/schemas/AnalyzeProxyPayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Topology Blast Radius Api Resolver Topology Blast
-                  Radius Post
         '422':
           description: Validation Error
           content:
@@ -4714,7 +4542,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/slo/burn:
     post:
       tags:
@@ -4728,14 +4555,13 @@ paths:
               $ref: '#/components/schemas/AnalyzeProxyPayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Slo Burn Api Resolver Slo Burn Post
         '422':
           description: Validation Error
           content:
@@ -4754,7 +4580,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/forecast/trajectory:
     post:
       tags:
@@ -4768,15 +4593,13 @@ paths:
               $ref: '#/components/schemas/AnalyzeProxyPayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Forecast Trajectory Api Resolver Forecast Trajectory
-                  Post
         '422':
           description: Validation Error
           content:
@@ -4795,7 +4618,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/causal/granger:
     post:
       tags:
@@ -4809,14 +4631,13 @@ paths:
               $ref: '#/components/schemas/AnalyzeProxyPayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Causal Granger Api Resolver Causal Granger Post
         '422':
           description: Validation Error
           content:
@@ -4835,7 +4656,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/causal/bayesian:
     post:
       tags:
@@ -4849,14 +4669,13 @@ paths:
               $ref: '#/components/schemas/AnalyzeProxyPayload'
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Causal Bayesian Api Resolver Causal Bayesian Post
         '422':
           description: Validation Error
           content:
@@ -4875,7 +4694,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/ml/weights:
     get:
       tags:
@@ -4884,14 +4702,13 @@ paths:
       operationId: ml_weights_api_resolver_ml_weights_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Ml Weights Api Resolver Ml Weights Get
         '401':
           description: Unauthorized
         '403':
@@ -4902,7 +4719,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/ml/weights/feedback:
     post:
       tags:
@@ -4927,15 +4743,13 @@ paths:
           title: Was Correct
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                title: Response Ml Weights Feedback Api Resolver Ml Weights Feedback
-                  Post
+                  $ref: '#/components/schemas/JSONValue'
         '422':
           description: Validation Error
           content:
@@ -4952,7 +4766,6 @@ paths:
           description: Bad Request
         '502':
           description: Bad Gateway
-      x-schemathesis-skip: true
   /api/resolver/ml/weights/reset:
     post:
       tags:
@@ -4961,14 +4774,13 @@ paths:
       operationId: ml_weights_reset_api_resolver_ml_weights_reset_post
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
                 additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Ml Weights Reset Api Resolver Ml Weights Reset Post
         '401':
           description: Unauthorized
         '403':
@@ -4981,7 +4793,6 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /api/resolver/events/deployments:
     get:
       tags:
@@ -4990,15 +4801,11 @@ paths:
       operationId: events_deployments_api_resolver_events_deployments_get
       responses:
         '200':
-          description: Successful Response
+          description: OK
           content:
             application/json:
               schema:
-                additionalProperties:
-                  $ref: '#/components/schemas/JSONValue-Output'
-                type: object
-                title: Response Events Deployments Api Resolver Events Deployments
-                  Get
+                $ref: '#/components/schemas/JSONValue'
         '401':
           description: Unauthorized
         '403':
@@ -5009,50 +4816,52 @@ paths:
           description: Bad Gateway
       security:
       - HTTPBearer: []
-      x-schemathesis-skip: true
   /:
     get:
       tags:
       - info
-      summary: Root
+      summary: Service Info
+      description: Returns service metadata and primary API endpoint links.
       operationId: root__get
       responses:
         '200':
-          description: Successful Response
+          description: Service metadata and endpoint references.
           content:
             application/json:
               schema:
-                additionalProperties: true
+                additionalProperties:
+                  $ref: '#/components/schemas/JSONValue'
                 type: object
-                title: Response Root  Get
   /health:
     get:
       tags:
       - health
-      summary: Health
+      summary: Service Health
+      description: Returns a lightweight health status for watchdog.
       operationId: health_health_get
       responses:
         '200':
-          description: Successful Response
+          description: The current health status for watchdog.
           content:
             application/json:
               schema:
                 additionalProperties:
                   type: string
                 type: object
-                title: Response Health Health Get
   /ready:
     get:
       tags:
       - health
-      summary: Ready
+      summary: Service Readiness
+      description: Runs readiness checks required for watchdog to serve traffic.
       operationId: ready_ready_get
       responses:
         '200':
-          description: Successful Response
+          description: The readiness result and dependency checks.
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
         '503':
           description: One or more required dependencies are unavailable
 components:
@@ -5113,7 +4922,8 @@ components:
           - type: string
           - type: 'null'
           title: Confidence Calibration Version
-      additionalProperties: true
+      additionalProperties:
+        $ref: '#/components/schemas/JSONValue'
       type: object
       title: AnalysisQualityPayload
     AnalyzeConfigTemplateResponse:
@@ -5123,7 +4933,7 @@ components:
           title: Version
         defaults:
           additionalProperties:
-            $ref: '#/components/schemas/JSONValue-Output'
+            $ref: '#/components/schemas/JSONValue'
           type: object
           title: Defaults
         template_yaml:
@@ -5204,7 +5014,7 @@ components:
           anyOf:
           - $ref: '#/components/schemas/AnalyzeResultPayload'
           - additionalProperties:
-              $ref: '#/components/schemas/JSONValue-Output'
+              $ref: '#/components/schemas/JSONValue'
             type: object
           - type: 'null'
           title: Result
@@ -5298,16 +5108,19 @@ components:
         start:
           anyOf:
           - type: integer
+            maximum: 9007199254740991.0
             minimum: 0.0
           - type: 'null'
           title: Start
         end:
           anyOf:
           - type: integer
+            maximum: 9007199254740991.0
             minimum: 0.0
           - type: 'null'
           title: End
-      additionalProperties: true
+      additionalProperties:
+        $ref: '#/components/schemas/JSONValue'
       type: object
       title: AnalyzeProxyPayload
     AnalyzeReportDeleteResponse:
@@ -5346,7 +5159,7 @@ components:
           anyOf:
           - $ref: '#/components/schemas/AnalyzeResultPayload'
           - additionalProperties:
-              $ref: '#/components/schemas/JSONValue-Output'
+              $ref: '#/components/schemas/JSONValue'
             type: object
           - type: 'null'
           title: Result
@@ -5367,10 +5180,12 @@ components:
           title: Tenant Id
         start:
           type: integer
+          maximum: 9007199254740991.0
           minimum: 0.0
           title: Start
         end:
           type: integer
+          maximum: 9007199254740991.0
           minimum: 0.0
           title: End
         step:
@@ -5450,7 +5265,8 @@ components:
             $ref: '#/components/schemas/RootCausePayload'
           type: array
           title: Root Causes
-      additionalProperties: true
+      additionalProperties:
+        $ref: '#/components/schemas/JSONValue'
       type: object
       title: AnalyzeResultPayload
     ApiKey:
@@ -5512,13 +5328,11 @@ components:
           anyOf:
           - type: string
           - type: 'null'
-          format: date-time
           title: Created At
         updated_at:
           anyOf:
           - type: string
           - type: 'null'
-          format: date-time
           title: Updated At
       type: object
       required:
@@ -5608,7 +5422,6 @@ components:
           default: true
         created_at:
           type: string
-          format: date-time
           title: Created At
       type: object
       required:
@@ -5737,7 +5550,8 @@ components:
           description: Whether the current user is the owner/creator
           default: false
         visibility:
-          $ref: '#/components/schemas/Visibility'
+          type: string
+          title: Visibility
           description: Visibility (private|group|tenant|public)
           default: private
         sharedGroupIds:
@@ -5846,7 +5660,7 @@ components:
         jsonData:
           anyOf:
           - additionalProperties:
-              $ref: '#/components/schemas/JSONValue-Output'
+              $ref: '#/components/schemas/JSONValue'
             type: object
           - type: 'null'
           title: Jsondata
@@ -5854,7 +5668,7 @@ components:
         secureJsonData:
           anyOf:
           - additionalProperties:
-              $ref: '#/components/schemas/JSONValue-Output'
+              $ref: '#/components/schemas/JSONValue'
             type: object
           - type: 'null'
           title: Securejsondata
@@ -5896,8 +5710,9 @@ components:
           default: false
         visibility:
           anyOf:
-          - $ref: '#/components/schemas/Visibility'
+          - type: string
           - type: 'null'
+          title: Visibility
           description: Visibility for the datasource (private|group|tenant|public)
         shared_group_ids:
           items:
@@ -6044,8 +5859,9 @@ components:
           title: Created By
           description: ID of the user who created the folder
         visibility:
-          $ref: '#/components/schemas/Visibility'
-          description: Visibility for the folder (private|group|tenant|public)
+          type: string
+          title: Visibility
+          description: Visibility for the folder (private|group|tenant)
           default: tenant
         sharedGroupIds:
           items:
@@ -6078,6 +5894,19 @@ components:
           title: Next
       type: object
       title: GrafanaBootstrapSessionRequest
+    GrafanaBootstrapSessionResponse:
+      properties:
+        launch_url:
+          type: string
+          title: Launch Url
+        org_key:
+          type: string
+          title: Org Key
+      type: object
+      required:
+      - launch_url
+      - org_key
+      title: GrafanaBootstrapSessionResponse
     GrafanaCreateFolderRequest:
       properties:
         title:
@@ -6094,45 +5923,50 @@ components:
     GrafanaDashboardPayloadRequest:
       properties:
         dashboard:
-          additionalProperties: true
-          type: object
+          anyOf:
+          - additionalProperties:
+              $ref: '#/components/schemas/JSONValue-Input'
+            type: object
+          - type: 'null'
           title: Dashboard
         folderId:
-          type: integer
+          anyOf:
+          - type: integer
+          - type: 'null'
           title: Folderid
-          default: 0
+        folderUid:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Folderuid
         overwrite:
-          type: boolean
+          anyOf:
+          - type: boolean
+          - type: 'null'
           title: Overwrite
-          default: false
         message:
           anyOf:
           - type: string
           - type: 'null'
           title: Message
-      additionalProperties: true
+        inputs:
+          anyOf:
+          - items:
+              additionalProperties:
+                $ref: '#/components/schemas/JSONValue-Input'
+              type: object
+            type: array
+          - type: 'null'
+          title: Inputs
+      additionalProperties:
+        $ref: '#/components/schemas/JSONValue'
       type: object
       title: GrafanaDashboardPayloadRequest
     GrafanaDatasourceQueryRequest:
-      properties:
-        queries:
-          items:
-            additionalProperties: true
-            type: object
-          type: array
-          title: Queries
-        from:
-          type: string
-          title: From
-        to:
-          type: string
-          title: To
-      additionalProperties: true
+      properties: {}
+      additionalProperties:
+        $ref: '#/components/schemas/JSONValue'
       type: object
-      required:
-      - queries
-      - from
-      - to
       title: GrafanaDatasourceQueryRequest
     GrafanaHiddenToggleRequest:
       properties:
@@ -6224,7 +6058,6 @@ components:
             type: string
           type: array
           title: User Ids
-      additionalProperties: false
       type: object
       title: GroupMembersUpdate
     GroupUpdate:
@@ -6283,16 +6116,16 @@ components:
         type: array
       - type: 'null'
     JSONValue-Output:
-      anyOf:
+      anyOf: &id002
       - type: string
       - type: integer
       - type: number
       - type: boolean
       - additionalProperties:
-          $ref: '#/components/schemas/JSONValue-Output'
+          $ref: '#/components/schemas/JSONValue'
         type: object
       - items:
-          $ref: '#/components/schemas/JSONValue-Output'
+          $ref: '#/components/schemas/JSONValue'
         type: array
       - type: 'null'
     LogDirection:
@@ -6320,14 +6153,12 @@ components:
         start:
           anyOf:
           - type: integer
-            minimum: 0.0
           - type: 'null'
           title: Start
           description: Start time in nanoseconds
         end:
           anyOf:
           - type: integer
-            minimum: 0.0
           - type: 'null'
           title: End
           description: End time in nanoseconds
@@ -6384,7 +6215,7 @@ components:
           description: Response status
         data:
           additionalProperties:
-            $ref: '#/components/schemas/JSONValue-Output'
+            $ref: '#/components/schemas/JSONValue'
           type: object
           title: Data
           description: Log data containing streams and statistics
@@ -6414,14 +6245,12 @@ components:
         start:
           anyOf:
           - type: integer
-            minimum: 0.0
           - type: 'null'
           title: Start
           description: Start time in nanoseconds
         end:
           anyOf:
           - type: integer
-            minimum: 0.0
           - type: 'null'
           title: End
           description: End time in nanoseconds
@@ -6465,13 +6294,9 @@ components:
       properties:
         username:
           type: string
-          maxLength: 200
-          minLength: 1
           title: Username
         password:
           type: string
-          maxLength: 1024
-          minLength: 1
           title: Password
         mfa_code:
           anyOf:
@@ -6702,6 +6527,21 @@ components:
       - loki
       - tempo
       title: QuotasResponse
+    ReadyResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+        checks:
+          additionalProperties:
+            type: boolean
+          type: object
+          title: Checks
+      type: object
+      required:
+      - status
+      - checks
+      title: ReadyResponse
     RecoveryCodesResponse:
       properties:
         recovery_codes:
@@ -6761,7 +6601,7 @@ components:
           title: Corroboration Summary
         suppression_diagnostics:
           additionalProperties:
-            $ref: '#/components/schemas/JSONValue-Output'
+            $ref: '#/components/schemas/JSONValue'
           type: object
           title: Suppression Diagnostics
         selection_score_components:
@@ -6769,7 +6609,8 @@ components:
             type: number
           type: object
           title: Selection Score Components
-      additionalProperties: true
+      additionalProperties:
+        $ref: '#/components/schemas/JSONValue'
       type: object
       title: RootCausePayload
     RuntimeQuota:
@@ -6852,7 +6693,8 @@ components:
           - type: number
           - type: 'null'
           title: Window End
-      additionalProperties: true
+      additionalProperties:
+        $ref: '#/components/schemas/JSONValue'
       type: object
       title: ServiceLatencyPayload
     Span:
@@ -6898,7 +6740,7 @@ components:
         attributes:
           anyOf:
           - additionalProperties:
-              $ref: '#/components/schemas/JSONValue-Output'
+              $ref: '#/components/schemas/JSONValue'
             type: object
           - type: 'null'
           title: Attributes
@@ -6932,7 +6774,7 @@ components:
           title: Key
           description: Attribute key
         value:
-          $ref: '#/components/schemas/JSONValue-Output'
+          $ref: '#/components/schemas/JSONValue'
           description: Attribute value
       type: object
       required:
@@ -7001,7 +6843,7 @@ components:
         processes:
           anyOf:
           - additionalProperties:
-              $ref: '#/components/schemas/JSONValue-Output'
+              $ref: '#/components/schemas/JSONValue'
             type: object
           - type: 'null'
           title: Processes
@@ -7285,15 +7127,15 @@ components:
       - msg
       - type
       title: ValidationError
-    Visibility:
-      type: string
-      enum:
-      - private
-      - group
-      - tenant
-      - public
-      title: Visibility
+    JSONValue:
+      anyOf: *id002
   securitySchemes:
     HTTPBearer:
       type: http
       scheme: bearer
+    WatchdogCookieAuth:
+      type: apiKey
+      in: cookie
+      name: watchdog_token
+      description: Authenticate using the watchdog_token cookie (same token as Bearer).
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema

@@ -295,8 +295,8 @@ describe("api request behavior", () => {
 
     await api.refreshSession();
     [, options] = fetch.mock.calls.at(-1);
-    expect(options.method).toBe("POST");
-    expect(fetch.mock.calls.at(-1)[0]).toContain("/api/auth/refresh");
+    expect(options.method).toBe("GET");
+    expect(fetch.mock.calls.at(-1)[0]).toContain("/api/auth/me");
 
     await api.getCurrentUserNoRedirect();
     expect(fetch.mock.calls.at(-1)[0]).toContain("/api/auth/me");
@@ -726,7 +726,7 @@ describe("api request behavior", () => {
     expect(fetch.mock.calls.at(-1)[0]).toContain("/api/grafana/dashboards/meta/filters");
 
     await api.getDatasource("ds/1");
-    expect(fetch.mock.calls.at(-1)[0]).toContain("/api/grafana/datasources/uid/ds%2F1");
+    expect(fetch.mock.calls.at(-1)[0]).toContain("/api/grafana/datasources/ds%2F1");
 
     await api.createDatasource({ name: "prom" }, "x-org=1");
     expect(fetch.mock.calls.at(-1)[0]).toContain("/api/grafana/datasources?x-org=1");

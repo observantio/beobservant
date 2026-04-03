@@ -32,7 +32,7 @@ from models.observability.resolver_models import (
 )
 from services.resolver_proxy_service import resolver_proxy_service
 from services.aiops.helpers import inject_tenant, correlation_id
-from custom_types.json import JSONDict
+from custom_types.json import JSONDict, JSONValue
 
 QueryParams = dict[str, str | int | float | bool]
 
@@ -386,7 +386,7 @@ async def ml_weights_reset(
 async def events_deployments(
     request: Request,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
-) -> JSONDict:
+) -> JSONValue:
     tenant_id = await resolve_tenant_id(request, current_user)
     result = await resolver_proxy_service.request_json(
         method="GET",
@@ -398,4 +398,6 @@ async def events_deployments(
         correlation_id=correlation_id(request),
         cache_ttl_seconds=getattr(config, "RESOLVER_PROXY_CACHE_TTL_SECONDS", 15),
     )
-    return result if isinstance(result, dict) else {}
+    if isinstance(result, (dict, list)):
+        return result
+    return {}

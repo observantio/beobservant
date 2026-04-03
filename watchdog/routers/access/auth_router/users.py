@@ -34,6 +34,7 @@ from services.auth.helper import (
 )
 
 from .shared import USER_NOT_FOUND, notification_service, router, rtp
+from .shared import SAFE_PATH_ID_PATTERN
 
 
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F]")
@@ -143,7 +144,7 @@ async def create_user(
 @router.put("/users/{user_id}", response_model=UserResponse)
 @handle_route_errors()
 async def update_user(
-    user_id: str = Path(..., min_length=1, max_length=200),
+    user_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     user_update: UserUpdate = Body(...),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.UPDATE_USERS, Permission.MANAGE_USERS, Permission.MANAGE_TENANTS], "auth")
@@ -176,7 +177,7 @@ async def update_user(
 @handle_route_errors()
 async def update_user_password(
     password_update: UserPasswordUpdate,
-    user_id: str = Path(..., min_length=1, max_length=200),
+    user_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     current_user: TokenData = Depends(require_authenticated_with_scope("auth")),
 ) -> dict[str, str]:
     if current_user.user_id != user_id:
@@ -194,7 +195,7 @@ async def update_user_password(
 
 @router.post("/users/{user_id}/password/reset-temp", response_model=TempPasswordResetResponse)
 async def reset_user_password_temp(
-    user_id: str = Path(..., min_length=1, max_length=200),
+    user_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     current_user: TokenData = Depends(require_authenticated_with_scope("auth")),
 ) -> TempPasswordResetResponse:
     if not (is_admin_check(current_user) or Permission.MANAGE_USERS.value in perms_check(current_user)):
@@ -227,7 +228,7 @@ async def reset_user_password_temp(
 
 @router.delete("/users/{user_id}")
 async def delete_user(
-    user_id: str = Path(..., min_length=1, max_length=200),
+    user_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     current_user: TokenData = Depends(require_authenticated_with_scope("auth")),
 ) -> dict[str, str]:
     if not is_admin_check(current_user):
@@ -245,7 +246,7 @@ async def delete_user(
 
 @router.put("/users/{user_id}/permissions")
 async def update_user_permissions(
-    user_id: str = Path(..., min_length=1, max_length=200),
+    user_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     permission_names: List[str] = Body(...),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.UPDATE_USER_PERMISSIONS, Permission.MANAGE_USERS], "auth")

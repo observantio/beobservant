@@ -311,7 +311,7 @@ export async function login(username, password, mfa_code) {
 }
 
 export async function refreshSession() {
-  return request("/api/auth/refresh", { method: "POST" });
+  return request("/api/auth/me");
 }
 
 export async function enrollMFA() {
@@ -1229,7 +1229,7 @@ export async function getDatasources({
   });
 }
 export async function getDatasource(uid) {
-  return request(`/api/grafana/datasources/uid/${encodeURIComponent(uid)}`);
+  return request(`/api/grafana/datasources/${encodeURIComponent(uid)}`);
 }
 export async function createDatasource(payload, queryParams = "") {
   const url = queryParams

@@ -10,6 +10,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 """
 
 import logging
+import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 from hmac import compare_digest
@@ -37,6 +38,13 @@ ALLOWLIST_DISABLED = object()
 GENERIC_ACCESS_DENIED_DETAIL = "Access denied"
 GENERIC_SCOPE_DENIED_DETAIL = "Requested tenant scope is not permitted"
 RATE_LIMIT_FALLBACK_MODES = {"memory", "deny", "allow"}
+TOKEN_SUBJECT_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
+
+
+def _is_safe_token_subject(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    return bool(TOKEN_SUBJECT_PATTERN.fullmatch(value))
 
 
 def _extract_bearer_token(
@@ -103,6 +111,13 @@ def _authenticate_request(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if not _is_safe_token_subject(token_data.user_id):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your session has expired or your token is invalid. Let's get you a new one.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     if getattr(token_data, "is_mfa_setup", False) and not allow_mfa_setup:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -110,7 +125,15 @@ def _authenticate_request(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = auth_service.get_user_by_id(token_data.user_id)
+    try:
+        user = auth_service.get_user_by_id(token_data.user_id)
+    except (SQLAlchemyError, UnicodeError, ValueError, TypeError) as exc:
+        logger.warning("Failed to resolve user from authentication token", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your session has expired or your token is invalid. Let's get you a new one.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
     if user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -126,7 +149,15 @@ def _authenticate_request(
             )
         return token_data
 
-    token_data = _hydrate_authenticated_user(token_data, user)
+    try:
+        token_data = _hydrate_authenticated_user(token_data, user)
+    except (SQLAlchemyError, UnicodeError, ValueError, TypeError) as exc:
+        logger.warning("Failed to hydrate authenticated user context", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your session has expired or your token is invalid. Let's get you a new one.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
 
     if apply_base_rate_limit:
         enforce_rate_limit(

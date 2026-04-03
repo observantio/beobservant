@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 USER_NOT_FOUND = "User not found"
 GROUP_NOT_FOUND = "Group not found"
+SAFE_PATH_ID_PATTERN = r"^[A-Za-z0-9_-]+$"
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 notification_service = NotificationService()

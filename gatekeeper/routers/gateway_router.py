@@ -10,8 +10,10 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 import logging
 
-from fastapi import APIRouter, Request, Response, HTTPException, status
+from fastapi import APIRouter, Request, Response, HTTPException, Security, status
 from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
+from pydantic import BaseModel, Field
 
 from models.exceptions import DatabaseUnavailable
 from services.gateway_service import GatewayAuthService
@@ -21,13 +23,29 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/gateway", tags=["gateway"])
 
 service = GatewayAuthService()
+otlp_token_header = APIKeyHeader(
+    name="x-otlp-token",
+    scheme_name="OtlpTokenHeader",
+    description="OTLP token used to resolve organization scope in the gateway.",
+    auto_error=False,
+)
 
 
-def _validate_otlp_token_request(request: Request) -> Response:
+class ValidateTokenResponse(BaseModel):
+    org_id: str = Field(..., description="Resolved organization identifier for the OTLP token.")
+
+
+class GatewayHealthResponse(BaseModel):
+    status: str
+    service: str
+
+
+def _validate_otlp_token_request(request: Request, otlp_token: str | None) -> Response:
     service.enforce_ip_allowlist(request)
     service.enforce_rate_limit(request)
 
-    token = service.extract_otlp_token(request.headers.get("x-otlp-token"))
+    raw_token = otlp_token if isinstance(otlp_token, str) else request.headers.get("x-otlp-token")
+    token = service.extract_otlp_token(raw_token)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing x-otlp-token header")
 
@@ -51,16 +69,46 @@ def _validate_otlp_token_request(request: Request) -> Response:
     return response
 
 
-@router.api_route("/validate", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def validate_otlp_token(request: Request) -> Response:
-    return _validate_otlp_token_request(request)
+@router.post(
+    "/validate",
+    summary="Validate OTLP Token",
+    description="Validates an OTLP token and returns scoped organization metadata.",
+    response_description="Validation result with resolved organization scope.",
+    response_model=ValidateTokenResponse,
+)
+async def validate_otlp_token(
+    request: Request,
+    otlp_token: str | None = Security(otlp_token_header),
+) -> Response:
+    return _validate_otlp_token_request(request, otlp_token)
 
 
-@router.api_route("/validate/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def validate_otlp_token_with_path(request: Request, path: str) -> Response:
-    _ = path
-    return _validate_otlp_token_request(request)
+@router.post(
+    "/validate/{upstream_path:path}",
+    include_in_schema=False,
+)
+async def validate_otlp_token_with_upstream_path(
+    request: Request,
+    upstream_path: str,
+    otlp_token: str | None = Security(otlp_token_header),
+) -> Response:
+    _ = upstream_path
+    return _validate_otlp_token_request(request, otlp_token)
 
-@router.get("/health")
+
+async def validate_otlp_token_with_path(
+    request: Request,
+    upstream_path: str,
+    otlp_token: str | None = Security(otlp_token_header),
+) -> Response:
+    return await validate_otlp_token_with_upstream_path(request, upstream_path, otlp_token)
+
+
+@router.get(
+    "/health",
+    summary="Gateway Health",
+    description="Returns health information for the gateway router surface.",
+    response_description="Current gateway router health status.",
+)
 async def health() -> dict[str, str]:
     return service.health()

@@ -240,10 +240,25 @@ def test_current_user_and_permission_dependency_edges(monkeypatch):
     with pytest.raises(HTTPException, match="expired or your token is invalid"):
         dependencies.get_current_user(_request(), creds)
 
+    monkeypatch.setattr(auth_stub, "decode_token", lambda token: _token_data(user_id="../bad-subject"))
+    with pytest.raises(HTTPException, match="expired or your token is invalid") as bad_subject:
+        dependencies.get_current_user(_request(), creds)
+    assert bad_subject.value.status_code == 401
+
     mfa_token = _token_data(is_mfa_setup=True)
     monkeypatch.setattr(auth_stub, "decode_token", lambda token: mfa_token)
     with pytest.raises(HTTPException, match="MFA setup token"):
         dependencies.get_current_user(_request(), creds)
+
+    monkeypatch.setattr(auth_stub, "decode_token", lambda token: _token_data())
+    monkeypatch.setattr(
+        auth_stub,
+        "get_user_by_id",
+        lambda user_id: (_ for _ in ()).throw(ValueError("bad subject")),
+    )
+    with pytest.raises(HTTPException, match="expired or your token is invalid") as bad_user_lookup:
+        dependencies.get_current_user(_request(), creds)
+    assert bad_user_lookup.value.status_code == 401
 
     inactive_user = types.SimpleNamespace(is_active=False)
     monkeypatch.setattr(auth_stub, "decode_token", lambda token: _token_data())
@@ -261,6 +276,19 @@ def test_current_user_and_permission_dependency_edges(monkeypatch):
     assert resolved.permissions == ["read:traces", "write:traces"]
     assert resolved.group_ids == ["g1", "2"]
     assert rate_limit_calls[0]["key"] == "user:u1"
+
+    monkeypatch.setattr(auth_stub, "decode_token", lambda token: _token_data())
+    monkeypatch.setattr(auth_stub, "get_user_by_id", lambda user_id: live_user)
+    monkeypatch.setattr(
+        auth_stub,
+        "get_user_permissions",
+        lambda user: (_ for _ in ()).throw(TypeError("permissions unavailable")),
+    )
+    with pytest.raises(HTTPException, match="expired or your token is invalid") as hydrate_error:
+        dependencies.get_current_user(_request(), creds)
+    assert hydrate_error.value.status_code == 401
+
+    monkeypatch.setattr(auth_stub, "get_user_permissions", lambda user: ["read:traces", "write:traces"])
 
     with pytest.raises(HTTPException, match="You need to log in"):
         dependencies.get_current_user_or_mfa_setup(_request(), None)

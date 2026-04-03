@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import Depends, Query, HTTPException, status
+from fastapi import Body, Depends, Query, HTTPException, Path, status
 from pydantic import BaseModel
 
 from middleware.dependencies import apply_scoped_rate_limit, auth_service, require_permission, require_permission_with_scope
@@ -20,7 +20,7 @@ from middleware.error_handlers import handle_route_errors
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUpdateRequest, ApiKeyShareUser, ApiKeyUpdate
 from models.access.auth_models import Permission, TokenData
 
-from .shared import router, rtp
+from .shared import SAFE_PATH_ID_PATTERN, router, rtp
 
 
 class HideTogglePayload(BaseModel):
@@ -48,8 +48,8 @@ async def create_api_key(
 @router.patch("/api-keys/{key_id}", response_model=ApiKey)
 @handle_route_errors()
 async def update_api_key(
-    key_id: str,
-    key_update: ApiKeyUpdate,
+    key_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
+    key_update: ApiKeyUpdate = Body(...),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_API_KEYS, "auth")),
 ) -> ApiKey:
     return await rtp(auth_service.update_api_key, current_user.user_id, key_id, key_update)
@@ -58,7 +58,7 @@ async def update_api_key(
 @router.post("/api-keys/{key_id}/otlp-token/regenerate", response_model=ApiKey)
 @handle_route_errors()
 async def regenerate_api_key_otlp_token(
-    key_id: str,
+    key_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_API_KEYS, "auth")),
 ) -> ApiKey:
     return await rtp(auth_service.regenerate_api_key_otlp_token, current_user.user_id, key_id)
@@ -67,7 +67,7 @@ async def regenerate_api_key_otlp_token(
 @router.delete("/api-keys/{key_id}")
 @handle_route_errors()
 async def delete_api_key(
-    key_id: str,
+    key_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.DELETE_API_KEYS, "auth")),
 ) -> dict[str, str]:
     if not await rtp(auth_service.delete_api_key, current_user.user_id, key_id):
@@ -78,8 +78,8 @@ async def delete_api_key(
 @router.post("/api-keys/{key_id}/hide")
 @handle_route_errors()
 async def hide_api_key(
-    key_id: str,
-    payload: HideTogglePayload,
+    key_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
+    payload: HideTogglePayload = Body(...),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_API_KEYS, "auth")),
 ) -> dict[str, object]:
     await rtp(auth_service.set_api_key_hidden, current_user.user_id, key_id, bool(payload.hidden))
@@ -89,7 +89,7 @@ async def hide_api_key(
 @router.get("/api-keys/{key_id}/shares", response_model=List[ApiKeyShareUser])
 @handle_route_errors()
 async def get_api_key_shares(
-    key_id: str,
+    key_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_API_KEYS, "auth")),
 ) -> List[ApiKeyShareUser]:
     try:
@@ -108,8 +108,8 @@ async def get_api_key_shares(
 @router.put("/api-keys/{key_id}/shares", response_model=List[ApiKeyShareUser])
 @handle_route_errors()
 async def put_api_key_shares(
-    key_id: str,
-    payload: ApiKeyShareUpdateRequest,
+    key_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
+    payload: ApiKeyShareUpdateRequest = Body(...),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_API_KEYS, "auth")),
 ) -> List[ApiKeyShareUser]:
     result = await rtp(
@@ -126,8 +126,8 @@ async def put_api_key_shares(
 @router.delete("/api-keys/{key_id}/shares/{shared_user_id}")
 @handle_route_errors()
 async def remove_api_key_share(
-    key_id: str,
-    shared_user_id: str,
+    key_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
+    shared_user_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_API_KEYS, "auth")),
 ) -> dict[str, str]:
     if not await rtp(

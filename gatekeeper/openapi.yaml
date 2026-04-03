@@ -4,307 +4,67 @@ info:
   version: 0.0.2
 paths:
   /api/gateway/validate:
-    get:
-      tags:
-      - gateway
-      summary: Validate Otlp Token
-      operationId: validate_otlp_token_api_gateway_validate_put
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '404':
-          description: Not Found
-        '429':
-          description: Too Many Requests
-        '503':
-          description: Service Unavailable
-    put:
-      tags:
-      - gateway
-      summary: Validate Otlp Token
-      operationId: validate_otlp_token_api_gateway_validate_put
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '404':
-          description: Not Found
-        '429':
-          description: Too Many Requests
-        '503':
-          description: Service Unavailable
-        '400':
-          description: Bad Request
     post:
       tags:
       - gateway
-      summary: Validate Otlp Token
-      operationId: validate_otlp_token_api_gateway_validate_put
+      summary: Validate OTLP Token
+      description: Validates an OTLP token and returns scoped organization metadata.
+      operationId: validate_otlp_token_api_gateway_validate_post
       responses:
         '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '404':
-          description: Not Found
-        '429':
-          description: Too Many Requests
-        '503':
-          description: Service Unavailable
-        '400':
-          description: Bad Request
-    delete:
-      tags:
-      - gateway
-      summary: Validate Otlp Token
-      operationId: validate_otlp_token_api_gateway_validate_put
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '404':
-          description: Not Found
-        '429':
-          description: Too Many Requests
-        '503':
-          description: Service Unavailable
-        '400':
-          description: Bad Request
-    patch:
-      tags:
-      - gateway
-      summary: Validate Otlp Token
-      operationId: validate_otlp_token_api_gateway_validate_put
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '404':
-          description: Not Found
-        '429':
-          description: Too Many Requests
-        '503':
-          description: Service Unavailable
-        '400':
-          description: Bad Request
-  /api/gateway/validate/{path}:
-    put:
-      tags:
-      - gateway
-      summary: Validate Otlp Token With Path
-      operationId: validate_otlp_token_with_path_api_gateway_validate__path__put
-      parameters:
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Path
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
+          description: Validation result with resolved organization scope.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '404':
-          description: Not Found
-        '429':
-          description: Too Many Requests
-        '503':
-          description: Service Unavailable
+                $ref: '#/components/schemas/ValidateTokenResponse'
         '400':
           description: Bad Request
-    get:
-      tags:
-      - gateway
-      summary: Validate Otlp Token With Path
-      operationId: validate_otlp_token_with_path_api_gateway_validate__path__put
-      parameters:
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Path
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized
-        '403':
-          description: Forbidden
-        '404':
-          description: Not Found
-        '429':
-          description: Too Many Requests
-        '503':
-          description: Service Unavailable
-    patch:
-      tags:
-      - gateway
-      summary: Validate Otlp Token With Path
-      operationId: validate_otlp_token_with_path_api_gateway_validate__path__put
-      parameters:
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Path
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-        '401':
-          description: Unauthorized
+                $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Forbidden
-        '404':
-          description: Not Found
-        '429':
-          description: Too Many Requests
-        '503':
-          description: Service Unavailable
-        '400':
-          description: Bad Request
-    delete:
-      tags:
-      - gateway
-      summary: Validate Otlp Token With Path
-      operationId: validate_otlp_token_with_path_api_gateway_validate__path__put
-      parameters:
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Path
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not Found
-        '429':
-          description: Too Many Requests
-        '503':
-          description: Service Unavailable
-        '400':
-          description: Bad Request
-    post:
-      tags:
-      - gateway
-      summary: Validate Otlp Token With Path
-      operationId: validate_otlp_token_with_path_api_gateway_validate__path__put
-      parameters:
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Path
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '404':
-          description: Not Found
+                $ref: '#/components/schemas/ErrorResponse'
         '429':
           description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '503':
           description: Service Unavailable
-        '400':
-          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - OtlpTokenHeader: []
   /api/gateway/health:
     get:
       tags:
       - gateway
-      summary: Health
+      summary: Gateway Health
+      description: Returns health information for the gateway router surface.
       operationId: health_api_gateway_health_get
       responses:
         '200':
-          description: Successful Response
+          description: Current gateway router health status.
           content:
             application/json:
               schema:
@@ -314,47 +74,69 @@ paths:
                 title: Response Health Api Gateway Health Get
   /health:
     get:
-      summary: Health Root
+      summary: Service Health
+      description: Returns a lightweight health status for gatekeeper.
       operationId: health_root_health_get
       responses:
         '200':
-          description: Successful Response
+          description: The current health status for gatekeeper.
           content:
             application/json:
               schema:
-                additionalProperties:
-                  type: string
-                type: object
-                title: Response Health Root Health Get
+                $ref: '#/components/schemas/HealthResponse'
 components:
   schemas:
-    HTTPValidationError:
+    HealthResponse:
       properties:
-        detail:
-          items:
-            $ref: '#/components/schemas/ValidationError'
-          type: array
-          title: Detail
-      type: object
-      title: HTTPValidationError
-    ValidationError:
-      properties:
-        loc:
-          items:
-            anyOf:
-            - type: string
-            - type: integer
-          type: array
-          title: Location
-        msg:
+        status:
           type: string
-          title: Message
-        type:
+          title: Status
+        service:
           type: string
-          title: Error Type
+          title: Service
       type: object
       required:
-      - loc
-      - msg
-      - type
-      title: ValidationError
+      - status
+      - service
+      title: HealthResponse
+    ValidateTokenResponse:
+      properties:
+        org_id:
+          type: string
+          title: Org Id
+          description: Resolved organization identifier for the OTLP token.
+      type: object
+      required:
+      - org_id
+      title: ValidateTokenResponse
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          title: Error
+          description: Stable error code identifier when available.
+        message:
+          type: string
+          title: Message
+          description: Human-readable error message.
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+          description: Request correlation identifier when available.
+        detail:
+          type: string
+          title: Detail
+          description: Legacy FastAPI error message field.
+      required:
+      - detail
+      title: ErrorResponse
+  securitySchemes:
+    OtlpTokenHeader:
+      type: apiKey
+      description: OTLP token used to resolve organization scope in the gateway.
+      in: header
+      name: x-otlp-token
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema

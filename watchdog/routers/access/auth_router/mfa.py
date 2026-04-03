@@ -21,7 +21,7 @@ from middleware.dependencies import (
 from models.access.auth_models import Permission, TokenData
 from models.access.user_models import MfaDisableRequest, MfaVerifyRequest, RecoveryCodesResponse, TotpEnrollResponse
 
-from .shared import USER_NOT_FOUND, router, rtp
+from .shared import SAFE_PATH_ID_PATTERN, USER_NOT_FOUND, router, rtp
 
 
 @router.post("/mfa/enroll", response_model=TotpEnrollResponse)
@@ -66,7 +66,7 @@ async def mfa_disable(
 
 @router.post("/users/{user_id}/mfa/reset")
 async def admin_reset_user_mfa(
-    user_id: str = Path(..., min_length=1, max_length=200),
+    user_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     current_user: TokenData = Depends(require_any_permission_with_scope([Permission.MANAGE_USERS], "auth")),
 ) -> dict[str, str]:
     if not await rtp(auth_service.reset_totp, user_id, current_user.user_id):
