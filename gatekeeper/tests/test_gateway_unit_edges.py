@@ -324,9 +324,6 @@ async def test_gateway_router_paths(monkeypatch):
     with_path = await gateway_router.validate_otlp_token_with_upstream_path(request, "tempo/v1/traces")
     assert with_path.status_code == 200
     assert with_path.headers["X-Scope-OrgID"] == "tenant-1"
-    with_path_alias = await gateway_router.validate_otlp_token_with_path(request, "tempo/v1/traces")
-    assert with_path_alias.status_code == 200
-    assert with_path_alias.headers["X-Scope-OrgID"] == "tenant-1"
     assert await gateway_router.health() == gateway_router.service.health()
 
     monkeypatch.setattr(GatewayAuthService, "validate_otlp_token", lambda self, token: None)

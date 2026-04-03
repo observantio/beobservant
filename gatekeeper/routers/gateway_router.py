@@ -96,14 +96,6 @@ async def validate_otlp_token_with_upstream_path(
     return _validate_otlp_token_request(request, otlp_token)
 
 
-async def validate_otlp_token_with_path(
-    request: Request,
-    upstream_path: str,
-    otlp_token: str | None = Security(otlp_token_header),
-) -> Response:
-    return await validate_otlp_token_with_upstream_path(request, upstream_path, otlp_token)
-
-
 @router.get(
     "/health",
     summary="Gateway Health",
