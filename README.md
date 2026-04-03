@@ -10,13 +10,15 @@
   <img src="https://img.shields.io/badge/RCA-AI--assisted-7c3aed?style=flat-square" alt="RCA" />
 </p>
 
+</div>
+<div>
 <p><strong>Self-hosted observability control plane for multi-tenant teams.</strong></p>
 
 <p>
 Watchdog is built around Grafana, Loki, Tempo, Mimir, and Alertmanager, with application services that add tenancy, access control, alert workflows, and AI-assisted root cause analysis.
 </p>
-
 </div>
+
 
 ![Observantio Quick Demo](assets/watchdog.gif)
 
