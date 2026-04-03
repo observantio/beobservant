@@ -61,7 +61,8 @@ run_suite() {
       --cov-report=xml:"${COVERAGE_DIR}/${service_dir}-coverage.xml" \
       --cov-report=html:"${COVERAGE_DIR}/${service_dir}-html" \
       --cov-fail-under="${COVERAGE_THRESHOLD}" \
-      -rA \
+      -ra \
+      --show-capture=no \
       --durations=10
   )
 }
