@@ -387,6 +387,30 @@ export default function RuleEditor({
       .filter(Boolean);
   }, [formData.notificationChannels, channels, selectableChannelIds]);
 
+  useEffect(() => {
+    const selected = Array.isArray(formData.notificationChannels)
+      ? formData.notificationChannels.map((id) => String(id || "")).filter(Boolean)
+      : [];
+    if (!selected.length) return;
+    const pruned = selected.filter((channelId) => selectableChannelIds.has(channelId));
+    if (pruned.length === selected.length) return;
+    setFormData((prev) => {
+      const prevSelected = Array.isArray(prev.notificationChannels)
+        ? prev.notificationChannels.map((id) => String(id || "")).filter(Boolean)
+        : [];
+      if (
+        prevSelected.length === pruned.length &&
+        prevSelected.every((id, index) => id === pruned[index])
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        notificationChannels: pruned,
+      };
+    });
+  }, [formData.notificationChannels, selectableChannelIds]);
+
   const computeFormValidation = useCallback(() => {
     const { errors: baseErrors, warnings } = validateRuleForm(formData, labelPairs);
     const errors = { ...baseErrors };
@@ -1787,7 +1811,7 @@ export default function RuleEditor({
 
                   <p className="text-xs text-sre-text-muted leading-relaxed">
                     Visibility hierarchy for channel selection:
-                    private rules can select private channels only, group rules can select private channels and group channels shared to the same group(s), and tenant/public rules can select private channels plus group channels across groups.
+                    private rules can select private channels only, group rules can select private channels and group channels shared to the same group(s), and tenant/public rules can select private, group, and tenant/public channels.
                   </p>
 
                   <div className="space-y-3">

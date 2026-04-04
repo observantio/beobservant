@@ -648,8 +648,15 @@ export default function IntegrationsPage() {
   async function handleSaveChannel(payload) {
     try {
       const visibilityToUse = payload?.visibility || editingChannel?.visibility || activeTab;
+      const cleanConfig =
+        payload && typeof payload.config === "object" && payload.config !== null
+          ? payload.config
+          : {};
       const finalPayload = {
-        ...payload,
+        name: String(payload?.name || "").trim(),
+        type: String(payload?.type || "").trim(),
+        enabled: Boolean(payload?.enabled ?? true),
+        config: cleanConfig,
         visibility: visibilityToUse,
         sharedGroupIds: visibilityToUse === "group" ? payload.sharedGroupIds || [] : [],
       };

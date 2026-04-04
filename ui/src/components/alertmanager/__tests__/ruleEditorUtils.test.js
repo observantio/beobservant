@@ -80,7 +80,7 @@ describe("ruleEditorUtils", () => {
     expect(isChannelSelectableForRuleVisibility("group", "tenant")).toBe(false);
     expect(isChannelSelectableForRuleVisibility("tenant", "private")).toBe(true);
     expect(isChannelSelectableForRuleVisibility("tenant", "group")).toBe(true);
-    expect(isChannelSelectableForRuleVisibility("tenant", "tenant")).toBe(false);
+    expect(isChannelSelectableForRuleVisibility("tenant", "tenant")).toBe(true);
 
     const filtered = filterSelectableChannels(
       [

@@ -111,7 +111,7 @@ describe("RuleEditor notification channel section", () => {
     expect(screen.queryByText("Tenant Channel")).not.toBeInTheDocument();
   });
 
-  it("shows channel-visibility error when selected channel becomes invalid after visibility change", async () => {
+  it("auto-drops invalid selected channels after visibility change and clears visibility error", async () => {
     useAuth.mockReturnValue({ hasPermission: () => true, user: { id: "u-1" } });
     await renderRuleEditor({
       channels: mixedChannels,
@@ -127,9 +127,11 @@ describe("RuleEditor notification channel section", () => {
       target: { value: "private" },
     });
 
-    expect(
-      screen.getByText(/not allowed for private visibility/i),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/not allowed for private visibility/i),
+      ).not.toBeInTheDocument();
+    });
   });
 });
 

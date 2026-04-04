@@ -16,15 +16,28 @@ export default function ChannelEditor({
   allowedTypes = [],
   visibility = "private",
 }) {
+  const sanitizeChannelForEdit = (source, fallbackVisibility) => {
+    const incoming = source || {};
+    return {
+      name: String(incoming.name || ""),
+      type: String(incoming.type || "webhook"),
+      enabled: Boolean(incoming.enabled ?? true),
+      config: typeof incoming.config === "object" && incoming.config !== null ? { ...incoming.config } : {},
+      visibility: String(incoming.visibility || fallbackVisibility || "private"),
+      sharedGroupIds:
+        incoming.sharedGroupIds || incoming.shared_group_ids || [],
+    };
+  };
+
   const incomingSharedGroupIds =
     channel?.sharedGroupIds || channel?.shared_group_ids || [];
   const [formData, setFormData] = useState(
-    channel || {
+    channel ? sanitizeChannelForEdit(channel, visibility) : {
       name: "",
       type: "webhook",
       enabled: true,
       config: {},
-      visibility: channel?.visibility || visibility,
+      visibility,
       sharedGroupIds: incomingSharedGroupIds,
     },
   );
@@ -41,9 +54,9 @@ export default function ChannelEditor({
     if (channel) {
       const normalizedSharedGroupIds =
         channel.sharedGroupIds || channel.shared_group_ids || [];
+      const sanitized = sanitizeChannelForEdit(channel, visibility);
       setFormData({
-        ...channel,
-        visibility: channel.visibility || visibility,
+        ...sanitized,
         sharedGroupIds: normalizedSharedGroupIds,
       });
       setSelectedGroups(new Set(normalizedSharedGroupIds));
@@ -82,8 +95,9 @@ export default function ChannelEditor({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const sanitized = sanitizeChannelForEdit(formData, visibility);
     onSave({
-      ...formData,
+      ...sanitized,
       sharedGroupIds: Array.from(selectedGroups),
     });
   };

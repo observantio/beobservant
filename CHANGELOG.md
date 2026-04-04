@@ -17,7 +17,7 @@ All notable changes to this project are documented here.
 - Updated AlertManager rule-channel compatibility UX and Guide documentation to reflect explicit visibility hierarchy:
   - private rules can invoke private owner channels only.
   - group rules can invoke private channels and overlapping group channels.
-  - tenant/public rules can invoke private channels and any group channel.
+  - tenant/public rules can invoke private channels, overlapping group channels, and tenant/public channels.
 
 ## [v0.0.2] - 2026-03-26
 

@@ -113,10 +113,14 @@ describe("ChannelEditor coverage", () => {
 
   it("covers channel hydration, empty allowed types, and load-groups error", async () => {
     getGroups.mockRejectedValueOnce(new Error("group load failed"));
+    const onSave = vi.fn();
 
     render(
       <ChannelEditor
         channel={{
+          id: "ch-1",
+          createdBy: "u-1",
+          isHidden: false,
           name: "Existing",
           type: "webhook",
           enabled: true,
@@ -124,7 +128,7 @@ describe("ChannelEditor coverage", () => {
           shared_group_ids: ["g2"],
           visibility: "group",
         }}
-        onSave={vi.fn()}
+        onSave={onSave}
         onCancel={vi.fn()}
         allowedTypes={["not-enabled"]}
         visibility="tenant"
@@ -139,5 +143,19 @@ describe("ChannelEditor coverage", () => {
     expect(
       screen.getByText(/No channel types are enabled by organization policy/i),
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Save Channel/i }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Existing",
+        type: "webhook",
+        visibility: "group",
+        sharedGroupIds: ["g2"],
+      }),
+    );
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty("id");
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty("createdBy");
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty("isHidden");
   });
 });

@@ -115,7 +115,7 @@ export function isChannelSelectableForRuleVisibility(
     }
     return false;
   }
-  return channelScope === "private" || channelScope === "group";
+  return channelScope === "private" || channelScope === "group" || channelScope === "public";
 }
 
 export function filterSelectableChannels(

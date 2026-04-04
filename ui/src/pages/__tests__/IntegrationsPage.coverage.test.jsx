@@ -176,6 +176,18 @@ describe("IntegrationsPage coverage", () => {
       expect(api.createNotificationChannel).toHaveBeenCalled();
       expect(toastSuccess).toHaveBeenCalledWith("Channel saved");
     });
+    const createPayload = api.createNotificationChannel.mock.calls[0][0];
+    expect(createPayload).toEqual(
+      expect.objectContaining({
+        name: "chan-new",
+        type: "email",
+        visibility: "private",
+        sharedGroupIds: [],
+      }),
+    );
+    expect(createPayload).not.toHaveProperty("id");
+    expect(createPayload).not.toHaveProperty("createdBy");
+    expect(createPayload).not.toHaveProperty("isHidden");
 
     fireEvent.click(screen.getByRole("button", { name: /Edit channel/i }));
     fireEvent.click(screen.getByRole("button", { name: /submit-channel/i }));
@@ -186,6 +198,18 @@ describe("IntegrationsPage coverage", () => {
         expect.objectContaining({ name: "chan-new" }),
       );
     });
+    const updatePayload = api.updateNotificationChannel.mock.calls[0][1];
+    expect(updatePayload).toEqual(
+      expect.objectContaining({
+        name: "chan-new",
+        type: "email",
+        visibility: "private",
+        sharedGroupIds: [],
+      }),
+    );
+    expect(updatePayload).not.toHaveProperty("id");
+    expect(updatePayload).not.toHaveProperty("createdBy");
+    expect(updatePayload).not.toHaveProperty("isHidden");
 
     fireEvent.click(screen.getByRole("button", { name: /Test channel/i }));
     await waitFor(() => {
