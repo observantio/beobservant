@@ -32,6 +32,7 @@ export default function ApiKeyPage() {
   const [allUsers, setAllUsers] = useState([]);
   const [allGroups, setAllGroups] = useState([]);
   const [shareSearch, setShareSearch] = useState("");
+  const [shareModalTab, setShareModalTab] = useState("groups");
   const [selectedShareUserIds, setSelectedShareUserIds] = useState([]);
   const [selectedShareGroupIds, setSelectedShareGroupIds] = useState([]);
   const [revealedOtlpTokens, setRevealedOtlpTokens] = useState({});
@@ -265,6 +266,7 @@ export default function ApiKeyPage() {
     setSelectedShareUserIds(selectedUsers);
     setSelectedShareGroupIds(inferredGroups);
     setShareSearch("");
+    setShareModalTab("groups");
     setShowShareModal(true);
   };
 
@@ -522,14 +524,14 @@ export default function ApiKeyPage() {
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="py-1 px-3"
+                  className="py-1 px-3 font-normal"
                   onClick={() => setShowDefaultModal(true)}
                 >
                   Update Default Key
                 </Button>
                 <Button
                   size="sm"
-                  className="py-1 px-3"
+                  className="py-1 px-3 font-normal"
                   onClick={() => setShowAddModal(true)}
                   disabled={atApiKeyLimit}
                   title={
@@ -543,7 +545,7 @@ export default function ApiKeyPage() {
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="py-1 px-3"
+                  className="py-1 px-3 font-normal"
                   onClick={() => {
                     if (!activeOwnedKeyCandidate) return;
                     setYamlModalKeyId(activeOwnedKeyCandidate.id);
@@ -652,8 +654,11 @@ export default function ApiKeyPage() {
                           </div>
                         )}
                         {key.is_shared && key.owner_username && (
-                          <div className="text-xs text-sre-text-muted">
-                            Shared by {key.owner_username}
+                          <div className="text-xs text-sre-text-muted inline-flex items-center gap-1.5">
+                            <span className="material-icons text-[14px]">
+                              person
+                            </span>
+                            <span>Shared by {key.owner_username}</span>
                           </div>
                         )}
                         {key.is_hidden && (
@@ -662,9 +667,14 @@ export default function ApiKeyPage() {
                         {!key.is_shared &&
                           Array.isArray(key.shared_with) &&
                           key.shared_with.length > 0 && (
-                            <div className="text-xs text-sre-text-muted">
-                              Shared with {key.shared_with.length} user
-                              {key.shared_with.length === 1 ? "" : "s"}
+                            <div className="text-xs text-sre-text-muted inline-flex items-center gap-1.5">
+                              <span className="material-icons text-[14px]">
+                                groups
+                              </span>
+                              <span>
+                                Shared with {key.shared_with.length} user
+                                {key.shared_with.length === 1 ? "" : "s"}
+                              </span>
                             </div>
                           )}
                       </td>
@@ -1083,6 +1093,7 @@ export default function ApiKeyPage() {
           onClose={() => {
             setShowShareModal(false);
             setSelectedShareGroupIds([]);
+            setShareModalTab("groups");
           }}
           title={`Share API Key${keyToShare ? `: ${keyToShare.name}` : ""}`}
           size="lg"
@@ -1093,68 +1104,149 @@ export default function ApiKeyPage() {
               Select users who can view and use this key. Owner retains
               edit/delete control.
             </div>
-            <div className="p-3 rounded border border-sre-border bg-sre-background">
-              <div className="text-xs font-medium text-sre-text mb-2">
-                Share with groups you are in
-              </div>
-              {myShareableGroups.length > 0 ? (
-                <div className="space-y-2 max-h-32 overflow-auto">
-                  {myShareableGroups.map((group) => (
-                    <div
-                      key={group.id}
-                      className="flex items-center justify-between p-2 rounded hover:bg-sre-surface/50"
-                    >
-                      <div className="text-sm text-sre-text">{group.name}</div>
-                      <Checkbox
-                        checked={selectedShareGroupIds.includes(group.id)}
-                        onChange={() => handleToggleShareGroup(group.id)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-xs text-sre-text-muted">
-                  No eligible groups found.
-                </div>
-              )}
+            <div
+              className="flex gap-1 justify-center bg-sre-bg-alt/80 rounded-xl p-1"
+              role="tablist"
+              aria-label="API key sharing mode"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={shareModalTab === "groups"}
+                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 inline-flex items-center gap-2 ${
+                  shareModalTab === "groups"
+                    ? "bg-sre-primary text-white shadow-sm"
+                    : "bg-transparent text-sre-text-muted hover:text-sre-text hover:bg-sre-surface/70"
+                }`}
+                onClick={() => setShareModalTab("groups")}
+              >
+                <span
+                  className={`w-6 h-6 rounded-full inline-flex items-center justify-center ${
+                    shareModalTab === "groups"
+                      ? "bg-white/20 text-white"
+                      : "bg-sre-surface text-sre-text-muted"
+                  }`}
+                >
+                  <span className="material-icons text-[14px]">groups</span>
+                </span>
+                Groups
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={shareModalTab === "users"}
+                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 inline-flex items-center gap-2 ${
+                  shareModalTab === "users"
+                    ? "bg-sre-primary text-white shadow-sm"
+                    : "bg-transparent text-sre-text-muted hover:text-sre-text hover:bg-sre-surface/70"
+                }`}
+                onClick={() => setShareModalTab("users")}
+              >
+                <span
+                  className={`w-6 h-6 rounded-full inline-flex items-center justify-center ${
+                    shareModalTab === "users"
+                      ? "bg-white/20 text-white"
+                      : "bg-sre-surface text-sre-text-muted"
+                  }`}
+                >
+                  <span className="material-icons text-[14px]">person</span>
+                </span>
+                Users
+              </button>
             </div>
-            <Input
-              value={shareSearch}
-              className="text-sm"
-              onChange={(e) => setShareSearch(e.target.value)}
-              placeholder="Search by username or email"
-            />
 
-            <div className="max-h-64 overflow-auto ">
-              {filteredShareUsers
-                .filter((u) => u.id !== user?.id)
-                .map((u) => (
-                  <div
-                    key={u.id}
-                    className="flex items-center justify-between p-2 rounded hover:bg-sre-surface/50"
-                  >
-                    <div className="text-sm text-sre-text">
-                      {u.username} {u.email ? `<${u.email}>` : ""}
-                    </div>
-                    <Checkbox
-                      checked={selectedShareUserIds.includes(u.id)}
-                      onChange={() =>
-                        setSelectedShareUserIds((prev) =>
-                          prev.includes(u.id)
-                            ? prev.filter((id) => id !== u.id)
-                            : [...prev, u.id],
-                        )
-                      }
-                    />
-                  </div>
-                ))}
-              {filteredShareUsers.filter((u) => u.id !== user?.id).length ===
-                0 && (
-                <div className="p-2 text-sm text-sre-text-muted">
-                  No users found.
+            {shareModalTab === "groups" && (
+              <div className="p-3 rounded bg-sre-background">
+                <div className="text-xs font-medium text-sre-text mb-2">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="material-icons text-sm text-sre-text-muted">
+                      groups
+                    </span>
+                    Share with groups you are in
+                  </span>
                 </div>
-              )}
-            </div>
+                {myShareableGroups.length > 0 ? (
+                  <div className="space-y-2 max-h-64 overflow-auto">
+                    {myShareableGroups.map((group) => (
+                      <div
+                        key={group.id}
+                        className="flex items-center justify-between  rounded hover:bg-sre-surface/50"
+                      >
+                        <div className="text-sm text-sre-text inline-flex items-center gap-2">
+                          <span className="material-icons text-[16px] text-sre-text-muted">
+                            group
+                          </span>
+                          {group.name}
+                        </div>
+                        <Checkbox
+                          checked={selectedShareGroupIds.includes(group.id)}
+                          onChange={() => handleToggleShareGroup(group.id)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-sre-text-muted">
+                    No eligible groups found.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {shareModalTab === "users" && (
+              <>
+                <Input
+                  value={shareSearch}
+                  className="text-sm"
+                  onChange={(e) => setShareSearch(e.target.value)}
+                  placeholder="Search by username or email"
+                />
+
+                <div className="max-h-64 overflow-auto">
+                  {filteredShareUsers
+                    .filter((u) => u.id !== user?.id)
+                    .map((u) => (
+                      <div
+                        key={u.id}
+                        className="flex items-center justify-between rounded hover:bg-sre-surface/50"
+                      >
+                        <div className="text-sm text-sre-text flex items-center gap-4 mr-2">
+                          <div className="inline-flex items-center gap-2">
+                            <span className="material-icons text-[16px] text-sre-text-muted">
+                              person
+                            </span>{" "}
+                            <span>{u.username}</span>
+                          </div>
+                          {u.email && (
+                            <div className="text-xs text-sre-text-muted inline-flex items-center gap-1.5">
+                              <span className="material-icons text-[14px]">
+                                mail
+                              </span>{" "}
+                              <span>{u.email}</span>
+                            </div>
+                          )}
+                        </div>
+                        <Checkbox
+                          checked={selectedShareUserIds.includes(u.id)}
+                          onChange={() =>
+                            setSelectedShareUserIds((prev) =>
+                              prev.includes(u.id)
+                                ? prev.filter((id) => id !== u.id)
+                                : [...prev, u.id],
+                            )
+                          }
+                        />
+                      </div>
+                    ))}
+                  {filteredShareUsers.filter((u) => u.id !== user?.id).length ===
+                    0 && (
+                    <div className="p-2 text-sm text-sre-text-muted">
+                      No users found.
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
 
             <div className="flex justify-end gap-2">
               <Button
@@ -1162,6 +1254,7 @@ export default function ApiKeyPage() {
                 onClick={() => {
                   setShowShareModal(false);
                   setSelectedShareGroupIds([]);
+                  setShareModalTab("groups");
                 }}
               >
                 Cancel

@@ -55,7 +55,6 @@ watchdog = [
   "aiosmtplib",
   "tenacity",
   "pyyaml",
-  "aiokafka",
   "hvac",
 ]
 

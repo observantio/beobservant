@@ -867,7 +867,7 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={a.fingerprint || a.id || a.starts_at || idx}
-                          className="h-full p-4 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
+                          className="h-full p-4 bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border border-sre-border/50 shadow-sm hover:border-sre-primary/40 hover:shadow-md transition-all duration-200"
                         >
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
@@ -1187,10 +1187,10 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={rule.id}
-                          className={`h-full p-4 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+                          className={`h-full p-4 bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border shadow-sm hover:border-sre-primary/40 hover:shadow-md transition-all duration-200 ${
                             rule.isHidden || rule.is_hidden
                               ? "border-amber-400/60 opacity-90"
-                              : "border-sre-border"
+                              : "border-sre-border/50"
                           }`}
                         >
                           <div className="space-y-3">
@@ -1223,6 +1223,9 @@ export default function AlertManagerPage() {
                                   <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200">
                                     {rule.group || "default"}
                                   </span>
+                                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium font-mono bg-sre-bg-alt border border-sre-border text-sre-text">
+                                    {rule.duration || "1m"}
+                                  </span>
                                   {rule.orgId ? (
                                     <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium bg-sre-primary/10 text-sre-primary">
                                       Key:{" "}
@@ -1242,7 +1245,7 @@ export default function AlertManagerPage() {
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-1 rounded-xl bg-sre-bg-alt/70 p-1.5 shrink-0">
+                              <div className="flex items-center gap-1 rounded-xl bg-sre-bg-alt/70 p-1 shrink-0">
                                 {canHideRule && (
                                   <Button
                                     variant="ghost"
@@ -1253,14 +1256,14 @@ export default function AlertManagerPage() {
                                         !(rule.isHidden || rule.is_hidden),
                                       )
                                     }
-                                    className="h-9 w-9 p-0"
+                                    className="h-8 w-8 p-0"
                                     title={
                                       rule.isHidden || rule.is_hidden
                                         ? "Unhide Rule"
                                         : "Hide Rule"
                                     }
                                   >
-                                    <span className="material-icons text-[18px]">
+                                    <span className="material-icons text-base">
                                       {rule.isHidden || rule.is_hidden
                                         ? "visibility"
                                         : "visibility_off"}
@@ -1271,10 +1274,10 @@ export default function AlertManagerPage() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleTestRule(rule.id)}
-                                  className="h-9 w-9 p-0"
+                                  className="h-8 w-8 p-0"
                                   title="Test Rule"
                                 >
-                                  <span className="material-icons text-[18px]">
+                                  <span className="material-icons text-base">
                                     science
                                   </span>
                                 </Button>
@@ -1286,10 +1289,10 @@ export default function AlertManagerPage() {
                                     setRuleSeed(buildRuleSeedFromExisting(rule));
                                     setShowRuleEditor(true);
                                   }}
-                                  className="h-9 w-9 p-0"
+                                  className="h-8 w-8 p-0"
                                   title="Create from this rule"
                                 >
-                                  <span className="material-icons text-[18px]">
+                                  <span className="material-icons text-base">
                                     content_copy
                                   </span>
                                 </Button>
@@ -1301,10 +1304,10 @@ export default function AlertManagerPage() {
                                     setEditingRule(rule);
                                     setShowRuleEditor(true);
                                   }}
-                                  className="h-9 w-9 p-0"
+                                  className="h-8 w-8 p-0"
                                   title="Edit Rule"
                                 >
-                                  <span className="material-icons text-[18px]">
+                                  <span className="material-icons text-base">
                                     edit
                                   </span>
                                 </Button>
@@ -1312,35 +1315,22 @@ export default function AlertManagerPage() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleDeleteRule(rule.id)}
-                                  className="h-9 w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
                                   title="Delete Rule"
                                 >
-                                  <span className="material-icons text-[18px]">
+                                  <span className="material-icons text-base">
                                     delete
                                   </span>
                                 </Button>
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 w-full">
-                              <div className="rounded-lg border border-sre-border bg-sre-surface px-3 py-2.5 w-full">
-                                <div className="text-[11px] uppercase tracking-wide text-sre-text-muted">
-                                  Duration
-                                </div>
-                                <div className="text-base font-semibold text-sre-text">
-                                  {rule.duration || "1m"}
-                                </div>
-                              </div>
-                              <div className="rounded-lg border border-sre-border bg-sre-surface px-3 py-2.5 w-full">
-                                <div className="text-[11px] uppercase tracking-wide text-sre-text-muted">
-                                  Summary
-                                </div>
-                                <div
-                                  className="text-sm text-sre-text truncate"
-                                  title={rule.annotations?.summary || "No summary"}
-                                >
-                                  {rule.annotations?.summary || "No summary"}
-                                </div>
+                            <div className="w-full">
+                              <div
+                                className="text-sm text-sre-text-muted leading-relaxed line-clamp-2"
+                                title={rule.annotations?.summary || "No description provided"}
+                              >
+                                {rule.annotations?.summary || "No description provided"}
                               </div>
                             </div>
                           </div>
@@ -1445,10 +1435,10 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={s.id}
-                          className={`h-full p-4 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+                          className={`h-full p-4 bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border shadow-sm hover:border-sre-primary/40 hover:shadow-md transition-all duration-200 ${
                             s.isHidden || s.is_hidden
                               ? "border-amber-400/60 opacity-90"
-                              : "border-sre-border"
+                              : "border-sre-border/50"
                           }`}
                         >
                           <div className="flex items-start justify-between">
@@ -1542,14 +1532,14 @@ export default function AlertManagerPage() {
                                       !(s.isHidden || s.is_hidden),
                                     )
                                   }
-                                  className="p-2"
+                                  className="h-8 w-8 p-0"
                                   title={
                                     s.isHidden || s.is_hidden
                                       ? "Unhide Silence"
                                       : "Hide Silence"
                                   }
                                 >
-                                  <span className="material-icons text-base">
+                                  <span className="material-icons text-[15px]">
                                     {s.isHidden || s.is_hidden
                                       ? "visibility"
                                       : "visibility_off"}
@@ -1560,10 +1550,10 @@ export default function AlertManagerPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleDeleteSilence(s.id)}
-                                className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
                                 title="Delete Silence"
                               >
-                                <span className="material-icons text-base">
+                                <span className="material-icons text-[15px]">
                                   delete
                                 </span>
                               </Button>

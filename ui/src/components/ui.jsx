@@ -22,19 +22,19 @@ export function Button({
   ...props
 }) {
   const baseClasses =
-    "inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-sre-bg";
+    "inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none";
 
   const variants = {
     primary:
-      "bg-sre-primary hover:bg-sre-primary-light text-white shadow-glow-sm hover:shadow-glow focus:ring-sre-primary",
+      "bg-sre-primary hover:bg-sre-primary-light text-white shadow-glow-sm hover:shadow-glow",
     secondary:
-      "bg-sre-surface hover:bg-sre-surface-light text-sre-text border border-sre-border focus:ring-sre-surface",
+      "bg-sre-surface hover:bg-sre-surface-light text-sre-text border border-sre-border",
     success:
-      "bg-sre-success hover:bg-sre-success-light text-white focus:ring-sre-success",
+      "bg-sre-success hover:bg-sre-success-light text-white",
     danger:
-      "bg-sre-error hover:bg-sre-error-light text-white focus:ring-sre-error",
+      "bg-sre-error hover:bg-sre-error-light text-white",
     ghost:
-      "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface/50 focus:ring-sre-surface",
+      "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface/50",
   };
 
   const sizes = {
