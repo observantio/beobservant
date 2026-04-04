@@ -76,6 +76,8 @@ ML_MODELS     = ["fraud-xgb-v4.2","fraud-nn-v2.1","risk-lgbm-v3.0","anomaly-iso-
 SEARCH_IDXS   = ["products_v8","products_v7","catalog_primary","catalog_shadow"]
 WAREHOUSES    = ["WH-EAST-01","WH-WEST-02","WH-EU-01","WH-APAC-01"]
 HTTP_VERSIONS = ["HTTP/1.1","HTTP/2","HTTP/3"]
+TLS_ISSUERS3  = ["Let's Encrypt","DigiCert","GlobalSign"]
+TLS_ISSUERS2  = ["Let's Encrypt","DigiCert"]
 
 def pick(lst):       return random.choice(lst)
 def rand(a, b):      return random.randint(a, b)
@@ -240,7 +242,7 @@ WARN_TEMPLATES = {
     ],
     "gateway-service": [
         lambda: f"Circuit breaker approaching threshold | upstream={pick(list(SERVICE_ENDPOINTS.keys()))} state=closed failure_count={rand(3,8)} failure_threshold=10 failure_rate_pct={rand(30,80)} window_seconds=60 recovery_timeout_seconds=30 half_open_max_calls=5 last_failure_epoch={int(time.time())-rand(5,30)}",
-        lambda: f"TLS certificate expiry approaching | domain={pick(['api.example.com','payments.example.com','auth.example.com'])} expires_epoch={int(time.time())+rand(86400,864000)} days_remaining={rand(1,10)} issuer={pick(['Let\\'s Encrypt','DigiCert','GlobalSign'])} auto_renew_configured={pick(['true','false'])} alert_sent=true",
+        lambda: f"TLS certificate expiry approaching | domain={pick(['api.example.com','payments.example.com','auth.example.com'])} expires_epoch={int(time.time())+rand(86400,864000)} days_remaining={rand(1,10)} issuer={pick(TLS_ISSUERS3)} auto_renew_configured={pick(['true','false'])} alert_sent=true",
     ],
     "messaging-service": [
         lambda: f"Consumer lag growing | group_id=grp_{secrets.token_hex(6)} topic={pick(QUEUE_NAMES)} total_lag_records={rand(1000,1000000)} lag_per_partition_max={rand(1000,100000)} consume_rate_per_sec={rand(100,5000)} produce_rate_per_sec={rand(200,6000)} eta_to_catch_up_seconds={rand(60,3600)} scaling_recommended=true",
@@ -307,7 +309,7 @@ ERROR_TEMPLATES = {
         lambda: f"Invoice generation failed | customer_id={uid()} subscription_id=sub_{secrets.token_hex(8)} billing_period_start={int(time.time())-2592000} error={pick(['template_render_timeout','pdf_service_unavailable','tax_api_timeout','line_item_calculation_overflow'])} retry_count={rand(1,3)} manual_review_required=true support_case=BILL-{rand(10000,99999)}",
     ],
     "gateway-service": [
-        lambda: f"Certificate expired — TLS handshake failing | domain={pick(['api.example.com','payments.example.com','auth.example.com'])} expired_epoch={int(time.time())-rand(3600,86400)} issuer={pick(['Let\\'s Encrypt','DigiCert'])} error=SSL_CERTIFICATE_EXPIRED affected_routes={rand(5,50)} client_errors_per_minute={rand(100,5000)} cert_renewed={pick(['true','false'])} rollout_pending={pick(['true','false'])}",
+        lambda: f"Certificate expired — TLS handshake failing | domain={pick(['api.example.com','payments.example.com','auth.example.com'])} expired_epoch={int(time.time())-rand(3600,86400)} issuer={pick(TLS_ISSUERS2)} error=SSL_CERTIFICATE_EXPIRED affected_routes={rand(5,50)} client_errors_per_minute={rand(100,5000)} cert_renewed={pick(['true','false'])} rollout_pending={pick(['true','false'])}",
         lambda: f"Auth service unreachable — all requests failing authentication | auth_host=auth-service.internal:{rand(8080,9090)} error=ECONNREFUSED circuit_breaker=open affected_routes={rand(10,100)} requests_rejected_per_minute={rand(500,10000)} emergency_bypass_policy={pick(['none','allowlist_only','jwt_local_verify'])} bypass_activated={pick(['true','false'])} incident_id=INC-{rand(1000,9999)}",
     ],
     "messaging-service": [
