@@ -290,10 +290,6 @@ def _load_allowed_scope_ids_for_user(*, current_user: TokenData, default_scope_i
     return {scope_id for scope_id in allowed_scope_ids if scope_id}
 
 
-def _load_allowed_org_ids_for_user(*, current_user: TokenData, default_org_id: str) -> set[str]:
-    return _load_allowed_scope_ids_for_user(current_user=current_user, default_scope_id=default_org_id)
-
-
 def _scope_exists_in_other_tenants(*, scope_id: str | None = None, tenant_id: str, org_id: str | None = None) -> bool:
     resolved_scope_id = str(scope_id or org_id or "").strip()
     if not resolved_scope_id:

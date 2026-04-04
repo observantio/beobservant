@@ -178,7 +178,7 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
     )
 
 
-def test_load_allowed_org_ids_and_scope_conflict(monkeypatch):
+def test_load_allowed_scope_ids_and_scope_conflict(monkeypatch):
     class QueryStub:
         def __init__(self, value):
             self.value = value
@@ -219,7 +219,10 @@ def test_load_allowed_org_ids_and_scope_conflict(monkeypatch):
         yield db
 
     monkeypatch.setattr(dependencies, "get_db_session", session)
-    allowed = dependencies._load_allowed_org_ids_for_user(current_user=_token_data(), default_org_id="org-default")
+    allowed = dependencies._load_allowed_scope_ids_for_user(
+        current_user=_token_data(),
+        default_scope_id="org-default",
+    )
     assert allowed == {"org-live", "org-own", "org-shared", "org-default"}
     assert dependencies._scope_exists_in_other_tenants(org_id="org-own", tenant_id="tenant-a") is True
 
