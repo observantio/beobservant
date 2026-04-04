@@ -3,15 +3,16 @@ Module defines Pydantic models for Grafana dashboard-related data structures use
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from custom_types.json import JSONDict
+
 
 class DashboardMeta(BaseModel):
     is_starred: bool = Field(False, alias="isStarred", description="Whether the dashboard is starred")
@@ -20,6 +21,7 @@ class DashboardMeta(BaseModel):
     url: Optional[str] = Field(None, description="URL of the dashboard")
     version: Optional[int] = Field(None, description="Version number of the dashboard")
     model_config = ConfigDict(populate_by_name=True)
+
 
 class Dashboard(BaseModel):
     id: Optional[int] = Field(None, description="Unique identifier for the dashboard")
@@ -37,6 +39,7 @@ class Dashboard(BaseModel):
     editable: bool = Field(True, description="Whether the dashboard is editable")
     model_config = ConfigDict(populate_by_name=True)
 
+
 class DashboardCreate(BaseModel):
     dashboard: Dashboard = Field(..., description="Dashboard configuration")
     folder_id: int = Field(0, alias="folderId", description="ID of the folder to create the dashboard in")
@@ -44,12 +47,14 @@ class DashboardCreate(BaseModel):
     message: Optional[str] = Field(None, description="Commit message for the dashboard creation")
     model_config = ConfigDict(populate_by_name=True)
 
+
 class DashboardUpdate(BaseModel):
     dashboard: Dashboard = Field(..., description="Updated dashboard configuration")
     folder_id: Optional[int] = Field(None, alias="folderId", description="ID of the folder containing the dashboard")
     overwrite: bool = Field(True, description="Whether to overwrite existing dashboard")
     message: Optional[str] = Field(None, description="Commit message for the dashboard update")
     model_config = ConfigDict(populate_by_name=True)
+
 
 class DashboardSearchResult(BaseModel):
     id: int = Field(..., description="Unique identifier for the dashboard")

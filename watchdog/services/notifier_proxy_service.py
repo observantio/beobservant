@@ -3,9 +3,9 @@ Proxy client for forwarding alertmanager API calls to Notifier.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -125,9 +125,7 @@ class NotifierProxyService(BaseProxyService):
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="No active API key available for this operation",
                 )
-            context_token = self._sign_context_token(
-                current_user=current_user, api_key_id=api_key_id
-            )
+            context_token = self._sign_context_token(current_user=current_user, api_key_id=api_key_id)
 
         target = f"{self.base_url}{upstream_path}"
         body = await request.body()
@@ -205,5 +203,6 @@ class NotifierProxyService(BaseProxyService):
                 "X-Request-ID": corr,
             },
         )
+
 
 notifier_proxy_service = NotifierProxyService()

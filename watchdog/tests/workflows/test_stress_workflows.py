@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -84,7 +84,9 @@ async def test_concurrent_50_user_regression_workflow(monkeypatch: pytest.Monkey
     monkeypatch.setattr(auth_routes, "get_db_session", lambda: FakeCtx())
     monkeypatch.setattr(auth_routes.notification_service, "send_user_welcome_email", _send_user_welcome_email)
     monkeypatch.setattr(user_routes.notification_service, "send_user_welcome_email", _send_user_welcome_email)
-    monkeypatch.setattr(user_routes.notification_service, "send_temporary_password_email", _send_temporary_password_email)
+    monkeypatch.setattr(
+        user_routes.notification_service, "send_temporary_password_email", _send_temporary_password_email
+    )
     monkeypatch.setattr(grafana_proxy_router, "enforce_public_endpoint_security", lambda *args, **kwargs: None)
     monkeypatch.setattr(alertmanager_router.notifier_proxy_service, "forward", fake_forward)
     monkeypatch.setattr(tempo_router.tempo_service, "get_services", fake_get_services)
@@ -97,6 +99,7 @@ async def test_concurrent_50_user_regression_workflow(monkeypatch: pytest.Monkey
 
     try:
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as async_client:
+
             async def register_user(index: int) -> dict[str, str]:
                 username = f"stress-{index:02d}"
                 password = f"Password-{index:03d}!"
@@ -160,7 +163,9 @@ async def test_concurrent_50_user_regression_workflow(monkeypatch: pytest.Monkey
                 assert default_keys_after_hide.status_code == 200
                 assert default_keys_after_hide.json() == []
 
-                hidden_keys_response = await async_client.get("/api/auth/api-keys", headers=headers, params={"show_hidden": True})
+                hidden_keys_response = await async_client.get(
+                    "/api/auth/api-keys", headers=headers, params={"show_hidden": True}
+                )
                 assert hidden_keys_response.status_code == 200
                 assert hidden_keys_response.json()[0]["id"] == key_id
                 assert hidden_keys_response.json()[0]["is_hidden"] is True

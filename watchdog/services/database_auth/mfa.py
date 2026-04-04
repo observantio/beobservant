@@ -1,11 +1,16 @@
 """
-Database authentication service utilities for handling multi-factor authentication (MFA) operations, including TOTP enrollment, verification, and recovery code management. This module provides functions to enroll users in TOTP-based MFA, verify TOTP codes during login, generate and manage recovery codes for MFA, and disable or reset MFA settings for users as needed. The utilities in this module ensure that MFA operations are performed securely, with support for encryption of TOTP secrets and proper handling of recovery codes to enhance the security of user accounts in the database authentication service.
+Database authentication service utilities for handling multi-factor authentication (MFA) operations, including TOTP
+enrollment, verification, and recovery code management. This module provides functions to enroll users in TOTP-based
+MFA, verify TOTP codes during login, generate and manage recovery codes for MFA, and disable or reset MFA settings for
+users as needed. The utilities in this module ensure that MFA operations are performed securely, with support for
+encryption of TOTP secrets and proper handling of recovery codes to enhance the security of user accounts in the
+database authentication service.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -97,10 +102,7 @@ def _generate_recovery_codes(_service: DatabaseAuthService, count: int = 10) -> 
 
 
 def _hash_recovery_codes(_service: DatabaseAuthService, codes: List[str]) -> List[str]:
-    return [
-        bcrypt.hashpw(code.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-        for code in codes
-    ]
+    return [bcrypt.hashpw(code.encode("utf-8"), bcrypt.gensalt()).decode("utf-8") for code in codes]
 
 
 def _consume_recovery_code(_service: DatabaseAuthService, db_user: User, code: str) -> bool:
@@ -205,6 +207,7 @@ def reset_totp(service: DatabaseAuthService, user_id: str, admin_id: str) -> boo
         user.mfa_recovery_hashes = None
         service._log_audit(db, user.tenant_id, admin_id, "mfa.reset", "users", user.id, {"admin_id": admin_id})
         return True
+
 
 def mfa_setup_challenge(service: DatabaseAuthService, user: User) -> JSONDict:
     setup_token = create_mfa_setup_token_op(user)

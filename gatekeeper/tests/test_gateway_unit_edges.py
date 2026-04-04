@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import importlib
@@ -382,14 +382,25 @@ def test_gateway_service_remaining_branches(monkeypatch):
     proxied = _request(headers=[(b"x-forwarded-for", b"  "), (b"x-real-ip", b"198.51.100.20")])
     assert GatewayAuthService._trusted_proxy_peer(proxied) is True
     assert GatewayAuthService._client_ip(proxied) == "198.51.100.20"
-    assert GatewayAuthService._client_ip(Request({"type": "http", "headers": [], "scheme": "http", "path": "/", "query_string": b""})) == "unknown"
+    assert (
+        GatewayAuthService._client_ip(
+            Request({"type": "http", "headers": [], "scheme": "http", "path": "/", "query_string": b""})
+        )
+        == "unknown"
+    )
 
     service = GatewayAuthService(rate_limit_per_minute=10, ip_allowlist="127.0.0.1")
+
     class FakeNamedDatabaseUnavailable(Exception):
         pass
+
     FakeNamedDatabaseUnavailable.__name__ = "DatabaseUnavailable"
 
-    monkeypatch.setattr(GatewayAuthService, "_fetch_org_from_api", lambda self, token: (_ for _ in ()).throw(FakeNamedDatabaseUnavailable("same-name")))
+    monkeypatch.setattr(
+        GatewayAuthService,
+        "_fetch_org_from_api",
+        lambda self, token: (_ for _ in ()).throw(FakeNamedDatabaseUnavailable("same-name")),
+    )
     with pytest.raises(FakeNamedDatabaseUnavailable):
         service.validate_otlp_token("tok")
 
@@ -531,7 +542,9 @@ def test_hybrid_rate_limiter_warns_once(monkeypatch):
     fallback = TokenRateLimiter(2)
     limiter = HybridTokenRateLimiter(BrokenPrimary(), fallback)
     times = iter([100.0, 101.0, 150.5])
-    monkeypatch.setattr(importlib.import_module("services.rate_limits.hybrid_token_rate_limiter").time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(
+        importlib.import_module("services.rate_limits.hybrid_token_rate_limiter").time, "monotonic", lambda: next(times)
+    )
     limiter.enforce("a")
     limiter.enforce("b")
     limiter.enforce("c")
@@ -540,7 +553,9 @@ def test_hybrid_rate_limiter_warns_once(monkeypatch):
 def test_token_rate_limiter_and_token_cache_eviction(monkeypatch):
     limiter = TokenRateLimiter(1)
     times = iter([0.0, 0.0, 61.0])
-    monkeypatch.setattr(importlib.import_module("services.rate_limits.token_rate_limiter").time, "time", lambda: next(times))
+    monkeypatch.setattr(
+        importlib.import_module("services.rate_limits.token_rate_limiter").time, "time", lambda: next(times)
+    )
     limiter.enforce("ip")
     with pytest.raises(HTTPException):
         limiter.enforce("ip")
@@ -550,7 +565,9 @@ def test_token_rate_limiter_and_token_cache_eviction(monkeypatch):
     cache.set("tok-1", "org-1")
     assert cache.get("tok-1") == (True, "org-1")
     monotonic_values = itertools.count(start=0.0, step=11.0)
-    monkeypatch.setattr(importlib.import_module("services.token_cache.memory").time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(
+        importlib.import_module("services.token_cache.memory").time, "monotonic", lambda: next(monotonic_values)
+    )
     cache = TokenCache(ttl=10, max_size=256)
     cache.set("tok-2", "org-2")
     assert cache.get("tok-2") == (False, None)

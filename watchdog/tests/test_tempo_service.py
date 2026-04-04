@@ -1,16 +1,18 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
 from tests._env import ensure_test_env
+
 ensure_test_env()
 from models.observability.tempo_models import TraceQuery
 from services.tempo_service import TempoService, _dict_list
+
 
 def test_search_traces_fetches_full_traces_with_concurrency():
     service = TempoService(tempo_url="http://tempo.test")

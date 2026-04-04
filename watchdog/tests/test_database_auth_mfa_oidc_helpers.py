@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -113,9 +113,18 @@ def test_delegation_helpers_and_oidc_pure_helpers(monkeypatch):
     actor = SimpleNamespace(groups=[], permissions=[])
     db = _DB(user=actor)
     service = SimpleNamespace(_collect_permissions=lambda user: ["read:users"])
-    assert delegation_mod.resolve_actor_permissions(service, db=db, actor_user_id=None, tenant_id="tenant", actor_permissions=["explicit"]) == {"explicit"}
-    assert delegation_mod.resolve_actor_permissions(service, db=db, actor_user_id=None, tenant_id="tenant", actor_permissions=None) == set()
-    assert delegation_mod.resolve_actor_permissions(service, db=db, actor_user_id="u1", tenant_id="tenant", actor_permissions=None) == {"read:users"}
+    assert delegation_mod.resolve_actor_permissions(
+        service, db=db, actor_user_id=None, tenant_id="tenant", actor_permissions=["explicit"]
+    ) == {"explicit"}
+    assert (
+        delegation_mod.resolve_actor_permissions(
+            service, db=db, actor_user_id=None, tenant_id="tenant", actor_permissions=None
+        )
+        == set()
+    )
+    assert delegation_mod.resolve_actor_permissions(
+        service, db=db, actor_user_id="u1", tenant_id="tenant", actor_permissions=None
+    ) == {"read:users"}
 
     claims = {"permissions": [" read:users ", "bad"], "scp": ["write:users", " "]}
     assert oidc_mod._claim_str({"email": " a@b.c "}, "email") == "a@b.c"
@@ -167,8 +176,21 @@ def test_mfa_helpers_and_flows(monkeypatch):
     user = SimpleNamespace(mfa_recovery_hashes=["bad"])
     assert mfa_mod._consume_recovery_code(SimpleNamespace(), user, "one") is False
 
-    service = SimpleNamespace(_log_audit=lambda *args, **kwargs: None, verify_password=lambda password, hashed: password == "pw", _MFA_SETUP_RESPONSE="mfa_setup_required")
-    user = SimpleNamespace(id="u1", email="a@b.c", username="alice", totp_secret="enc", tenant_id="tenant", mfa_enabled=False, must_setup_mfa=True, mfa_recovery_hashes=[])
+    service = SimpleNamespace(
+        _log_audit=lambda *args, **kwargs: None,
+        verify_password=lambda password, hashed: password == "pw",
+        _MFA_SETUP_RESPONSE="mfa_setup_required",
+    )
+    user = SimpleNamespace(
+        id="u1",
+        email="a@b.c",
+        username="alice",
+        totp_secret="enc",
+        tenant_id="tenant",
+        mfa_enabled=False,
+        must_setup_mfa=True,
+        mfa_recovery_hashes=[],
+    )
     db = _DB(user=user)
     monkeypatch.setattr(mfa_mod, "get_db_session", lambda: _ctx(db))
     monkeypatch.setattr(mfa_mod, "_encrypt_mfa_secret", lambda service, secret: f"enc:{secret}")
@@ -230,7 +252,9 @@ def test_mfa_helpers_and_flows(monkeypatch):
 def test_oidc_sync_and_provision_helpers(monkeypatch):
     real_provision_oidc_user = oidc_mod.provision_oidc_user
     real_update_oidc_user = oidc_mod.update_oidc_user
-    fake_user_model = type("User", (), {"external_subject": "external_subject", "id": "id", "email": "email", "username": "username"})
+    fake_user_model = type(
+        "User", (), {"external_subject": "external_subject", "id": "id", "email": "email", "username": "username"}
+    )
     fake_tenant_model = type("Tenant", (), {"__init__": lambda self, **kwargs: self.__dict__.update(kwargs)})
     monkeypatch.setattr(oidc_mod, "User", fake_user_model)
     monkeypatch.setattr(oidc_mod, "Tenant", fake_tenant_model)
@@ -248,10 +272,16 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
         _ensure_default_api_key=lambda db, user: setattr(user, "api_key_created", True),
     )
 
-    existing = SimpleNamespace(id="u1", auth_provider="local", is_active=True, email="a@b.c", full_name="Old", external_subject=None)
+    existing = SimpleNamespace(
+        id="u1", auth_provider="local", is_active=True, email="a@b.c", full_name="Old", external_subject=None
+    )
     monkeypatch.setattr(oidc_mod, "_resolve_existing_user", lambda service, db, **kwargs: existing)
     updated = []
-    monkeypatch.setattr(oidc_mod, "update_oidc_user", lambda db, user, email, full_name, subject: updated.append((email, full_name, subject)))
+    monkeypatch.setattr(
+        oidc_mod,
+        "update_oidc_user",
+        lambda db, user, email, full_name, subject: updated.append((email, full_name, subject)),
+    )
     db = _DB(user=existing)
     monkeypatch.setattr(oidc_mod, "get_db_session", lambda: _ctx(db))
     synced = oidc_mod.sync_user_from_oidc_claims(service, {"email": "a@b.c", "sub": "sub-1", "name": "Alice"})
@@ -261,7 +291,9 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
 
     monkeypatch.setattr(oidc_mod, "_resolve_existing_user", lambda service, db, **kwargs: None)
     provisioned = SimpleNamespace(id="u2", is_active=True)
-    monkeypatch.setattr(oidc_mod, "provision_oidc_user", lambda service, db, email, preferred_username, full_name, subject: provisioned)
+    monkeypatch.setattr(
+        oidc_mod, "provision_oidc_user", lambda service, db, email, preferred_username, full_name, subject: provisioned
+    )
     db = _DB(user=provisioned)
     monkeypatch.setattr(oidc_mod, "get_db_session", lambda: _ctx(db))
     assert oidc_mod.sync_user_from_oidc_claims(service, {"email": "b@c.d", "sub": "sub-2"}) is provisioned
@@ -294,7 +326,9 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     assert db.rollbacks == 0
     assert getattr(provisioned, "api_key_created", False) is True
 
-    user = SimpleNamespace(id="u9", auth_provider="local", external_subject=None, email="old@example.com", full_name="Old")
+    user = SimpleNamespace(
+        id="u9", auth_provider="local", external_subject=None, email="old@example.com", full_name="Old"
+    )
     db = _DB(conflict=None)
     monkeypatch.setattr(oidc_mod, "User", fake_user_model)
     monkeypatch.setattr(oidc_mod, "update_oidc_user", real_update_oidc_user)

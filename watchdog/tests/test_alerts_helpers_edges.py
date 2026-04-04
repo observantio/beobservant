@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -278,7 +278,9 @@ async def test_find_silence_for_mutation_paths(monkeypatch):
         return OkResponse()
 
     monkeypatch.setattr(helpers_mod.notifier_proxy_service._client, "request", ok_response)
-    assert await helpers_mod.find_silence_for_mutation(request=request, current_user=user, silence_id="s1") == {"id": "s1"}
+    assert await helpers_mod.find_silence_for_mutation(request=request, current_user=user, silence_id="s1") == {
+        "id": "s1"
+    }
     with pytest.raises(HTTPException, match="Silence not found"):
         await helpers_mod.find_silence_for_mutation(request=request, current_user=user, silence_id="missing")
 
@@ -287,7 +289,9 @@ async def test_find_silence_for_mutation_paths(monkeypatch):
 async def test_webhook_route_enforces_security_and_forwards(monkeypatch):
     calls = []
 
-    monkeypatch.setattr(helpers_mod, "enforce_public_endpoint_security", lambda *args, **kwargs: calls.append(("public", kwargs)))
+    monkeypatch.setattr(
+        helpers_mod, "enforce_public_endpoint_security", lambda *args, **kwargs: calls.append(("public", kwargs))
+    )
     monkeypatch.setattr(helpers_mod, "enforce_header_token", lambda *args, **kwargs: calls.append(("header", kwargs)))
 
     async def fake_forward(**kwargs):

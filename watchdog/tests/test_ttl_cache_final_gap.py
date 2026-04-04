@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -30,13 +30,16 @@ async def test_ttl_cache_remaining_memory_and_pending_paths(monkeypatch):
 
     # get_or_set returns cached value path
     await cache.set("cached", {"ok": True}, 5)
+
     async def factory():
         return {"new": True}
+
     assert await cache.get_or_set("cached", factory, 5) == {"ok": True}
 
     # owner path with None value (pending.set_result(None))
     async def none_factory():
         return None
+
     assert await cache.get_or_set("none", none_factory, 5) is None
 
 
@@ -60,6 +63,7 @@ async def test_ttl_cache_redis_falsey_ping_and_none_client_paths(monkeypatch):
     # clear early return when ensure_redis true but client is None
     async def ensure_true():
         return True
+
     cache2 = ttl_mod.TTLCache()
     cache2._ensure_redis = ensure_true  # type: ignore[assignment]
     cache2._redis_client = None

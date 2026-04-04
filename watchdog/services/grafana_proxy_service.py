@@ -3,9 +3,9 @@ Grafana Proxy Service for forwarding requests to Grafana API with authentication
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ class GrafanaProxyService:
     def _normalize_group_ids(group_ids: Optional[List[str]]) -> List[str]:
         out: List[str] = []
         seen = set()
-        for gid in (group_ids or []):
+        for gid in group_ids or []:
             val = str(gid or "").strip()
             if not val or val in seen:
                 continue
@@ -202,12 +202,20 @@ class GrafanaProxyService:
         clear_proxy_auth_cache()
 
     def build_dashboard_search_context(
-        self, db: Session, *, tenant_id: str, uid: Optional[str] = None,
+        self,
+        db: Session,
+        *,
+        tenant_id: str,
+        uid: Optional[str] = None,
     ) -> DashboardSearchContext:
         return build_dashboard_search_context(db, tenant_id=tenant_id, uid=uid)
 
     def build_datasource_list_context(
-        self, db: Session, *, tenant_id: str, uid: Optional[str] = None,
+        self,
+        db: Session,
+        *,
+        tenant_id: str,
+        uid: Optional[str] = None,
     ) -> DatasourceListContext:
         return build_datasource_list_context(self, db, tenant_id=tenant_id, uid=uid)
 
@@ -233,16 +241,30 @@ class GrafanaProxyService:
         exclude_foldered_dashboards: bool = False,
     ) -> List[DashboardSearchResult]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await search_dashboards(
-            self, db, user_id, tenant_id, effective_group_ids,
-            query=query, tag=tag, starred=starred,
-            folder_ids=folder_ids, folder_uids=folder_uids,
+            self,
+            db,
+            user_id,
+            tenant_id,
+            effective_group_ids,
+            query=query,
+            tag=tag,
+            starred=starred,
+            folder_ids=folder_ids,
+            folder_uids=folder_uids,
             dashboard_uids=dashboard_uids,
-            uid=uid, team_id=team_id,
-            show_hidden=show_hidden, limit=limit, offset=offset,
-            search_context=search_context, is_admin=is_admin,
+            uid=uid,
+            team_id=team_id,
+            show_hidden=show_hidden,
+            limit=limit,
+            offset=offset,
+            search_context=search_context,
+            is_admin=is_admin,
             exclude_foldered_dashboards=exclude_foldered_dashboards,
         )
 
@@ -256,7 +278,10 @@ class GrafanaProxyService:
         is_admin: bool = False,
     ) -> Optional[JSONDict]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await get_dashboard(self, db, uid, user_id, tenant_id, effective_group_ids, is_admin=is_admin)
 
@@ -273,11 +298,22 @@ class GrafanaProxyService:
         actor_permissions: Optional[List[str]] = None,
     ) -> Optional[JSONDict]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await create_dashboard(
-            self, db, dashboard_create, user_id, tenant_id, effective_group_ids,
-            visibility, shared_group_ids, is_admin, actor_permissions,
+            self,
+            db,
+            dashboard_create,
+            user_id,
+            tenant_id,
+            effective_group_ids,
+            visibility,
+            shared_group_ids,
+            is_admin,
+            actor_permissions,
         )
 
     async def update_dashboard(
@@ -294,23 +330,48 @@ class GrafanaProxyService:
         actor_permissions: Optional[List[str]] = None,
     ) -> Optional[JSONDict]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await update_dashboard(
-            self, db, uid, dashboard_update, user_id, tenant_id, effective_group_ids,
-            visibility, shared_group_ids, is_admin, actor_permissions,
+            self,
+            db,
+            uid,
+            dashboard_update,
+            user_id,
+            tenant_id,
+            effective_group_ids,
+            visibility,
+            shared_group_ids,
+            is_admin,
+            actor_permissions,
         )
 
     async def delete_dashboard(
-        self, db: Session, uid: str, user_id: str, tenant_id: str, group_ids: List[str],
+        self,
+        db: Session,
+        uid: str,
+        user_id: str,
+        tenant_id: str,
+        group_ids: List[str],
     ) -> bool:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await delete_dashboard(self, db, uid, user_id, tenant_id, effective_group_ids)
 
     def toggle_dashboard_hidden(
-        self, db: Session, uid: str, user_id: str, tenant_id: str, hidden: bool,
+        self,
+        db: Session,
+        uid: str,
+        user_id: str,
+        tenant_id: str,
+        hidden: bool,
     ) -> bool:
         return toggle_dashboard_hidden(db, uid, user_id, tenant_id, hidden)
 
@@ -333,26 +394,55 @@ class GrafanaProxyService:
         datasource_context: Optional[DatasourceListContext] = None,
     ) -> List[Datasource]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await get_datasources(
-            self, db, user_id, tenant_id, effective_group_ids,
-            uid, query, team_id, show_hidden, limit, offset, datasource_context,
+            self,
+            db,
+            user_id,
+            tenant_id,
+            effective_group_ids,
+            uid,
+            query,
+            team_id,
+            show_hidden,
+            limit,
+            offset,
+            datasource_context,
         )
 
     async def get_datasource(
-        self, db: Session, uid: str, user_id: str, tenant_id: str, group_ids: List[str],
+        self,
+        db: Session,
+        uid: str,
+        user_id: str,
+        tenant_id: str,
+        group_ids: List[str],
     ) -> Optional[Datasource]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await get_datasource(self, db, uid, user_id, tenant_id, effective_group_ids)
 
     async def get_datasource_by_name(
-        self, db: Session, name: str, user_id: str, tenant_id: str, group_ids: List[str],
+        self,
+        db: Session,
+        name: str,
+        user_id: str,
+        tenant_id: str,
+        group_ids: List[str],
     ) -> Optional[Datasource]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await get_datasource_by_name(self, db, name, user_id, tenant_id, effective_group_ids)
 
@@ -368,11 +458,21 @@ class GrafanaProxyService:
         is_admin: bool = False,
     ) -> Optional[Datasource]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await create_datasource(
-            self, db, datasource_create, user_id, tenant_id, effective_group_ids,
-            visibility, shared_group_ids, is_admin,
+            self,
+            db,
+            datasource_create,
+            user_id,
+            tenant_id,
+            effective_group_ids,
+            visibility,
+            shared_group_ids,
+            is_admin,
         )
 
     async def update_datasource(
@@ -388,23 +488,47 @@ class GrafanaProxyService:
         is_admin: bool = False,
     ) -> Optional[Datasource]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await update_datasource(
-            self, db, uid, datasource_update, user_id, tenant_id, effective_group_ids,
-            visibility, shared_group_ids, is_admin,
+            self,
+            db,
+            uid,
+            datasource_update,
+            user_id,
+            tenant_id,
+            effective_group_ids,
+            visibility,
+            shared_group_ids,
+            is_admin,
         )
 
     async def delete_datasource(
-        self, db: Session, uid: str, user_id: str, tenant_id: str, group_ids: List[str],
+        self,
+        db: Session,
+        uid: str,
+        user_id: str,
+        tenant_id: str,
+        group_ids: List[str],
     ) -> bool:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await delete_datasource(self, db, uid, user_id, tenant_id, effective_group_ids)
 
     def toggle_datasource_hidden(
-        self, db: Session, uid: str, user_id: str, tenant_id: str, hidden: bool,
+        self,
+        db: Session,
+        uid: str,
+        user_id: str,
+        tenant_id: str,
+        hidden: bool,
     ) -> bool:
         return toggle_datasource_hidden(db, uid, user_id, tenant_id, hidden)
 
@@ -424,10 +548,20 @@ class GrafanaProxyService:
         group_ids: List[str],
     ) -> None:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         await enforce_datasource_query_access(
-            self, db, user_id, tenant_id, effective_group_ids, "/api/ds/query", "POST", payload,
+            self,
+            db,
+            user_id,
+            tenant_id,
+            effective_group_ids,
+            "/api/ds/query",
+            "POST",
+            payload,
         )
 
     async def get_folders(
@@ -440,7 +574,10 @@ class GrafanaProxyService:
         is_admin: bool = False,
     ) -> List[Folder]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await get_folders(
             self,
@@ -462,7 +599,10 @@ class GrafanaProxyService:
         is_admin: bool = False,
     ) -> Optional[Folder]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await get_folder(self, db, uid, user_id, tenant_id, effective_group_ids, is_admin=is_admin)
 
@@ -479,10 +619,18 @@ class GrafanaProxyService:
         is_admin: bool = False,
     ) -> Optional[Folder]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await create_folder(
-            self, db, title, user_id, tenant_id, effective_group_ids,
+            self,
+            db,
+            title,
+            user_id,
+            tenant_id,
+            effective_group_ids,
             visibility=visibility,
             shared_group_ids=shared_group_ids,
             allow_dashboard_writes=allow_dashboard_writes,
@@ -499,10 +647,19 @@ class GrafanaProxyService:
         is_admin: bool = False,
     ) -> bool:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await delete_folder(
-            self, db, uid, user_id, tenant_id, effective_group_ids, is_admin=is_admin,
+            self,
+            db,
+            uid,
+            user_id,
+            tenant_id,
+            effective_group_ids,
+            is_admin=is_admin,
         )
 
     async def update_folder(
@@ -519,10 +676,18 @@ class GrafanaProxyService:
         is_admin: bool = False,
     ) -> Optional[Folder]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return await update_folder(
-            self, db, uid, user_id, tenant_id, effective_group_ids,
+            self,
+            db,
+            uid,
+            user_id,
+            tenant_id,
+            effective_group_ids,
             title=title,
             visibility=visibility,
             shared_group_ids=shared_group_ids,
@@ -542,10 +707,19 @@ class GrafanaProxyService:
         is_admin: bool = False,
     ) -> Optional[GrafanaFolder]:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return check_folder_access(
-            db, uid, user_id, tenant_id, effective_group_ids, require_write=require_write, is_admin=is_admin,
+            db,
+            uid,
+            user_id,
+            tenant_id,
+            effective_group_ids,
+            require_write=require_write,
+            is_admin=is_admin,
         )
 
     def is_folder_accessible(
@@ -560,10 +734,19 @@ class GrafanaProxyService:
         is_admin: bool = False,
     ) -> bool:
         effective_group_ids = self._effective_group_ids(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            group_ids=group_ids,
         )
         return is_folder_accessible(
-            db, uid, user_id, tenant_id, effective_group_ids, require_write=require_write, is_admin=is_admin,
+            db,
+            uid,
+            user_id,
+            tenant_id,
+            effective_group_ids,
+            require_write=require_write,
+            is_admin=is_admin,
         )
 
     def toggle_folder_hidden(

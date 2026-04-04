@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -117,16 +117,18 @@ def test_json_helpers_and_audit_utility_edges(monkeypatch):
         ip_address="203.0.113.10",
         user_agent="ua",
     )
-    assert added == [{
-        "tenant_id": "tenant-a",
-        "user_id": "user-a",
-        "action": "resource.view",
-        "resource_type": "http",
-        "resource_id": "/api/tempo/query",
-        "details": {"method": "GET", "status_code": 200, "query": "token=%5BREDACTED%5D&plain=1"},
-        "ip_address": "203.0.113.10",
-        "user_agent": "ua",
-    }]
+    assert added == [
+        {
+            "tenant_id": "tenant-a",
+            "user_id": "user-a",
+            "action": "resource.view",
+            "resource_type": "http",
+            "resource_id": "/api/tempo/query",
+            "details": {"method": "GET", "status_code": 200, "query": "token=%5BREDACTED%5D&plain=1"},
+            "ip_address": "203.0.113.10",
+            "user_agent": "ua",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -150,16 +152,22 @@ async def test_request_size_and_concurrency_extra_branches(monkeypatch):
     assert sent[0]["status"] == 204
 
     warnings = []
-    monkeypatch.setattr(audit_middleware.logger if False else importlib.import_module("middleware.request_size_limit").logger, "warning", lambda message, *args: warnings.append((message, args)))
+    monkeypatch.setattr(
+        audit_middleware.logger if False else importlib.import_module("middleware.request_size_limit").logger,
+        "warning",
+        lambda message, *args: warnings.append((message, args)),
+    )
 
     async def app_with_started_response(scope, receive, send):
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await receive()
 
     late_limit = RequestSizeLimitMiddleware(app_with_started_response, max_bytes=4)
-    chunks = iter([
-        {"type": "http.request", "body": b"abcde", "more_body": False},
-    ])
+    chunks = iter(
+        [
+            {"type": "http.request", "body": b"abcde", "more_body": False},
+        ]
+    )
 
     async def receive_large():
         return next(chunks)
@@ -253,7 +261,9 @@ def test_rate_limit_primitives_and_ip_edges(monkeypatch):
     warnings = []
     monkeypatch.setattr(hybrid_module.logger, "warning", lambda message, *args: warnings.append((message, args)))
     fallback_events = []
-    monkeypatch.setattr(hybrid_module, "record_fallback_event", lambda mode, reason: fallback_events.append((mode, reason)))
+    monkeypatch.setattr(
+        hybrid_module, "record_fallback_event", lambda mode, reason: fallback_events.append((mode, reason))
+    )
     monkeypatch.setattr(hybrid_module.time, "monotonic", lambda: 100.0)
 
     limiter = hybrid_module.HybridRateLimiter(RedisRaises(RuntimeError("down")), FallbackLimiter())
@@ -274,9 +284,9 @@ def test_rate_limit_primitives_and_ip_edges(monkeypatch):
     assert allow.fallback_used is True
 
     with pytest.raises(HTTPException):
-        hybrid_module.HybridRateLimiter(RedisRaises(HTTPException(status_code=429, detail="stop")), FallbackLimiter()).hit(
-            "d", limit=2, window_seconds=60
-        )
+        hybrid_module.HybridRateLimiter(
+            RedisRaises(HTTPException(status_code=429, detail="stop")), FallbackLimiter()
+        ).hit("d", limit=2, window_seconds=60)
 
     monkeypatch.setattr(observability_module.logger, "warning", lambda message, *args: warnings.append((message, args)))
     monkeypatch.setattr(observability_module, "_rate_limit_fallback_total", 0)
@@ -295,11 +305,20 @@ def test_rate_limit_primitives_and_ip_edges(monkeypatch):
 
     monkeypatch.setattr(ip_module.config, "TRUST_PROXY_HEADERS", True)
     monkeypatch.setattr(ip_module.config, "TRUSTED_PROXY_CIDRS", [])
-    assert ip_module.client_ip(_request(headers=[(b"x-real-ip", b"198.51.100.3")], client=("10.0.0.1", 1234))) == "198.51.100.3"
+    assert (
+        ip_module.client_ip(_request(headers=[(b"x-real-ip", b"198.51.100.3")], client=("10.0.0.1", 1234)))
+        == "198.51.100.3"
+    )
 
     monkeypatch.setattr(ip_module.config, "TRUSTED_PROXY_CIDRS", ["bad-cidr", "203.0.113.0/24"])
-    assert ip_module.client_ip(_request(headers=[(b"x-forwarded-for", b"198.51.100.9")], client=("203.0.113.5", 1234))) == "198.51.100.9"
-    assert ip_module.client_ip(_request(headers=[(b"x-forwarded-for", b"bad")], client=("203.0.113.5", 1234))) == "203.0.113.5"
+    assert (
+        ip_module.client_ip(_request(headers=[(b"x-forwarded-for", b"198.51.100.9")], client=("203.0.113.5", 1234)))
+        == "198.51.100.9"
+    )
+    assert (
+        ip_module.client_ip(_request(headers=[(b"x-forwarded-for", b"bad")], client=("203.0.113.5", 1234)))
+        == "203.0.113.5"
+    )
     assert ip_module.client_ip(_request(client=("bad-ip", 1234))) == "unknown"
 
 
@@ -338,7 +357,10 @@ def test_rate_limit_module_builder_and_enforcers(monkeypatch):
     monkeypatch.setattr(rate_limit_module, "RedisFixedWindowRateLimiter", FailingRedisLimiter)
     built = rate_limit_module._build_rate_limiter()
     assert built._redis_limiter is None
-    assert any(message == "Redis rate limiting failed in production; rate limiting is process-local only" for message, _ in warnings)
+    assert any(
+        message == "Redis rate limiting failed in production; rate limiting is process-local only"
+        for message, _ in warnings
+    )
 
     class DenyLimiter:
         def hit(self, key, *, limit, window_seconds, fallback_mode=None):
@@ -357,7 +379,9 @@ def test_rate_limit_module_builder_and_enforcers(monkeypatch):
         lambda **kwargs: captured.update(kwargs),
     )
     rate_limit_module.enforce_ip_rate_limit(
-        _request(headers=[(b"user-agent", b"ua"), (b"x-forwarded-for", b"xf"), (b"x-real-ip", b"xr"), (b"host", b"example")]),
+        _request(
+            headers=[(b"user-agent", b"ua"), (b"x-forwarded-for", b"xf"), (b"x-real-ip", b"xr"), (b"host", b"example")]
+        ),
         scope="login",
         limit=3,
         window_seconds=60,
@@ -407,7 +431,9 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
     errors = []
     warnings = []
     monkeypatch.setattr(system_helpers.logger, "error", lambda message, *args: errors.append((message, args)))
-    monkeypatch.setattr(system_service_module.logger, "warning", lambda message, *args: warnings.append((message, args)))
+    monkeypatch.setattr(
+        system_service_module.logger, "warning", lambda message, *args: warnings.append((message, args))
+    )
 
     class BrokenProc:
         def cpu_percent(self, interval=None):
@@ -465,23 +491,53 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
     monkeypatch.setattr(service, "get_memory_metrics", lambda: {"utilization": "bad"})
     monkeypatch.setattr(service, "get_disk_metrics", lambda: {"io": True})
     monkeypatch.setattr(service, "get_network_metrics", lambda: {"total_connections": 2.9})
-    monkeypatch.setattr(service, "determine_stress_status", lambda cpu, memory, connections: {"cpu": cpu, "memory": memory, "connections": connections})
+    monkeypatch.setattr(
+        service,
+        "determine_stress_status",
+        lambda cpu, memory, connections: {"cpu": cpu, "memory": memory, "connections": connections},
+    )
     assert service.get_all_metrics()["stress"] == {"cpu": 1.0, "memory": 0.0, "connections": 2}
 
     assert cookie_helpers._parse_networks(["127.0.0.0/8"])
     assert cookie_helpers.is_secure_cookie_request(_request(), trust_proxy_headers=False) is False
-    assert cookie_helpers.is_secure_cookie_request(_request(headers=[(b"x-forwarded-proto", b"https")]), trust_proxy_headers=True) is False
-    assert cookie_helpers.is_secure_cookie_request(_request(client=None), trust_proxy_headers=True, trusted_proxy_cidrs=["127.0.0.0/8"]) is False
-    assert cookie_helpers.is_secure_cookie_request(_request(client=("bad-ip", 1)), trust_proxy_headers=True, trusted_proxy_cidrs=["127.0.0.0/8"]) is False
-    assert cookie_helpers.is_secure_cookie_request(_request(client=("203.0.113.10", 1)), trust_proxy_headers=True, trusted_proxy_cidrs=["127.0.0.0/8"]) is False
-    assert cookie_helpers.is_secure_cookie_request(
-        _request(headers=[(b"x-forwarded-proto", b"https")], client=("127.0.0.2", 1)),
-        trust_proxy_headers=True,
-        trusted_proxy_cidrs=["127.0.0.0/8"],
-    ) is True
+    assert (
+        cookie_helpers.is_secure_cookie_request(
+            _request(headers=[(b"x-forwarded-proto", b"https")]), trust_proxy_headers=True
+        )
+        is False
+    )
+    assert (
+        cookie_helpers.is_secure_cookie_request(
+            _request(client=None), trust_proxy_headers=True, trusted_proxy_cidrs=["127.0.0.0/8"]
+        )
+        is False
+    )
+    assert (
+        cookie_helpers.is_secure_cookie_request(
+            _request(client=("bad-ip", 1)), trust_proxy_headers=True, trusted_proxy_cidrs=["127.0.0.0/8"]
+        )
+        is False
+    )
+    assert (
+        cookie_helpers.is_secure_cookie_request(
+            _request(client=("203.0.113.10", 1)), trust_proxy_headers=True, trusted_proxy_cidrs=["127.0.0.0/8"]
+        )
+        is False
+    )
+    assert (
+        cookie_helpers.is_secure_cookie_request(
+            _request(headers=[(b"x-forwarded-proto", b"https")], client=("127.0.0.2", 1)),
+            trust_proxy_headers=True,
+            trusted_proxy_cidrs=["127.0.0.0/8"],
+        )
+        is True
+    )
     monkeypatch.setattr(cookie_helpers.config, "TRUST_PROXY_HEADERS", True)
     monkeypatch.setattr(cookie_helpers.config, "TRUSTED_PROXY_CIDRS", ["127.0.0.0/8"])
-    assert cookie_helpers.cookie_secure(_request(headers=[(b"x-forwarded-proto", b"https")], client=("127.0.0.2", 1))) is True
+    assert (
+        cookie_helpers.cookie_secure(_request(headers=[(b"x-forwarded-proto", b"https")], client=("127.0.0.2", 1)))
+        is True
+    )
 
     monkeypatch.setenv("EMPTY_SECRET", "")
     monkeypatch.setenv("FILLED_SECRET", "value")
@@ -490,7 +546,9 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
     assert provider.get_many(["EMPTY_SECRET", "FILLED_SECRET"]) == {"EMPTY_SECRET": None, "FILLED_SECRET": "value"}
 
     registry = {}
-    heartbeat = AgentHeartbeat(name="agent-a", tenant_id="tenant-a", attributes={"host.hostname": "host-a"}, signal=None)
+    heartbeat = AgentHeartbeat(
+        name="agent-a", tenant_id="tenant-a", attributes={"host.hostname": "host-a"}, signal=None
+    )
     agent_helpers.update_agent_registry(registry, heartbeat)
     assert registry["tenant-a:agent-a"].host_name == "host-a"
     duplicate = AgentHeartbeat(name="agent-a", tenant_id="tenant-a", attributes={}, signal="metrics")
@@ -697,9 +755,20 @@ async def test_resilience_edges(monkeypatch):
     request = httpx.Request("GET", "https://example.test")
     response_404 = httpx.Response(404, request=request)
     response_429 = httpx.Response(429, request=request)
-    assert resilience_module._is_retriable_httpx(httpx.HTTPStatusError("no-response", request=request, response=None)) is True
-    assert resilience_module._is_retriable_httpx(httpx.HTTPStatusError("not-found", request=request, response=response_404)) is False
-    assert resilience_module._is_retriable_httpx(httpx.HTTPStatusError("limited", request=request, response=response_429)) is True
+    assert (
+        resilience_module._is_retriable_httpx(httpx.HTTPStatusError("no-response", request=request, response=None))
+        is True
+    )
+    assert (
+        resilience_module._is_retriable_httpx(
+            httpx.HTTPStatusError("not-found", request=request, response=response_404)
+        )
+        is False
+    )
+    assert (
+        resilience_module._is_retriable_httpx(httpx.HTTPStatusError("limited", request=request, response=response_429))
+        is True
+    )
     assert resilience_module._is_retriable_httpx(httpx.ReadTimeout("slow", request=request)) is True
     assert resilience_module._is_retriable_httpx(ValueError("bad")) is False
 
@@ -816,7 +885,9 @@ async def test_tempo_utility_edges(monkeypatch):
 
     assert tempo_metrics.extract_metric_values(None) == []
     assert tempo_metrics.extract_metric_values({"data": {"result": []}}) == []
-    assert tempo_metrics.extract_metric_values({"data": {"result": [{"values": [["bad", "2"], [1, "3.9"], [1, "2"]]}]}}) == [[1, "5"]]
+    assert tempo_metrics.extract_metric_values(
+        {"data": {"result": [{"values": [["bad", "2"], [1, "3.9"], [1, "2"]]}]}}
+    ) == [[1, "5"]]
 
     query = TraceQuery(
         limit=5,
@@ -831,7 +902,10 @@ async def test_tempo_utility_edges(monkeypatch):
 
     assert tempo_promql.build_promql_selectors(None) == ["{}"]
     assert tempo_promql.build_promql_selectors('svc"x')[-1] == '{service.name="svc\\"x"}'
-    assert tempo_promql.build_count_promql("svc", 30, label_variant=99) == 'sum(count_over_time({service.name="svc"}[30s]))'
+    assert (
+        tempo_promql.build_count_promql("svc", 30, label_variant=99)
+        == 'sum(count_over_time({service.name="svc"}[30s]))'
+    )
 
     assert tempo_parsers._json_dict([]) == {}
     assert tempo_parsers._json_dict_list({}) == []
@@ -839,15 +913,24 @@ async def test_tempo_utility_edges(monkeypatch):
     assert tempo_parsers._int_value(2.8) == 2
     assert tempo_parsers._int_value("bad") == 0
 
-    attrs = tempo_parsers.parse_attributes([
-        {"key": "", "value": {"stringValue": "skip"}},
-        {"key": "ok", "value": {"boolValue": True}},
-        {"key": "missing", "value": "bad"},
-    ])
+    attrs = tempo_parsers.parse_attributes(
+        [
+            {"key": "", "value": {"stringValue": "skip"}},
+            {"key": "ok", "value": {"boolValue": True}},
+            {"key": "missing", "value": "bad"},
+        ]
+    )
     assert attrs == {"ok": True}
 
     span = tempo_parsers.parse_span(
-        {"spanId": 7, "name": 8, "startTimeUnixNano": 5000.4, "endTimeUnixNano": True, "parentSpanId": "", "attributes": []},
+        {
+            "spanId": 7,
+            "name": 8,
+            "startTimeUnixNano": 5000.4,
+            "endTimeUnixNano": True,
+            "parentSpanId": "",
+            "attributes": [],
+        },
         "trace-a",
         "proc-a",
         "svc-a",
@@ -867,12 +950,24 @@ async def test_tempo_utility_edges(monkeypatch):
             "batches": [
                 {
                     "resource": {"attributes": [{"key": "serviceName", "value": {"intValue": 9}}]},
-                    "scopeSpans": [{"spans": [{"spanId": "s", "name": "op", "startTimeUnixNano": "1000", "endTimeUnixNano": "3000"}]}],
+                    "scopeSpans": [
+                        {
+                            "spans": [
+                                {"spanId": "s", "name": "op", "startTimeUnixNano": "1000", "endTimeUnixNano": "3000"}
+                            ]
+                        }
+                    ],
                 }
             ]
         },
     )
-    assert trace.processes == {"9": {"serviceName": "9", "resource": {"attributes": [{"key": "serviceName", "value": {"intValue": 9}}]}, "attributes": {"serviceName": 9}}}
+    assert trace.processes == {
+        "9": {
+            "serviceName": "9",
+            "resource": {"attributes": [{"key": "serviceName", "value": {"intValue": 9}}]},
+            "attributes": {"serviceName": 9},
+        }
+    }
 
     summary = tempo_parsers.build_summary_trace({"traceID": "tx", "rootServiceName": 123, "rootTraceName": object()})
     assert summary is not None
@@ -903,7 +998,10 @@ async def test_error_handler_and_small_helper_edges(monkeypatch):
 
     monkeypatch.setattr(ip_module.config, "TRUST_PROXY_HEADERS", True)
     monkeypatch.setattr(ip_module.config, "TRUSTED_PROXY_CIDRS", ["127.0.0.0/8"])
-    assert ip_module.client_ip(_request(client=("127.0.0.1", 1), headers=[(b"x-forwarded-for", b"198.51.100.4")])) == "198.51.100.4"
+    assert (
+        ip_module.client_ip(_request(client=("127.0.0.1", 1), headers=[(b"x-forwarded-for", b"198.51.100.4")]))
+        == "198.51.100.4"
+    )
 
     monkeypatch.setattr(ip_module, "_valid_ip", lambda value: (value or "").strip() or None)
     monkeypatch.setattr(ip_module, "ip_address", lambda value: (_ for _ in ()).throw(ValueError("bad ip")))

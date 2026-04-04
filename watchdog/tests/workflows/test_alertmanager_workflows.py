@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -90,12 +90,14 @@ def _build_alertmanager_forwarder(state: dict[str, Any], forward_calls: list[dic
         if path.startswith("rules/") and method == "PUT":
             rule_id = path.split("/", 1)[1]
             rule = state["rules"][rule_id]
-            rule.update({
-                "name": payload.get("name", rule["name"]),
-                "expr": payload.get("expr", rule["expr"]),
-                "labels": payload.get("labels", rule["labels"]),
-                "annotations": payload.get("annotations", rule["annotations"]),
-            })
+            rule.update(
+                {
+                    "name": payload.get("name", rule["name"]),
+                    "expr": payload.get("expr", rule["expr"]),
+                    "labels": payload.get("labels", rule["labels"]),
+                    "annotations": payload.get("annotations", rule["annotations"]),
+                }
+            )
             return JSONResponse(rule)
         if path.startswith("rules/") and method == "DELETE":
             rule_id = path.split("/", 1)[1]
@@ -356,7 +358,10 @@ def test_alertmanager_rules_channels_and_integrations_workflow(client, monkeypat
         headers=operator_headers,
         json={
             "rules": [
-                {"name": "latency-spike", "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1"},
+                {
+                    "name": "latency-spike",
+                    "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1",
+                },
                 {"name": "error-burst", "expr": "sum(rate(errors_total[5m])) > 10"},
             ]
         },
@@ -397,7 +402,11 @@ def test_alertmanager_rules_channels_and_integrations_workflow(client, monkeypat
     update_channel_response = client.put(
         f"/api/alertmanager/channels/{email_channel_id}",
         headers=operator_headers,
-        json={"name": "email-escalation", "type": "email", "config": {"to": ["sre@example.com"], "cc": ["mgr@example.com"]}},
+        json={
+            "name": "email-escalation",
+            "type": "email",
+            "config": {"to": ["sre@example.com"], "cc": ["mgr@example.com"]},
+        },
     )
     assert update_channel_response.status_code == 200
     assert update_channel_response.json()["name"] == "email-escalation"
@@ -451,14 +460,19 @@ def test_alertmanager_rules_channels_and_integrations_workflow(client, monkeypat
     assert public_rules_response.status_code == 200
     assert len(public_rules_response.json()["groups"]) == 3
 
-    assert client.post("/api/alertmanager/channels", headers=read_only_headers, json={"name": "blocked"}).status_code == 403
+    assert (
+        client.post("/api/alertmanager/channels", headers=read_only_headers, json={"name": "blocked"}).status_code
+        == 403
+    )
     assert client.get("/api/alertmanager/jira/config", headers=read_only_headers).status_code == 403
 
     delete_rule_response = client.delete(f"/api/alertmanager/rules/{cpu_rule_id}", headers=operator_headers)
     assert delete_rule_response.status_code == 200
     assert set(store["integrations"]) == {"slack", "webhook"}
     assert store["jira_config"]["strategy"] == "dedupe"
-    assert all(call["require_api_key"] for call in forward_calls if call["method"] in {"POST", "PUT", "PATCH", "DELETE"})
+    assert all(
+        call["require_api_key"] for call in forward_calls if call["method"] in {"POST", "PUT", "PATCH", "DELETE"}
+    )
 
 
 def test_alertmanager_silence_validation_and_ownership_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -546,11 +560,14 @@ def test_alertmanager_silence_validation_and_ownership_workflow(client, monkeypa
     )
     assert unauthorized_group_response.status_code == 403
 
-    assert client.put(
-        "/api/alertmanager/silences/sil-ops-1",
-        headers=operator_two_headers,
-        json={"id": "sil-ops-1", "visibility": "private"},
-    ).status_code == 403
+    assert (
+        client.put(
+            "/api/alertmanager/silences/sil-ops-1",
+            headers=operator_two_headers,
+            json={"id": "sil-ops-1", "visibility": "private"},
+        ).status_code
+        == 403
+    )
 
     assert client.delete("/api/alertmanager/silences/sil-ops-1", headers=operator_two_headers).status_code == 403
 
@@ -568,16 +585,22 @@ def test_alertmanager_silence_validation_and_ownership_workflow(client, monkeypa
     assert any(call["path"].endswith("/silences") for call in forward_calls)
 
 
-def test_alertmanager_incident_and_integration_permission_boundaries_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_alertmanager_incident_and_integration_permission_boundaries_workflow(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
     state = WorkflowState()
     patch_auth_service(monkeypatch, state)
 
     operator = state.create_user(
-        SimpleNamespace(username="incident-op", email="incident-op@example.com", password="password123", role=Role.USER),
+        SimpleNamespace(
+            username="incident-op", email="incident-op@example.com", password="password123", role=Role.USER
+        ),
         state.tenant_id,
     )
     reader = state.create_user(
-        SimpleNamespace(username="incident-reader", email="incident-reader@example.com", password="password123", role=Role.VIEWER),
+        SimpleNamespace(
+            username="incident-reader", email="incident-reader@example.com", password="password123", role=Role.VIEWER
+        ),
         state.tenant_id,
     )
 
@@ -918,7 +941,9 @@ def test_alertmanager_silence_hide_show_hidden_lifecycle_workflow(client, monkey
     patch_auth_service(monkeypatch, state)
 
     operator = state.create_user(
-        SimpleNamespace(username="silence-hide-op", email="silence-hide-op@example.com", password="password123", role=Role.USER),
+        SimpleNamespace(
+            username="silence-hide-op", email="silence-hide-op@example.com", password="password123", role=Role.USER
+        ),
         state.tenant_id,
     )
     state.update_user_permissions(
@@ -1000,7 +1025,9 @@ def test_alertmanager_channel_hide_show_hidden_lifecycle_workflow(client, monkey
     patch_auth_service(monkeypatch, state)
 
     operator = state.create_user(
-        SimpleNamespace(username="channel-hide-op", email="channel-hide-op@example.com", password="password123", role=Role.USER),
+        SimpleNamespace(
+            username="channel-hide-op", email="channel-hide-op@example.com", password="password123", role=Role.USER
+        ),
         state.tenant_id,
     )
     state.update_user_permissions(

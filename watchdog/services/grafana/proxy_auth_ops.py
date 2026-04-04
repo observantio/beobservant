@@ -3,9 +3,9 @@ NginX proxy authentication operations for Grafana integration.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
     from services.grafana_proxy_service import GrafanaProxyService
 
+
 class ProxyAuthCacheEntry(TypedDict):
     expires: float
     headers: Dict[str, str]
@@ -45,7 +46,7 @@ PROXY_AUTH_CACHE: Dict[str, ProxyAuthCacheEntry] = {}
 PROXY_AUTH_CACHE_TTL = int(getattr(config, "GRAFANA_PROXY_CACHE_TTL", 60))
 PROXY_AUTH_CACHE_LOCK = threading.Lock()
 PROXY_AUTH_CACHE_GC_EVERY = 500
-proxy_auth_cache_ops = 0
+PROXY_AUTH_CACHE_OPS = 0
 
 HEADER_SAFE_RE = re.compile(r"[\r\n\x00]")
 STATIC_PREFIXES = ("/grafana/public/", "/grafana/public/build/")
@@ -95,12 +96,14 @@ def _normalize_cache_path(path: str) -> str:
 
 
 def _cache_key(token: str, method: str, path: str, tenant_id: str) -> str:
-    raw = "|".join([
-        hashlib.sha256(token.encode("utf-8")).hexdigest(),
-        (method or "GET").upper(),
-        _normalize_cache_path(path),
-        str(tenant_id or ""),
-    ])
+    raw = "|".join(
+        [
+            hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            (method or "GET").upper(),
+            _normalize_cache_path(path),
+            str(tenant_id or ""),
+        ]
+    )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -129,9 +132,9 @@ def _cache_set(token: str, method: str, path: str, tenant_id: str, headers: Dict
     key = _cache_key(token, method, path, tenant_id)
     now = time.monotonic()
     with PROXY_AUTH_CACHE_LOCK:
-        ops = proxy_auth_cache_ops + 1
-        globals()["proxy_auth_cache_ops"] = ops
-        if proxy_auth_cache_ops % PROXY_AUTH_CACHE_GC_EVERY == 0:
+        ops = PROXY_AUTH_CACHE_OPS + 1
+        globals()["PROXY_AUTH_CACHE_OPS"] = ops
+        if PROXY_AUTH_CACHE_OPS % PROXY_AUTH_CACHE_GC_EVERY == 0:
             expired = [k for k, v in PROXY_AUTH_CACHE.items() if v["expires"] <= now]
             for k in expired:
                 PROXY_AUTH_CACHE.pop(k, None)
@@ -227,7 +230,10 @@ def _is_blocked_proxy_path(path: str) -> bool:
 
 def _is_dashboard_write_intent(path: str, method: str) -> bool:
     return (path or "").lower().startswith("/grafana/api/dashboards/uid/") and (method or "GET").upper() in {
-        "DELETE", "PUT", "PATCH", "POST",
+        "DELETE",
+        "PUT",
+        "PATCH",
+        "POST",
     }
 
 
@@ -249,9 +255,7 @@ def _is_folder_write_intent(path: str, method: str) -> bool:
 
 async def _enforce_writable_datasource(service: GrafanaProxyService, datasource_uid: str) -> None:
     datasource = await service.grafana_service.get_datasource(datasource_uid)
-    if datasource and (
-        bool(getattr(datasource, "is_default", False)) or bool(getattr(datasource, "read_only", False))
-    ):
+    if datasource and (bool(getattr(datasource, "is_default", False)) or bool(getattr(datasource, "read_only", False))):
         raise HTTPException(status_code=403, detail="Default/read-only datasources are view/query only")
 
 
@@ -415,45 +419,61 @@ def _db_load_context(
             )
 
         dash = (
-            s.query(GrafanaDashboard)
-            .options(joinedload(GrafanaDashboard.shared_groups))
-            .filter(
-                GrafanaDashboard.grafana_uid == dashboard_uid,
-                GrafanaDashboard.tenant_id == token_data.tenant_id,
+            (
+                s.query(GrafanaDashboard)
+                .options(joinedload(GrafanaDashboard.shared_groups))
+                .filter(
+                    GrafanaDashboard.grafana_uid == dashboard_uid,
+                    GrafanaDashboard.tenant_id == token_data.tenant_id,
+                )
+                .first()
             )
-            .first()
-        ) if dashboard_uid else None
+            if dashboard_uid
+            else None
+        )
 
         ds_uid = (
-            s.query(GrafanaDatasource)
-            .options(joinedload(GrafanaDatasource.shared_groups))
-            .filter(
-                GrafanaDatasource.grafana_uid == datasource_uid,
-                GrafanaDatasource.tenant_id == token_data.tenant_id,
+            (
+                s.query(GrafanaDatasource)
+                .options(joinedload(GrafanaDatasource.shared_groups))
+                .filter(
+                    GrafanaDatasource.grafana_uid == datasource_uid,
+                    GrafanaDatasource.tenant_id == token_data.tenant_id,
+                )
+                .first()
             )
-            .first()
-        ) if datasource_uid else None
+            if datasource_uid
+            else None
+        )
 
         ds_id = (
-            s.query(GrafanaDatasource)
-            .options(joinedload(GrafanaDatasource.shared_groups))
-            .filter(
-                GrafanaDatasource.grafana_id == datasource_id,
-                GrafanaDatasource.tenant_id == token_data.tenant_id,
+            (
+                s.query(GrafanaDatasource)
+                .options(joinedload(GrafanaDatasource.shared_groups))
+                .filter(
+                    GrafanaDatasource.grafana_id == datasource_id,
+                    GrafanaDatasource.tenant_id == token_data.tenant_id,
+                )
+                .first()
             )
-            .first()
-        ) if datasource_id is not None else None
+            if datasource_id is not None
+            else None
+        )
 
         effective_folder_uid = folder_uid or (getattr(dash, "folder_uid", None) if dash else None)
         folder = (
-            s.query(GrafanaFolder)
-            .options(joinedload(GrafanaFolder.shared_groups))
-            .filter(
-                GrafanaFolder.grafana_uid == effective_folder_uid,
-                GrafanaFolder.tenant_id == token_data.tenant_id,
+            (
+                s.query(GrafanaFolder)
+                .options(joinedload(GrafanaFolder.shared_groups))
+                .filter(
+                    GrafanaFolder.grafana_uid == effective_folder_uid,
+                    GrafanaFolder.tenant_id == token_data.tenant_id,
+                )
+                .first()
             )
-            .first()
-        ) if effective_folder_uid else None
+            if effective_folder_uid
+            else None
+        )
 
         return orm_user, ProxyAuthorizationContext(
             org_id=org_id,
@@ -543,7 +563,9 @@ def _is_safe_system_datasource(datasource: object) -> bool:
     )
 
 
-async def _lookup_safe_system_datasource(service: GrafanaProxyService, *, datasource_uid: Optional[str], datasource_id: Optional[int]) -> bool:
+async def _lookup_safe_system_datasource(
+    service: GrafanaProxyService, *, datasource_uid: Optional[str], datasource_id: Optional[int]
+) -> bool:
     if datasource_uid:
         ds = await service.grafana_service.get_datasource(datasource_uid)
         return bool(ds and _is_safe_system_datasource(ds))
@@ -730,7 +752,12 @@ async def authorize_proxy_request(
 
     _, context = await run_in_threadpool(
         _db_load_context,
-        auth_service, token_data, dashboard_uid, datasource_uid, datasource_id, folder_uid,
+        auth_service,
+        token_data,
+        dashboard_uid,
+        datasource_uid,
+        datasource_id,
+        folder_uid,
     )
 
     _apply_proxy_user_context(token_data, context)

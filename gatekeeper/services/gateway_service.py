@@ -3,9 +3,9 @@ Gateway authentication and rate limiting service.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -64,9 +64,7 @@ class GatewayAuthService:
             rate_limit_backend if rate_limit_backend is not None else gw_config.RATE_LIMIT_BACKEND,
             rate_limit_redis_url if rate_limit_redis_url is not None else gw_config.RATE_LIMIT_REDIS_URL,
         )
-        self._networks = _parse_networks(
-            ip_allowlist if ip_allowlist is not None else gw_config.IP_ALLOWLIST
-        )
+        self._networks = _parse_networks(ip_allowlist if ip_allowlist is not None else gw_config.IP_ALLOWLIST)
         self._token_cache = make_token_cache(
             token_cache_ttl if token_cache_ttl is not None else gw_config.TOKEN_CACHE_TTL,
             gw_config.TOKEN_CACHE_REDIS_URL or None,

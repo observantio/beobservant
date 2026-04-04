@@ -16,4 +16,12 @@ from services.alerts.helpers import (
     webhook_route,
 )
 
-__all__ = ["assert_silence_owner", "extract_silence_id", "find_silence_for_mutation", "is_mutating", "required_permissions", "validate_and_normalize_silence_payload", "webhook_route"]
+__all__ = [
+    "assert_silence_owner",
+    "extract_silence_id",
+    "find_silence_for_mutation",
+    "is_mutating",
+    "required_permissions",
+    "validate_and_normalize_silence_payload",
+    "webhook_route",
+]

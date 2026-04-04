@@ -3,9 +3,9 @@ Helper functions for authentication and authorization operations.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from datetime import datetime, timezone
@@ -26,6 +26,7 @@ from custom_types.json import JSONDict
 from services.common.cookies import cookie_secure
 from services.auth.delegation import is_admin_actor as _is_admin_actor, role_to_text as _role_to_text
 from middleware.dependencies import enforce_public_endpoint_security, require_permission_with_scope
+
 logger = logging.getLogger(__name__)
 
 AuditLogQueryRow: TypeAlias = tuple[AuditLog, str, str]
@@ -48,6 +49,7 @@ AUDIT_SENSITIVE_EXACT_KEYS = {
     "code",
 }
 
+
 def invalidate_grafana_proxy_auth_cache() -> None:
     try:
         from services.grafana.proxy_auth_ops import clear_proxy_auth_cache
@@ -57,11 +59,12 @@ def invalidate_grafana_proxy_auth_cache() -> None:
         logger.warning("Failed to invalidate Grafana proxy auth cache: %s", exc)
 
 
-def require_admin_with_audit_permission(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AUDIT_LOGS, "auth"))) -> TokenData:
+def require_admin_with_audit_permission(
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AUDIT_LOGS, "auth"))
+) -> TokenData:
     if not is_admin_check(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required to view audit logs")
     return current_user
-
 
 
 def set_auth_cookie(request: Request, response: Response, token: str) -> None:
@@ -75,6 +78,7 @@ def set_auth_cookie(request: Request, response: Response, token: str) -> None:
         max_age=config.JWT_EXPIRATION_MINUTES * 60,
         path="/",
     )
+
 
 def audit_key_is_sensitive(key: str) -> bool:
     lowered = str(key or "").strip().lower()
@@ -132,16 +136,14 @@ def clear_auth_cookie(request: Request, response: Response) -> None:
         path="/",
     )
 
+
 def build_audit_log_query(
     db: Session,
     current_user: TokenData,
     tenant_id: Optional[str],
     actor: type[User],
 ) -> RowReturningQuery[AuditLogQueryRow]:
-    query = (
-        db.query(AuditLog, actor.username, actor.email)
-        .outerjoin(actor, actor.id == AuditLog.user_id)
-    )
+    query = db.query(AuditLog, actor.username, actor.email).outerjoin(actor, actor.id == AuditLog.user_id)
     if not getattr(current_user, "is_superuser", False):
         query = query.filter(AuditLog.tenant_id == current_user.tenant_id)
     elif tenant_id:
@@ -237,6 +239,9 @@ def audit_text_like_pattern(text: object) -> str:
 
 def rate_limit_func(request: Request, scope: str, limit: int, window: int) -> None:
     enforce_public_endpoint_security(
-        request, scope=scope, limit=limit, window_seconds=window,
+        request,
+        scope=scope,
+        limit=limit,
+        window_seconds=window,
         allowlist=config.AUTH_PUBLIC_IP_ALLOWLIST,
     )

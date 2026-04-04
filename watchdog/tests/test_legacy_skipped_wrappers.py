@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -140,14 +140,29 @@ class FakeAuthService:
         return next(user for user in self.db.users if user.id == user_id)
 
     def create_group(self, group_create, tenant_id, creator_id):
-        group = Group(id=self._next_id("group"), tenant_id=tenant_id, name=group_create.name, description=group_create.description, is_active=True)
+        group = Group(
+            id=self._next_id("group"),
+            tenant_id=tenant_id,
+            name=group_create.name,
+            description=group_create.description,
+            is_active=True,
+        )
         self.db.add(group)
         return group
 
-    def update_group_permissions(self, group_id, permission_names, tenant_id, actor_user_id=None, actor_role=None, **kwargs):
+    def update_group_permissions(
+        self, group_id, permission_names, tenant_id, actor_user_id=None, actor_role=None, **kwargs
+    ):
         if "manage:users" in permission_names and actor_role == "user":
             raise HTTPException(status_code=403, detail="forbidden")
-        row = AuditLog(id=self._next_id("audit"), tenant_id=tenant_id, user_id=actor_user_id, action="update_group_permissions", resource_type="groups", resource_id=group_id)
+        row = AuditLog(
+            id=self._next_id("audit"),
+            tenant_id=tenant_id,
+            user_id=actor_user_id,
+            action="update_group_permissions",
+            resource_type="groups",
+            resource_id=group_id,
+        )
         self.db.add(row)
         return True
 
@@ -216,7 +231,10 @@ class FakeAuthService:
         if user is None:
             return None
         interval = int(getattr(config, "PASSWORD_RESET_INTERVAL_DAYS", 30))
-        user.needs_password_change = bool(user.password_changed_at and user.password_changed_at < datetime.now(timezone.utc) - timedelta(days=interval))
+        user.needs_password_change = bool(
+            user.password_changed_at
+            and user.password_changed_at < datetime.now(timezone.utc) - timedelta(days=interval)
+        )
         return user
 
     def update_user(self, user_id, user_update, tenant_id, updater_id):
@@ -228,9 +246,13 @@ class FakeAuthService:
         if actor.role != Role.ADMIN.value and role == Role.ADMIN:
             raise HTTPException(status_code=403, detail="forbidden")
         if role == Role.USER and actor.role == Role.ADMIN.value and target.role == Role.ADMIN.value:
-            raise HTTPException(status_code=403, detail="Admin accounts can only be activated or deactivated by another admin")
+            raise HTTPException(
+                status_code=403, detail="Admin accounts can only be activated or deactivated by another admin"
+            )
         if full_name is not None and actor.role == Role.ADMIN.value and target.role == Role.ADMIN.value:
-            raise HTTPException(status_code=403, detail="Admin accounts can only be activated or deactivated by another admin")
+            raise HTTPException(
+                status_code=403, detail="Admin accounts can only be activated or deactivated by another admin"
+            )
         if is_active is not None:
             target.is_active = is_active
         return target
@@ -246,7 +268,12 @@ def _patch_legacy_module(monkeypatch, module, db, svc):
     monkeypatch.setattr(module, "UserCreate", lambda **kwargs: SimpleNamespace(**kwargs), raising=False)
     monkeypatch.setattr(module, "GroupCreate", lambda **kwargs: SimpleNamespace(**kwargs), raising=False)
     monkeypatch.setattr(module, "User", User, raising=False)
-    monkeypatch.setattr(module, "database", SimpleNamespace(db_models=SimpleNamespace(Tenant=Tenant, User=User), connection_test=lambda: False), raising=False)
+    monkeypatch.setattr(
+        module,
+        "database",
+        SimpleNamespace(db_models=SimpleNamespace(Tenant=Tenant, User=User), connection_test=lambda: False),
+        raising=False,
+    )
     monkeypatch.setattr(global_config, "AUTH_PROVIDER", "local", raising=False)
     monkeypatch.setattr(global_config, "OIDC_AUTO_PROVISION_USERS", False, raising=False)
     monkeypatch.setattr(global_config, "AUTH_PASSWORD_FLOW_ENABLED", True, raising=False)
@@ -270,7 +297,11 @@ def test_executes_legacy_group_permissions_forbidden_body(monkeypatch):
 
 
 def test_executes_legacy_group_member_prune_body(monkeypatch):
-    _run_legacy(monkeypatch, legacy_group_ops, legacy_group_ops.test_update_group_members_prunes_removed_member_grafana_group_shares)
+    _run_legacy(
+        monkeypatch,
+        legacy_group_ops,
+        legacy_group_ops.test_update_group_members_prunes_removed_member_grafana_group_shares,
+    )
 
 
 def test_executes_legacy_oidc_link_existing_body(monkeypatch):
@@ -282,11 +313,15 @@ def test_executes_legacy_oidc_disabled_autoprovision_body(monkeypatch):
 
 
 def test_executes_legacy_oidc_password_change_body(monkeypatch):
-    _run_legacy(monkeypatch, legacy_oidc, legacy_oidc.test_local_user_needs_password_change_with_oidc_enabled, monkeypatch)
+    _run_legacy(
+        monkeypatch, legacy_oidc, legacy_oidc.test_local_user_needs_password_change_with_oidc_enabled, monkeypatch
+    )
 
 
 def test_executes_legacy_oidc_expiry_body(monkeypatch):
-    _run_legacy(monkeypatch, legacy_oidc, legacy_oidc.test_password_login_triggers_expiry_even_if_provider_set, monkeypatch)
+    _run_legacy(
+        monkeypatch, legacy_oidc, legacy_oidc.test_password_login_triggers_expiry_even_if_provider_set, monkeypatch
+    )
 
 
 def test_executes_legacy_oidc_auto_provision_body(monkeypatch):
@@ -302,7 +337,9 @@ def test_executes_legacy_admin_creation_forbidden_body(monkeypatch):
 
 
 def test_executes_legacy_admin_toggle_body(monkeypatch):
-    _run_legacy(monkeypatch, legacy_user_security, legacy_user_security.test_admin_can_only_toggle_is_active_for_another_admin)
+    _run_legacy(
+        monkeypatch, legacy_user_security, legacy_user_security.test_admin_can_only_toggle_is_active_for_another_admin
+    )
 
 
 def test_executes_legacy_mfa_enroll_body(monkeypatch):

@@ -3,9 +3,9 @@ Quota service orchestration and API key quota logic.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ from models.access.quota_models import ApiKeyQuota, QuotasResponse, RuntimeQuota
 
 from .parsing import compute_remaining, now_utc
 from .runtime_probe import RuntimeQuotaProbe
-
 
 ConfigGetter = Callable[[], Any]
 DbSessionFactory = Callable[[], Any]
@@ -99,21 +98,15 @@ class QuotaService:
         final_limit = native.limit if native.limit is not None else prom.limit
         final_used = native.used if native.used is not None else prom.used
         has_any_value = final_limit is not None or final_used is not None
-        source: RuntimeSource = (
-            "native" if native.any_value() else ("prometheus" if prom.any_value() else "none")
-        )
+        source: RuntimeSource = "native" if native.any_value() else ("prometheus" if prom.any_value() else "none")
 
         if has_any_value:
             if messages:
                 final_message = "; ".join(messages)
             elif final_limit is None and final_used is not None:
-                final_message = (
-                    f"{service_name.capitalize()} usage is available, but upstream did not return a limit"
-                )
+                final_message = f"{service_name.capitalize()} usage is available, but upstream did not return a limit"
             elif final_limit is not None and final_used is None:
-                final_message = (
-                    f"{service_name.capitalize()} limit is available, but upstream did not return usage"
-                )
+                final_message = f"{service_name.capitalize()} limit is available, but upstream did not return usage"
             else:
                 final_message = "Partial quota data available from upstream"
         else:
@@ -135,9 +128,7 @@ class QuotaService:
         cfg = self._get_config()
         with self._db_session_factory() as db:
             current = (
-                db.query(UserApiKey)
-                .filter(UserApiKey.user_id == user_id, UserApiKey.tenant_id == tenant_id)
-                .count()
+                db.query(UserApiKey).filter(UserApiKey.user_id == user_id, UserApiKey.tenant_id == tenant_id).count()
             )
         max_keys = int(cfg.MAX_API_KEYS_PER_USER)
         return ApiKeyQuota(
@@ -153,9 +144,7 @@ class QuotaService:
         tenant_scope: Optional[str] = None,
     ) -> QuotasResponse:
         cfg = self._get_config()
-        resolved_scope = str(
-            tenant_scope or current_user.org_id or current_user.tenant_id or cfg.DEFAULT_ORG_ID
-        )
+        resolved_scope = str(tenant_scope or current_user.org_id or current_user.tenant_id or cfg.DEFAULT_ORG_ID)
         return QuotasResponse(
             api_keys=self._api_key_quota(current_user.user_id, current_user.tenant_id),
             loki=await self._resolve_runtime_quota(

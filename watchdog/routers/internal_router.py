@@ -3,9 +3,9 @@ Internal token validation route — consumed only by the gateway auth service.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -31,11 +31,7 @@ def _verify_service_token(x_internal_token: str = Header(...)) -> None:
 @router.get(
     "/otlp/validate",
     dependencies=[Depends(_verify_service_token)],
-    responses={
-        status.HTTP_410_GONE: {
-            "description": "Legacy query token validation is disabled; use POST endpoint"
-        }
-    },
+    responses={status.HTTP_410_GONE: {"description": "Legacy query token validation is disabled; use POST endpoint"}},
 )
 async def validate_otlp_token_query(token: str = Query(..., min_length=1)) -> dict[str, str]:
     _ = token

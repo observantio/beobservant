@@ -26,9 +26,33 @@ def _session():
 
 def _seed(db):
     tenant = Tenant(id="t1", name="tenant-1", display_name="Tenant 1", is_active=True)
-    owner = User(id="u1", tenant_id="t1", username="owner", email="owner@example.com", hashed_password="x", org_id="org-1", is_active=True)
-    viewer = User(id="u2", tenant_id="t1", username="viewer", email="viewer@example.com", hashed_password="x", org_id="org-2", is_active=True)
-    outsider = User(id="u3", tenant_id="t1", username="outsider", email="outsider@example.com", hashed_password="x", org_id="org-3", is_active=True)
+    owner = User(
+        id="u1",
+        tenant_id="t1",
+        username="owner",
+        email="owner@example.com",
+        hashed_password="x",
+        org_id="org-1",
+        is_active=True,
+    )
+    viewer = User(
+        id="u2",
+        tenant_id="t1",
+        username="viewer",
+        email="viewer@example.com",
+        hashed_password="x",
+        org_id="org-2",
+        is_active=True,
+    )
+    outsider = User(
+        id="u3",
+        tenant_id="t1",
+        username="outsider",
+        email="outsider@example.com",
+        hashed_password="x",
+        org_id="org-3",
+        is_active=True,
+    )
     group = Group(id="g1", tenant_id="t1", name="Ops", is_active=True)
 
     private_folder = GrafanaFolder(
@@ -140,10 +164,17 @@ def test_folder_helpers_cover_access_and_payload_branches():
     assert folder_ops._db_folder_by_uid(db, "t1", "f-private").id == private_folder.id
     assert folder_ops.check_folder_access(db, "missing", viewer.id, "t1", []) is None
     assert folder_ops.check_folder_access(db, hidden_folder.grafana_uid, viewer.id, "t1", []) is None
-    assert folder_ops.check_folder_access(db, hidden_folder.grafana_uid, viewer.id, "t1", [], include_hidden=True).id == hidden_folder.id
-    assert folder_ops.check_folder_access(db, private_folder.grafana_uid, viewer.id, "t1", [], require_write=True) is None
+    assert (
+        folder_ops.check_folder_access(db, hidden_folder.grafana_uid, viewer.id, "t1", [], include_hidden=True).id
+        == hidden_folder.id
+    )
+    assert (
+        folder_ops.check_folder_access(db, private_folder.grafana_uid, viewer.id, "t1", [], require_write=True) is None
+    )
     assert folder_ops.check_folder_access(db, tenant_folder.grafana_uid, viewer.id, "t1", []).id == tenant_folder.id
-    assert folder_ops.check_folder_access(db, group_folder.grafana_uid, viewer.id, "t1", [group.id]).id == group_folder.id
+    assert (
+        folder_ops.check_folder_access(db, group_folder.grafana_uid, viewer.id, "t1", [group.id]).id == group_folder.id
+    )
     assert folder_ops.check_folder_access(db, group_folder.grafana_uid, viewer.id, "t1", []) is None
 
     assert folder_ops.is_folder_accessible(db, None, viewer.id, "t1", []) is True
@@ -157,11 +188,15 @@ def test_folder_helpers_cover_access_and_payload_branches():
     assert model_payload["sharedGroupIds"] == [group.id]
     assert model_payload["allowDashboardWrites"] is True
 
-    dict_payload = folder_ops._folder_payload({"uid": "dict", "title": "Dict Folder"}, db_folder=None, user_id=viewer.id)
+    dict_payload = folder_ops._folder_payload(
+        {"uid": "dict", "title": "Dict Folder"}, db_folder=None, user_id=viewer.id
+    )
     assert dict_payload["visibility"] == "tenant"
     assert dict_payload["is_owned"] is False
 
-    obj_payload = folder_ops._folder_payload(SimpleNamespace(uid="obj", title="Object Folder"), db_folder=tenant_folder, user_id=owner.id)
+    obj_payload = folder_ops._folder_payload(
+        SimpleNamespace(uid="obj", title="Object Folder"), db_folder=tenant_folder, user_id=owner.id
+    )
     assert obj_payload["created_by"] == owner.id
     assert obj_payload["is_owned"] is True
 

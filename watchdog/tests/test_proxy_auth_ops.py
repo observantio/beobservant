@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import os
@@ -241,39 +241,127 @@ def test_required_permissions_for_path_matrix(path, method, expected):
 def test_proxy_access_extraction_and_headers():
     group = SimpleNamespace(id="g1")
     assert proxy_auth_ops.is_resource_accessible(None, _token_data()) is False
-    assert proxy_auth_ops.is_resource_accessible(
-        SimpleNamespace(tenant_id="tenant-b", hidden_by=[], created_by="u1", is_default=False, read_only=False, visibility="private", shared_groups=[]),
-        _token_data(),
-    ) is False
-    assert proxy_auth_ops.is_resource_accessible(
-        SimpleNamespace(tenant_id="tenant-a", hidden_by=["u1"], created_by="u2", is_default=False, read_only=False, visibility="tenant", shared_groups=[]),
-        _token_data(),
-    ) is False
-    assert proxy_auth_ops.is_resource_accessible(
-        SimpleNamespace(tenant_id="tenant-a", hidden_by=[], created_by="u1", is_default=False, read_only=False, visibility="private", shared_groups=[]),
-        _token_data(),
-    ) is True
-    assert proxy_auth_ops.is_resource_accessible(
-        SimpleNamespace(tenant_id="tenant-a", hidden_by=[], created_by="u2", is_default=True, read_only=False, visibility="private", shared_groups=[]),
-        _token_data(),
-    ) is True
-    assert proxy_auth_ops.is_resource_accessible(
-        SimpleNamespace(tenant_id="tenant-a", hidden_by=[], created_by="u2", is_default=False, read_only=False, visibility="tenant", shared_groups=[]),
-        _token_data(),
-    ) is True
-    assert proxy_auth_ops.is_resource_accessible(
-        SimpleNamespace(tenant_id="tenant-a", hidden_by=[], created_by="u2", is_default=False, read_only=False, visibility="group", shared_groups=[group]),
-        _token_data(group_ids=["g1"]),
-    ) is True
-    assert proxy_auth_ops.is_resource_accessible(
-        SimpleNamespace(tenant_id="tenant-a", hidden_by=[], created_by="u2", is_default=False, read_only=False, visibility="private", shared_groups=[]),
-        _token_data(),
-    ) is False
-    assert proxy_auth_ops.is_resource_accessible(
-        SimpleNamespace(tenant_id="tenant-a", hidden_by=[], created_by="u2", is_default=False, read_only=False, visibility="tenant", shared_groups=[]),
-        _token_data(),
-        require_write=True,
-    ) is False
+    assert (
+        proxy_auth_ops.is_resource_accessible(
+            SimpleNamespace(
+                tenant_id="tenant-b",
+                hidden_by=[],
+                created_by="u1",
+                is_default=False,
+                read_only=False,
+                visibility="private",
+                shared_groups=[],
+            ),
+            _token_data(),
+        )
+        is False
+    )
+    assert (
+        proxy_auth_ops.is_resource_accessible(
+            SimpleNamespace(
+                tenant_id="tenant-a",
+                hidden_by=["u1"],
+                created_by="u2",
+                is_default=False,
+                read_only=False,
+                visibility="tenant",
+                shared_groups=[],
+            ),
+            _token_data(),
+        )
+        is False
+    )
+    assert (
+        proxy_auth_ops.is_resource_accessible(
+            SimpleNamespace(
+                tenant_id="tenant-a",
+                hidden_by=[],
+                created_by="u1",
+                is_default=False,
+                read_only=False,
+                visibility="private",
+                shared_groups=[],
+            ),
+            _token_data(),
+        )
+        is True
+    )
+    assert (
+        proxy_auth_ops.is_resource_accessible(
+            SimpleNamespace(
+                tenant_id="tenant-a",
+                hidden_by=[],
+                created_by="u2",
+                is_default=True,
+                read_only=False,
+                visibility="private",
+                shared_groups=[],
+            ),
+            _token_data(),
+        )
+        is True
+    )
+    assert (
+        proxy_auth_ops.is_resource_accessible(
+            SimpleNamespace(
+                tenant_id="tenant-a",
+                hidden_by=[],
+                created_by="u2",
+                is_default=False,
+                read_only=False,
+                visibility="tenant",
+                shared_groups=[],
+            ),
+            _token_data(),
+        )
+        is True
+    )
+    assert (
+        proxy_auth_ops.is_resource_accessible(
+            SimpleNamespace(
+                tenant_id="tenant-a",
+                hidden_by=[],
+                created_by="u2",
+                is_default=False,
+                read_only=False,
+                visibility="group",
+                shared_groups=[group],
+            ),
+            _token_data(group_ids=["g1"]),
+        )
+        is True
+    )
+    assert (
+        proxy_auth_ops.is_resource_accessible(
+            SimpleNamespace(
+                tenant_id="tenant-a",
+                hidden_by=[],
+                created_by="u2",
+                is_default=False,
+                read_only=False,
+                visibility="private",
+                shared_groups=[],
+            ),
+            _token_data(),
+        )
+        is False
+    )
+    assert (
+        proxy_auth_ops.is_resource_accessible(
+            SimpleNamespace(
+                tenant_id="tenant-a",
+                hidden_by=[],
+                created_by="u2",
+                is_default=False,
+                read_only=False,
+                visibility="tenant",
+                shared_groups=[],
+            ),
+            _token_data(),
+            require_write=True,
+        )
+        is False
+    )
 
     assert proxy_auth_ops.extract_dashboard_uid("/grafana/d/uid-a/name") == "uid-a"
     assert proxy_auth_ops.extract_dashboard_uid("/grafana/api/dashboards/uid/uid-b?x=1") == "uid-b"
@@ -288,16 +376,18 @@ def test_proxy_access_extraction_and_headers():
 
     header_request = _request("/", headers=[(b"authorization", b"Bearer bearer-token")])
     assert proxy_auth_ops.extract_proxy_token(header_request) == "bearer-token"
-    cookie_request = Request({
-        "type": "http",
-        "http_version": "1.1",
-        "method": "GET",
-        "path": "/",
-        "headers": [(b"cookie", b"access_token=cookie-token")],
-        "client": ("127.0.0.1", 1),
-        "scheme": "http",
-        "query_string": b"",
-    })
+    cookie_request = Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "path": "/",
+            "headers": [(b"cookie", b"access_token=cookie-token")],
+            "client": ("127.0.0.1", 1),
+            "scheme": "http",
+            "query_string": b"",
+        }
+    )
     assert proxy_auth_ops.extract_proxy_token(cookie_request) == "cookie-token"
     header_token_request = _request("/", headers=[(b"x-auth-token", b"header-token")])
     assert proxy_auth_ops.extract_proxy_token(header_token_request) == "header-token"
@@ -330,7 +420,9 @@ def test_proxy_db_helpers_cover_loader_and_update_paths(monkeypatch):
 
     dash = SimpleNamespace(folder_uid="fold-1")
     folder = SimpleNamespace(grafana_uid="fold-1")
-    orm_user = SimpleNamespace(is_active=True, org_id="scope-a", groups=[SimpleNamespace(id="g1"), SimpleNamespace(id=" ")])
+    orm_user = SimpleNamespace(
+        is_active=True, org_id="scope-a", groups=[SimpleNamespace(id="g1"), SimpleNamespace(id=" ")]
+    )
 
     class DbStub:
         def __init__(self, values):
@@ -407,55 +499,101 @@ async def test_proxy_authorization_helper_branches(monkeypatch):
     monkeypatch.setattr(proxy_auth_ops, "run_in_threadpool", fake_run_in_threadpool)
 
     service = _ProxyStub(_GrafanaDashServiceStub(dashboard={"meta": {"folderUid": "fold-1"}}))
-    folder_obj = SimpleNamespace(grafana_uid="fold-1", tenant_id="tenant-a", hidden_by=[], created_by="u1", is_default=False, read_only=False, visibility="tenant", shared_groups=[])
+    folder_obj = SimpleNamespace(
+        grafana_uid="fold-1",
+        tenant_id="tenant-a",
+        hidden_by=[],
+        created_by="u1",
+        is_default=False,
+        read_only=False,
+        visibility="tenant",
+        shared_groups=[],
+    )
     set_calls = []
     monkeypatch.setattr(proxy_auth_ops, "_db_load_folder", lambda tenant_id, folder_uid: folder_obj)
-    monkeypatch.setattr(proxy_auth_ops, "_db_set_dashboard_folder_uid", lambda tenant_id, dashboard_uid, folder_uid: set_calls.append((tenant_id, dashboard_uid, folder_uid)))
-    resolved_folder = await proxy_auth_ops._resolve_dashboard_folder_context(service, _token_data(), dashboard_uid="dash-1", folder_obj=None)
+    monkeypatch.setattr(
+        proxy_auth_ops,
+        "_db_set_dashboard_folder_uid",
+        lambda tenant_id, dashboard_uid, folder_uid: set_calls.append((tenant_id, dashboard_uid, folder_uid)),
+    )
+    resolved_folder = await proxy_auth_ops._resolve_dashboard_folder_context(
+        service, _token_data(), dashboard_uid="dash-1", folder_obj=None
+    )
     assert resolved_folder is folder_obj
     assert set_calls == [("tenant-a", "dash-1", "fold-1")]
 
     service = _ProxyStub(_GrafanaDashServiceStub(dashboard={"meta": {"folderId": 3}}))
-    monkeypatch.setattr(proxy_auth_ops, "_db_load_folder_by_id", lambda tenant_id, folder_id: SimpleNamespace(grafana_uid="fold-3"))
-    folder = await proxy_auth_ops._resolve_dashboard_folder_context(service, _token_data(), dashboard_uid="dash-2", folder_obj=None)
+    monkeypatch.setattr(
+        proxy_auth_ops, "_db_load_folder_by_id", lambda tenant_id, folder_id: SimpleNamespace(grafana_uid="fold-3")
+    )
+    folder = await proxy_auth_ops._resolve_dashboard_folder_context(
+        service, _token_data(), dashboard_uid="dash-2", folder_obj=None
+    )
     assert getattr(folder, "grafana_uid") == "fold-3"
 
     service = _ProxyStub(_GrafanaDashServiceStub(dashboard={"meta": {"folderId": 3}}))
-    monkeypatch.setattr(proxy_auth_ops, "_db_load_folder_by_id", lambda tenant_id, folder_id: SimpleNamespace(grafana_uid=""))
+    monkeypatch.setattr(
+        proxy_auth_ops, "_db_load_folder_by_id", lambda tenant_id, folder_id: SimpleNamespace(grafana_uid="")
+    )
     with pytest.raises(HTTPException, match="Folder access denied"):
-        await proxy_auth_ops._resolve_dashboard_folder_context(service, _token_data(), dashboard_uid="dash-3", folder_obj=None)
+        await proxy_auth_ops._resolve_dashboard_folder_context(
+            service, _token_data(), dashboard_uid="dash-3", folder_obj=None
+        )
 
     clear_calls = []
     service = _ProxyStub(_GrafanaDashServiceStub(dashboard={"meta": {}}))
-    monkeypatch.setattr(proxy_auth_ops, "_db_clear_dashboard_folder_uid", lambda tenant_id, dashboard_uid: clear_calls.append((tenant_id, dashboard_uid)))
-    assert await proxy_auth_ops._resolve_dashboard_folder_context(service, _token_data(), dashboard_uid="dash-4", folder_obj=None) is None
+    monkeypatch.setattr(
+        proxy_auth_ops,
+        "_db_clear_dashboard_folder_uid",
+        lambda tenant_id, dashboard_uid: clear_calls.append((tenant_id, dashboard_uid)),
+    )
+    assert (
+        await proxy_auth_ops._resolve_dashboard_folder_context(
+            service, _token_data(), dashboard_uid="dash-4", folder_obj=None
+        )
+        is None
+    )
     assert clear_calls == [("tenant-a", "dash-4")]
 
-    assert await proxy_auth_ops._authorize_dashboard_access(
-        _ProxyStub(_GrafanaDashServiceStub()),
-        _token_data(),
-        dashboard_uid=None,
-        dashboard_obj=None,
-        folder_obj=folder_obj,
-        original_path="/grafana/api/search",
-        original_method="GET",
-    ) is folder_obj
+    assert (
+        await proxy_auth_ops._authorize_dashboard_access(
+            _ProxyStub(_GrafanaDashServiceStub()),
+            _token_data(),
+            dashboard_uid=None,
+            dashboard_obj=None,
+            folder_obj=folder_obj,
+            original_path="/grafana/api/search",
+            original_method="GET",
+        )
+        is folder_obj
+    )
 
-    dashboard_obj = SimpleNamespace(tenant_id="tenant-a", hidden_by=[], created_by="u1", is_default=False, read_only=False, visibility="tenant", shared_groups=[])
+    dashboard_obj = SimpleNamespace(
+        tenant_id="tenant-a",
+        hidden_by=[],
+        created_by="u1",
+        is_default=False,
+        read_only=False,
+        visibility="tenant",
+        shared_groups=[],
+    )
 
     async def resolve_folder(*args, **kwargs):
         return folder_obj
 
     monkeypatch.setattr(proxy_auth_ops, "_resolve_dashboard_folder_context", resolve_folder)
-    assert await proxy_auth_ops._authorize_dashboard_access(
-        _ProxyStub(_GrafanaDashServiceStub()),
-        _token_data(),
-        dashboard_uid="dash-5",
-        dashboard_obj=dashboard_obj,
-        folder_obj=folder_obj,
-        original_path="/grafana/api/dashboards/uid/dash-5",
-        original_method="GET",
-    ) is folder_obj
+    assert (
+        await proxy_auth_ops._authorize_dashboard_access(
+            _ProxyStub(_GrafanaDashServiceStub()),
+            _token_data(),
+            dashboard_uid="dash-5",
+            dashboard_obj=dashboard_obj,
+            folder_obj=folder_obj,
+            original_path="/grafana/api/dashboards/uid/dash-5",
+            original_method="GET",
+        )
+        is folder_obj
+    )
 
     with pytest.raises(HTTPException, match="Dashboard access denied"):
         await proxy_auth_ops._authorize_dashboard_access(
@@ -468,7 +606,15 @@ async def test_proxy_authorization_helper_branches(monkeypatch):
             original_method="GET",
         )
 
-    hidden_folder = SimpleNamespace(tenant_id="tenant-a", hidden_by=["u1"], created_by="u2", is_default=False, read_only=False, visibility="tenant", shared_groups=[])
+    hidden_folder = SimpleNamespace(
+        tenant_id="tenant-a",
+        hidden_by=["u1"],
+        created_by="u2",
+        is_default=False,
+        read_only=False,
+        visibility="tenant",
+        shared_groups=[],
+    )
 
     async def resolve_hidden_folder(*args, **kwargs):
         return hidden_folder
@@ -495,7 +641,16 @@ async def test_proxy_datasource_and_request_error_branches(monkeypatch):
 
     monkeypatch.setattr(proxy_auth_ops, "_enforce_writable_datasource", enforce_writable)
 
-    ds_obj = SimpleNamespace(grafana_uid="ds-1", tenant_id="tenant-a", hidden_by=[], created_by="u1", is_default=False, read_only=False, visibility="tenant", shared_groups=[])
+    ds_obj = SimpleNamespace(
+        grafana_uid="ds-1",
+        tenant_id="tenant-a",
+        hidden_by=[],
+        created_by="u1",
+        is_default=False,
+        read_only=False,
+        visibility="tenant",
+        shared_groups=[],
+    )
     await proxy_auth_ops._authorize_datasource_access(
         _ProxyStub(_GrafanaServiceStub()),
         _token_data(),

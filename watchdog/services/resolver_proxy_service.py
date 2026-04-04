@@ -3,9 +3,9 @@ Proxy client for forwarding Resolver API calls through Watchdog.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -38,19 +38,14 @@ class ResolverProxyService(BaseProxyService):
             tls_enabled=bool(config.RESOLVER_TLS_ENABLED),
             ca_cert_path=config.RESOLVER_CA_CERT_PATH,
         )
-        self._cache_ttl_seconds = max(
-            0, int(getattr(config, "RESOLVER_PROXY_CACHE_TTL_SECONDS", 15))
-        )
+        self._cache_ttl_seconds = max(0, int(getattr(config, "RESOLVER_PROXY_CACHE_TTL_SECONDS", 15)))
         self._read_cache = TTLCache()
         self._read_inflight: Dict[str, asyncio.Future[JSONValue]] = {}
         self._read_inflight_lock = asyncio.Lock()
 
     @staticmethod
     def _is_volatile_read(upstream_path: str) -> bool:
-        return (
-            upstream_path.startswith("/api/v1/jobs")
-            or upstream_path.startswith("/api/v1/reports")
-        )
+        return upstream_path.startswith("/api/v1/jobs") or upstream_path.startswith("/api/v1/reports")
 
     def _resolve_cache_ttl(
         self,
@@ -59,11 +54,7 @@ class ResolverProxyService(BaseProxyService):
         upstream_path: str,
         cache_ttl_seconds: Optional[int],
     ) -> int:
-        configured_cache_ttl = (
-            self._cache_ttl_seconds
-            if cache_ttl_seconds is None
-            else max(0, int(cache_ttl_seconds))
-        )
+        configured_cache_ttl = self._cache_ttl_seconds if cache_ttl_seconds is None else max(0, int(cache_ttl_seconds))
         if method.upper() == "GET" and self._is_volatile_read(upstream_path):
             return 0
         return configured_cache_ttl
@@ -174,9 +165,7 @@ class ResolverProxyService(BaseProxyService):
             if not owner:
                 return await inflight_future
 
-        context_token = self._sign_context_token(
-            current_user=current_user, tenant_id=tenant_id
-        )
+        context_token = self._sign_context_token(current_user=current_user, tenant_id=tenant_id)
         corr = correlation_id or str(uuid.uuid4())
         target = f"{self.base_url}{upstream_path}"
         headers = {
@@ -246,11 +235,7 @@ class ResolverProxyService(BaseProxyService):
         )
 
         if response.status_code >= 400:
-            detail = (
-                "Resolver upstream error"
-                if response.status_code >= 500
-                else self._extract_error_detail(response)
-            )
+            detail = "Resolver upstream error" if response.status_code >= 500 else self._extract_error_detail(response)
             err = HTTPException(
                 status_code=response.status_code,
                 detail=detail,
@@ -280,5 +265,6 @@ class ResolverProxyService(BaseProxyService):
             if owner and cache_key:
                 async with self._read_inflight_lock:
                     self._read_inflight.pop(cache_key, None)
+
 
 resolver_proxy_service = ResolverProxyService()

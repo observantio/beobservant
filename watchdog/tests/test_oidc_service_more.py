@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from tests._env import ensure_test_env
 ensure_test_env()
 
 from services.auth.oidc_service import OIDCService, _json_dict, _looks_like_jwt
-
 
 _oidc_module = importlib.import_module(OIDCService.__module__)
 
@@ -51,7 +50,9 @@ def test_oidc_small_helpers_and_authorization_validation(monkeypatch):
 
     monkeypatch.setattr(service, "_get_well_known", lambda: {"authorization_endpoint": "https://issuer/auth"})
     with pytest.raises(ValueError, match="Unsupported PKCE"):
-        service.build_authorization_url("https://app/cb", "state", "nonce", code_challenge="x", code_challenge_method="bad")
+        service.build_authorization_url(
+            "https://app/cb", "state", "nonce", code_challenge="x", code_challenge_method="bad"
+        )
 
     with pytest.raises(ValueError, match="code_challenge_method requires code_challenge"):
         asyncio.run(
@@ -71,7 +72,15 @@ def test_oidc_well_known_jwks_and_exchange_paths(monkeypatch):
         def get(self, url, **kwargs):
             get_calls.append((url, kwargs))
             if url.endswith("openid-configuration"):
-                return ResponseStub({"issuer": "https://issuer", "jwks_uri": "https://issuer/jwks", "userinfo_endpoint": "https://issuer/userinfo", "token_endpoint": "https://issuer/token", "authorization_endpoint": "https://issuer/auth"})
+                return ResponseStub(
+                    {
+                        "issuer": "https://issuer",
+                        "jwks_uri": "https://issuer/jwks",
+                        "userinfo_endpoint": "https://issuer/userinfo",
+                        "token_endpoint": "https://issuer/token",
+                        "authorization_endpoint": "https://issuer/auth",
+                    }
+                )
             if url.endswith("/jwks"):
                 return ResponseStub({"keys": [{"kid": "kid-1", "kty": "RSA", "alg": "RS256", "use": "sig"}]})
             if url.endswith("/userinfo"):
@@ -148,7 +157,11 @@ def test_oidc_transaction_error_paths(monkeypatch):
     assert record["nonce"] == "nonce1"
 
     with pytest.raises(ValueError, match="transaction not found"):
-        asyncio.run(service.consume_authorization_transaction_async(transaction_id=None, state="missing", redirect_uri="https://app/cb"))
+        asyncio.run(
+            service.consume_authorization_transaction_async(
+                transaction_id=None, state="missing", redirect_uri="https://app/cb"
+            )
+        )
 
     created2 = asyncio.run(
         service.start_authorization_transaction_async(
@@ -160,9 +173,20 @@ def test_oidc_transaction_error_paths(monkeypatch):
         )
     )
     with pytest.raises(ValueError, match="Missing PKCE"):
-        asyncio.run(service.consume_authorization_transaction_async(transaction_id=created2["transaction_id"], state="state2", redirect_uri="https://app/cb"))
+        asyncio.run(
+            service.consume_authorization_transaction_async(
+                transaction_id=created2["transaction_id"], state="state2", redirect_uri="https://app/cb"
+            )
+        )
     with pytest.raises(ValueError, match="Invalid PKCE"):
-        asyncio.run(service.consume_authorization_transaction_async(transaction_id=created2["transaction_id"], state="state2", redirect_uri="https://app/cb", code_verifier="wrong"))
+        asyncio.run(
+            service.consume_authorization_transaction_async(
+                transaction_id=created2["transaction_id"],
+                state="state2",
+                redirect_uri="https://app/cb",
+                code_verifier="wrong",
+            )
+        )
 
 
 def test_oidc_sync_runtime_helpers(monkeypatch):
@@ -198,7 +222,9 @@ def test_oidc_admin_token_and_keycloak_user_paths(monkeypatch):
             calls.append(("post", url, kwargs))
             if url.endswith("/token"):
                 return ResponseStub({"access_token": "admin-token", "expires_in": 60})
-            return ResponseStub({}, status_code=201, headers={"Location": "https://kc/admin/realms/master/users/user-1"})
+            return ResponseStub(
+                {}, status_code=201, headers={"Location": "https://kc/admin/realms/master/users/user-1"}
+            )
 
         def get(self, url, **kwargs):
             calls.append(("get", url, kwargs))

@@ -3,9 +3,9 @@ OpenAPI customization wiring for the Watchdog FastAPI app.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -101,7 +101,11 @@ def _apply_inferred_responses(path: str, method: str, operation: dict[str, Any])
     if has_path_params:
         inferred["404"] = {"description": "Not Found"}
 
-    if path.startswith("/api/auth/login") or path.startswith("/api/auth/register") or path.startswith("/api/auth/oidc/"):
+    if (
+        path.startswith("/api/auth/login")
+        or path.startswith("/api/auth/register")
+        or path.startswith("/api/auth/oidc/")
+    ):
         inferred["429"] = {"description": "Too Many Requests"}
 
     if path.startswith("/api/auth/login") or path.startswith("/api/auth/register"):
@@ -196,14 +200,7 @@ def _iter_method_operations(paths: dict[str, Any]) -> list[tuple[str, str, dict[
 
 
 def _sanitize_operation_id_suffix(path: str) -> str:
-    cleaned = (
-        path.strip("/")
-        .replace("/", "_")
-        .replace("{", "")
-        .replace("}", "")
-        .replace(":", "_")
-        .replace("-", "_")
-    )
+    cleaned = path.strip("/").replace("/", "_").replace("{", "").replace("}", "").replace(":", "_").replace("-", "_")
     return cleaned or "root"
 
 

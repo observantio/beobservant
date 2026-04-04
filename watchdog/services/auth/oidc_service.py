@@ -1,12 +1,12 @@
 """
-OIDC authentication service for validating ID tokens, exchanging credentials for tokens,
-and provisioning users in Keycloak if enabled.
+OIDC authentication service for validating ID tokens, exchanging credentials for tokens, and provisioning users in
+Keycloak if enabled.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -155,11 +155,7 @@ class OIDCService:
 
     def _get_jwks(self, *, force_refresh: bool = False) -> JSONDict:
         with self._cache_lock:
-            if (
-                not force_refresh
-                and self._jwks_cache
-                and self._is_fresh(self._jwks_cache_at)
-            ):
+            if not force_refresh and self._jwks_cache and self._is_fresh(self._jwks_cache_at):
                 return self._jwks_cache
 
         jwks_url = config.OIDC_JWKS_URL
@@ -247,14 +243,8 @@ class OIDCService:
                 key_item
                 for key_item in keys
                 if str(key_item.get("kty") or "").strip()
-                and (
-                    not str(key_item.get("alg") or "").strip()
-                    or str(key_item.get("alg") or "").strip() == alg
-                )
-                and (
-                    not str(key_item.get("use") or "").strip()
-                    or str(key_item.get("use") or "").strip() == "sig"
-                )
+                and (not str(key_item.get("alg") or "").strip() or str(key_item.get("alg") or "").strip() == alg)
+                and (not str(key_item.get("use") or "").strip() or str(key_item.get("use") or "").strip() == "sig")
             ]
             if len(candidates) == 1:
                 return candidates[0]

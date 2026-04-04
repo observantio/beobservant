@@ -1,11 +1,12 @@
 """
-System Service for collecting CPU, memory, disk, and network metrics, and determining system stress status based on configurable thresholds.
+System Service for collecting CPU, memory, disk, and network metrics, and determining system stress status based on
+configurable thresholds.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import logging
@@ -38,6 +39,7 @@ def _int_value(value: object) -> int:
     if isinstance(value, float):
         return int(value)
     return 0
+
 
 class SystemService:
     def __init__(self) -> None:

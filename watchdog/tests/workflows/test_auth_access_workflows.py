@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -773,7 +773,9 @@ def test_api_key_otlp_rotation_and_enablement_workflow(client, monkeypatch: pyte
     patch_auth_service(monkeypatch, state)
 
     monkeypatch.setattr(internal_router.internal_service, "_get_internal_token", lambda: "internal-token")
-    monkeypatch.setattr(internal_router.internal_service._auth_service, "validate_otlp_token", state.validate_otlp_token)
+    monkeypatch.setattr(
+        internal_router.internal_service._auth_service, "validate_otlp_token", state.validate_otlp_token
+    )
 
     admin_headers = state.auth_header("token-u-admin")
     key_response = client.post(

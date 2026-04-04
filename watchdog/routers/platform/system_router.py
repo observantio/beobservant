@@ -3,9 +3,9 @@ Router for system-level operations such as retrieving system metrics, health sta
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
@@ -28,8 +28,8 @@ system_service = SystemService()
 GITHUB_OJO_LATEST_RELEASE_URL = "https://api.github.com/repos/observantio/ojo/releases/latest"
 GITHUB_OJO_RELEASES_URL = "https://api.github.com/repos/observantio/ojo/releases"
 OJO_RELEASE_CACHE_TTL_SECONDS = 3600
-ojo_release_cache_payload: Optional[JSONDict] = None
-ojo_release_cache_expires_at: float = 0.0
+OJO_RELEASE_CACHE_PAYLOAD: Optional[JSONDict] = None
+OJO_RELEASE_CACHE_EXPIRES_AT: float = 0.0
 ojo_release_cache_lock = asyncio.Lock()
 
 
@@ -45,7 +45,7 @@ async def get_system_metrics(
 @handle_route_errors(internal_detail="Failed to retrieve system quotas")
 async def get_system_quotas(
     org_id: Optional[str] = Query(default=None, alias="orgId"),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system")),
 ) -> QuotasResponse:
     requested_org = org_id if isinstance(org_id, str) else None
     selected_org = str(requested_org or current_user.org_id or "").strip()
@@ -86,13 +86,13 @@ async def get_ojo_releases(
         return payload
 
     now = time.monotonic()
-    if ojo_release_cache_payload is not None and now < ojo_release_cache_expires_at:
-        return ojo_release_cache_payload
+    if OJO_RELEASE_CACHE_PAYLOAD is not None and now < OJO_RELEASE_CACHE_EXPIRES_AT:
+        return OJO_RELEASE_CACHE_PAYLOAD
 
     async with ojo_release_cache_lock:
         now = time.monotonic()
-        if ojo_release_cache_payload is not None and now < ojo_release_cache_expires_at:
-            return ojo_release_cache_payload
+        if OJO_RELEASE_CACHE_PAYLOAD is not None and now < OJO_RELEASE_CACHE_EXPIRES_AT:
+            return OJO_RELEASE_CACHE_PAYLOAD
 
         timeout = httpx.Timeout(8.0)
         headers = {"Accept": "application/vnd.github+json"}
@@ -107,8 +107,8 @@ async def get_ojo_releases(
                     headers=headers,
                 )
         except httpx.HTTPError:
-            if ojo_release_cache_payload is not None:
-                return _fallback_payload(cached_payload=ojo_release_cache_payload)
+            if OJO_RELEASE_CACHE_PAYLOAD is not None:
+                return _fallback_payload(cached_payload=OJO_RELEASE_CACHE_PAYLOAD)
             return _fallback_payload()
 
         latest_payload = latest_res.json() if latest_res.is_success else {}
@@ -119,6 +119,6 @@ async def get_ojo_releases(
             "latest_ok": latest_res.is_success,
             "releases_ok": list_res.is_success,
         }
-        globals()["ojo_release_cache_payload"] = payload
-        globals()["ojo_release_cache_expires_at"] = now + OJO_RELEASE_CACHE_TTL_SECONDS
+        globals()["OJO_RELEASE_CACHE_PAYLOAD"] = payload
+        globals()["OJO_RELEASE_CACHE_EXPIRES_AT"] = now + OJO_RELEASE_CACHE_TTL_SECONDS
         return payload

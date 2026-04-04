@@ -1,11 +1,16 @@
 """
-Entrypoint for the FastAPI application, setting up the server, middleware, routes, and database connections. This module initializes the application, configures logging, sets up CORS and security headers, and defines the main API endpoints for health checks and service information. It also includes exception handlers for validation errors and unexpected exceptions to ensure consistent error responses. The application is designed to be modular, with separate routers for different services (Tempo, Loki, Alertmanager, Grafana) and a shared authentication system. The server is configured to use uvloop for improved performance and includes graceful shutdown logic to clean up resources on exit.
+Entrypoint for the FastAPI application, setting up the server, middleware, routes, and database connections. This module
+initializes the application, configures logging, sets up CORS and security headers, and defines the main API endpoints
+for health checks and service information. It also includes exception handlers for validation errors and unexpected
+exceptions to ensure consistent error responses. The application is designed to be modular, with separate routers for
+different services (Tempo, Loki, Alertmanager, Grafana) and a shared authentication system. The server is configured to
+use uvloop for improved performance and includes graceful shutdown logic to clean up resources on exit.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import logging
@@ -46,8 +51,7 @@ from middleware.error_handlers import (
 from middleware.openapi import install_custom_openapi
 
 logging.basicConfig(
-    level=getattr(logging, config.LOG_LEVEL.upper()),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=getattr(logging, config.LOG_LEVEL.upper()), format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("watchdog")
 
@@ -77,6 +81,7 @@ if not config.SKIP_STARTUP_DB_INIT:
     logger.info("✓ Database schema ready")
 
     from middleware.dependencies import auth_service
+
     auth_service._lazy_init()
     auth_service.backfill_otlp_tokens()
     logger.info("✓ Auth service initialized")
@@ -109,6 +114,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         unique = {id(c): c for c in clients}.values()
         if unique:
             await asyncio.gather(*(c.aclose() for c in unique), return_exceptions=True)
+
 
 app = FastAPI(
     title=constants.APP_NAME,
@@ -180,8 +186,9 @@ async def root() -> dict[str, object]:
             constants.SERVICE_RESOLVER: "/api/resolver",
         },
         "documentation": "/docs",
-        "health": "/health"
+        "health": "/health",
     }
+
 
 @app.get(
     "/health",
@@ -191,11 +198,7 @@ async def root() -> dict[str, object]:
     response_description="The current health status for watchdog.",
 )
 async def health() -> dict[str, str]:
-    return {
-        "status": constants.STATUS_HEALTHY,
-        "service": constants.APP_NAME,
-        "version": constants.APP_VERSION
-    }
+    return {"status": constants.STATUS_HEALTHY, "service": constants.APP_NAME, "version": constants.APP_VERSION}
 
 
 async def _upstream_reachable(base_url: str) -> bool:
@@ -216,9 +219,7 @@ async def _upstream_reachable(base_url: str) -> bool:
     response_description="The readiness result and dependency checks.",
     response_model=ReadyResponse,
     responses={
-        status.HTTP_503_SERVICE_UNAVAILABLE: {
-            "description": "One or more required dependencies are unavailable"
-        }
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "One or more required dependencies are unavailable"}
     },
 )
 async def ready() -> JSONResponse:
@@ -249,15 +250,10 @@ async def ready() -> JSONResponse:
         return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=payload)
     return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
 
+
 if __name__ == "__main__":
     import uvicorn
 
     logger.info(f"Starting {constants.APP_NAME} v{constants.APP_VERSION}")
 
-    uvicorn.run(
-        app,
-        host=config.HOST,
-        port=config.PORT,
-        loop="uvloop",
-        log_level=config.LOG_LEVEL
-    )
+    uvicorn.run(app, host=config.HOST, port=config.PORT, loop="uvloop", log_level=config.LOG_LEVEL)

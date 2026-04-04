@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import os
@@ -81,29 +81,47 @@ def _update_payload(title: str = "Updated by collaborator", folder_id=None):
 @pytest.mark.asyncio
 async def test_non_owner_can_update_dashboard_when_folder_allows_dashboard_writes():
     db = _session()
-    db.add_all([
-        Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
-        User(id="u1", tenant_id="t1", username="owner", email="o@example.com", hashed_password="x", org_id="org", is_active=True),
-        User(id="u2", tenant_id="t1", username="member", email="m@example.com", hashed_password="x", org_id="org", is_active=True),
-        GrafanaFolder(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="f-collab",
-            grafana_id=11,
-            title="Collaborative",
-            visibility="tenant",
-            allow_dashboard_writes=True,
-        ),
-        GrafanaDashboard(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="d1",
-            grafana_id=101,
-            title="Original",
-            visibility="private",
-            folder_uid="f-collab",
-        ),
-    ])
+    db.add_all(
+        [
+            Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
+            User(
+                id="u1",
+                tenant_id="t1",
+                username="owner",
+                email="o@example.com",
+                hashed_password="x",
+                org_id="org",
+                is_active=True,
+            ),
+            User(
+                id="u2",
+                tenant_id="t1",
+                username="member",
+                email="m@example.com",
+                hashed_password="x",
+                org_id="org",
+                is_active=True,
+            ),
+            GrafanaFolder(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="f-collab",
+                grafana_id=11,
+                title="Collaborative",
+                visibility="tenant",
+                allow_dashboard_writes=True,
+            ),
+            GrafanaDashboard(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="d1",
+                grafana_id=101,
+                title="Original",
+                visibility="private",
+                folder_uid="f-collab",
+            ),
+        ]
+    )
     db.commit()
 
     service = _ProxyStub()
@@ -129,29 +147,47 @@ async def test_non_owner_can_update_dashboard_when_folder_allows_dashboard_write
 @pytest.mark.asyncio
 async def test_non_owner_cannot_change_visibility_when_delegated_update_enabled():
     db = _session()
-    db.add_all([
-        Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
-        User(id="u1", tenant_id="t1", username="owner", email="o@example.com", hashed_password="x", org_id="org", is_active=True),
-        User(id="u2", tenant_id="t1", username="member", email="m@example.com", hashed_password="x", org_id="org", is_active=True),
-        GrafanaFolder(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="f-collab",
-            grafana_id=11,
-            title="Collaborative",
-            visibility="tenant",
-            allow_dashboard_writes=True,
-        ),
-        GrafanaDashboard(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="d1",
-            grafana_id=101,
-            title="Original",
-            visibility="private",
-            folder_uid="f-collab",
-        ),
-    ])
+    db.add_all(
+        [
+            Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
+            User(
+                id="u1",
+                tenant_id="t1",
+                username="owner",
+                email="o@example.com",
+                hashed_password="x",
+                org_id="org",
+                is_active=True,
+            ),
+            User(
+                id="u2",
+                tenant_id="t1",
+                username="member",
+                email="m@example.com",
+                hashed_password="x",
+                org_id="org",
+                is_active=True,
+            ),
+            GrafanaFolder(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="f-collab",
+                grafana_id=11,
+                title="Collaborative",
+                visibility="tenant",
+                allow_dashboard_writes=True,
+            ),
+            GrafanaDashboard(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="d1",
+                grafana_id=101,
+                title="Original",
+                visibility="private",
+                folder_uid="f-collab",
+            ),
+        ]
+    )
     db.commit()
 
     service = _ProxyStub()
@@ -176,38 +212,56 @@ async def test_non_owner_cannot_change_visibility_when_delegated_update_enabled(
 @pytest.mark.asyncio
 async def test_non_owner_cannot_move_dashboard_to_other_folder_when_delegated_update_enabled():
     db = _session()
-    db.add_all([
-        Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
-        User(id="u1", tenant_id="t1", username="owner", email="o@example.com", hashed_password="x", org_id="org", is_active=True),
-        User(id="u2", tenant_id="t1", username="member", email="m@example.com", hashed_password="x", org_id="org", is_active=True),
-        GrafanaFolder(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="f-collab",
-            grafana_id=11,
-            title="Collaborative",
-            visibility="tenant",
-            allow_dashboard_writes=True,
-        ),
-        GrafanaFolder(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="f-other",
-            grafana_id=12,
-            title="Other",
-            visibility="tenant",
-            allow_dashboard_writes=True,
-        ),
-        GrafanaDashboard(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="d1",
-            grafana_id=101,
-            title="Original",
-            visibility="private",
-            folder_uid="f-collab",
-        ),
-    ])
+    db.add_all(
+        [
+            Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
+            User(
+                id="u1",
+                tenant_id="t1",
+                username="owner",
+                email="o@example.com",
+                hashed_password="x",
+                org_id="org",
+                is_active=True,
+            ),
+            User(
+                id="u2",
+                tenant_id="t1",
+                username="member",
+                email="m@example.com",
+                hashed_password="x",
+                org_id="org",
+                is_active=True,
+            ),
+            GrafanaFolder(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="f-collab",
+                grafana_id=11,
+                title="Collaborative",
+                visibility="tenant",
+                allow_dashboard_writes=True,
+            ),
+            GrafanaFolder(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="f-other",
+                grafana_id=12,
+                title="Other",
+                visibility="tenant",
+                allow_dashboard_writes=True,
+            ),
+            GrafanaDashboard(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="d1",
+                grafana_id=101,
+                title="Original",
+                visibility="private",
+                folder_uid="f-collab",
+            ),
+        ]
+    )
     db.commit()
 
     service = _ProxyStub()
@@ -232,29 +286,47 @@ async def test_non_owner_cannot_move_dashboard_to_other_folder_when_delegated_up
 @pytest.mark.asyncio
 async def test_dashboard_owner_can_update_in_shared_folder_when_writes_enabled():
     db = _session()
-    db.add_all([
-        Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
-        User(id="u1", tenant_id="t1", username="folder-owner", email="o@example.com", hashed_password="x", org_id="org", is_active=True),
-        User(id="u2", tenant_id="t1", username="member", email="m@example.com", hashed_password="x", org_id="org", is_active=True),
-        GrafanaFolder(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="f-collab",
-            grafana_id=11,
-            title="Collaborative",
-            visibility="tenant",
-            allow_dashboard_writes=True,
-        ),
-        GrafanaDashboard(
-            tenant_id="t1",
-            created_by="u2",
-            grafana_uid="d1",
-            grafana_id=101,
-            title="Original",
-            visibility="private",
-            folder_uid="f-collab",
-        ),
-    ])
+    db.add_all(
+        [
+            Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
+            User(
+                id="u1",
+                tenant_id="t1",
+                username="folder-owner",
+                email="o@example.com",
+                hashed_password="x",
+                org_id="org",
+                is_active=True,
+            ),
+            User(
+                id="u2",
+                tenant_id="t1",
+                username="member",
+                email="m@example.com",
+                hashed_password="x",
+                org_id="org",
+                is_active=True,
+            ),
+            GrafanaFolder(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="f-collab",
+                grafana_id=11,
+                title="Collaborative",
+                visibility="tenant",
+                allow_dashboard_writes=True,
+            ),
+            GrafanaDashboard(
+                tenant_id="t1",
+                created_by="u2",
+                grafana_uid="d1",
+                grafana_id=101,
+                title="Original",
+                visibility="private",
+                folder_uid="f-collab",
+            ),
+        ]
+    )
     db.commit()
 
     service = _ProxyStub()
@@ -280,29 +352,47 @@ async def test_dashboard_owner_can_update_in_shared_folder_when_writes_enabled()
 @pytest.mark.asyncio
 async def test_non_owner_update_accepts_unchanged_visibility_query_params():
     db = _session()
-    db.add_all([
-        Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
-        User(id="u1", tenant_id="t1", username="owner", email="o@example.com", hashed_password="x", org_id="org", is_active=True),
-        User(id="u2", tenant_id="t1", username="member", email="m@example.com", hashed_password="x", org_id="org", is_active=True),
-        GrafanaFolder(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="f-collab",
-            grafana_id=11,
-            title="Collaborative",
-            visibility="tenant",
-            allow_dashboard_writes=True,
-        ),
-        GrafanaDashboard(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="d1",
-            grafana_id=101,
-            title="Original",
-            visibility="private",
-            folder_uid="f-collab",
-        ),
-    ])
+    db.add_all(
+        [
+            Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
+            User(
+                id="u1",
+                tenant_id="t1",
+                username="owner",
+                email="o@example.com",
+                hashed_password="x",
+                org_id="org",
+                is_active=True,
+            ),
+            User(
+                id="u2",
+                tenant_id="t1",
+                username="member",
+                email="m@example.com",
+                hashed_password="x",
+                org_id="org",
+                is_active=True,
+            ),
+            GrafanaFolder(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="f-collab",
+                grafana_id=11,
+                title="Collaborative",
+                visibility="tenant",
+                allow_dashboard_writes=True,
+            ),
+            GrafanaDashboard(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="d1",
+                grafana_id=101,
+                title="Original",
+                visibility="private",
+                folder_uid="f-collab",
+            ),
+        ]
+    )
     db.commit()
 
     service = _ProxyStub()

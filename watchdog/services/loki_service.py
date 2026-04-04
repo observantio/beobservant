@@ -1,11 +1,12 @@
 """
-Loki Service for querying logs, fetching labels, and calculating log volume with caching, fallback mechanisms, and multi-tenant support.
+Loki Service for querying logs, fetching labels, and calculating log volume with caching, fallback mechanisms, and
+multi-tenant support.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
@@ -83,12 +84,7 @@ class LokiService:
         return {"X-Scope-OrgID": tenant_id}
 
     def _escape_logql(self, value: str) -> str:
-        return (
-            value.replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-        )
+        return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
 
     def _label_selector(self, labels: Dict[str, str]) -> str:
         if not labels:
@@ -107,9 +103,7 @@ class LokiService:
                 params[key] = val
         return params
 
-    def _normalize_range_for_step(
-        self, start_ns: Optional[int], end_ns: Optional[int], step_s: int
-    ) -> tuple[int, int]:
+    def _normalize_range_for_step(self, start_ns: Optional[int], end_ns: Optional[int], step_s: int) -> tuple[int, int]:
         now_ns = int(time.time() * 1_000_000_000)
         end = int(end_ns or now_ns)
         start = int(start_ns or (end - 3_600 * 1_000_000_000))
@@ -137,12 +131,14 @@ class LokiService:
                 for value in values:
                     if isinstance(value, (list, tuple)) and len(value) > 1 and isinstance(value[1], str):
                         total_bytes += len(value[1])
-            return LogStatsResponse.model_validate({
-                "total_entries": total_entries,
-                "total_bytes": total_bytes,
-                "streams": streams,
-                "chunks": 0,
-            })
+            return LogStatsResponse.model_validate(
+                {
+                    "total_entries": total_entries,
+                    "total_bytes": total_bytes,
+                    "streams": streams,
+                    "chunks": 0,
+                }
+            )
         except (KeyError, TypeError, ValueError) as e:
             logger.error("Error calculating stats: %s", e)
             return None
@@ -201,9 +197,7 @@ class LokiService:
 
     @with_retry()
     @with_timeout()
-    async def query_logs(
-        self, query: LogQuery, tenant_id: str = config.DEFAULT_ORG_ID
-    ) -> LogResponse:
+    async def query_logs(self, query: LogQuery, tenant_id: str = config.DEFAULT_ORG_ID) -> LogResponse:
         params = self._query_params(query)
         headers = self._headers(tenant_id)
         endpoint = f"{self.loki_url}/loki/api/v1/query_range"
@@ -213,7 +207,10 @@ class LokiService:
             payload = _json_dict(data.get("data"))
             if query.query and not _object_list(payload.get("result")):
                 fallback = await run_fallback_queries(
-                    endpoint, params, headers, query.query,
+                    endpoint,
+                    params,
+                    headers,
+                    query.query,
                     client=self._client,
                     http_client=self._http,
                     max_fallbacks=config.LOKI_MAX_FALLBACK_QUERIES,
@@ -224,7 +221,9 @@ class LokiService:
                     data = fallback
                     payload = _json_dict(data.get("data"))
             self._normalize_stream_labels(payload)
-            return LogResponse(status=str(data.get("status") or "success"), data=payload, stats=self._calculate_stats(payload))
+            return LogResponse(
+                status=str(data.get("status") or "success"), data=payload, stats=self._calculate_stats(payload)
+            )
         except httpx.HTTPError as e:
             self._observe("loki_query_errors_total")
             logger.error("Error querying logs: %s", e)
@@ -251,7 +250,10 @@ class LokiService:
             payload = _json_dict(data.get("data"))
             if query_str and not _object_list(payload.get("result")):
                 fallback = await run_fallback_queries(
-                    endpoint, params, headers, query_str,
+                    endpoint,
+                    params,
+                    headers,
+                    query_str,
                     client=self._client,
                     http_client=self._http,
                     max_fallbacks=config.LOKI_MAX_FALLBACK_QUERIES,
@@ -343,13 +345,16 @@ class LokiService:
                 values = _string_list(payload.get("data"))
             else:
                 self._observe("loki_query_fallbacks_total")
-                selector = (
-                    query
-                    if isinstance(query, str) and query.strip().startswith("{")
-                    else f'{{{label}=~".+"}}'
-                )
+                selector = query if isinstance(query, str) and query.strip().startswith("{") else f'{{{label}=~".+"}}'
                 log_response = await self.query_logs(
-                    LogQuery(query=selector, limit=1000, start=start_ns, end=end_ns, direction=LogDirection.BACKWARD, step=None),
+                    LogQuery(
+                        query=selector,
+                        limit=1000,
+                        start=start_ns,
+                        end=end_ns,
+                        direction=LogDirection.BACKWARD,
+                        step=None,
+                    ),
                     tenant_id=tenant_id,
                 )
                 results = log_response.data.get("result") if isinstance(log_response.data, dict) else None
@@ -398,7 +403,12 @@ class LokiService:
                 params=params,
                 headers=self._headers(tenant_id),
             )
-            return {"status": str(data.get("status") or "success"), "data": _json_dict(data.get("data")), "query": query_str, "step": step}
+            return {
+                "status": str(data.get("status") or "success"),
+                "data": _json_dict(data.get("data")),
+                "query": query_str,
+                "step": step,
+            }
         except httpx.HTTPStatusError as e:
             self._observe("loki_query_errors_total")
             status = e.response.status_code
@@ -434,7 +444,10 @@ class LokiService:
                 async with semaphore:
                     return await self.aggregate_logs(
                         f"sum(count_over_time({candidate}[{step}s]))",
-                        start_ns, end_ns, step, tenant_id=tenant_id,
+                        start_ns,
+                        end_ns,
+                        step,
+                        tenant_id=tenant_id,
                     )
 
             tasks = [asyncio.create_task(_run(c)) for c in candidates]

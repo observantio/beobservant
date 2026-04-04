@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 AuthResult = Optional[Union[Token, JSONDict]]
 
+
 @dataclass(frozen=True)
 class _OidcTokens:
     access_token: str
@@ -31,7 +32,9 @@ class _OidcTokens:
         return not self.access_token and not self.id_token
 
 
-def _mfa_gate(service: DatabaseAuthService, user: User, mfa_code: Optional[str]) -> Optional[Union[bool, JSONDict, Token]]:
+def _mfa_gate(
+    service: DatabaseAuthService, user: User, mfa_code: Optional[str]
+) -> Optional[Union[bool, JSONDict, Token]]:
     if service._needs_mfa_setup(user):
         return service._mfa_setup_challenge(user)
 
@@ -44,7 +47,9 @@ def _mfa_gate(service: DatabaseAuthService, user: User, mfa_code: Optional[str])
     return True
 
 
-def _resolve_oidc_claims(service: DatabaseAuthService, *, tokens: _OidcTokens, expected_nonce: str, enforce_nonce: bool) -> Optional[JSONDict]:
+def _resolve_oidc_claims(
+    service: DatabaseAuthService, *, tokens: _OidcTokens, expected_nonce: str, enforce_nonce: bool
+) -> Optional[JSONDict]:
     if enforce_nonce and expected_nonce and not tokens.id_token:
         return None
 
@@ -202,7 +207,9 @@ def get_oidc_authorization_url(
     return {str(key): str(value) for key, value in result.items()}
 
 
-def provision_external_user(service: DatabaseAuthService, *, email: str, username: str, full_name: Optional[str]) -> Optional[str]:
+def provision_external_user(
+    service: DatabaseAuthService, *, email: str, username: str, full_name: Optional[str]
+) -> Optional[str]:
     if not service.is_external_auth_enabled():
         return None
     try:

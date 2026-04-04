@@ -1,15 +1,17 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from tests._env import ensure_test_env
+
 ensure_test_env()
 import asyncio
 from services.tempo import metrics as tempo_metrics
+
 
 def test_extract_metric_values_aggregates_and_skips():
     resp = {
@@ -28,17 +30,23 @@ def test_extract_metric_values_aggregates_and_skips():
 
 
 def test_query_metrics_range_disabled_and_4xx_behavior():
-    result, enabled = asyncio.run(tempo_metrics.query_metrics_range(client=None, promql="x", start_us=None, end_us=None, metrics_enabled=False))
+    result, enabled = asyncio.run(
+        tempo_metrics.query_metrics_range(client=None, promql="x", start_us=None, end_us=None, metrics_enabled=False)
+    )
     assert isinstance(result, dict) and result.get("status") == "error"
     assert enabled is False
+
     class DummyClient:
         async def get(self, url, params=None, headers=None):
             class R:
                 status_code = 200
+
                 def json(self):
                     return {"data": {"result": [[1, "2"]]}}
+
                 def raise_for_status(self):
                     return None
+
             return R()
 
     client = DummyClient()

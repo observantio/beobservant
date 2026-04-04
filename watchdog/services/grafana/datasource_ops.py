@@ -3,9 +3,9 @@ Datasource operations for Grafana integration.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from models.grafana.grafana_datasource_models import Datasource, DatasourceCreat
 from custom_types.json import JSONDict
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
+from services.grafana.visibility import resolve_visibility_groups
 
 if TYPE_CHECKING:
     from services.grafana_proxy_service import GrafanaProxyService
@@ -99,9 +100,7 @@ def _enrich_datasource_payload(
     payload["created_by"] = db_ds.created_by if db_ds else None
     payload["is_hidden"] = bool(db_ds and user_id in (db_ds.hidden_by or []))
     payload["is_owned"] = is_owner
-    payload["visibility"] = (
-        db_ds.visibility if db_ds else ("system" if is_unregistered_safe_system else "private")
-    )
+    payload["visibility"] = db_ds.visibility if db_ds else ("system" if is_unregistered_safe_system else "private")
     sgids = [g.id for g in (db_ds.shared_groups or [])] if db_ds else []
     payload["shared_group_ids"] = sgids
     payload["sharedGroupIds"] = sgids
@@ -143,10 +142,7 @@ def _load_allowed_scope_org_ids(db: Session, *, user_id: str, tenant_id: str) ->
 
 def _scope_conflicts_with_other_tenants(db: Session, *, org_id: str, tenant_id: str) -> bool:
     return (
-        db.query(UserApiKey.id)
-        .filter(UserApiKey.key == org_id, UserApiKey.tenant_id != tenant_id)
-        .first()
-        is not None
+        db.query(UserApiKey.id).filter(UserApiKey.key == org_id, UserApiKey.tenant_id != tenant_id).first() is not None
     )
 
 
@@ -198,7 +194,9 @@ async def _has_accessible_name_conflict(
             continue
         if exclude_uid and uid == str(exclude_uid):
             continue
-        is_unregistered_safe = allow_system and uid not in all_registered_uids and _is_safe_system_datasource(datasource)
+        is_unregistered_safe = (
+            allow_system and uid not in all_registered_uids and _is_safe_system_datasource(datasource)
+        )
         if uid not in accessible and not is_unregistered_safe:
             continue
         db_ds = db_map.get(uid)
@@ -402,7 +400,9 @@ async def get_datasources(
         datasource = await service.grafana_service.get_datasource(uid)
         if not datasource:
             return []
-        effective_context = datasource_context or build_datasource_list_context(service, db, tenant_id=tenant_id, uid=uid)
+        effective_context = datasource_context or build_datasource_list_context(
+            service, db, tenant_id=tenant_id, uid=uid
+        )
         db_ds = effective_context.get("uid_db_datasource")
         if db_ds:
             if check_datasource_access(db, uid, user_id, tenant_id, group_ids) is None:
@@ -452,10 +452,12 @@ async def get_datasources(
                 and query_lc not in uid_value
             ):
                 continue
-        payload = _enrich_datasource_payload(d.model_dump(), db_ds=db_ds, user_id=user_id, is_unregistered_safe_system=is_unregistered_safe)
+        payload = _enrich_datasource_payload(
+            d.model_dump(), db_ds=db_ds, user_id=user_id, is_unregistered_safe_system=is_unregistered_safe
+        )
         out.append(Datasource.model_validate(payload))
 
-    return out[capped_offset: capped_offset + capped_limit]
+    return out[capped_offset : capped_offset + capped_limit]
 
 
 async def get_datasource(
@@ -514,14 +516,21 @@ async def create_datasource(
 ) -> Optional[Datasource]:
     requested_name = str(getattr(datasource_create, "name", "") or "").strip()
     if requested_name and await _has_accessible_name_conflict(
-        service, db, tenant_id=tenant_id, user_id=user_id, group_ids=group_ids, name=requested_name,
+        service,
+        db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        group_ids=group_ids,
+        name=requested_name,
     ):
         raise HTTPException(status_code=409, detail="Datasource name already exists in your visible scope")
 
     if datasource_create.type in {"prometheus", "loki", "tempo"}:
         org_id = _resolve_datasource_org_scope(
-            db, requested_org_id=getattr(datasource_create, "org_id", None),
-            user_id=user_id, tenant_id=tenant_id,
+            db,
+            requested_org_id=getattr(datasource_create, "org_id", None),
+            user_id=user_id,
+            tenant_id=tenant_id,
         )
         json_data = dict(getattr(datasource_create, "json_data", None) or {})
         secure_json_data = dict(getattr(datasource_create, "secure_json_data", None) or {})
@@ -533,12 +542,9 @@ async def create_datasource(
             update={"org_id": org_id, "json_data": json_data, "secure_json_data": secure_json_data}
         )
 
-    groups = []
-    if visibility == "group":
-        groups = service._validate_group_visibility(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
-            shared_group_ids=shared_group_ids, is_admin=is_admin,
-        )
+    groups = resolve_visibility_groups(
+        service, db, user_id, tenant_id, visibility, group_ids, shared_group_ids, is_admin
+    )
 
     try:
         result = await service.grafana_service.create_datasource(datasource_create)
@@ -616,13 +622,13 @@ async def update_datasource(
         incoming_json = dict(getattr(datasource_update, "json_data", None) or {})
         existing_json = dict(getattr(existing, "json_data", None) or {})
         scoped_org_candidate = (
-            requested_org_id
-            or incoming_json.get("watchdogScopeKey")
-            or existing_json.get("watchdogScopeKey")
-            or None
+            requested_org_id or incoming_json.get("watchdogScopeKey") or existing_json.get("watchdogScopeKey") or None
         )
         validated_org_id = _resolve_datasource_org_scope(
-            db, requested_org_id=scoped_org_candidate, user_id=user_id, tenant_id=tenant_id,
+            db,
+            requested_org_id=scoped_org_candidate,
+            user_id=user_id,
+            tenant_id=tenant_id,
         )
         json_data = _merge_json_payload(existing_json, incoming_json)
         secure_json_data = dict(getattr(datasource_update, "secure_json_data", None) or {})
@@ -639,8 +645,13 @@ async def update_datasource(
     if getattr(datasource_update, "name", None) is not None:
         requested_name = str(datasource_update.name or "").strip()
         if requested_name and await _has_accessible_name_conflict(
-            service, db, tenant_id=tenant_id, user_id=user_id, group_ids=group_ids,
-            name=requested_name, exclude_uid=uid,
+            service,
+            db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            group_ids=group_ids,
+            name=requested_name,
+            exclude_uid=uid,
         ):
             raise HTTPException(status_code=409, detail="Datasource name already exists in your visible scope")
 
@@ -670,8 +681,12 @@ async def update_datasource(
         db_ds.visibility = visibility
         if visibility == "group" and shared_group_ids is not None:
             groups = service._validate_group_visibility(
-                db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
-                shared_group_ids=shared_group_ids, is_admin=is_admin,
+                db,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                group_ids=group_ids,
+                shared_group_ids=shared_group_ids,
+                is_admin=is_admin,
             )
             db_ds.shared_groups.clear()
             db_ds.shared_groups.extend(groups)

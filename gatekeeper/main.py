@@ -3,9 +3,9 @@ Gateway auth service entry point.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -60,7 +60,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                         )
                     probe_token = "__gateway_startup_probe__"
                     logger.warning(
-                        "GATEWAY_STATUS_OTLP_TOKEN is not set; using synthetic startup probe token to verify auth API connectivity"
+                        "GATEWAY_STATUS_OTLP_TOKEN is not set; "
+                        "using synthetic startup probe token to verify "
+                        "auth API connectivity"
                     )
                 service.probe_auth_api(probe_token)
             logger.info("Startup connectivity checks passed")
@@ -79,7 +81,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 raise
             logger.warning(
                 "Startup check failed (attempt %d/%d): %s — retrying in %.1fs",
-                attempt, max_retries, exc, backoff,
+                attempt,
+                max_retries,
+                exc,
+                backoff,
             )
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 30.0)

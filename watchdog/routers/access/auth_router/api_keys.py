@@ -3,9 +3,9 @@ Api key management endpoints for Watchdog authentication router.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -15,7 +15,12 @@ from typing import List
 from fastapi import Body, Depends, Query, HTTPException, Path, status
 from pydantic import BaseModel
 
-from middleware.dependencies import apply_scoped_rate_limit, auth_service, require_permission, require_permission_with_scope
+from middleware.dependencies import (
+    apply_scoped_rate_limit,
+    auth_service,
+    require_permission,
+    require_permission_with_scope,
+)
 from middleware.error_handlers import handle_route_errors
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUpdateRequest, ApiKeyShareUser, ApiKeyUpdate
 from models.access.auth_models import Permission, TokenData

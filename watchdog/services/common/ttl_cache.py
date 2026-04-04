@@ -3,9 +3,9 @@ TTLCache implementation for Watchdog, with optional Redis backend support.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
@@ -20,11 +20,13 @@ from custom_types.json import JSONValue, is_json_value
 _redis_asyncio = None
 try:
     import redis
+
     _redis_asyncio = getattr(redis, "asyncio", None)
 except ImportError:
     _redis_asyncio = None
 
 logger = logging.getLogger(__name__)
+
 
 @runtime_checkable
 class RedisAsyncClient(Protocol):

@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -35,7 +35,11 @@ def _collect_get_db_dependencies(root: Dependant) -> set[Callable[..., Any]]:
         current = stack.pop()
         for dependency in current.dependencies:
             call = dependency.call
-            if callable(call) and getattr(call, "__name__", "") == "get_db" and "database" in getattr(call, "__module__", ""):
+            if (
+                callable(call)
+                and getattr(call, "__name__", "") == "get_db"
+                and "database" in getattr(call, "__module__", "")
+            ):
                 get_db_calls.add(call)
             stack.append(dependency)
     return get_db_calls
@@ -56,7 +60,9 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
     monkeypatch.setattr(auth_routes, "rate_limit_func", lambda *args, **kwargs: None)
     monkeypatch.setattr(grafana_proxy_router, "enforce_public_endpoint_security", lambda *args, **kwargs: None)
     monkeypatch.setattr(user_routes.notification_service, "send_user_welcome_email", _send_user_welcome_email)
-    monkeypatch.setattr(user_routes.notification_service, "send_temporary_password_email", _send_temporary_password_email)
+    monkeypatch.setattr(
+        user_routes.notification_service, "send_temporary_password_email", _send_temporary_password_email
+    )
     monkeypatch.setattr(config, "SKIP_STARTUP_DB_INIT", True)
     from main import app
 

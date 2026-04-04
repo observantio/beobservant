@@ -3,9 +3,9 @@ Audit log endpoints for Watchdog authentication router.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ from services.auth.helper import (
 from .shared import router, rtp
 
 AuditLogItem: TypeAlias = dict[str, object]
+
 
 @router.get("/audit-logs")
 async def list_audit_logs(
@@ -120,11 +121,7 @@ async def list_audit_logs(
     responses={
         200: {
             "description": "CSV export of audit logs.",
-            "content": {
-                "text/csv": {
-                    "schema": {"type": "string", "format": "binary"}
-                }
-            },
+            "content": {"text/csv": {"schema": {"type": "string", "format": "binary"}}},
         }
     },
 )

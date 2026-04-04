@@ -3,9 +3,9 @@ Loki Fallback HTTP client with integrated Prometheus metrics observation.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
@@ -38,9 +38,7 @@ def _normalize_service_label(query: str) -> str:
 
 
 def _expand_exact_to_prefix(query: str) -> str:
-    return EXACT_LABEL_RE.sub(
-        lambda m: f'{m.group("label")}=~"{re.escape(m.group("value"))}.*"', query
-    )
+    return EXACT_LABEL_RE.sub(lambda m: f'{m.group("label")}=~"{re.escape(m.group("value"))}.*"', query)
 
 
 def build_service_fallback_queries(query: str) -> List[str]:
@@ -102,7 +100,7 @@ async def run_fallback_queries(
     max_fallbacks: int = 4,
     concurrency: int = 4,
 ) -> Optional[JSONDict]:
-    candidates = build_service_fallback_queries(query_str)[:max(0, max_fallbacks)]
+    candidates = build_service_fallback_queries(query_str)[: max(0, max_fallbacks)]
     if not candidates:
         return None
 

@@ -1,15 +1,15 @@
 """
-Database initialization and session management using SQLAlchemy with connection pooling and environment variable configuration for pool settings.
+Database initialization and session management using SQLAlchemy with connection pooling and environment variable
+configuration for pool settings.
 
 Alerting/incident/rules/channel persistence was moved to Notifier.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
-
 
 import logging
 import os
@@ -27,9 +27,9 @@ from db_models import Base
 
 logger = logging.getLogger(__name__)
 
-_engine: Optional[Engine] = None
-_session_local: Optional[Callable[[], Session]] = None
-_init_lock = threading.Lock()
+_ENGINE: Optional[Engine] = None
+_SESSION_LOCAL: Optional[Callable[[], Session]] = None
+_INIT_LOCK = threading.Lock()
 
 
 def _env_int(name: str, default: int) -> int:
@@ -48,11 +48,11 @@ def init_database(
     echo: bool = False,
     pool_size: Optional[int] = None,
 ) -> None:
-    if _engine is not None and _session_local is not None:
+    if _ENGINE is not None and _SESSION_LOCAL is not None:
         return
 
-    with _init_lock:
-        if _engine is not None and _session_local is not None:
+    with _INIT_LOCK:
+        if _ENGINE is not None and _SESSION_LOCAL is not None:
             return
 
         resolved_pool_size = pool_size or _env_int("DB_POOL_SIZE", 10)
@@ -86,12 +86,12 @@ def init_database(
             expire_on_commit=False,
             future=True,
         )
-        globals()["_engine"] = engine
-        globals()["_session_local"] = session_local
+        globals()["_ENGINE"] = engine
+        globals()["_SESSION_LOCAL"] = session_local
 
 
 def _require_session_factory() -> Callable[[], Session]:
-    session_local = _session_local
+    session_local = _SESSION_LOCAL
     if session_local is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
     return session_local
@@ -151,10 +151,10 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def connection_test() -> bool:
-    if _engine is None:
+    if _ENGINE is None:
         return False
     try:
-        with _engine.connect() as conn:
+        with _ENGINE.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
     except SQLAlchemyError as exc:
@@ -163,16 +163,16 @@ def connection_test() -> bool:
 
 
 def dispose_database() -> None:
-    with _init_lock:
-        globals()["_session_local"] = None
-        if _engine is not None:
+    with _INIT_LOCK:
+        globals()["_SESSION_LOCAL"] = None
+        if _ENGINE is not None:
             try:
-                _engine.dispose()
+                _ENGINE.dispose()
             finally:
-                globals()["_engine"] = None
+                globals()["_ENGINE"] = None
 
 
 def init_db() -> None:
-    if _engine is None:
+    if _ENGINE is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
-    Base.metadata.create_all(bind=_engine)
+    Base.metadata.create_all(bind=_ENGINE)

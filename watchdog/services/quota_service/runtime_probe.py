@@ -3,9 +3,9 @@ Runtime quota probing for native and Prometheus sources.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ from .parsing import (
     prom_query_url,
     response_payload,
 )
-
 
 ConfigGetter = Callable[[], Any]
 HttpxGetter = Callable[[], Any]
@@ -244,9 +243,7 @@ class RuntimeQuotaProbe:
         httpx_module = self._get_httpx()
         end_ns = int(time.time() * 1_000_000_000)
         start_ns = end_ns - int(cfg.QUOTA_USAGE_WINDOW_SECONDS) * 1_000_000_000
-        async with httpx_module.AsyncClient(
-            timeout=float(cfg.QUOTA_NATIVE_TIMEOUT_SECONDS)
-        ) as client:
+        async with httpx_module.AsyncClient(timeout=float(cfg.QUOTA_NATIVE_TIMEOUT_SECONDS)) as client:
             series_resp = await client.get(
                 f"{cfg.LOKI_URL.rstrip('/')}/loki/api/v1/series",
                 headers={"X-Scope-OrgID": tenant_id},
@@ -279,9 +276,7 @@ class RuntimeQuotaProbe:
         httpx_module = self._get_httpx()
         end_us = int(time.time() * 1_000_000)
         start_us = end_us - int(cfg.QUOTA_USAGE_WINDOW_SECONDS) * 1_000_000
-        async with httpx_module.AsyncClient(
-            timeout=float(cfg.QUOTA_NATIVE_TIMEOUT_SECONDS)
-        ) as client:
+        async with httpx_module.AsyncClient(timeout=float(cfg.QUOTA_NATIVE_TIMEOUT_SECONDS)) as client:
             try:
                 response = await client.get(
                     f"{cfg.TEMPO_URL.rstrip('/')}/api/search",
@@ -394,14 +389,9 @@ class RuntimeQuotaProbe:
         collected_used: Optional[float] = None
 
         for candidate_path in candidate_paths:
-            target = (
-                f"{base_url.rstrip('/')}/"
-                f"{format_with_tenant(candidate_path, tenant_id).lstrip('/')}"
-            )
+            target = f"{base_url.rstrip('/')}/" f"{format_with_tenant(candidate_path, tenant_id).lstrip('/')}"
             try:
-                async with httpx_module.AsyncClient(
-                    timeout=float(cfg.QUOTA_NATIVE_TIMEOUT_SECONDS)
-                ) as client:
+                async with httpx_module.AsyncClient(timeout=float(cfg.QUOTA_NATIVE_TIMEOUT_SECONDS)) as client:
                     response = await client.get(
                         target,
                         headers={"X-Scope-OrgID": tenant_id},
@@ -456,11 +446,7 @@ class RuntimeQuotaProbe:
             source="native",
             limit=None,
             used=None,
-            message=(
-                f"{service_name.capitalize()} runtime quota endpoint unavailable"
-                if last_error
-                else None
-            ),
+            message=(f"{service_name.capitalize()} runtime quota endpoint unavailable" if last_error else None),
         )
 
     async def query_prometheus_value(
@@ -476,9 +462,7 @@ class RuntimeQuotaProbe:
             return None
 
         query = format_with_tenant(query_template, tenant_id)
-        async with httpx_module.AsyncClient(
-            timeout=float(cfg.QUOTA_PROMETHEUS_TIMEOUT_SECONDS)
-        ) as client:
+        async with httpx_module.AsyncClient(timeout=float(cfg.QUOTA_PROMETHEUS_TIMEOUT_SECONDS)) as client:
             response = await client.get(
                 query_url,
                 params={"query": query},
@@ -505,16 +489,8 @@ class RuntimeQuotaProbe:
             return QuotaProbe(source="none", limit=None, used=None, message=None)
 
         try:
-            limit = (
-                await self.query_prometheus_value(limit_query, tenant_id)
-                if limit_query
-                else None
-            )
-            used = (
-                await self.query_prometheus_value(used_query, tenant_id)
-                if used_query
-                else None
-            )
+            limit = await self.query_prometheus_value(limit_query, tenant_id) if limit_query else None
+            used = await self.query_prometheus_value(used_query, tenant_id) if used_query else None
             return QuotaProbe(source="prometheus", limit=limit, used=used, message=None)
         except self._error_types():
             return QuotaProbe(

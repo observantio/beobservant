@@ -44,4 +44,7 @@ def test_normalize_label_value_dict_and_values_cover_fallback_paths(monkeypatch)
     assert extras == {}
 
     monkeypatch.setattr(label_utils, "parse_labelset_value", lambda label, value: {"other": "x"})
-    assert label_utils.normalize_label_values("service", ['service="api",env="prod",', "plain"]) == ['service="api', "plain"]
+    assert label_utils.normalize_label_values("service", ['service="api",env="prod",', "plain"]) == [
+        'service="api',
+        "plain",
+    ]

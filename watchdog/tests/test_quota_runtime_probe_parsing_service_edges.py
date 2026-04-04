@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -179,9 +179,18 @@ def test_parsing_helpers_edge_paths():
     assert compute_remaining(None, 3) is None
 
     assert prom_query_url(SimpleNamespace(QUOTA_PROMETHEUS_BASE_URL="")) == ""
-    assert prom_query_url(SimpleNamespace(QUOTA_PROMETHEUS_BASE_URL="http://mimir/api/v1/query")) == "http://mimir/api/v1/query"
-    assert prom_query_url(SimpleNamespace(QUOTA_PROMETHEUS_BASE_URL="http://mimir/prometheus")) == "http://mimir/prometheus/api/v1/query"
-    assert prom_query_url(SimpleNamespace(QUOTA_PROMETHEUS_BASE_URL="http://mimir")) == "http://mimir/prometheus/api/v1/query"
+    assert (
+        prom_query_url(SimpleNamespace(QUOTA_PROMETHEUS_BASE_URL="http://mimir/api/v1/query"))
+        == "http://mimir/api/v1/query"
+    )
+    assert (
+        prom_query_url(SimpleNamespace(QUOTA_PROMETHEUS_BASE_URL="http://mimir/prometheus"))
+        == "http://mimir/prometheus/api/v1/query"
+    )
+    assert (
+        prom_query_url(SimpleNamespace(QUOTA_PROMETHEUS_BASE_URL="http://mimir"))
+        == "http://mimir/prometheus/api/v1/query"
+    )
 
     assert extract_prom_result({"data": {"result": [{"value": [123, "9.25"]}]}}) == 9.25
     assert extract_prom_result([]) is None
@@ -225,10 +234,7 @@ async def test_runtime_probe_payload_extractors_and_candidate_paths():
     probe = _probe_with(_unused)
 
     assert probe.loki_limit_from_payload({"cfg": {"limit": 20}}, "cfg.limit", "org-a") == 20.0
-    assert (
-        probe.loki_limit_from_payload({"__raw_text": "max_global_streams_per_user: 30"}, "", "org-a")
-        == 30.0
-    )
+    assert probe.loki_limit_from_payload({"__raw_text": "max_global_streams_per_user: 30"}, "", "org-a") == 30.0
     assert probe.loki_limit_from_payload({"org-a": {"max_streams_per_user": 8}}, "", "org-a") == 8.0
     assert probe.loki_limit_from_payload({"__raw_text": "unrelated: 1"}, "", "org-a") is None
     assert probe.tempo_limit_from_payload({"limits": {"max_traces_per_user": 11}}, "", "org-a") == 11.0
@@ -453,13 +459,13 @@ async def test_prometheus_probe_paths(monkeypatch):
     probe = _probe_with(_prom)
 
     assert await probe.query_prometheus_value("", "org-a") is None
-    assert await probe.query_prometheus_value("loki_limit{tenant_id=\"{tenant_id}\"}", "org-a") == 100.0
+    assert await probe.query_prometheus_value('loki_limit{tenant_id="{tenant_id}"}', "org-a") == 100.0
 
     out = await probe.fetch_prometheus_quota(
         service_name="loki",
         tenant_id="org-a",
-        limit_query="loki_limit{tenant_id=\"{tenant_id}\"}",
-        used_query="loki_used{tenant_id=\"{tenant_id}\"}",
+        limit_query='loki_limit{tenant_id="{tenant_id}"}',
+        used_query='loki_used{tenant_id="{tenant_id}"}',
     )
     assert out.source == "prometheus" and out.limit == 100.0 and out.used == 40.0
 

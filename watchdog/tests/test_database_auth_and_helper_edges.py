@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -31,7 +31,18 @@ from services.database_auth import permissions as perms_mod
 
 
 def _request() -> Request:
-    return Request({"type": "http", "method": "GET", "path": "/", "headers": [], "scheme": "http", "query_string": b"", "client": ("127.0.0.1", 1234), "http_version": "1.1"})
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+            "scheme": "http",
+            "query_string": b"",
+            "client": ("127.0.0.1", 1234),
+            "http_version": "1.1",
+        }
+    )
 
 
 def _user(**kwargs) -> TokenData:
@@ -139,7 +150,9 @@ def test_database_auth_auth_helpers_and_login_flows(monkeypatch):
         create_access_token=lambda user: Token(access_token="jwt", expires_in=60),
         _sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=True),
     )
-    monkeypatch.setattr(auth_mod, "sync_active_user_from_claims", lambda service, claims: SimpleNamespace(is_active=True))
+    monkeypatch.setattr(
+        auth_mod, "sync_active_user_from_claims", lambda service, claims: SimpleNamespace(is_active=True)
+    )
 
     user = SimpleNamespace(mfa_enabled=False)
     assert auth_mod._mfa_gate(service, user, None) is True
@@ -151,7 +164,9 @@ def test_database_auth_auth_helpers_and_login_flows(monkeypatch):
     assert auth_mod._mfa_gate(service, user, "bad") is None
 
     tokens = auth_mod._OidcTokens(access_token="", id_token="id")
-    assert auth_mod._resolve_oidc_claims(service, tokens=tokens, expected_nonce="nonce", enforce_nonce=True) == {"sub": "1"}
+    assert auth_mod._resolve_oidc_claims(service, tokens=tokens, expected_nonce="nonce", enforce_nonce=True) == {
+        "sub": "1"
+    }
     tokens = auth_mod._OidcTokens(access_token="access", id_token="")
     assert auth_mod._resolve_oidc_claims(service, tokens=tokens, expected_nonce="", enforce_nonce=False) == {"sub": "1"}
     tokens = auth_mod._OidcTokens(access_token="fallback", id_token="")
@@ -167,7 +182,9 @@ def test_database_auth_auth_helpers_and_login_flows(monkeypatch):
     service.is_password_auth_enabled = lambda: True
     assert isinstance(auth_mod.login(service, "user", "pw"), Token)
 
-    assert isinstance(auth_mod.exchange_oidc_authorization_code(service, "code", "https://cb", transaction_id="tx"), Token)
+    assert isinstance(
+        auth_mod.exchange_oidc_authorization_code(service, "code", "https://cb", transaction_id="tx"), Token
+    )
     service.is_external_auth_enabled = lambda: False
     assert auth_mod.exchange_oidc_authorization_code(service, "code", "https://cb") is None
     service.is_external_auth_enabled = lambda: True
@@ -200,7 +217,9 @@ def test_password_and_permissions_modules(monkeypatch):
     with pytest.raises(HTTPException):
         pwd_mod._require_user_in_tenant(db, "u1", "tenant")
 
-    target = SimpleNamespace(id="u2", tenant_id="tenant", role="user", is_superuser=False, username="target", email="t@example.com")
+    target = SimpleNamespace(
+        id="u2", tenant_id="tenant", role="user", is_superuser=False, username="target", email="t@example.com"
+    )
     actor = SimpleNamespace(id="u1", tenant_id="tenant", is_superuser=True, role="user", permissions=[])
     db = FakeDB(actor, target)
     monkeypatch.setattr(pwd_mod, "get_db_session", lambda: _ctx(db))
@@ -215,8 +234,16 @@ def test_password_and_permissions_modules(monkeypatch):
     with pytest.raises(HTTPException):
         pwd_mod.reset_user_password_temp(service, "u1", "u2", "tenant")
 
-    db_user = SimpleNamespace(role="admin", groups=[SimpleNamespace(is_active=True, permissions=[SimpleNamespace(name="gperm")])], permissions=[SimpleNamespace(name="uperm")])
-    permission_rows = [SimpleNamespace(id="p1", name="read:users", display_name="Read", description="d", resource_type="users", action="read")]
+    db_user = SimpleNamespace(
+        role="admin",
+        groups=[SimpleNamespace(is_active=True, permissions=[SimpleNamespace(name="gperm")])],
+        permissions=[SimpleNamespace(name="uperm")],
+    )
+    permission_rows = [
+        SimpleNamespace(
+            id="p1", name="read:users", display_name="Read", description="d", resource_type="users", action="read"
+        )
+    ]
     monkeypatch.setattr(perms_mod, "get_db_session", lambda: _ctx(PermissionsDB(db_user, permission_rows)))
     user = SimpleNamespace(id="u1", role="admin", groups=[], permissions=[])
     assert "gperm" in perms_mod.get_user_permissions(None, user)
@@ -247,7 +274,11 @@ def test_auth_helper_edges(monkeypatch):
     assert auth_helper.audit_key_is_sensitive("status_code") is False
     assert auth_helper.redact_query_string("code=123&name=alice") == "code=%5BREDACTED%5D&name=alice"
     assert "code=%5BREDACTED%5D" in auth_helper.sanitize_resource_id("https://x?code=123")
-    assert auth_helper.sanitize_audit_details({"token": "abc", "query": "code=123", "ok": True}) == {"token": "[REDACTED]", "query": "code=%5BREDACTED%5D", "ok": True}
+    assert auth_helper.sanitize_audit_details({"token": "abc", "query": "code=123", "ok": True}) == {
+        "token": "[REDACTED]",
+        "query": "code=%5BREDACTED%5D",
+        "ok": True,
+    }
     assert Permission.READ_ALERTS.value in auth_helper.role_permission_strings(Role.ADMIN)
     assert auth_helper.role_permission_strings("bad") == []
     assert auth_helper.perms_check(_user(permissions=["a", "b"])) == {"a", "b"}

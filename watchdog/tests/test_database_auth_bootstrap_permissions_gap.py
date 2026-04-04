@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -43,7 +43,11 @@ def test_ensure_default_setup_creates_tenant_and_admin_when_missing(monkeypatch)
     logs = []
     service = SimpleNamespace(
         hash_password=lambda text: f"hashed:{text}",
-        logger=SimpleNamespace(info=lambda *args, **kwargs: logs.append(args), warning=lambda *args, **kwargs: None, error=lambda *args, **kwargs: None),
+        logger=SimpleNamespace(
+            info=lambda *args, **kwargs: logs.append(args),
+            warning=lambda *args, **kwargs: None,
+            error=lambda *args, **kwargs: None,
+        ),
     )
 
     @contextmanager

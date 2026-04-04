@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -32,8 +32,26 @@ def _session():
 
 def _seed(db):
     db.add(Tenant(id="t1", name="tenant-1", display_name="Tenant 1", is_active=True))
-    admin = User(id="u-admin", tenant_id="t1", username="admin", email="a@example.com", hashed_password="x", org_id="org", role="admin", is_active=True)
-    member = User(id="u-member", tenant_id="t1", username="member", email="m@example.com", hashed_password="x", org_id="org", role="user", is_active=True)
+    admin = User(
+        id="u-admin",
+        tenant_id="t1",
+        username="admin",
+        email="a@example.com",
+        hashed_password="x",
+        org_id="org",
+        role="admin",
+        is_active=True,
+    )
+    member = User(
+        id="u-member",
+        tenant_id="t1",
+        username="member",
+        email="m@example.com",
+        hashed_password="x",
+        org_id="org",
+        role="user",
+        is_active=True,
+    )
     db.add_all([admin, member])
     db.commit()
     return admin, member
@@ -93,7 +111,9 @@ def test_prune_removed_member_grafana_group_shares_reverts_to_private():
 def test_update_group_permissions_denies_non_admin_for_group_with_admin_member(monkeypatch):
     db = _session()
     admin, member = _seed(db)
-    read_perm = Permission(id="p1", name="read:users", display_name="Read", description="d", resource_type="users", action="read")
+    read_perm = Permission(
+        id="p1", name="read:users", display_name="Read", description="d", resource_type="users", action="read"
+    )
     group = Group(id="g1", tenant_id="t1", name="Ops", is_active=True)
     group.members.extend([admin, member])
     db.add_all([read_perm, group])

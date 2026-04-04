@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -483,7 +483,9 @@ class WorkflowState:
             return True
 
     def list_all_permissions(self) -> list[dict[str, object]]:
-        return [{"name": permission.value, "resource_type": permission.value.split(":", 1)[-1]} for permission in Permission]
+        return [
+            {"name": permission.value, "resource_type": permission.value.split(":", 1)[-1]} for permission in Permission
+        ]
 
     def list_groups(self, tenant_id: str, *_args: Any, **_kwargs: Any) -> list[Group]:
         with self._lock:
@@ -534,7 +536,9 @@ class WorkflowState:
                 self._sync_user_tokens(user)
             return True
 
-    def update_group_permissions(self, group_id: str, permission_names: list[str], tenant_id: str, *_args: Any, **_kwargs: Any) -> bool:
+    def update_group_permissions(
+        self, group_id: str, permission_names: list[str], tenant_id: str, *_args: Any, **_kwargs: Any
+    ) -> bool:
         with self._lock:
             group = self.get_group(group_id, tenant_id)
             if group is None:
@@ -545,9 +549,7 @@ class WorkflowState:
             actor_is_superuser = bool(_args[3]) if len(_args) > 3 else False
 
             actor_role = (
-                actor_role_raw.value
-                if isinstance(actor_role_raw, Role)
-                else str(actor_role_raw or Role.USER.value)
+                actor_role_raw.value if isinstance(actor_role_raw, Role) else str(actor_role_raw or Role.USER.value)
             )
 
             if not actor_is_superuser:
@@ -571,7 +573,14 @@ class WorkflowState:
             updated = group.model_copy(
                 update={
                     "permissions": [
-                        PermissionInfo(id=name, name=name, display_name=name, description=None, resource_type="workflow", action="test")
+                        PermissionInfo(
+                            id=name,
+                            name=name,
+                            display_name=name,
+                            description=None,
+                            resource_type="workflow",
+                            action="test",
+                        )
                         for name in permission_names
                     ]
                 }
@@ -598,7 +607,9 @@ class WorkflowState:
             return show_hidden or key.id not in user.hidden_api_key_ids
         if user.id in key.shared_user_ids:
             return show_hidden or key.id not in user.hidden_api_key_ids
-        return bool(set(user.group_ids).intersection(key.shared_group_ids)) and (show_hidden or key.id not in user.hidden_api_key_ids)
+        return bool(set(user.group_ids).intersection(key.shared_group_ids)) and (
+            show_hidden or key.id not in user.hidden_api_key_ids
+        )
 
     def _api_key_model(self, key: ApiKeyState, user: UserState) -> ApiKey:
         shared_with = [
@@ -620,7 +631,11 @@ class WorkflowState:
             owner_user_id=key.owner_user_id,
             owner_username=key.owner_username,
             is_shared=key.owner_user_id != user.id,
-            can_use=(key.owner_user_id == user.id or user.id in key.shared_user_ids or bool(set(user.group_ids).intersection(key.shared_group_ids))),
+            can_use=(
+                key.owner_user_id == user.id
+                or user.id in key.shared_user_ids
+                or bool(set(user.group_ids).intersection(key.shared_group_ids))
+            ),
             shared_with=shared_with,
             is_default=key.is_default,
             is_enabled=key.is_enabled,
@@ -739,7 +754,9 @@ class WorkflowState:
             key = next((item for item in self.api_keys.values() if item.otlp_token == token), None)
             return key.key if key and key.is_enabled else None
 
-    def _resource_visible(self, visibility: str, owner_id: str, tenant_id: str, shared_group_ids: list[str], current_user: TokenData) -> bool:
+    def _resource_visible(
+        self, visibility: str, owner_id: str, tenant_id: str, shared_group_ids: list[str], current_user: TokenData
+    ) -> bool:
         if getattr(current_user, "is_superuser", False):
             return True
         if tenant_id != current_user.tenant_id:
@@ -771,10 +788,7 @@ class WorkflowState:
         **_kwargs: Any,
     ) -> dict[str, Any]:
         permissions = set(actor_permissions or [])
-        if not (
-            Permission.CREATE_DASHBOARDS.value in permissions
-            or Permission.WRITE_DASHBOARDS.value in permissions
-        ):
+        if not (Permission.CREATE_DASHBOARDS.value in permissions or Permission.WRITE_DASHBOARDS.value in permissions):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Missing permission to create dashboards",
@@ -816,17 +830,27 @@ class WorkflowState:
     ) -> dict[str, Any] | None:
         permissions = set(actor_permissions or [])
         if not is_admin and not (
-            Permission.UPDATE_DASHBOARDS.value in permissions
-            or Permission.WRITE_DASHBOARDS.value in permissions
+            Permission.UPDATE_DASHBOARDS.value in permissions or Permission.WRITE_DASHBOARDS.value in permissions
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Missing permission to update dashboards",
             )
 
-        current_user = TokenData(user_id=user_id, username="user", tenant_id=tenant_id, org_id=self.org_id, role=Role.ADMIN if is_admin else Role.USER, is_superuser=is_admin, permissions=[], group_ids=list(self.users[user_id].group_ids))
+        current_user = TokenData(
+            user_id=user_id,
+            username="user",
+            tenant_id=tenant_id,
+            org_id=self.org_id,
+            role=Role.ADMIN if is_admin else Role.USER,
+            is_superuser=is_admin,
+            permissions=[],
+            group_ids=list(self.users[user_id].group_ids),
+        )
         item = self.dashboards.get(uid)
-        if item is None or not self._resource_visible(item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current_user):
+        if item is None or not self._resource_visible(
+            item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current_user
+        ):
             return None
         payload = dashboard_update.get("dashboard", {}) if isinstance(dashboard_update, dict) else {}
         item.title = str(payload.get("title") or item.title)
@@ -837,21 +861,53 @@ class WorkflowState:
         item.version += 1
         return {"id": item.id, "uid": uid, "status": "success", "version": item.version}
 
-    async def delete_dashboard(self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], **_kwargs: Any) -> bool:
-        current_user = TokenData(user_id=user_id, username="user", tenant_id=tenant_id, org_id=self.org_id, role=Role.USER, permissions=[], group_ids=list(group_ids))
+    async def delete_dashboard(
+        self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], **_kwargs: Any
+    ) -> bool:
+        current_user = TokenData(
+            user_id=user_id,
+            username="user",
+            tenant_id=tenant_id,
+            org_id=self.org_id,
+            role=Role.USER,
+            permissions=[],
+            group_ids=list(group_ids),
+        )
         item = self.dashboards.get(uid)
-        if item is None or not self._resource_visible(item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current_user):
+        if item is None or not self._resource_visible(
+            item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current_user
+        ):
             return False
         self.dashboards.pop(uid, None)
         return True
 
-    async def search_dashboards(self, *, user_id: str, tenant_id: str, group_ids: list[str], is_admin: bool, show_hidden: bool = False, **_kwargs: Any) -> list[dict[str, Any]]:
-        current_user = TokenData(user_id=user_id, username=self.users[user_id].username, tenant_id=tenant_id, org_id=self.org_id, role=self.users[user_id].role, permissions=[], group_ids=list(group_ids), is_superuser=is_admin)
+    async def search_dashboards(
+        self,
+        *,
+        user_id: str,
+        tenant_id: str,
+        group_ids: list[str],
+        is_admin: bool,
+        show_hidden: bool = False,
+        **_kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        current_user = TokenData(
+            user_id=user_id,
+            username=self.users[user_id].username,
+            tenant_id=tenant_id,
+            org_id=self.org_id,
+            role=self.users[user_id].role,
+            permissions=[],
+            group_ids=list(group_ids),
+            is_superuser=is_admin,
+        )
         items = []
         for item in self.dashboards.values():
             if user_id in item.hidden_by and not show_hidden:
                 continue
-            if not self._resource_visible(item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current_user):
+            if not self._resource_visible(
+                item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current_user
+            ):
                 continue
             folder = self.folders.get(item.folder_uid or "") if item.folder_uid else None
             items.append(
@@ -877,12 +933,25 @@ class WorkflowState:
             )
         return sorted(items, key=lambda item: item["uid"])
 
-    async def get_dashboard(self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], is_admin: bool, **_kwargs: Any) -> dict[str, Any] | None:
-        current_user = TokenData(user_id=user_id, username=self.users[user_id].username, tenant_id=tenant_id, org_id=self.org_id, role=self.users[user_id].role, permissions=[], group_ids=list(group_ids), is_superuser=is_admin)
+    async def get_dashboard(
+        self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], is_admin: bool, **_kwargs: Any
+    ) -> dict[str, Any] | None:
+        current_user = TokenData(
+            user_id=user_id,
+            username=self.users[user_id].username,
+            tenant_id=tenant_id,
+            org_id=self.org_id,
+            role=self.users[user_id].role,
+            permissions=[],
+            group_ids=list(group_ids),
+            is_superuser=is_admin,
+        )
         item = self.dashboards.get(uid)
         if item is None or user_id in item.hidden_by:
             return None
-        if not self._resource_visible(item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current_user):
+        if not self._resource_visible(
+            item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current_user
+        ):
             return None
         return {
             "dashboard": {"uid": item.uid, "title": item.title, "version": item.version},
@@ -964,36 +1033,78 @@ class WorkflowState:
             }
         )
 
-    async def get_datasource_by_name(self, *, name: str, user_id: str, tenant_id: str, group_ids: list[str], **_kwargs: Any) -> Datasource | None:
+    async def get_datasource_by_name(
+        self, *, name: str, user_id: str, tenant_id: str, group_ids: list[str], **_kwargs: Any
+    ) -> Datasource | None:
         item = next((entry for entry in self.datasources.values() if entry.name == name), None)
         if item is None:
             return None
-        current = TokenData(user_id=user_id, username=self.users[user_id].username, tenant_id=tenant_id, org_id=self.org_id, role=self.users[user_id].role, permissions=[], group_ids=list(group_ids))
+        current = TokenData(
+            user_id=user_id,
+            username=self.users[user_id].username,
+            tenant_id=tenant_id,
+            org_id=self.org_id,
+            role=self.users[user_id].role,
+            permissions=[],
+            group_ids=list(group_ids),
+        )
         if not self._resource_visible(item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current):
             return None
         return self._datasource_model(item, self.users[user_id])
 
-    async def get_datasources(self, *, user_id: str, tenant_id: str, group_ids: list[str], show_hidden: bool = False, **_kwargs: Any) -> list[Datasource]:
-        current = TokenData(user_id=user_id, username=self.users[user_id].username, tenant_id=tenant_id, org_id=self.org_id, role=self.users[user_id].role, permissions=[], group_ids=list(group_ids))
+    async def get_datasources(
+        self, *, user_id: str, tenant_id: str, group_ids: list[str], show_hidden: bool = False, **_kwargs: Any
+    ) -> list[Datasource]:
+        current = TokenData(
+            user_id=user_id,
+            username=self.users[user_id].username,
+            tenant_id=tenant_id,
+            org_id=self.org_id,
+            role=self.users[user_id].role,
+            permissions=[],
+            group_ids=list(group_ids),
+        )
         results = []
         for item in self.datasources.values():
-            if not self._resource_visible(item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current):
+            if not self._resource_visible(
+                item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current
+            ):
                 continue
             if user_id in item.hidden_by and not show_hidden:
                 continue
             results.append(self._datasource_model(item, self.users[user_id]))
         return results
 
-    async def get_datasource(self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], **_kwargs: Any) -> Datasource | None:
+    async def get_datasource(
+        self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], **_kwargs: Any
+    ) -> Datasource | None:
         item = self.datasources.get(uid)
         if item is None or user_id in item.hidden_by:
             return None
-        current = TokenData(user_id=user_id, username=self.users[user_id].username, tenant_id=tenant_id, org_id=self.org_id, role=self.users[user_id].role, permissions=[], group_ids=list(group_ids))
+        current = TokenData(
+            user_id=user_id,
+            username=self.users[user_id].username,
+            tenant_id=tenant_id,
+            org_id=self.org_id,
+            role=self.users[user_id].role,
+            permissions=[],
+            group_ids=list(group_ids),
+        )
         if not self._resource_visible(item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current):
             return None
         return self._datasource_model(item, self.users[user_id])
 
-    async def update_datasource(self, *, uid: str, datasource_update: DatasourceUpdate, user_id: str, tenant_id: str, visibility: str | None, shared_group_ids: list[str] | None, **_kwargs: Any) -> Datasource | None:
+    async def update_datasource(
+        self,
+        *,
+        uid: str,
+        datasource_update: DatasourceUpdate,
+        user_id: str,
+        tenant_id: str,
+        visibility: str | None,
+        shared_group_ids: list[str] | None,
+        **_kwargs: Any,
+    ) -> Datasource | None:
         item = self.datasources.get(uid)
         if item is None or item.tenant_id != tenant_id:
             return None
@@ -1071,27 +1182,69 @@ class WorkflowState:
             is_owned=item.created_by == user.id,
         )
 
-    async def get_folders(self, *, user_id: str, tenant_id: str, group_ids: list[str], show_hidden: bool = False, is_admin: bool = False, **_kwargs: Any) -> list[Folder]:
-        current = TokenData(user_id=user_id, username=self.users[user_id].username, tenant_id=tenant_id, org_id=self.org_id, role=self.users[user_id].role, permissions=[], group_ids=list(group_ids), is_superuser=is_admin)
+    async def get_folders(
+        self,
+        *,
+        user_id: str,
+        tenant_id: str,
+        group_ids: list[str],
+        show_hidden: bool = False,
+        is_admin: bool = False,
+        **_kwargs: Any,
+    ) -> list[Folder]:
+        current = TokenData(
+            user_id=user_id,
+            username=self.users[user_id].username,
+            tenant_id=tenant_id,
+            org_id=self.org_id,
+            role=self.users[user_id].role,
+            permissions=[],
+            group_ids=list(group_ids),
+            is_superuser=is_admin,
+        )
         results = []
         for item in self.folders.values():
-            if not self._resource_visible(item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current):
+            if not self._resource_visible(
+                item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current
+            ):
                 continue
             if user_id in item.hidden_by and not show_hidden:
                 continue
             results.append(self._folder_model(item, self.users[user_id]))
         return results
 
-    async def get_folder(self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], is_admin: bool = False, **_kwargs: Any) -> Folder | None:
+    async def get_folder(
+        self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], is_admin: bool = False, **_kwargs: Any
+    ) -> Folder | None:
         item = self.folders.get(uid)
         if item is None or user_id in item.hidden_by:
             return None
-        current = TokenData(user_id=user_id, username=self.users[user_id].username, tenant_id=tenant_id, org_id=self.org_id, role=self.users[user_id].role, permissions=[], group_ids=list(group_ids), is_superuser=is_admin)
+        current = TokenData(
+            user_id=user_id,
+            username=self.users[user_id].username,
+            tenant_id=tenant_id,
+            org_id=self.org_id,
+            role=self.users[user_id].role,
+            permissions=[],
+            group_ids=list(group_ids),
+            is_superuser=is_admin,
+        )
         if not self._resource_visible(item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current):
             return None
         return self._folder_model(item, self.users[user_id])
 
-    async def update_folder(self, *, uid: str, user_id: str, tenant_id: str, title: str | None, visibility: str | None, shared_group_ids: list[str] | None, allow_dashboard_writes: bool | None, **_kwargs: Any) -> Folder | None:
+    async def update_folder(
+        self,
+        *,
+        uid: str,
+        user_id: str,
+        tenant_id: str,
+        title: str | None,
+        visibility: str | None,
+        shared_group_ids: list[str] | None,
+        allow_dashboard_writes: bool | None,
+        **_kwargs: Any,
+    ) -> Folder | None:
         item = self.folders.get(uid)
         if item is None or item.tenant_id != tenant_id:
             return None

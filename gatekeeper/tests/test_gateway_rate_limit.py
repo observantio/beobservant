@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import unittest
@@ -110,6 +110,7 @@ class GatewayRateLimitTests(unittest.TestCase):
         from routers import gateway_router
 
         gateway_router.service._networks = [ipaddress.ip_network("127.0.0.1/32")]
+
         def _boom(self, token):
             raise gateway_router.DatabaseUnavailable("db down")
 
@@ -128,6 +129,7 @@ class GatewayRateLimitTests(unittest.TestCase):
             }
             req = Request(scope)
             import asyncio
+
             with self.assertLogs("routers.gateway_router", level="WARNING") as log_ctx:
                 with self.assertRaises(HTTPException) as cm:
                     asyncio.run(gateway_router.validate_otlp_token(req))
@@ -138,7 +140,6 @@ class GatewayRateLimitTests(unittest.TestCase):
             self.assertNotIn("Traceback", log_output)
         finally:
             GatewayAuthService.validate_otlp_token = prev
-
 
     def test_token_cache_hits(self):
         service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
@@ -176,6 +177,7 @@ class GatewayRateLimitTests(unittest.TestCase):
 
     def test_make_token_cache_fallback(self):
         import services.token_cache as tc_mod
+
         prev_redis = getattr(tc_mod, "redis", None)
         tc_mod.redis = None
         try:
@@ -196,6 +198,7 @@ class GatewayRateLimitTests(unittest.TestCase):
 
         orig_init = RedisTokenRateLimiter.__init__
         try:
+
             def fail(self, *_args, **_kwargs):
                 raise RuntimeError("no redis")
 
@@ -204,6 +207,7 @@ class GatewayRateLimitTests(unittest.TestCase):
                 make_default_rate_limiter(1, backend="redis", redis_url=None)
             with self.assertRaises(RuntimeError):
                 make_default_rate_limiter(1, backend="redis", redis_url="redis://localhost")
+
             def ok_init(self, limit, _url, *_args, **_kwargs):
                 self._limit = limit
                 self.enforce = lambda key: None

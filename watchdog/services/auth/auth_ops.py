@@ -1,11 +1,12 @@
 """
-Authentication operations for managing user authentication, including token generation, validation, and user information retrieval.
+Authentication operations for managing user authentication, including token generation, validation, and user information
+retrieval.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -72,9 +73,14 @@ def _jwt_key_objects() -> tuple[SigningKey, VerificationKey]:
         if not isinstance(private_key, rsa.RSAPrivateKey) or not isinstance(public_key, rsa.RSAPublicKey):
             raise ValueError("JWT key type mismatch: RS256 requires RSA private/public PEM keys")
     else:
-        if not isinstance(private_key, ec.EllipticCurvePrivateKey) or not isinstance(public_key, ec.EllipticCurvePublicKey):
+        if not isinstance(private_key, ec.EllipticCurvePrivateKey) or not isinstance(
+            public_key, ec.EllipticCurvePublicKey
+        ):
             raise ValueError("JWT key type mismatch: ES256 requires EC private/public PEM keys")
-        if getattr(private_key.curve, "name", "") != "secp256r1" or getattr(public_key.curve, "name", "") != "secp256r1":
+        if (
+            getattr(private_key.curve, "name", "") != "secp256r1"
+            or getattr(public_key.curve, "name", "") != "secp256r1"
+        ):
             raise ValueError("ES256 requires P-256 (secp256r1) key material")
 
     return private_key, public_key
@@ -244,7 +250,9 @@ def authenticate_user(service: DatabaseAuthService, username: str, password: str
         return hydrated
 
 
-def update_password(service: DatabaseAuthService, user_id: str, password_update: UserPasswordUpdate, tenant_id: str) -> bool:
+def update_password(
+    service: DatabaseAuthService, user_id: str, password_update: UserPasswordUpdate, tenant_id: str
+) -> bool:
     new_password = getattr(password_update, "new_password", "") or ""
     current_password = getattr(password_update, "current_password", "") or ""
 
@@ -257,9 +265,7 @@ def update_password(service: DatabaseAuthService, user_id: str, password_update:
             return False
 
         auth_provider = str(getattr(user, "auth_provider", "local") or "local").strip().lower()
-        pending_password_bootstrap = bool(
-            auth_provider != "local" and getattr(user, "needs_password_change", False)
-        )
+        pending_password_bootstrap = bool(auth_provider != "local" and getattr(user, "needs_password_change", False))
 
         if pending_password_bootstrap:
             # User is authenticated via OIDC and is setting their first local

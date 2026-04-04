@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -100,7 +100,9 @@ async def test_create_dashboard_none_no_uid_and_folder_resolution_error(monkeypa
         grafana_service=gs,
         logger=SimpleNamespace(debug=lambda *args, **kwargs: None),
         _validate_group_visibility=lambda *args, **kwargs: [],
-        _raise_http_from_grafana_error=lambda exc: (_ for _ in ()).throw(HTTPException(status_code=500, detail=str(exc))),
+        _raise_http_from_grafana_error=lambda exc: (_ for _ in ()).throw(
+            HTTPException(status_code=500, detail=str(exc))
+        ),
     )
 
     async def no_conflict(*_args, **_kwargs):
@@ -163,7 +165,11 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
         mapped["count"] += 1
         raise HTTPException(status_code=502, detail="mapped")
 
-    service = SimpleNamespace(grafana_service=_GS(), _raise_http_from_grafana_error=_map, _validate_group_visibility=lambda *args, **kwargs: [g1])
+    service = SimpleNamespace(
+        grafana_service=_GS(),
+        _raise_http_from_grafana_error=_map,
+        _validate_group_visibility=lambda *args, **kwargs: [g1],
+    )
 
     async def no_conflict(*_args, **_kwargs):
         return False
@@ -177,7 +183,13 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
             service,
             db,
             "d1",
-            DashboardUpdate(dashboard=Dashboard(title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]), folderId=11, overwrite=True),
+            DashboardUpdate(
+                dashboard=Dashboard(
+                    title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                ),
+                folderId=11,
+                overwrite=True,
+            ),
             owner.id,
             "t1",
             ["g1"],
@@ -189,7 +201,13 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
         service,
         db,
         "d1",
-        DashboardUpdate(dashboard=Dashboard(title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]), folderId=11, overwrite=True),
+        DashboardUpdate(
+            dashboard=Dashboard(
+                title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+            ),
+            folderId=11,
+            overwrite=True,
+        ),
         owner.id,
         "t1",
         ["g1"],
@@ -202,7 +220,13 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
         service,
         db,
         "d1",
-        DashboardUpdate(dashboard=Dashboard(title="U2", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]), folderId=0, overwrite=True),
+        DashboardUpdate(
+            dashboard=Dashboard(
+                title="U2", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+            ),
+            folderId=0,
+            overwrite=True,
+        ),
         owner.id,
         "t1",
         ["g1"],
@@ -220,7 +244,12 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
             service,
             db,
             "d1",
-            DashboardUpdate(dashboard=Dashboard(title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]), overwrite=True),
+            DashboardUpdate(
+                dashboard=Dashboard(
+                    title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                ),
+                overwrite=True,
+            ),
             owner.id,
             "t1",
             ["g1"],
@@ -230,15 +259,23 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
         return None
 
     service.grafana_service.update_dashboard = update_none
-    assert await dashboard_ops.update_dashboard(
-        service,
-        db,
-        "d1",
-        DashboardUpdate(dashboard=Dashboard(title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]), overwrite=True),
-        owner.id,
-        "t1",
-        ["g1"],
-    ) is None
+    assert (
+        await dashboard_ops.update_dashboard(
+            service,
+            db,
+            "d1",
+            DashboardUpdate(
+                dashboard=Dashboard(
+                    title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                ),
+                overwrite=True,
+            ),
+            owner.id,
+            "t1",
+            ["g1"],
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio
@@ -279,9 +316,8 @@ async def test_search_get_delete_additional_branches(monkeypatch):
                         "folderUid": None,
                         "folderTitle": None,
                     }
-            return [
-                _Dash()
-            ]
+
+            return [_Dash()]
 
         async def get_dashboard(self, uid):
             if uid == "d1":

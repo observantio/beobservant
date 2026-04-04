@@ -33,6 +33,7 @@ class _VaultInvalidPathFallback(Exception):
 class _VaultErrorFallback(Exception):
     pass
 
+
 hvac: ModuleType | None
 
 try:
@@ -41,9 +42,21 @@ try:
     forbidden_exc = getattr(hvac_exceptions, "Forbidden", _VaultForbiddenFallback)
     invalid_path_exc = getattr(hvac_exceptions, "InvalidPath", _VaultInvalidPathFallback)
     vault_error_exc = getattr(hvac_exceptions, "VaultError", _VaultErrorFallback)
-    Forbidden = forbidden_exc if isinstance(forbidden_exc, type) and issubclass(forbidden_exc, Exception) else _VaultForbiddenFallback
-    InvalidPath = invalid_path_exc if isinstance(invalid_path_exc, type) and issubclass(invalid_path_exc, Exception) else _VaultInvalidPathFallback
-    VaultError = vault_error_exc if isinstance(vault_error_exc, type) and issubclass(vault_error_exc, Exception) else _VaultErrorFallback
+    Forbidden = (
+        forbidden_exc
+        if isinstance(forbidden_exc, type) and issubclass(forbidden_exc, Exception)
+        else _VaultForbiddenFallback
+    )
+    InvalidPath = (
+        invalid_path_exc
+        if isinstance(invalid_path_exc, type) and issubclass(invalid_path_exc, Exception)
+        else _VaultInvalidPathFallback
+    )
+    VaultError = (
+        vault_error_exc
+        if isinstance(vault_error_exc, type) and issubclass(vault_error_exc, Exception)
+        else _VaultErrorFallback
+    )
 except ImportError:
     hvac = None
     Forbidden = _VaultForbiddenFallback
@@ -94,9 +107,7 @@ class VaultSecretProvider:
         elif role_id and secret_id_fn:
             self._approle_login()
         else:
-            raise VaultClientError(
-                "Vault auth not configured (provide token or role_id + secret_id_fn)"
-            )
+            raise VaultClientError("Vault auth not configured (provide token or role_id + secret_id_fn)")
 
         if not self._client.is_authenticated():
             raise VaultClientError("Vault authentication failed")

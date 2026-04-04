@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -139,7 +139,9 @@ def test_audit_list_and_export_workflow(client, monkeypatch: pytest.MonkeyPatch)
         return FakeAuditQuery(audit_rows)
 
     def fake_apply_audit_filters(query, start, end, user_id, action, resource_type, q=None):
-        return query.filter_by_fields(start=start, end=end, user_id=user_id, action=action, resource_type=resource_type, q=q)
+        return query.filter_by_fields(
+            start=start, end=end, user_id=user_id, action=action, resource_type=resource_type, q=q
+        )
 
     monkeypatch.setattr(audit_routes, "get_db_session", lambda: FakeCtx())
     monkeypatch.setattr(audit_routes, "build_audit_log_query", fake_build_audit_log_query)

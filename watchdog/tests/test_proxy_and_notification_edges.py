@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -153,7 +153,9 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
     assert svc._normalize_group_ids([" g1 ", "g1", "", None, "g2"]) == ["g1", "g2"]
 
     monkeypatch.setattr(svc, "_effective_group_ids", lambda *_args, **_kwargs: ["live"])
-    monkeypatch.setitem(svc.search_dashboards.__globals__, "search_dashboards", lambda *_args, **_kwargs: [{"uid": "d1"}])
+    monkeypatch.setitem(
+        svc.search_dashboards.__globals__, "search_dashboards", lambda *_args, **_kwargs: [{"uid": "d1"}]
+    )
 
     async def fake_search(*args, **kwargs):
         return [{"uid": "d1", "groups": args[4]}]
@@ -230,5 +232,7 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
     assert response.status_code == 200
 
     with pytest.raises(HTTPException) as exc:
-        await proxy_router.bootstrap_grafana_session(_request(), proxy_router.GrafanaBootstrapSessionRequest(), token_data)
+        await proxy_router.bootstrap_grafana_session(
+            _request(), proxy_router.GrafanaBootstrapSessionRequest(), token_data
+        )
     assert exc.value.status_code == 401

@@ -19,6 +19,7 @@ from middleware.dependencies import enforce_public_endpoint_security, enforce_he
 
 SILENCE_META_KEY = "watchdog_meta"
 
+
 def required_permissions(path: str, method: str) -> Optional[Set[str]]:
     p = f"/{path.strip('/')}" if path else "/"
     m = method.upper()
@@ -73,7 +74,12 @@ def required_permissions(path: str, method: str) -> Optional[Set[str]]:
         return {Permission.UPDATE_INCIDENTS.value}
 
     if p in {"/metrics/names", "/metrics/query", "/metrics/labels"} or p.startswith("/metrics/label-values/"):
-        return {Permission.READ_METRICS.value, Permission.CREATE_RULES.value, Permission.UPDATE_RULES.value, Permission.WRITE_ALERTS.value}
+        return {
+            Permission.READ_METRICS.value,
+            Permission.CREATE_RULES.value,
+            Permission.UPDATE_RULES.value,
+            Permission.WRITE_ALERTS.value,
+        }
 
     if p == "/public/rules":
         return set()
@@ -87,7 +93,10 @@ def check_permissions(current_user: TokenData, required: Set[str]) -> None:
     if not set(current_user.permissions or []).intersection(required):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"You do not have permission to communicate with Notifier. Required permissions: {', '.join(required)}",
+            detail=(
+                "You do not have permission to communicate with Notifier. "
+                f"Required permissions: {', '.join(required)}"
+            ),
         )
 
 
@@ -143,12 +152,17 @@ def validate_and_normalize_silence_payload(payload: JSONDict, current_user: Toke
 
     if visibility == "group":
         if not shared_group_ids:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one group is required when visibility is 'group'")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one group is required when visibility is 'group'",
+            )
         if not current_user.is_superuser:
             actor_groups = set(normalize_group_ids(getattr(current_user, "group_ids", [])))
             unauthorized = [gid for gid in shared_group_ids if gid not in actor_groups]
             if unauthorized:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is not a member of one or more specified groups")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="User is not a member of one or more specified groups"
+                )
     else:
         shared_group_ids = []
 
@@ -161,17 +175,19 @@ def assert_silence_owner(current_user: TokenData, silence: JSONDict) -> None:
     if current_user.is_superuser:
         return
     meta = _extract_silence_meta(silence)
-    creator = (
-        silence.get("created_by") or silence.get("createdBy")
-        or meta.get("created_by") or meta.get("createdBy")
-    )
+    creator = silence.get("created_by") or silence.get("createdBy") or meta.get("created_by") or meta.get("createdBy")
     creator_id = str(creator).strip() if creator is not None else ""
     if not creator_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Silence ownership metadata is missing; update/delete is denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Silence ownership metadata is missing; update/delete is denied",
+        )
 
     actor_id = str(getattr(current_user, "user_id", "") or "").strip()
     if not actor_id or creator_id != actor_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update or delete silences that you created")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="You can only update or delete silences that you created"
+        )
 
 
 def extract_silence_id(path: str, payload: Optional[JSONDict]) -> Optional[str]:
@@ -187,9 +203,7 @@ def extract_silence_id(path: str, payload: Optional[JSONDict]) -> Optional[str]:
     return None
 
 
-async def find_silence_for_mutation(
-    *, request: Request, current_user: TokenData, silence_id: str
-) -> JSONDict:
+async def find_silence_for_mutation(*, request: Request, current_user: TokenData, silence_id: str) -> JSONDict:
     service_token = config.get_secret("NOTIFIER_SERVICE_TOKEN")
     if not service_token:
         raise HTTPException(
@@ -197,9 +211,7 @@ async def find_silence_for_mutation(
             detail="Notifier service token not configured",
         )
 
-    context_token = notifier_proxy_service._sign_context_token(
-        current_user=current_user, api_key_id=None
-    )
+    context_token = notifier_proxy_service._sign_context_token(current_user=current_user, api_key_id=None)
     headers = {
         "X-Service-Token": service_token,
         "X-Correlation-ID": request.headers.get("X-Request-ID", ""),
@@ -224,7 +236,9 @@ async def find_silence_for_mutation(
     try:
         data = resp.json()
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Invalid silence response from Notifier") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Invalid silence response from Notifier"
+        ) from exc
 
     for item in (data if isinstance(data, list) else []):
         if isinstance(item, dict) and str(item.get("id", "")).strip() == silence_id:
@@ -254,4 +268,5 @@ def webhook_route(upstream_suffix: str, audit_action: str, scope: str) -> Callab
             require_api_key=False,
             audit_action=audit_action,
         )
+
     return handler

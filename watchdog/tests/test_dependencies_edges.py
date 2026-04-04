@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -78,8 +78,15 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
     current_user = _token_data(org_id="org-a")
     assert await dependencies.resolve_tenant_id(req, current_user) == "org-a"
     assert await dependencies.resolve_tenant_id(_request(headers=[(b"x-scope-orgid", b" ")]), current_user) == "org-a"
-    assert await dependencies.resolve_tenant_id(_request(headers=[(b"x-scope-orgid", b"org-a")]), current_user) == "org-a"
-    assert await dependencies.resolve_tenant_id(_request(headers=[(b"x-scope-orgid", b"org-b")]), _token_data(is_superuser=True)) == "org-b"
+    assert (
+        await dependencies.resolve_tenant_id(_request(headers=[(b"x-scope-orgid", b"org-a")]), current_user) == "org-a"
+    )
+    assert (
+        await dependencies.resolve_tenant_id(
+            _request(headers=[(b"x-scope-orgid", b"org-b")]), _token_data(is_superuser=True)
+        )
+        == "org-b"
+    )
 
     async def run_sync(fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -90,13 +97,17 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
         await dependencies.resolve_tenant_id(_request(headers=[(b"x-scope-orgid", b"org-b")]), current_user)
     assert not_allowed.value.status_code == 403
 
-    monkeypatch.setattr(dependencies, "_load_allowed_scope_ids_for_user", lambda **kwargs: (_ for _ in ()).throw(SQLAlchemyError("db")))
+    monkeypatch.setattr(
+        dependencies, "_load_allowed_scope_ids_for_user", lambda **kwargs: (_ for _ in ()).throw(SQLAlchemyError("db"))
+    )
     with pytest.raises(HTTPException) as load_error:
         await dependencies.resolve_tenant_id(_request(headers=[(b"x-scope-orgid", b"org-b")]), current_user)
     assert load_error.value.status_code == 500
 
     monkeypatch.setattr(dependencies, "_load_allowed_scope_ids_for_user", lambda **kwargs: {"org-a", "org-b"})
-    monkeypatch.setattr(dependencies, "_scope_exists_in_other_tenants", lambda **kwargs: (_ for _ in ()).throw(SQLAlchemyError("db")))
+    monkeypatch.setattr(
+        dependencies, "_scope_exists_in_other_tenants", lambda **kwargs: (_ for _ in ()).throw(SQLAlchemyError("db"))
+    )
     with pytest.raises(HTTPException) as scope_error:
         await dependencies.resolve_tenant_id(_request(headers=[(b"x-scope-orgid", b"org-b")]), current_user)
     assert scope_error.value.status_code == 500
@@ -104,7 +115,9 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
     calls = []
     monkeypatch.setattr(dependencies, "enforce_rate_limit", lambda **kwargs: calls.append(kwargs))
     dependencies.apply_scoped_rate_limit(current_user, "tempo")
-    assert calls == [{"key": "user:u1:tempo", "limit": dependencies.config.RATE_LIMIT_USER_PER_MINUTE, "window_seconds": 60}]
+    assert calls == [
+        {"key": "user:u1:tempo", "limit": dependencies.config.RATE_LIMIT_USER_PER_MINUTE, "window_seconds": 60}
+    ]
 
     naive_user = types.SimpleNamespace(session_invalid_before=datetime.fromtimestamp(101, timezone.utc))
     with pytest.raises(HTTPException) as revoked:
@@ -126,7 +139,9 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
     with pytest.raises(HTTPException, match="Access denied"):
         dependencies.enforce_ip_allowlist(_request(), "", scope="public")
     with pytest.raises(HTTPException, match="Access denied"):
-        monkeypatch.setattr(dependencies, "client_ip", lambda request: "bad-ip") or dependencies.enforce_ip_allowlist(_request(), "127.0.0.1", scope="public")
+        monkeypatch.setattr(dependencies, "client_ip", lambda request: "bad-ip") or dependencies.enforce_ip_allowlist(
+            _request(), "127.0.0.1", scope="public"
+        )
     monkeypatch.setattr(dependencies, "client_ip", lambda request: "127.0.0.1")
     dependencies.enforce_ip_allowlist(_request(), "127.0.0.1", scope="public")
     monkeypatch.setattr(dependencies, "client_ip", lambda request: "198.51.100.4")
@@ -140,16 +155,27 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
     with pytest.raises(HTTPException, match="Access denied"):
         dependencies.enforce_public_endpoint_security(_request(client=None), scope="public", limit=1, window_seconds=60)
     monkeypatch.setattr(dependencies, "client_ip", lambda request: "127.0.0.1")
-    dependencies.enforce_public_endpoint_security(_request(), scope="public", limit=2, window_seconds=30, fallback_mode="allow")
+    dependencies.enforce_public_endpoint_security(
+        _request(), scope="public", limit=2, window_seconds=30, fallback_mode="allow"
+    )
     assert ip_rate_calls == [{"scope": "public", "limit": 2, "window_seconds": 30, "fallback_mode": "allow"}]
     with pytest.raises(ValueError, match="fallback_mode"):
-        dependencies.enforce_public_endpoint_security(_request(), scope="public", limit=2, window_seconds=30, fallback_mode="bad")
+        dependencies.enforce_public_endpoint_security(
+            _request(), scope="public", limit=2, window_seconds=30, fallback_mode="bad"
+        )
 
     dependencies.enforce_header_token(_request(), header_name="x-test", expected_token=None, unauthorized_detail="bad")
     with pytest.raises(HTTPException) as unauthorized:
-        dependencies.enforce_header_token(_request(), header_name="x-test", expected_token="secret", unauthorized_detail="bad")
+        dependencies.enforce_header_token(
+            _request(), header_name="x-test", expected_token="secret", unauthorized_detail="bad"
+        )
     assert unauthorized.value.status_code == 401
-    dependencies.enforce_header_token(_request(headers=[(b"x-test", b"secret")]), header_name="x-test", expected_token="secret", unauthorized_detail="bad")
+    dependencies.enforce_header_token(
+        _request(headers=[(b"x-test", b"secret")]),
+        header_name="x-test",
+        expected_token="secret",
+        unauthorized_detail="bad",
+    )
 
 
 def test_load_allowed_org_ids_and_scope_conflict(monkeypatch):
@@ -206,7 +232,10 @@ def test_dependency_helper_misc_branches(monkeypatch):
     assert dependencies._validate_rate_limit_fallback_mode(" MEMORY ") == "memory"
     assert dependencies._scope_exists_in_other_tenants(scope_id=None, org_id=None, tenant_id="tenant-a") is False
     assert [str(item) for item in dependencies._parse_ip_allowlist("10.0.0.0/24")] == ["10.0.0.0/24"]
-    assert [str(item) for item in dependencies._parse_ip_allowlist("127.0.0.1, ,10.0.0.1")] == ["127.0.0.1/32", "10.0.0.1/32"]
+    assert [str(item) for item in dependencies._parse_ip_allowlist("127.0.0.1, ,10.0.0.1")] == [
+        "127.0.0.1/32",
+        "10.0.0.1/32",
+    ]
 
     class QueryStub:
         def filter_by(self, **kwargs):
@@ -266,7 +295,9 @@ def test_current_user_and_permission_dependency_edges(monkeypatch):
     with pytest.raises(HTTPException, match="User not found or inactive"):
         dependencies.get_current_user(_request(), creds)
 
-    live_user = types.SimpleNamespace(is_active=True, org_id="org-live", group_ids=(" g1 ", "", 2), session_invalid_before=None)
+    live_user = types.SimpleNamespace(
+        is_active=True, org_id="org-live", group_ids=(" g1 ", "", 2), session_invalid_before=None
+    )
     monkeypatch.setattr(auth_stub, "get_user_by_id", lambda user_id: live_user)
     monkeypatch.setattr(auth_stub, "get_user_permissions", lambda user: ["read:traces", "write:traces"])
     rate_limit_calls = []
@@ -309,7 +340,9 @@ def test_current_user_and_permission_dependency_edges(monkeypatch):
 
     decode_calls = []
     user_calls = []
-    monkeypatch.setattr(auth_stub, "decode_token", lambda token: decode_calls.append(token) or _token_data(is_mfa_setup=False))
+    monkeypatch.setattr(
+        auth_stub, "decode_token", lambda token: decode_calls.append(token) or _token_data(is_mfa_setup=False)
+    )
     monkeypatch.setattr(auth_stub, "get_user_by_id", lambda user_id: user_calls.append(user_id) or live_user)
     rate_limit_calls.clear()
     resolved_non_mfa = dependencies.get_current_user_or_mfa_setup(_request(), creds)
@@ -324,7 +357,11 @@ def test_current_user_and_permission_dependency_edges(monkeypatch):
     assert dependencies.require_permission("read:traces")(_token_data(permissions=["read:traces"]))
 
     scoped_calls = []
-    monkeypatch.setattr(dependencies, "apply_scoped_rate_limit", lambda current_user, scope: scoped_calls.append((current_user.user_id, scope)))
+    monkeypatch.setattr(
+        dependencies,
+        "apply_scoped_rate_limit",
+        lambda current_user, scope: scoped_calls.append((current_user.user_id, scope)),
+    )
     assert dependencies.require_permission_with_scope("read:traces", "tempo")(_token_data(permissions=["read:traces"]))
     assert scoped_calls[-1] == ("u1", "tempo")
 
@@ -384,7 +421,11 @@ def test_scope_aware_current_user_dependency_does_not_require_body(monkeypatch):
 
 def test_scoped_permission_dependencies_cover_forbidden_and_superuser_paths(monkeypatch):
     scoped_calls = []
-    monkeypatch.setattr(dependencies, "apply_scoped_rate_limit", lambda current_user, scope: scoped_calls.append((current_user.user_id, scope)))
+    monkeypatch.setattr(
+        dependencies,
+        "apply_scoped_rate_limit",
+        lambda current_user, scope: scoped_calls.append((current_user.user_id, scope)),
+    )
 
     perm_dependency = dependencies.require_permission_with_scope("read:users", "tempo")
     perm_checker = perm_dependency.__defaults__[0].dependency

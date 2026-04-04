@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from fastapi.testclient import TestClient
@@ -12,6 +12,7 @@ from fastapi import FastAPI
 import pytest
 
 from tests._env import ensure_test_env
+
 ensure_test_env()
 
 from services.internal_service import InternalService
@@ -23,6 +24,7 @@ from routers import internal_router
 class DummyAuthService:
     def validate_otlp_token(self, token, *, suppress_errors=True):
         return "org123" if token == "good" else None
+
 
 @pytest.fixture(autouse=True)
 def patch_auth_service(monkeypatch):

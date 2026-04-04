@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import os
@@ -144,9 +144,7 @@ async def test_get_folders_hides_private_folder_from_non_owner(db_session):
     )
     db_session.commit()
 
-    service = _ProxyStub(
-        _GrafanaServiceStub(folders=[SimpleNamespace(id=10, uid="f-private", title="Private Folder")])
-    )
+    service = _ProxyStub(_GrafanaServiceStub(folders=[SimpleNamespace(id=10, uid="f-private", title="Private Folder")]))
 
     folders = await folder_ops.get_folders(
         service,
@@ -174,9 +172,7 @@ async def test_get_folders_hides_private_folder_from_admin_when_not_owner(db_ses
     )
     db_session.commit()
 
-    service = _ProxyStub(
-        _GrafanaServiceStub(folders=[SimpleNamespace(id=10, uid="f-private", title="Private Folder")])
-    )
+    service = _ProxyStub(_GrafanaServiceStub(folders=[SimpleNamespace(id=10, uid="f-private", title="Private Folder")]))
 
     folders = await folder_ops.get_folders(
         service,
@@ -192,25 +188,27 @@ async def test_get_folders_hides_private_folder_from_admin_when_not_owner(db_ses
 
 @pytest.mark.asyncio
 async def test_dashboard_search_respects_folder_scope(db_session):
-    db_session.add_all([
-        GrafanaFolder(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="f-private",
-            grafana_id=10,
-            title="Private Folder",
-            visibility="private",
-        ),
-        GrafanaDashboard(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="d-1",
-            grafana_id=100,
-            title="CPU",
-            folder_uid="f-private",
-            visibility="tenant",
-        ),
-    ])
+    db_session.add_all(
+        [
+            GrafanaFolder(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="f-private",
+                grafana_id=10,
+                title="Private Folder",
+                visibility="private",
+            ),
+            GrafanaDashboard(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="d-1",
+                grafana_id=100,
+                title="CPU",
+                folder_uid="f-private",
+                visibility="tenant",
+            ),
+        ]
+    )
     db_session.commit()
 
     dash = DashboardSearchResult(

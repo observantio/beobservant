@@ -3,9 +3,9 @@ Resolver models for Watchdog observability analysis.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from custom_types.json import JSONDict
 
 MAX_EPOCH_VALUE = 9_007_199_254_740_991
 EpochInt = Annotated[StrictInt, Field(ge=0, le=MAX_EPOCH_VALUE)]
+
 
 class AnalyzeRequestPayload(BaseModel):
     tenant_id: Optional[str] = None
@@ -34,11 +35,13 @@ class AnalyzeRequestPayload(BaseModel):
     slo_target: float = Field(default=0.999, ge=0.0, le=1.0)
     correlation_window_seconds: float = Field(default=60.0, ge=10.0, le=600.0)
     forecast_horizon_seconds: float = Field(default=1800.0, ge=60.0, le=86400.0)
+
     @model_validator(mode="after")
     def validate_time_range(self) -> "AnalyzeRequestPayload":
         if self.start >= self.end:
             raise ValueError("start must be less than end")
         return self
+
 
 class AnalyzeProxyPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -51,6 +54,7 @@ class AnalyzeProxyPayload(BaseModel):
         if self.start is not None and self.end is not None and self.start >= self.end:
             raise ValueError("start must be less than end")
         return self
+
 
 class AnalyzeJobStatus(str, Enum):
     PENDING = "pending"
@@ -86,6 +90,7 @@ class AnalyzeJobStatus(str, Enum):
                     return member
         return cls.PENDING
 
+
 class AnalyzeJobCreateResponse(BaseModel):
     job_id: str
     report_id: str
@@ -93,6 +98,7 @@ class AnalyzeJobCreateResponse(BaseModel):
     created_at: datetime
     tenant_id: str
     requested_by: str
+
 
 class AnalyzeJobSummary(BaseModel):
     job_id: str
@@ -107,9 +113,11 @@ class AnalyzeJobSummary(BaseModel):
     tenant_id: str
     requested_by: str
 
+
 class AnalyzeJobListResponse(BaseModel):
     items: List[AnalyzeJobSummary]
     next_cursor: Optional[str] = None
+
 
 class AnalysisQualityPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -118,12 +126,14 @@ class AnalysisQualityPayload(BaseModel):
     gating_profile: Optional[str] = None
     confidence_calibration_version: Optional[str] = None
 
+
 class ServiceLatencyPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
     service: Optional[str] = None
     operation: Optional[str] = None
     window_start: Optional[float] = None
     window_end: Optional[float] = None
+
 
 class RootCausePayload(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -132,11 +142,13 @@ class RootCausePayload(BaseModel):
     suppression_diagnostics: JSONDict = Field(default_factory=dict)
     selection_score_components: Dict[str, float] = Field(default_factory=dict)
 
+
 class AnalyzeResultPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
     quality: Optional[AnalysisQualityPayload] = None
     service_latency: List[ServiceLatencyPayload] = Field(default_factory=list)
     root_causes: List[RootCausePayload] = Field(default_factory=list)
+
 
 class AnalyzeJobResultResponse(BaseModel):
     job_id: str
@@ -146,6 +158,7 @@ class AnalyzeJobResultResponse(BaseModel):
     requested_by: str
     result: Optional[AnalyzeResultPayload | JSONDict] = None
 
+
 class AnalyzeReportResponse(BaseModel):
     job_id: str
     report_id: str
@@ -154,10 +167,12 @@ class AnalyzeReportResponse(BaseModel):
     requested_by: str
     result: Optional[AnalyzeResultPayload | JSONDict] = None
 
+
 class AnalyzeReportDeleteResponse(BaseModel):
     report_id: str
     status: AnalyzeJobStatus = AnalyzeJobStatus.DELETED
     deleted: bool = True
+
 
 class AnalyzeConfigTemplateResponse(BaseModel):
     version: int

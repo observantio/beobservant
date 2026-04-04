@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
@@ -11,6 +11,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from tests._env import ensure_test_env
+
 ensure_test_env()
 from config import config
 from models.access.auth_models import Role, TokenData
@@ -110,7 +111,11 @@ async def test_resolver_proxy_missing_service_token_and_generic_error(monkeypatc
     service = ResolverProxyService()
     audits = []
     monkeypatch.setattr(service, "write_audit", lambda **kwargs: audits.append(kwargs))
-    monkeypatch.setattr(config, "get_secret", lambda key: {"RESOLVER_CONTEXT_SIGNING_KEY": "resolver-context-signing-key-32chars"}.get(key))
+    monkeypatch.setattr(
+        config,
+        "get_secret",
+        lambda key: {"RESOLVER_CONTEXT_SIGNING_KEY": "resolver-context-signing-key-32chars"}.get(key),
+    )
 
     with pytest.raises(HTTPException, match="service token not configured"):
         await service.request_json(
@@ -369,7 +374,11 @@ async def test_resolver_proxy_collapses_inflight_reads(monkeypatch):
 @pytest.mark.asyncio
 async def test_resolver_proxy_uses_existing_inflight_future_and_locked_cache(monkeypatch):
     service = ResolverProxyService()
-    monkeypatch.setattr(config, "get_secret", lambda key: "service-token" if key == "RESOLVER_SERVICE_TOKEN" else "resolver-context-signing-key-32chars")
+    monkeypatch.setattr(
+        config,
+        "get_secret",
+        lambda key: "service-token" if key == "RESOLVER_SERVICE_TOKEN" else "resolver-context-signing-key-32chars",
+    )
     monkeypatch.setattr(service, "_sign_context_token", lambda **_: "ctx")
     monkeypatch.setattr(service, "write_audit", lambda **_kwargs: None)
 

@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ ensure_test_env()
 from models.observability.loki_models import LogDirection, LogQuery
 from services.loki_service import LokiService, _json_dict, _object_list, _string_list
 
-
 _loki_module = importlib.import_module(LokiService.__module__)
 
 
@@ -40,7 +39,9 @@ def test_loki_service_small_helpers_cover_fallback_types(monkeypatch):
     assert _string_list(["a", 1, "b"]) == ["a", "b"]
     assert _string_list("bad") == []
     assert service._headers("tenant-1") == {"X-Scope-OrgID": "tenant-1"}
-    assert service._query_params(LogQuery(query="{}", limit=5, direction=LogDirection.FORWARD, start=1, end=2, step=None)) == {
+    assert service._query_params(
+        LogQuery(query="{}", limit=5, direction=LogDirection.FORWARD, start=1, end=2, step=None)
+    ) == {
         "query": "{}",
         "limit": 5,
         "direction": "forward",
@@ -107,7 +108,7 @@ async def test_query_logs_covers_fallback_and_http_errors(monkeypatch):
 
     async def timed_get_json(_client, endpoint, params=None, headers=None):
         assert endpoint.endswith("/query_range")
-        assert params["query"] == "{app=\"web\"}"
+        assert params["query"] == '{app="web"}'
         assert headers["X-Scope-OrgID"] == "tenant-a"
         return {"status": "success", "data": {"result": []}}
 
@@ -160,15 +161,17 @@ async def test_query_logs_instant_get_labels_and_label_values_cover_error_paths(
         raise AssertionError(endpoint)
 
     async def query_logs(log_query, tenant_id="default"):
-        assert log_query.query == "{service_name=~\".+\"}"
-        return SimpleNamespace(data={"result": [{"stream": {"service_name": "api"}}, {"stream": {"service_name": "worker"}}]})
+        assert log_query.query == '{service_name=~".+"}'
+        return SimpleNamespace(
+            data={"result": [{"stream": {"service_name": "api"}}, {"stream": {"service_name": "worker"}}]}
+        )
 
     monkeypatch.setattr(service._http, "timed_get_json", timed_get_json)
     monkeypatch.setattr(service._http, "safe_get_json", safe_get_json)
     monkeypatch.setattr(_loki_module, "run_fallback_queries", fallback)
     monkeypatch.setattr(service, "query_logs", query_logs)
 
-    instant = await service.query_logs_instant("{app=\"web\"}", at_time=10, tenant_id="tenant-a", limit=2)
+    instant = await service.query_logs_instant('{app="web"}', at_time=10, tenant_id="tenant-a", limit=2)
     assert instant.status == "success"
     assert instant.data["result"][0]["stream"]["service_name"] == "api"
 
@@ -221,8 +224,10 @@ async def test_aggregate_volume_search_and_filter_cover_remaining_branches(monke
         return {"status": "success", "data": {"result": [{"values": [["1", "5"]]}]}, "query": query_str}
 
     monkeypatch.setattr(service, "aggregate_logs", aggregate_logs)
-    monkeypatch.setattr(_loki_module, "build_volume_fallback_queries", lambda query, max_queries: ["candidate-1", "candidate-2"])
-    volume = await service.get_log_volume("{service_name=\"api\"}", start=5, end=5, step=60, tenant_id="tenant-a")
+    monkeypatch.setattr(
+        _loki_module, "build_volume_fallback_queries", lambda query, max_queries: ["candidate-1", "candidate-2"]
+    )
+    volume = await service.get_log_volume('{service_name="api"}', start=5, end=5, step=60, tenant_id="tenant-a")
     assert volume["data"]["result"]
 
     captured: list[tuple[str, int]] = []
@@ -234,7 +239,7 @@ async def test_aggregate_volume_search_and_filter_cover_remaining_branches(monke
     monkeypatch.setattr(service, "query_logs", query_logs)
     await service.search_logs_by_pattern('error "quoted"', labels={"app": "web"}, limit=12)
     await service.filter_logs({"app": "web"}, filters=["timeout", "5xx"], limit=7)
-    assert captured[0][0] == '{app="web"} |= "error \\\"quoted\\\""'
+    assert captured[0][0] == '{app="web"} |= "error \\"quoted\\""'
     assert captured[0][1] == 12
     assert captured[1][0] == '{app="web"} |= "timeout" |= "5xx"'
     assert captured[1][1] == 7

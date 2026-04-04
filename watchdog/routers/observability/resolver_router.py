@@ -1,11 +1,12 @@
 """
-Resolver proxy router and RCA analysis job endpoints for secure multi-tenant access to Resolver features with comprehensive permission checks.
+Resolver proxy router and RCA analysis job endpoints for secure multi-tenant access to Resolver features with
+comprehensive permission checks.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -51,6 +52,7 @@ def _job_result_response_from_summary(summary: AnalyzeJobSummary) -> AnalyzeJobR
         result=None,
     )
 
+
 router = APIRouter(prefix="/api/resolver", tags=["resolver"])
 
 
@@ -69,6 +71,7 @@ async def get_analyze_config_template(
         correlation_id=correlation_id(request),
     )
     return AnalyzeConfigTemplateResponse.model_validate(_json_dict(upstream))
+
 
 @router.post("/analyze/jobs", response_model=AnalyzeJobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_analyze_job(
@@ -214,11 +217,7 @@ async def _proxy_post(
     audit_action: str,
 ) -> JSONDict:
     tenant_id = await resolve_tenant_id(request, current_user)
-    payload_data = (
-        payload.model_dump(exclude_none=True)
-        if isinstance(payload, AnalyzeProxyPayload)
-        else dict(payload)
-    )
+    payload_data = payload.model_dump(exclude_none=True) if isinstance(payload, AnalyzeProxyPayload) else dict(payload)
     result = await resolver_proxy_service.request_json(
         method="POST",
         upstream_path=upstream_path,
@@ -237,7 +236,13 @@ async def anomalies_metrics(
     payload: AnalyzeProxyPayload = Body(default_factory=lambda: AnalyzeProxyPayload.model_validate({})),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> JSONDict:
-    return await _proxy_post(request=request, current_user=current_user, upstream_path="/api/v1/anomalies/metrics", payload=payload, audit_action="resolver.proxy.metrics")
+    return await _proxy_post(
+        request=request,
+        current_user=current_user,
+        upstream_path="/api/v1/anomalies/metrics",
+        payload=payload,
+        audit_action="resolver.proxy.metrics",
+    )
 
 
 @router.post("/anomalies/logs/patterns")
@@ -246,7 +251,13 @@ async def anomalies_log_patterns(
     payload: AnalyzeProxyPayload = Body(default_factory=lambda: AnalyzeProxyPayload.model_validate({})),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> JSONDict:
-    return await _proxy_post(request=request, current_user=current_user, upstream_path="/api/v1/anomalies/logs/patterns", payload=payload, audit_action="resolver.proxy.logs.patterns")
+    return await _proxy_post(
+        request=request,
+        current_user=current_user,
+        upstream_path="/api/v1/anomalies/logs/patterns",
+        payload=payload,
+        audit_action="resolver.proxy.logs.patterns",
+    )
 
 
 @router.post("/anomalies/logs/bursts")
@@ -255,7 +266,13 @@ async def anomalies_log_bursts(
     payload: AnalyzeProxyPayload = Body(default_factory=lambda: AnalyzeProxyPayload.model_validate({})),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> JSONDict:
-    return await _proxy_post(request=request, current_user=current_user, upstream_path="/api/v1/anomalies/logs/bursts", payload=payload, audit_action="resolver.proxy.logs.bursts")
+    return await _proxy_post(
+        request=request,
+        current_user=current_user,
+        upstream_path="/api/v1/anomalies/logs/bursts",
+        payload=payload,
+        audit_action="resolver.proxy.logs.bursts",
+    )
 
 
 @router.post("/anomalies/traces")
@@ -264,7 +281,13 @@ async def anomalies_traces(
     payload: AnalyzeProxyPayload = Body(default_factory=lambda: AnalyzeProxyPayload.model_validate({})),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> JSONDict:
-    return await _proxy_post(request=request, current_user=current_user, upstream_path="/api/v1/anomalies/traces", payload=payload, audit_action="resolver.proxy.traces")
+    return await _proxy_post(
+        request=request,
+        current_user=current_user,
+        upstream_path="/api/v1/anomalies/traces",
+        payload=payload,
+        audit_action="resolver.proxy.traces",
+    )
 
 
 @router.post("/correlate")
@@ -273,7 +296,13 @@ async def correlate_signals(
     payload: AnalyzeProxyPayload = Body(default_factory=lambda: AnalyzeProxyPayload.model_validate({})),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> JSONDict:
-    return await _proxy_post(request=request, current_user=current_user, upstream_path="/api/v1/correlate", payload=payload, audit_action="resolver.proxy.correlate")
+    return await _proxy_post(
+        request=request,
+        current_user=current_user,
+        upstream_path="/api/v1/correlate",
+        payload=payload,
+        audit_action="resolver.proxy.correlate",
+    )
 
 
 @router.post("/topology/blast-radius")
@@ -282,7 +311,13 @@ async def topology_blast_radius(
     payload: AnalyzeProxyPayload = Body(default_factory=lambda: AnalyzeProxyPayload.model_validate({})),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> JSONDict:
-    return await _proxy_post(request=request, current_user=current_user, upstream_path="/api/v1/topology/blast-radius", payload=payload, audit_action="resolver.proxy.topology")
+    return await _proxy_post(
+        request=request,
+        current_user=current_user,
+        upstream_path="/api/v1/topology/blast-radius",
+        payload=payload,
+        audit_action="resolver.proxy.topology",
+    )
 
 
 @router.post("/slo/burn")
@@ -291,7 +326,13 @@ async def slo_burn(
     payload: AnalyzeProxyPayload = Body(default_factory=lambda: AnalyzeProxyPayload.model_validate({})),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> JSONDict:
-    return await _proxy_post(request=request, current_user=current_user, upstream_path="/api/v1/slo/burn", payload=payload, audit_action="resolver.proxy.slo")
+    return await _proxy_post(
+        request=request,
+        current_user=current_user,
+        upstream_path="/api/v1/slo/burn",
+        payload=payload,
+        audit_action="resolver.proxy.slo",
+    )
 
 
 @router.post("/forecast/trajectory")
@@ -300,7 +341,13 @@ async def forecast_trajectory(
     payload: AnalyzeProxyPayload = Body(default_factory=lambda: AnalyzeProxyPayload.model_validate({})),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> JSONDict:
-    return await _proxy_post(request=request, current_user=current_user, upstream_path="/api/v1/forecast/trajectory", payload=payload, audit_action="resolver.proxy.forecast")
+    return await _proxy_post(
+        request=request,
+        current_user=current_user,
+        upstream_path="/api/v1/forecast/trajectory",
+        payload=payload,
+        audit_action="resolver.proxy.forecast",
+    )
 
 
 @router.post("/causal/granger")
@@ -309,7 +356,13 @@ async def causal_granger(
     payload: AnalyzeProxyPayload = Body(default_factory=lambda: AnalyzeProxyPayload.model_validate({})),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> JSONDict:
-    return await _proxy_post(request=request, current_user=current_user, upstream_path="/api/v1/causal/granger", payload=payload, audit_action="resolver.proxy.causal.granger")
+    return await _proxy_post(
+        request=request,
+        current_user=current_user,
+        upstream_path="/api/v1/causal/granger",
+        payload=payload,
+        audit_action="resolver.proxy.causal.granger",
+    )
 
 
 @router.post("/causal/bayesian")
@@ -318,7 +371,13 @@ async def causal_bayesian(
     payload: AnalyzeProxyPayload = Body(default_factory=lambda: AnalyzeProxyPayload.model_validate({})),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> JSONDict:
-    return await _proxy_post(request=request, current_user=current_user, upstream_path="/api/v1/causal/bayesian", payload=payload, audit_action="resolver.proxy.causal.bayesian")
+    return await _proxy_post(
+        request=request,
+        current_user=current_user,
+        upstream_path="/api/v1/causal/bayesian",
+        payload=payload,
+        audit_action="resolver.proxy.causal.bayesian",
+    )
 
 
 @router.get("/ml/weights")

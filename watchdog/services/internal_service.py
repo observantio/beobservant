@@ -3,9 +3,9 @@ Service layer for internal API endpoints.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-see the LICENSE file distributed with this work or
-https://www.apache.org/licenses/LICENSE-2.0 for details.
+Licensed under the Apache License, Version 2.0 (the "License"); see the LICENSE file distributed with this work or
+https://www.apache.org/licenses/LICENSE-2.0
+for details.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from config import config
 from services.database_auth_service import DatabaseAuthService
 
 logger = logging.getLogger(__name__)
+
 
 class InternalService:
     def __init__(self, auth_service: DatabaseAuthService | None = None):

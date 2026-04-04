@@ -3,9 +3,9 @@ Configuration values for the gateway auth service.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -57,19 +57,19 @@ def build_secret_provider() -> SecretProvider:
     secret_id_fn = None
     if role_id:
         if secret_id_file:
+
             def load_secret_id_from_file() -> str:
                 return _read_secret_id_file(secret_id_file)
 
             secret_id_fn = load_secret_id_from_file
         elif secret_id:
+
             def load_secret_id_from_env() -> str:
                 return secret_id
 
             secret_id_fn = load_secret_id_from_env
         else:
-            raise VaultClientError(
-                "VAULT_ROLE_ID set but neither VAULT_SECRET_ID nor VAULT_SECRET_ID_FILE provided"
-            )
+            raise VaultClientError("VAULT_ROLE_ID set but neither VAULT_SECRET_ID nor VAULT_SECRET_ID_FILE provided")
 
     return VaultSecretProvider(
         address=vault_addr,
@@ -97,9 +97,7 @@ IP_ALLOWLIST: str = os.getenv("GATEWAY_IP_ALLOWLIST", "").strip()
 ALLOWLIST_FAIL_OPEN: bool = os.getenv("GATEWAY_ALLOWLIST_FAIL_OPEN", "false").lower() in ("1", "true", "yes", "on")
 TRUST_PROXY_HEADERS: bool = os.getenv("GATEWAY_TRUST_PROXY_HEADERS", "false").lower() in ("1", "true", "yes", "on")
 TRUSTED_PROXY_CIDRS: list[str] = [
-    entry.strip()
-    for entry in os.getenv("GATEWAY_TRUSTED_PROXY_CIDRS", "").split(",")
-    if entry.strip()
+    entry.strip() for entry in os.getenv("GATEWAY_TRUSTED_PROXY_CIDRS", "").split(",") if entry.strip()
 ]
 
 TOKEN_CACHE_TTL: int = int(os.getenv("GATEWAY_TOKEN_CACHE_TTL", "60"))
@@ -122,13 +120,27 @@ ENABLE_API_DOCS: bool = _to_bool(os.getenv("ENABLE_API_DOCS"), default=not IS_PR
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info").upper()
 PORT: int = int(os.getenv("GATEWAY_PORT", os.getenv("PORT", "4321")))
 
-GATEWAY_STARTUP_RETRIES: int = int(os.getenv("GATEWAY_STARTUP_RETRIES", os.getenv("GATEWAY_DB_STARTUP_RETRIES", "10")))
-GATEWAY_STARTUP_BACKOFF: float = float(os.getenv("GATEWAY_STARTUP_BACKOFF", os.getenv("GATEWAY_DB_STARTUP_BACKOFF", "1.0")))
+GATEWAY_STARTUP_RETRIES: int = int(
+    os.getenv(
+        "GATEWAY_STARTUP_RETRIES",
+        os.getenv("GATEWAY_DB_STARTUP_RETRIES", "10"),
+    )
+)
+GATEWAY_STARTUP_BACKOFF: float = float(
+    os.getenv(
+        "GATEWAY_STARTUP_BACKOFF",
+        os.getenv("GATEWAY_DB_STARTUP_BACKOFF", "1.0"),
+    )
+)
 GATEWAY_STATUS_OTLP_TOKEN: str = secrets.get("GATEWAY_STATUS_OTLP_TOKEN") or ""
-GATEWAY_STARTUP_CHECK_MODE: str = os.getenv(
-    "GATEWAY_STARTUP_CHECK_MODE",
-    "strict" if IS_PRODUCTION else "warn",
-).strip().lower()
+GATEWAY_STARTUP_CHECK_MODE: str = (
+    os.getenv(
+        "GATEWAY_STARTUP_CHECK_MODE",
+        "strict" if IS_PRODUCTION else "warn",
+    )
+    .strip()
+    .lower()
+)
 
 if GATEWAY_STARTUP_CHECK_MODE not in {"strict", "warn"}:
     raise ValueError("GATEWAY_STARTUP_CHECK_MODE must be either 'strict' or 'warn'")

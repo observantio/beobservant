@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import os
@@ -40,7 +40,10 @@ class _ProxyStub:
     def _raise_http_from_grafana_error(self, exc):
         if isinstance(exc, GrafanaAPIError):
             detail = (
-                (isinstance(exc.body, dict) and (exc.body.get("message") or exc.body.get("error") or exc.body.get("detail")))
+                (
+                    isinstance(exc.body, dict)
+                    and (exc.body.get("message") or exc.body.get("error") or exc.body.get("detail"))
+                )
                 or (isinstance(exc.body, str) and exc.body)
                 or "Grafana API error"
             )
@@ -57,26 +60,28 @@ def _session():
 @pytest.mark.asyncio
 async def test_update_folder_maps_412_to_409():
     db = _session()
-    db.add_all([
-        Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
-        User(
-            id="u1",
-            tenant_id="t1",
-            username="owner",
-            email="owner@example.com",
-            hashed_password="x",
-            org_id="org-a",
-            is_active=True,
-        ),
-        GrafanaFolder(
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="f1",
-            grafana_id=10,
-            title="Ops",
-            visibility="private",
-        ),
-    ])
+    db.add_all(
+        [
+            Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
+            User(
+                id="u1",
+                tenant_id="t1",
+                username="owner",
+                email="owner@example.com",
+                hashed_password="x",
+                org_id="org-a",
+                is_active=True,
+            ),
+            GrafanaFolder(
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="f1",
+                grafana_id=10,
+                title="Ops",
+                visibility="private",
+            ),
+        ]
+    )
     db.commit()
 
     service = _ProxyStub()
@@ -102,18 +107,20 @@ async def test_update_folder_maps_412_to_409():
 @pytest.mark.asyncio
 async def test_create_folder_maps_grafana_400_to_http_400_with_message():
     db = _session()
-    db.add_all([
-        Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
-        User(
-            id="u1",
-            tenant_id="t1",
-            username="owner",
-            email="owner@example.com",
-            hashed_password="x",
-            org_id="org-a",
-            is_active=True,
-        ),
-    ])
+    db.add_all(
+        [
+            Tenant(id="t1", name="tenant-1", display_name="Tenant 1"),
+            User(
+                id="u1",
+                tenant_id="t1",
+                username="owner",
+                email="owner@example.com",
+                hashed_password="x",
+                org_id="org-a",
+                is_active=True,
+            ),
+        ]
+    )
     db.commit()
 
     service = _ProxyStub()

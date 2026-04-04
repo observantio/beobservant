@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -87,7 +87,11 @@ def test_bootstrap_primitives_and_column_helpers(monkeypatch):
     boot_mod._pg_advisory_unlock(db, 1)
     assert db.executed == []
 
-    monkeypatch.setattr(boot_mod, "inspect", lambda bind: SimpleNamespace(get_columns=lambda table_name: [{"name": "id"}, {"name": "name"}]))
+    monkeypatch.setattr(
+        boot_mod,
+        "inspect",
+        lambda bind: SimpleNamespace(get_columns=lambda table_name: [{"name": "id"}, {"name": "name"}]),
+    )
     assert boot_mod._table_columns(_DB(), "users") == {"id", "name"}
 
     def _raise_no_table(_table_name):
@@ -131,15 +135,23 @@ def test_bootstrap_indexes_and_api_key_helpers(monkeypatch):
     fake_api_key = lambda **kwargs: SimpleNamespace(id="new-key", **kwargs)
     monkeypatch.setattr(boot_mod, "UserApiKey", fake_api_key)
 
-    existing = SimpleNamespace(id="k1", user_id="u1", is_enabled=False, updated_at=None, name="Default", otlp_token_hash=None, otlp_token=None)
+    existing = SimpleNamespace(
+        id="k1", user_id="u1", is_enabled=False, updated_at=None, name="Default", otlp_token_hash=None, otlp_token=None
+    )
     db = _DB(query_rows=[existing])
-    boot_mod.ensure_default_api_key(service, db, SimpleNamespace(id="u1", username="admin", tenant_id="tenant", org_id="org-1"))
+    boot_mod.ensure_default_api_key(
+        service, db, SimpleNamespace(id="u1", username="admin", tenant_id="tenant", org_id="org-1")
+    )
     assert existing.is_enabled is True
     assert existing.otlp_token_hash == "hash:default-raw"
 
-    existing = SimpleNamespace(id="k2", user_id="u2", is_enabled=True, updated_at=None, name="Other", otlp_token_hash=None, otlp_token="legacy")
+    existing = SimpleNamespace(
+        id="k2", user_id="u2", is_enabled=True, updated_at=None, name="Other", otlp_token_hash=None, otlp_token="legacy"
+    )
     db = _DB(query_rows=[existing])
-    boot_mod.ensure_default_api_key(service, db, SimpleNamespace(id="u2", username="user", tenant_id="tenant", org_id="org-2"))
+    boot_mod.ensure_default_api_key(
+        service, db, SimpleNamespace(id="u2", username="user", tenant_id="tenant", org_id="org-2")
+    )
     assert existing.otlp_token_hash == "hash:legacy"
 
     db = _DB(query_rows=[None])

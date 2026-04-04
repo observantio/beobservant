@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -27,7 +27,15 @@ ensure_test_env()
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUpdateRequest, ApiKeyUpdate
 from models.access.auth_models import Permission, Role, Token, TokenData
 from models.access.group_models import GroupCreate, GroupMembersUpdate, GroupUpdate
-from models.access.user_models import LoginRequest, MfaDisableRequest, MfaVerifyRequest, RegisterRequest, UserCreate, UserPasswordUpdate, UserUpdate
+from models.access.user_models import (
+    LoginRequest,
+    MfaDisableRequest,
+    MfaVerifyRequest,
+    RegisterRequest,
+    UserCreate,
+    UserPasswordUpdate,
+    UserUpdate,
+)
 from routers.access.auth_router import api_keys as api_keys_router
 from routers.access.auth_router import authentication as auth_router
 from routers.access.auth_router import groups as groups_router
@@ -89,7 +97,9 @@ def _patch_shared(monkeypatch):
 async def test_authentication_routes_cover_success_and_error_branches(monkeypatch):
     cookie_calls = []
     cleared = []
-    monkeypatch.setattr(auth_router, "set_auth_cookie", lambda request, response, token: cookie_calls.append((request, response, token)))
+    monkeypatch.setattr(
+        auth_router, "set_auth_cookie", lambda request, response, token: cookie_calls.append((request, response, token))
+    )
     monkeypatch.setattr(auth_router, "clear_auth_cookie", lambda request, response: cleared.append((request, response)))
     monkeypatch.setattr(auth_router.auth_service, "is_external_auth_enabled", lambda: True)
     monkeypatch.setattr(auth_router.auth_service, "is_password_auth_enabled", lambda: False)
@@ -133,7 +143,9 @@ async def test_authentication_routes_cover_success_and_error_branches(monkeypatc
     assert exc.value.status_code == 400
 
     monkeypatch.setattr(auth_router.auth_service, "is_external_auth_enabled", lambda: True)
-    monkeypatch.setattr(auth_router.auth_service, "get_oidc_authorization_url", lambda *_args: (_ for _ in ()).throw(ValueError("bad")))
+    monkeypatch.setattr(
+        auth_router.auth_service, "get_oidc_authorization_url", lambda *_args: (_ for _ in ()).throw(ValueError("bad"))
+    )
     with pytest.raises(HTTPException) as exc:
         await auth_router.oidc_authorize_url(request, oidc_request)
     assert exc.value.status_code == 400
@@ -147,12 +159,20 @@ async def test_authentication_routes_cover_success_and_error_branches(monkeypatc
     assert result.authorization_url == "https://idp"
 
     exchange_payload = auth_router.OIDCCodeExchangeRequest(code="abc", redirect_uri="https://app/callback")
-    monkeypatch.setattr(auth_router.auth_service, "exchange_oidc_authorization_code", lambda *_args: (_ for _ in ()).throw(ValueError("denied")))
+    monkeypatch.setattr(
+        auth_router.auth_service,
+        "exchange_oidc_authorization_code",
+        lambda *_args: (_ for _ in ()).throw(ValueError("denied")),
+    )
     with pytest.raises(HTTPException) as exc:
         await auth_router.oidc_exchange_token(request, exchange_payload, response)
     assert exc.value.detail == "denied"
 
-    monkeypatch.setattr(auth_router.auth_service, "exchange_oidc_authorization_code", lambda *_args: (_ for _ in ()).throw(OSError("boom")))
+    monkeypatch.setattr(
+        auth_router.auth_service,
+        "exchange_oidc_authorization_code",
+        lambda *_args: (_ for _ in ()).throw(OSError("boom")),
+    )
     with pytest.raises(HTTPException) as exc:
         await auth_router.oidc_exchange_token(request, exchange_payload, response)
     assert exc.value.detail == "OIDC authentication failed"
@@ -162,7 +182,9 @@ async def test_authentication_routes_cover_success_and_error_branches(monkeypatc
         await auth_router.oidc_exchange_token(request, exchange_payload, response)
     assert exc.value.detail == "OIDC authentication failed"
 
-    monkeypatch.setattr(auth_router.auth_service, "exchange_oidc_authorization_code", lambda *_args: {"mfa_setup_required": True})
+    monkeypatch.setattr(
+        auth_router.auth_service, "exchange_oidc_authorization_code", lambda *_args: {"mfa_setup_required": True}
+    )
     with pytest.raises(HTTPException) as exc:
         await auth_router.oidc_exchange_token(request, exchange_payload, response)
     assert exc.value.detail == {"mfa_setup_required": True}
@@ -367,7 +389,9 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
 
     monkeypatch.setattr(users_router.notification_service, "send_user_welcome_email", fake_welcome_email)
     monkeypatch.setattr(users_router, "invalidate_grafana_proxy_auth_cache", lambda: sent.append({"cache": True}))
-    created = await users_router.create_user(UserCreate(username="user2", email="u2@example.com", password="password123"), admin_user)
+    created = await users_router.create_user(
+        UserCreate(username="user2", email="u2@example.com", password="password123"), admin_user
+    )
     assert created is response_obj
     assert any("recipient_email" in entry for entry in sent)
 
@@ -395,23 +419,35 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     monkeypatch.setattr(
         users_router.auth_service,
         "update_user",
-        lambda *_args: (_ for _ in ()).throw(HTTPException(status_code=403, detail="Users cannot change their own role, tenant scope, or group memberships")),
+        lambda *_args: (_ for _ in ()).throw(
+            HTTPException(
+                status_code=403, detail="Users cannot change their own role, tenant scope, or group memberships"
+            )
+        ),
     )
     with pytest.raises(HTTPException) as exc:
         await users_router.update_user("u1", UserUpdate(role=Role.USER), admin_user)
     assert exc.value.status_code == 403
 
     with pytest.raises(HTTPException) as exc:
-        await users_router.update_user_password("u2", UserPasswordUpdate(current_password="oldpass123", new_password="newpass123"), _current_user(is_superuser=False, permissions=[]))
+        await users_router.update_user_password(
+            "u2",
+            UserPasswordUpdate(current_password="oldpass123", new_password="newpass123"),
+            _current_user(is_superuser=False, permissions=[]),
+        )
     assert exc.value.status_code == 403
 
     monkeypatch.setattr(users_router.auth_service, "update_password", lambda *_args: False)
     with pytest.raises(HTTPException) as exc:
-        await users_router.update_user_password("u1", UserPasswordUpdate(current_password="oldpass123", new_password="newpass123"), admin_user)
+        await users_router.update_user_password(
+            "u1", UserPasswordUpdate(current_password="oldpass123", new_password="newpass123"), admin_user
+        )
     assert exc.value.status_code == 400
 
     monkeypatch.setattr(users_router.auth_service, "update_password", lambda *_args: True)
-    assert await users_router.update_user_password("u1", UserPasswordUpdate(current_password="oldpass123", new_password="newpass123"), admin_user) == {
+    assert await users_router.update_user_password(
+        "u1", UserPasswordUpdate(current_password="oldpass123", new_password="newpass123"), admin_user
+    ) == {
         "message": "Password updated successfully",
     }
 
@@ -425,12 +461,20 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
         await users_router.reset_user_password_temp("u2", admin_user)
     assert exc.value.status_code == 404
 
-    monkeypatch.setattr(users_router.auth_service, "get_user_by_id_in_tenant", lambda *_args: SimpleNamespace(username="target", role=Role.ADMIN))
+    monkeypatch.setattr(
+        users_router.auth_service,
+        "get_user_by_id_in_tenant",
+        lambda *_args: SimpleNamespace(username="target", role=Role.ADMIN),
+    )
     with pytest.raises(HTTPException) as exc:
         await users_router.reset_user_password_temp("u2", admin_user)
     assert exc.value.status_code == 403
 
-    monkeypatch.setattr(users_router.auth_service, "get_user_by_id_in_tenant", lambda *_args: SimpleNamespace(username="target", role=Role.USER))
+    monkeypatch.setattr(
+        users_router.auth_service,
+        "get_user_by_id_in_tenant",
+        lambda *_args: SimpleNamespace(username="target", role=Role.USER),
+    )
     monkeypatch.setattr(
         users_router.auth_service,
         "reset_user_password_temp",
@@ -453,12 +497,16 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
         await users_router.delete_user("u1", admin_user)
     assert exc.value.status_code == 400
 
-    monkeypatch.setattr(users_router.auth_service, "get_user_by_id_in_tenant", lambda *_args: SimpleNamespace(role=Role.ADMIN))
+    monkeypatch.setattr(
+        users_router.auth_service, "get_user_by_id_in_tenant", lambda *_args: SimpleNamespace(role=Role.ADMIN)
+    )
     with pytest.raises(HTTPException) as exc:
         await users_router.delete_user("u2", admin_user)
     assert exc.value.status_code == 403
 
-    monkeypatch.setattr(users_router.auth_service, "get_user_by_id_in_tenant", lambda *_args: SimpleNamespace(role=Role.USER))
+    monkeypatch.setattr(
+        users_router.auth_service, "get_user_by_id_in_tenant", lambda *_args: SimpleNamespace(role=Role.USER)
+    )
     monkeypatch.setattr(users_router.auth_service, "delete_user", lambda *_args: False)
     with pytest.raises(HTTPException) as exc:
         await users_router.delete_user("u2", admin_user)
@@ -481,20 +529,26 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     monkeypatch.setattr(
         users_router.auth_service,
         "update_user_permissions",
-        lambda *_args: (_ for _ in ()).throw(HTTPException(status_code=403, detail="Users cannot change their own permissions")),
+        lambda *_args: (_ for _ in ()).throw(
+            HTTPException(status_code=403, detail="Users cannot change their own permissions")
+        ),
     )
     with pytest.raises(HTTPException) as exc:
         await users_router.update_user_permissions("u1", ["read:users"], admin_user)
     assert exc.value.status_code == 403
 
-    monkeypatch.setattr(users_router.auth_service, "list_all_permissions", lambda: [{"name": "read:users"}, {"name": "delete:users"}])
+    monkeypatch.setattr(
+        users_router.auth_service, "list_all_permissions", lambda: [{"name": "read:users"}, {"name": "delete:users"}]
+    )
     assert await users_router.list_all_permissions(admin_user) == [{"name": "read:users"}, {"name": "delete:users"}]
     filtered = await users_router.list_all_permissions(_current_user(is_superuser=False, permissions=["read:users"]))
     assert filtered == [{"name": "read:users"}]
 
     defaults = await users_router.list_role_defaults(admin_user)
     assert Role.ADMIN.value in defaults
-    filtered_defaults = await users_router.list_role_defaults(_current_user(is_superuser=False, permissions=[Permission.READ_USERS.value]))
+    filtered_defaults = await users_router.list_role_defaults(
+        _current_user(is_superuser=False, permissions=[Permission.READ_USERS.value])
+    )
     assert all(Permission.READ_USERS.value in perms or not perms for perms in filtered_defaults.values())
 
     group_obj = SimpleNamespace(id="g1")
@@ -558,7 +612,9 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
         "user_ids": ["u1"],
     }
 
-    monkeypatch.setattr(mfa_router.auth_service, "enroll_totp", lambda *_args: {"secret": "abc", "otpauth_url": "otpauth://url"})
+    monkeypatch.setattr(
+        mfa_router.auth_service, "enroll_totp", lambda *_args: {"secret": "abc", "otpauth_url": "otpauth://url"}
+    )
     enrolled = await mfa_router.mfa_enroll(admin_user)
     assert enrolled.secret == "abc"
 
@@ -571,12 +627,18 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     verified = await mfa_router.mfa_verify(MfaVerifyRequest(code="123456"), admin_user)
     assert verified.recovery_codes == ["rc1", "rc2"]
 
-    monkeypatch.setattr(mfa_router.auth_service, "verify_enable_totp", lambda *_args: (_ for _ in ()).throw(ValueError("not enrolled")))
+    monkeypatch.setattr(
+        mfa_router.auth_service, "verify_enable_totp", lambda *_args: (_ for _ in ()).throw(ValueError("not enrolled"))
+    )
     with pytest.raises(HTTPException) as exc:
         await mfa_router.mfa_verify(MfaVerifyRequest(code="123456"), admin_user)
     assert exc.value.detail == "TOTP not enrolled for user"
 
-    monkeypatch.setattr(mfa_router.auth_service, "verify_enable_totp", lambda *_args: (_ for _ in ()).throw(ValueError("Invalid TOTP code")))
+    monkeypatch.setattr(
+        mfa_router.auth_service,
+        "verify_enable_totp",
+        lambda *_args: (_ for _ in ()).throw(ValueError("Invalid TOTP code")),
+    )
     with pytest.raises(HTTPException) as exc:
         await mfa_router.mfa_verify(MfaVerifyRequest(code="123456"), admin_user)
     assert exc.value.detail == "Invalid TOTP code"

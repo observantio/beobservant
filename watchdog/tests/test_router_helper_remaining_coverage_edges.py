@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -133,7 +133,9 @@ async def test_system_router_quota_scope_fallback_and_forbidden_paths(monkeypatc
     )
 
     with pytest.raises(HTTPException) as exc:
-        await system_router.get_system_quotas(org_id="org-denied", current_user=SimpleNamespace(user_id="u1", org_id="", tenant_id="tenant-fallback"))
+        await system_router.get_system_quotas(
+            org_id="org-denied", current_user=SimpleNamespace(user_id="u1", org_id="", tenant_id="tenant-fallback")
+        )
     assert exc.value.status_code == 403
 
 
@@ -165,7 +167,11 @@ async def test_system_router_ojo_releases_returns_cached_inside_lock(monkeypatch
     task = asyncio.create_task(_call_release())
     await asyncio.sleep(0)
 
-    monkeypatch.setattr(system_router, "ojo_release_cache_payload", {"latest": {}, "releases": [], "latest_ok": True, "releases_ok": True})
+    monkeypatch.setattr(
+        system_router,
+        "ojo_release_cache_payload",
+        {"latest": {}, "releases": [], "latest_ok": True, "releases_ok": True},
+    )
     monkeypatch.setattr(system_router, "ojo_release_cache_expires_at", 10_000_000.0)
     monkeypatch.setattr(system_router.time, "monotonic", lambda: 1_000_000.0)
 

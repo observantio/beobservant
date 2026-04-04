@@ -3,9 +3,9 @@ IP-based rate limiter for Watchdog middleware.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from fastapi import Request
 
 from config import config
 
+
 def _valid_ip(value: str) -> Optional[str]:
     candidate = (value or "").strip()
     if not candidate:
@@ -26,6 +27,7 @@ def _valid_ip(value: str) -> Optional[str]:
         return candidate
     except ValueError:
         return None
+
 
 def client_ip(request: Request) -> str:
     def _trusted_proxy_peer() -> bool:

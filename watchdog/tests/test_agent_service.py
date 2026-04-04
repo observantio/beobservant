@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import os
@@ -18,6 +18,7 @@ import pytest
 from models.observability.agent_models import AgentHeartbeat, AgentInfo
 from services.agent_service import AgentService
 from services.agent import helpers
+
 
 def test_update_registry_new_and_existing():
     registry: dict[str, AgentInfo] = {}
@@ -36,7 +37,9 @@ def test_update_registry_new_and_existing():
     assert info2.last_seen == later
     assert "s2" in info2.signals
 
-    hb3 = AgentHeartbeat(name="a", tenant_id="t", timestamp=later, attributes={"host.name": "updated-host"}, signal=None)
+    hb3 = AgentHeartbeat(
+        name="a", tenant_id="t", timestamp=later, attributes={"host.name": "updated-host"}, signal=None
+    )
     helpers.update_agent_registry(registry, hb3)
     assert registry["t:a"].host_name == "updated-host"
 
@@ -69,7 +72,10 @@ def test_extract_metrics_series():
 
 def test_mimir_prometheus_url_helper():
     assert helpers.mimir_prometheus_url("http://mimir", "api/v1/query") == "http://mimir/prometheus/api/v1/query"
-    assert helpers.mimir_prometheus_url("http://mimir/prometheus", "api/v1/query_range") == "http://mimir/prometheus/api/v1/query_range"
+    assert (
+        helpers.mimir_prometheus_url("http://mimir/prometheus", "api/v1/query_range")
+        == "http://mimir/prometheus/api/v1/query_range"
+    )
 
 
 def test_mimir_prometheus_url_handles_empty_base_and_suffix():

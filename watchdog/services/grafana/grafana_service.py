@@ -3,9 +3,9 @@ Proxy service for Grafana API interactions, including folder management.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import base64
@@ -38,6 +38,7 @@ def _dict_list(value: object) -> list[JSONDict]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
+
 
 class GrafanaAPIError(Exception):
     def __init__(self, status: int, body: JSONValue | None = None):
@@ -185,7 +186,8 @@ class GrafanaService:
     @with_timeout()
     async def create_dashboard(self, dashboard_create: DashboardCreate) -> Optional[JSONDict]:
         result = await self._mutating_request(
-            "POST", "/api/dashboards/db",
+            "POST",
+            "/api/dashboards/db",
             json=dashboard_create.model_dump(by_alias=True, exclude_none=True),
         )
         return result if isinstance(result, dict) or result is None else None
@@ -197,7 +199,8 @@ class GrafanaService:
             return None
         dashboard_update.dashboard.uid = uid
         result = await self._mutating_request(
-            "POST", "/api/dashboards/db",
+            "POST",
+            "/api/dashboards/db",
             json=dashboard_update.model_dump(by_alias=True, exclude_none=True),
         )
         return result if isinstance(result, dict) or result is None else None
@@ -243,7 +246,8 @@ class GrafanaService:
     @with_timeout()
     async def create_datasource(self, datasource: DatasourceCreate) -> Optional[Datasource]:
         result = await self._mutating_request(
-            "POST", "/api/datasources",
+            "POST",
+            "/api/datasources",
             json=datasource.model_dump(by_alias=True, exclude_none=True),
         )
         datasource_payload = _json_dict(result).get("datasource")
@@ -263,7 +267,11 @@ class GrafanaService:
         data.setdefault("isDefault", getattr(existing, "is_default", None))
         result = await self._mutating_request("PUT", f"/api/datasources/uid/{uid}", json=data)
         datasource_payload = _json_dict(result).get("datasource")
-        return Datasource.model_validate(datasource_payload) if isinstance(datasource_payload, dict) else await self.get_datasource(uid)
+        return (
+            Datasource.model_validate(datasource_payload)
+            if isinstance(datasource_payload, dict)
+            else await self.get_datasource(uid)
+        )
 
     @with_retry()
     @with_timeout()

@@ -3,16 +3,15 @@ Shared query parameter helpers for Grafana router endpoints.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
 
 import re
 from typing import Optional
-
 
 UID_QUERY_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
 

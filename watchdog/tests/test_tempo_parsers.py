@@ -1,12 +1,13 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from tests._env import ensure_test_env
+
 ensure_test_env()
 from services.tempo import parsers as tempo_parsers
 from models.observability.tempo_models import Span, Trace
@@ -53,7 +54,13 @@ def test_build_summary_trace_returns_trace_or_none():
     t = tempo_parsers.build_summary_trace({})
     assert t is None
 
-    td = {"traceID": "tx", "startTimeUnixNano": "1000000", "durationMs": 5, "rootTraceName": "r", "rootServiceName": "svc"}
+    td = {
+        "traceID": "tx",
+        "startTimeUnixNano": "1000000",
+        "durationMs": 5,
+        "rootTraceName": "r",
+        "rootServiceName": "svc",
+    }
     s = tempo_parsers.build_summary_trace(td)
     assert isinstance(s, Trace)
     assert s.spans[0].operation_name == "r"

@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -120,7 +120,9 @@ async def test_tempo_service_public_api_edges(monkeypatch):
     monkeypatch.setattr(
         service,
         "_get_json",
-        lambda url, params=None, headers=None: asyncio.sleep(0, result={"traces": [{"traceID": "t-1"}, {}, {"traceID": ""}]})
+        lambda url, params=None, headers=None: asyncio.sleep(
+            0, result={"traces": [{"traceID": "t-1"}, {}, {"traceID": ""}]}
+        ),
     )
     summary = await service.search_traces(TraceQuery(limit=3), fetch_full_traces=False)
     assert summary.total == 1
@@ -162,19 +164,23 @@ async def test_tempo_service_public_api_edges(monkeypatch):
         def json(self):
             return self.payload
 
-    responses = iter([
-        EmptyResponse(),
-        JsonErrorResponse(),
-        DictResponse({"traceID": "missing-batches"}),
-        DictResponse({"batches": []}),
-    ])
+    responses = iter(
+        [
+            EmptyResponse(),
+            JsonErrorResponse(),
+            DictResponse({"traceID": "missing-batches"}),
+            DictResponse({"batches": []}),
+        ]
+    )
 
     class TraceClient:
         async def get(self, url, headers=None, params=None):
             return next(responses)
 
     service._client = TraceClient()
-    monkeypatch.setattr(tempo_service_module.tempo_parsers, "parse_tempo_trace", lambda trace_id, data: _trace(trace_id, "parsed-svc"))
+    monkeypatch.setattr(
+        tempo_service_module.tempo_parsers, "parse_tempo_trace", lambda trace_id, data: _trace(trace_id, "parsed-svc")
+    )
     assert await service.get_trace("a") is None
     assert await service.get_trace("b") is None
     assert await service.get_trace("c") is None
@@ -210,7 +216,9 @@ async def test_tempo_service_public_api_edges(monkeypatch):
         return {"data": {"tagNames": ["ignored", "service"]}}
 
     async def infer_services(*args, **kwargs):
-        return TraceResponse.model_validate({"data": [_trace("t1", "svc-b"), _trace("t2", "svc-a")], "total": 2, "limit": 50, "offset": 0})
+        return TraceResponse.model_validate(
+            {"data": [_trace("t1", "svc-b"), _trace("t2", "svc-a")], "total": 2, "limit": 50, "offset": 0}
+        )
 
     monkeypatch.setattr(service, "_get_json", get_json_services)
     monkeypatch.setattr(service, "search_traces", infer_services)
@@ -252,10 +260,12 @@ async def test_tempo_service_public_api_edges(monkeypatch):
     monkeypatch.setattr(service, "search_traces", broken_service_search)
     assert await service.get_services("tenant-a") == []
 
-    op_responses = iter([
-        httpx.ReadError("first failed"),
-        ["op-b", "op-a", "op-b"],
-    ])
+    op_responses = iter(
+        [
+            httpx.ReadError("first failed"),
+            ["op-b", "op-a", "op-b"],
+        ]
+    )
 
     class OperationsClient:
         async def get(self, url, params=None, headers=None):
@@ -290,7 +300,14 @@ async def test_tempo_service_public_api_edges(monkeypatch):
     assert await service.get_operations("svc-y") == ["op-a", "op-c"]
 
     async def fallback_ops(*args, **kwargs):
-        return TraceResponse.model_validate({"data": [_trace("t3", "svc-x", "op-z"), _trace("t4", "svc-x", "op-a")], "total": 2, "limit": 50, "offset": 0})
+        return TraceResponse.model_validate(
+            {
+                "data": [_trace("t3", "svc-x", "op-z"), _trace("t4", "svc-x", "op-a")],
+                "total": 2,
+                "limit": 50,
+                "offset": 0,
+            }
+        )
 
     monkeypatch.setattr(service, "search_traces", fallback_ops)
 
@@ -322,7 +339,15 @@ async def test_tempo_router_edges(monkeypatch):
         tempo_router,
         "tempo_service",
         types.SimpleNamespace(
-            search_traces=lambda query, tenant_id, fetch_full_traces: search_calls.append((query, tenant_id, fetch_full_traces)) or asyncio.sleep(0, result=TraceResponse.model_validate({"data": [_trace("t1")], "total": 1, "limit": query.limit, "offset": 0})),
+            search_traces=lambda query, tenant_id, fetch_full_traces: search_calls.append(
+                (query, tenant_id, fetch_full_traces)
+            )
+            or asyncio.sleep(
+                0,
+                result=TraceResponse.model_validate(
+                    {"data": [_trace("t1")], "total": 1, "limit": query.limit, "offset": 0}
+                ),
+            ),
             get_trace=lambda trace_id, tenant_id: asyncio.sleep(0, result=_trace(trace_id)),
             get_services=lambda tenant_id: asyncio.sleep(0, result=["svc-a"]),
             get_operations=lambda service, tenant_id: asyncio.sleep(0, result=["op-a"]),
@@ -332,7 +357,18 @@ async def test_tempo_router_edges(monkeypatch):
 
     user = types.SimpleNamespace()
     request = types.SimpleNamespace(url=types.SimpleNamespace(path="/api/tempo/traces/search"))
-    search_result = await tempo_router.search_traces(request, service="svc", operation="op", min_duration="1ms", max_duration="2ms", start=1, end=2, limit=7, fetch_full=True, current_user=user)
+    search_result = await tempo_router.search_traces(
+        request,
+        service="svc",
+        operation="op",
+        min_duration="1ms",
+        max_duration="2ms",
+        start=1,
+        end=2,
+        limit=7,
+        fetch_full=True,
+        current_user=user,
+    )
     assert search_result.total == 1
     built_query, tenant_id, fetch_full = search_calls[0]
     assert built_query.service == "svc"
@@ -401,7 +437,9 @@ async def test_tempo_router_timeout_and_lifespan_edges(monkeypatch):
     with pytest.raises(HTTPException, match="Tempo trace lookup timed out for trace-a"):
         await tempo_router.get_trace("trace-a", request, current_user=user)
 
-    monkeypatch.setattr(tempo_router.tempo_service, "get_trace", lambda trace_id, tenant_id: asyncio.sleep(0, result=None))
+    monkeypatch.setattr(
+        tempo_router.tempo_service, "get_trace", lambda trace_id, tenant_id: asyncio.sleep(0, result=None)
+    )
     with pytest.raises(HTTPException, match="Trace trace-a not found"):
         await tempo_router.get_trace("trace-a", request, current_user=user)
 

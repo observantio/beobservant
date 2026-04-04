@@ -3,9 +3,9 @@ Folder operations for Grafana integration.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from models.grafana.grafana_folder_models import Folder
 from custom_types.json import JSONDict
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
+from services.grafana.visibility import resolve_visibility_groups
 
 if TYPE_CHECKING:
     from services.grafana_proxy_service import GrafanaProxyService
@@ -29,9 +30,7 @@ if TYPE_CHECKING:
 
 def _db_folder_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[GrafanaFolder]:
     return (
-        db.query(GrafanaFolder)
-        .filter(GrafanaFolder.tenant_id == tenant_id, GrafanaFolder.grafana_uid == uid)
-        .first()
+        db.query(GrafanaFolder).filter(GrafanaFolder.tenant_id == tenant_id, GrafanaFolder.grafana_uid == uid).first()
     )
 
 
@@ -122,10 +121,7 @@ async def get_folders(
 ) -> List[Folder]:
     folders = await service.grafana_service.get_folders()
     db_rows = (
-        db.query(GrafanaFolder)
-        .filter(GrafanaFolder.tenant_id == tenant_id)
-        .limit(int(config.MAX_QUERY_LIMIT))
-        .all()
+        db.query(GrafanaFolder).filter(GrafanaFolder.tenant_id == tenant_id).limit(int(config.MAX_QUERY_LIMIT)).all()
     )
     db_map = {f.grafana_uid: f for f in db_rows}
 
@@ -164,7 +160,14 @@ async def get_folder(
     if not db_folder:
         return None
     if not check_folder_access(
-        db, uid, user_id, tenant_id, group_ids, require_write=False, is_admin=is_admin, include_hidden=False,
+        db,
+        uid,
+        user_id,
+        tenant_id,
+        group_ids,
+        require_write=False,
+        is_admin=is_admin,
+        include_hidden=False,
     ):
         return None
     folder = await service.grafana_service.get_folder(uid)
@@ -186,12 +189,9 @@ async def create_folder(
     allow_dashboard_writes: bool = False,
     is_admin: bool = False,
 ) -> Optional[Folder]:
-    groups = []
-    if visibility == "group":
-        groups = service._validate_group_visibility(
-            db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
-            shared_group_ids=shared_group_ids, is_admin=is_admin,
-        )
+    groups = resolve_visibility_groups(
+        service, db, user_id, tenant_id, visibility, group_ids, shared_group_ids, is_admin
+    )
 
     try:
         created = await service.grafana_service.create_folder(title)
@@ -203,7 +203,11 @@ async def create_folder(
 
     uid = str(getattr(created, "uid", "") or "")
     if not uid:
-        return created if isinstance(created, Folder) else Folder.model_validate(_folder_payload(created, db_folder=None, user_id=user_id))
+        return (
+            created
+            if isinstance(created, Folder)
+            else Folder.model_validate(_folder_payload(created, db_folder=None, user_id=user_id))
+        )
 
     db_folder = GrafanaFolder(
         tenant_id=tenant_id,
@@ -242,7 +246,13 @@ async def update_folder(
     if not db_folder:
         return None
     if not check_folder_access(
-        db, uid, user_id, tenant_id, group_ids, require_write=True, is_admin=is_admin,
+        db,
+        uid,
+        user_id,
+        tenant_id,
+        group_ids,
+        require_write=True,
+        is_admin=is_admin,
     ):
         return None
 
@@ -267,8 +277,12 @@ async def update_folder(
         db_folder.visibility = visibility
         if visibility == "group":
             groups = service._validate_group_visibility(
-                db, user_id=user_id, tenant_id=tenant_id, group_ids=group_ids,
-                shared_group_ids=shared_group_ids, is_admin=is_admin,
+                db,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                group_ids=group_ids,
+                shared_group_ids=shared_group_ids,
+                is_admin=is_admin,
             )
             db_folder.shared_groups.clear()
             db_folder.shared_groups.extend(groups)
@@ -294,7 +308,13 @@ async def delete_folder(
     if not db_folder:
         return False
     if not check_folder_access(
-        db, uid, user_id, tenant_id, group_ids, require_write=True, is_admin=is_admin,
+        db,
+        uid,
+        user_id,
+        tenant_id,
+        group_ids,
+        require_write=True,
+        is_admin=is_admin,
     ):
         return False
 

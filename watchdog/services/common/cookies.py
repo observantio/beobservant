@@ -1,13 +1,12 @@
 """
-Ensure cookies are marked Secure when appropriate based on the request scheme
-and proxy headers, with support for trusting specific proxy CIDRs when
-determining if the original request was made over HTTPS.
+Ensure cookies are marked Secure when appropriate based on the request scheme and proxy headers, with support for
+trusting specific proxy CIDRs when determining if the original request was made over HTTPS.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -21,6 +20,7 @@ from fastapi import Request
 from config import config
 
 Network = IPv4Network | IPv6Network
+
 
 def _parse_networks(cidrs: Sequence[str]) -> list[Network]:
     try:
@@ -36,6 +36,7 @@ def _forwarded_proto(request: Request) -> str:
         return match.group(1).strip().lower()
     proto = request.headers.get("x-forwarded-proto", "")
     return proto.split(",")[0].strip().lower()
+
 
 def is_secure_cookie_request(
     request: Request,

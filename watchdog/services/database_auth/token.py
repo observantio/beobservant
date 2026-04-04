@@ -1,11 +1,15 @@
 """
-Database authentication service utilities for handling token decoding and user information extraction, including functions to decode access tokens, extract user information from tokens, and build token data structures based on user information. This module provides a common interface for handling token-related operations in the database authentication service, allowing for consistent decoding of tokens and extraction of relevant user information such as permissions and group memberships while also supporting integration with external authentication providers when enabled.
+Database authentication service utilities for handling token decoding and user information extraction, including
+functions to decode access tokens, extract user information from tokens, and build token data structures based on user
+information. This module provides a common interface for handling token-related operations in the database
+authentication service, allowing for consistent decoding of tokens and extraction of relevant user information such as
+permissions and group memberships while also supporting integration with external authentication providers when enabled.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from db_models import User
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
 
+
 def build_token_data_for_user(service: DatabaseAuthService, user: User) -> TokenData:
     role = safe_role(getattr(user, "role", None))
 
@@ -34,6 +39,7 @@ def build_token_data_for_user(service: DatabaseAuthService, user: User) -> Token
         permissions=service.get_user_permissions(user) or [],
         group_ids=[g.id for g in (getattr(user, "groups", None) or [])],
     )
+
 
 def decode_token(service: DatabaseAuthService, token: str) -> Optional[TokenData]:
     local_token = decode_token_op(service, token)
@@ -62,8 +68,10 @@ def decode_token(service: DatabaseAuthService, token: str) -> Optional[TokenData
 
     return token_data
 
+
 def _safe_role(raw_role: Optional[str]) -> Role:
     return safe_role(raw_role)
+
 
 def _known_permission_names(service: DatabaseAuthService) -> Set[str]:
     perms = service.list_all_permissions() or []

@@ -3,9 +3,9 @@ User authentication and registration endpoints for Watchdog access management.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -25,7 +25,13 @@ from middleware.dependencies import (
 )
 from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, ROLE_PERMISSIONS, Role, TokenData
-from models.access.user_models import TempPasswordResetResponse, UserCreate, UserPasswordUpdate, UserResponse, UserUpdate
+from models.access.user_models import (
+    TempPasswordResetResponse,
+    UserCreate,
+    UserPasswordUpdate,
+    UserResponse,
+    UserUpdate,
+)
 from services.auth.helper import (
     invalidate_grafana_proxy_auth_cache,
     is_admin_check,
@@ -35,7 +41,6 @@ from services.auth.helper import (
 
 from .shared import USER_NOT_FOUND, notification_service, router, rtp
 from .shared import SAFE_PATH_ID_PATTERN
-
 
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F]")
 
@@ -50,7 +55,9 @@ def _string_value(value: object) -> str:
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: TokenData = Depends(require_authenticated_with_scope("auth"))) -> UserResponse:
+async def get_current_user_info(
+    current_user: TokenData = Depends(require_authenticated_with_scope("auth")),
+) -> UserResponse:
     user = await rtp(auth_service.get_user_by_id, current_user.user_id)
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, USER_NOT_FOUND)
@@ -117,9 +124,7 @@ async def list_users(
 @handle_route_errors()
 async def create_user(
     user_create: UserCreate,
-    current_user: TokenData = Depends(
-        require_any_permission([Permission.CREATE_USERS, Permission.MANAGE_USERS])
-    ),
+    current_user: TokenData = Depends(require_any_permission([Permission.CREATE_USERS, Permission.MANAGE_USERS])),
 ) -> UserResponse:
     apply_scoped_rate_limit(current_user, "auth")
     user = await rtp(
@@ -147,7 +152,9 @@ async def update_user(
     user_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     user_update: UserUpdate = Body(...),
     current_user: TokenData = Depends(
-        require_any_permission_with_scope([Permission.UPDATE_USERS, Permission.MANAGE_USERS, Permission.MANAGE_TENANTS], "auth")
+        require_any_permission_with_scope(
+            [Permission.UPDATE_USERS, Permission.MANAGE_USERS, Permission.MANAGE_TENANTS], "auth"
+        )
     ),
 ) -> UserResponse:
     perms = perms_check(current_user)
@@ -157,7 +164,9 @@ async def update_user(
 
     if Permission.MANAGE_TENANTS.value in perms and not can_manage and not is_admin:
         if update_fields - {"is_active"}:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "manage:tenants can only activate/deactivate non-admin users")
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "manage:tenants can only activate/deactivate non-admin users"
+            )
 
     if (update_fields & {"role", "org_id", "group_ids"}) and not is_admin:
         raise HTTPException(

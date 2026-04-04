@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -55,11 +55,37 @@ async def test_grafana_service_wrapper_methods_and_return_shapes(monkeypatch):
         if path == "/api/dashboards/uid/missing":
             return None
         if path == "/api/datasources":
-            return [{"id": 1, "uid": "ds1", "orgId": 1, "name": "Prom", "type": "prometheus", "access": "proxy", "url": "http://prom"}]
+            return [
+                {
+                    "id": 1,
+                    "uid": "ds1",
+                    "orgId": 1,
+                    "name": "Prom",
+                    "type": "prometheus",
+                    "access": "proxy",
+                    "url": "http://prom",
+                }
+            ]
         if path == "/api/datasources/uid/ds1":
-            return {"id": 1, "uid": "ds1", "orgId": 1, "name": "Prom", "type": "prometheus", "access": "proxy", "url": "http://prom"}
+            return {
+                "id": 1,
+                "uid": "ds1",
+                "orgId": 1,
+                "name": "Prom",
+                "type": "prometheus",
+                "access": "proxy",
+                "url": "http://prom",
+            }
         if path == "/api/datasources/name/Prom":
-            return {"id": 1, "uid": "ds1", "orgId": 1, "name": "Prom", "type": "prometheus", "access": "proxy", "url": "http://prom"}
+            return {
+                "id": 1,
+                "uid": "ds1",
+                "orgId": 1,
+                "name": "Prom",
+                "type": "prometheus",
+                "access": "proxy",
+                "url": "http://prom",
+            }
         if path == "/api/folders":
             return [{"id": 5, "uid": "f1", "title": "Ops"}]
         if path == "/api/folders/f1":
@@ -116,11 +142,20 @@ async def test_grafana_service_wrapper_methods_and_return_shapes(monkeypatch):
     assert len(results) == 1 and results[0].uid == "d1"
 
     assert await service.get_dashboard("d1") is not None
-    created = await service.create_dashboard(DashboardCreate(dashboard=Dashboard(title="CPU", tags=[]), overwrite=False))
+    created = await service.create_dashboard(
+        DashboardCreate(dashboard=Dashboard(title="CPU", tags=[]), overwrite=False)
+    )
     assert created and created.get("uid") == "d1"
-    updated = await service.update_dashboard("d1", DashboardUpdate(dashboard=Dashboard(title="CPU2", tags=[]), overwrite=True))
+    updated = await service.update_dashboard(
+        "d1", DashboardUpdate(dashboard=Dashboard(title="CPU2", tags=[]), overwrite=True)
+    )
     assert updated and updated.get("uid") == "d1"
-    assert await service.update_dashboard("missing", DashboardUpdate(dashboard=Dashboard(title="x", tags=[]), overwrite=True)) is None
+    assert (
+        await service.update_dashboard(
+            "missing", DashboardUpdate(dashboard=Dashboard(title="x", tags=[]), overwrite=True)
+        )
+        is None
+    )
 
     assert await service.delete_dashboard("d1") is False
     assert (await service.query_datasource({"queries": []})) == {}
@@ -129,7 +164,9 @@ async def test_grafana_service_wrapper_methods_and_return_shapes(monkeypatch):
     assert len(datasources) == 1 and datasources[0].uid == "ds1"
     assert (await service.get_datasource("ds1")).uid == "ds1"
     assert (await service.get_datasource_by_name("Prom")).uid == "ds1"
-    assert (await service.create_datasource(DatasourceCreate(name="Prom", type="prometheus", url="http://prom"))).uid == "ds1"
+    assert (
+        await service.create_datasource(DatasourceCreate(name="Prom", type="prometheus", url="http://prom"))
+    ).uid == "ds1"
     assert (await service.update_datasource("ds1", DatasourceUpdate(name="Prom2"))).name == "Prom2"
     assert await service.delete_datasource("ds1") is False
 

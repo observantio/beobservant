@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -78,7 +78,11 @@ async def test_create_dashboard_retries_uid_on_conflict_and_then_succeeds(monkey
             return {
                 "uid": payload.dashboard.uid,
                 "id": 11,
-                "dashboard": {"uid": payload.dashboard.uid, "title": payload.dashboard.title, "tags": payload.dashboard.tags},
+                "dashboard": {
+                    "uid": payload.dashboard.uid,
+                    "title": payload.dashboard.title,
+                    "tags": payload.dashboard.tags,
+                },
             }
 
         async def search_dashboards(self, **_kwargs):

@@ -28,8 +28,6 @@ def make_token_cache(ttl: int, redis_url: Optional[str] = None) -> TokenCache | 
             logger.info("Gateway token cache backend: redis (%s)", redis_url)
             return cache
         except RuntimeError as exc:
-            logger.warning(
-                "Redis token cache init failed (%s), using in-memory fallback", type(exc).__name__
-            )
+            logger.warning("Redis token cache init failed (%s), using in-memory fallback", type(exc).__name__)
     logger.info("Gateway token cache backend: in-memory")
     return TokenCache(ttl)

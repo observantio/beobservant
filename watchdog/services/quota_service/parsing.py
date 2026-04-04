@@ -3,9 +3,9 @@ Parsing and extraction helpers for quota services.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -49,9 +49,7 @@ def extract_path(payload: object, path: str) -> Optional[float]:
 def extract_from_text(text: str, key: str) -> Optional[float]:
     if not text or not key:
         return None
-    pattern = re.compile(
-        rf"(?im)^\s*{re.escape(key)}\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*$"
-    )
+    pattern = re.compile(rf"(?im)^\s*{re.escape(key)}\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*$")
     match = pattern.search(text)
     if not match:
         return None

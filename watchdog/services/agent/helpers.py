@@ -1,15 +1,14 @@
 """
 Helper functions for OTLP agent management.
 
-This module extracts shared routines from AgentService so that the main
-service class remains lightweight and focused on orchestration. Helpers
-include ID generation, registry updates, and Mimir query logic.
+This module extracts shared routines from AgentService so that the main service class remains lightweight and focused on
+orchestration. Helpers include ID generation, registry updates, and Mimir query logic.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from datetime import datetime, timezone, timedelta
@@ -36,7 +35,7 @@ class KeyVolumePoint(TypedDict):
 
 ATTR_HOST_NAME = "host.name"
 ATTR_HOST_HOSTNAME = "host.hostname"
-METRIC_COUNT_QUERY = "count({__name__=~\".+\"})"
+METRIC_COUNT_QUERY = 'count({__name__=~".+"})'
 AGENT_LABEL_CANDIDATES = ("instance", "job", "service_name")
 # Do not use "instance" for host estimation. In many setups it represents
 # multiple scrape targets/endpoints for a single collector host and inflates
@@ -198,10 +197,12 @@ def extract_metrics_series(payload: JSONDict) -> list[KeyVolumePoint]:
             continue
         raw_ts, raw_value = entry[0], entry[1]
         try:
-            points.append({
-                "ts": int(float(str(raw_ts))),
-                "value": int(float(str(raw_value))),
-            })
+            points.append(
+                {
+                    "ts": int(float(str(raw_ts))),
+                    "value": int(float(str(raw_value))),
+                }
+            )
         except (TypeError, ValueError):
             continue
     return points

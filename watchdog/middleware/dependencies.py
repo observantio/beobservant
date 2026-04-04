@@ -1,12 +1,11 @@
 """
-These are ASGI middleware components for enforcing request size limits
-and concurrency limits on incoming HTTP requests.
+These are ASGI middleware components for enforcing request size limits and concurrency limits on incoming HTTP requests.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import logging
@@ -185,6 +184,7 @@ def _validate_rate_limit_fallback_mode(fallback_mode: str | None) -> str | None:
         raise ValueError("fallback_mode must be one of: allow, deny, memory")
     return normalized
 
+
 async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
     default_scope_id = getattr(current_user, "org_id", config.DEFAULT_ORG_ID)
     header_value = request.headers.get("x-scope-orgid")
@@ -248,15 +248,12 @@ async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
 
     return candidate_scope_id
 
+
 def _load_allowed_scope_ids_for_user(*, current_user: TokenData, default_scope_id: str) -> set[str]:
     allowed_scope_ids: set[str] = set()
 
     with get_db_session() as db:
-        user = (
-            db.query(User)
-            .filter_by(id=current_user.user_id, tenant_id=current_user.tenant_id)
-            .first()
-        )
+        user = db.query(User).filter_by(id=current_user.user_id, tenant_id=current_user.tenant_id).first()
         if not user or not getattr(user, "is_active", False):
             return {default_scope_id}
 
@@ -534,10 +531,7 @@ def require_any_permission(permissions: list[Permission | str]) -> Callable[...,
             return current_user
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "You don't have any of the required permissions: "
-                f"{', '.join(p.upper() for p in perm_values)}"
-            ),
+            detail=("You don't have any of the required permissions: " f"{', '.join(p.upper() for p in perm_values)}"),
         )
 
     return permission_checker
@@ -553,10 +547,7 @@ def require_any_permission_with_scope(permissions: list[Permission | str], scope
             return current_user
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "You don't have any of the required permissions: "
-                f"{', '.join(p.upper() for p in perm_values)}"
-            ),
+            detail=("You don't have any of the required permissions: " f"{', '.join(p.upper() for p in perm_values)}"),
         )
 
     def dependency(current_user: TokenData = Depends(permission_checker)) -> TokenData:

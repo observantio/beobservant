@@ -3,9 +3,9 @@ Helpers for system metrics collection and stress status determination.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import logging
@@ -14,6 +14,7 @@ import psutil
 from custom_types.json import JSONDict
 
 logger = logging.getLogger(__name__)
+
 
 def _fallback(payload: JSONDict) -> JSONDict:
     return payload
@@ -39,21 +40,23 @@ def cpu_metrics(proc: psutil.Process) -> JSONDict:
         }
     except (psutil.Error, AttributeError, OSError, RuntimeError, ValueError) as exc:
         logger.error("Error getting CPU metrics: %s", exc)
-        return _fallback({
-            "utilization": 0,
-            "raw_utilization": 0,
-            "count": 0,
-            "threads": 0,
-            "frequency_mhz": None,
-        })
+        return _fallback(
+            {
+                "utilization": 0,
+                "raw_utilization": 0,
+                "count": 0,
+                "threads": 0,
+                "frequency_mhz": None,
+            }
+        )
 
 
 def memory_metrics(proc: psutil.Process) -> JSONDict:
     try:
         mem_info = proc.memory_info()
         mem_percent = proc.memory_percent()
-        rss_mb = mem_info.rss / (1024 ** 2)
-        vms_mb = mem_info.vms / (1024 ** 2)
+        rss_mb = mem_info.rss / (1024**2)
+        vms_mb = mem_info.vms / (1024**2)
 
         return {
             "rss_mb": round(rss_mb, 2),
@@ -62,11 +65,13 @@ def memory_metrics(proc: psutil.Process) -> JSONDict:
         }
     except (psutil.Error, AttributeError, OSError, RuntimeError, ValueError) as exc:
         logger.error("Error getting memory metrics: %s", exc)
-        return _fallback({
-            "rss_mb": 0,
-            "vms_mb": 0,
-            "utilization": 0,
-        })
+        return _fallback(
+            {
+                "rss_mb": 0,
+                "vms_mb": 0,
+                "utilization": 0,
+            }
+        )
 
 
 def disk_metrics(proc: psutil.Process) -> JSONDict:
@@ -74,19 +79,21 @@ def disk_metrics(proc: psutil.Process) -> JSONDict:
         io_counters = proc.io_counters()
 
         return {
-            "read_mb": round(io_counters.read_bytes / (1024 ** 2), 2),
-            "write_mb": round(io_counters.write_bytes / (1024 ** 2), 2),
+            "read_mb": round(io_counters.read_bytes / (1024**2), 2),
+            "write_mb": round(io_counters.write_bytes / (1024**2), 2),
             "read_count": io_counters.read_count,
             "write_count": io_counters.write_count,
         }
     except (psutil.Error, AttributeError, OSError, RuntimeError, ValueError) as exc:
         logger.error("Error getting I/O metrics: %s", exc)
-        return _fallback({
-            "read_mb": 0,
-            "write_mb": 0,
-            "read_count": 0,
-            "write_count": 0,
-        })
+        return _fallback(
+            {
+                "read_mb": 0,
+                "write_mb": 0,
+                "read_count": 0,
+                "write_count": 0,
+            }
+        )
 
 
 def network_metrics(proc: psutil.Process) -> JSONDict:
@@ -106,38 +113,40 @@ def network_metrics(proc: psutil.Process) -> JSONDict:
         }
     except (psutil.Error, AttributeError, OSError, RuntimeError, ValueError) as exc:
         logger.error("Error getting network metrics: %s", exc)
-        return _fallback({
-            "total_connections": 0,
-            "established": 0,
-            "listen": 0,
-            "time_wait": 0,
-            "close_wait": 0,
-        })
+        return _fallback(
+            {
+                "total_connections": 0,
+                "established": 0,
+                "listen": 0,
+                "time_wait": 0,
+                "close_wait": 0,
+            }
+        )
 
 
 def determine_stress_status(cpu_percent: float, memory_percent: float, connections: int) -> JSONDict:
-    HIGH_CPU_THRESHOLD = 50
-    HIGH_MEMORY_THRESHOLD = 80
-    HIGH_CONNECTIONS_THRESHOLD = 100
+    high_cpu_threshold = 50
+    high_memory_threshold = 80
+    high_connections_threshold = 100
 
-    MODERATE_CPU_THRESHOLD = 25
-    MODERATE_MEMORY_THRESHOLD = 50
-    MODERATE_CONNECTIONS_THRESHOLD = 50
+    moderate_cpu_threshold = 25
+    moderate_memory_threshold = 50
+    moderate_connections_threshold = 50
 
     issues = []
-    if cpu_percent >= HIGH_CPU_THRESHOLD:
+    if cpu_percent >= high_cpu_threshold:
         issues.append(f"High CPU usage ({cpu_percent}%)")
-    elif cpu_percent >= MODERATE_CPU_THRESHOLD:
+    elif cpu_percent >= moderate_cpu_threshold:
         issues.append(f"Moderate CPU usage ({cpu_percent}%)")
 
-    if memory_percent >= HIGH_MEMORY_THRESHOLD:
+    if memory_percent >= high_memory_threshold:
         issues.append(f"High memory usage ({memory_percent}%)")
-    elif memory_percent >= MODERATE_MEMORY_THRESHOLD:
+    elif memory_percent >= moderate_memory_threshold:
         issues.append(f"Moderate memory usage ({memory_percent}%)")
 
-    if connections >= HIGH_CONNECTIONS_THRESHOLD:
+    if connections >= high_connections_threshold:
         issues.append(f"High connection count ({connections})")
-    elif connections >= MODERATE_CONNECTIONS_THRESHOLD:
+    elif connections >= moderate_connections_threshold:
         issues.append(f"Moderate connection count ({connections})")
 
     if any("High" in issue for issue in issues):

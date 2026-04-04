@@ -5,9 +5,9 @@ Alerting/incident/rules/channel persistence was moved to Notifier.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ class _VaultInvalidPathFallback(Exception):
 class _VaultErrorFallback(Exception):
     pass
 
+
 hvac: ModuleType | None
 
 try:
@@ -38,9 +39,21 @@ try:
     forbidden_exc = getattr(hvac_exceptions, "Forbidden", _VaultForbiddenFallback)
     invalid_path_exc = getattr(hvac_exceptions, "InvalidPath", _VaultInvalidPathFallback)
     vault_error_exc = getattr(hvac_exceptions, "VaultError", _VaultErrorFallback)
-    Forbidden = forbidden_exc if isinstance(forbidden_exc, type) and issubclass(forbidden_exc, Exception) else _VaultForbiddenFallback
-    InvalidPath = invalid_path_exc if isinstance(invalid_path_exc, type) and issubclass(invalid_path_exc, Exception) else _VaultInvalidPathFallback
-    VaultError = vault_error_exc if isinstance(vault_error_exc, type) and issubclass(vault_error_exc, Exception) else _VaultErrorFallback
+    Forbidden = (
+        forbidden_exc
+        if isinstance(forbidden_exc, type) and issubclass(forbidden_exc, Exception)
+        else _VaultForbiddenFallback
+    )
+    InvalidPath = (
+        invalid_path_exc
+        if isinstance(invalid_path_exc, type) and issubclass(invalid_path_exc, Exception)
+        else _VaultInvalidPathFallback
+    )
+    VaultError = (
+        vault_error_exc
+        if isinstance(vault_error_exc, type) and issubclass(vault_error_exc, Exception)
+        else _VaultErrorFallback
+    )
 except ImportError:
     hvac = None
     Forbidden = _VaultForbiddenFallback

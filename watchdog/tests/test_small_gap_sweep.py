@@ -23,16 +23,18 @@ from services.loki.http_client import LokiHttpClient
 
 
 def _request(*, scheme="http", headers=None, client=("127.0.0.1", 1)):
-    return Request({
-        "type": "http",
-        "http_version": "1.1",
-        "method": "GET",
-        "path": "/",
-        "scheme": scheme,
-        "headers": headers or [],
-        "client": client,
-        "query_string": b"",
-    })
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "path": "/",
+            "scheme": scheme,
+            "headers": headers or [],
+            "client": client,
+            "query_string": b"",
+        }
+    )
 
 
 def _db_session():
@@ -129,7 +131,9 @@ def test_auth_helper_database_audit_cookie_and_loki_small_gaps(monkeypatch):
     assert _request().url.path == "/"
 
     audit_db = _AuditDB()
-    current_user = TokenData(user_id="u1", username="user", tenant_id="tenant-a", org_id="org-1", role=Role.USER, permissions=[])
+    current_user = TokenData(
+        user_id="u1", username="user", tenant_id="tenant-a", org_id="org-1", role=Role.USER, permissions=[]
+    )
     auth_helper.build_audit_log_query(audit_db, current_user, None, User)
     assert audit_db.query_obj.filters
 
@@ -162,20 +166,30 @@ def test_auth_helper_database_audit_cookie_and_loki_small_gaps(monkeypatch):
 
 def test_folder_ops_remaining_success_and_nonraising_error_paths():
     db = _db_session()
-    db.add_all([
-        Tenant(id="t1", name="tenant-1", display_name="Tenant 1", is_active=True),
-        User(id="u1", tenant_id="t1", username="owner", email="owner@example.com", hashed_password="x", org_id="org-1", is_active=True),
-        GrafanaFolder(
-            id="db-folder",
-            tenant_id="t1",
-            created_by="u1",
-            grafana_uid="f1",
-            grafana_id=11,
-            title="Folder 1",
-            visibility="private",
-            hidden_by=[],
-        ),
-    ])
+    db.add_all(
+        [
+            Tenant(id="t1", name="tenant-1", display_name="Tenant 1", is_active=True),
+            User(
+                id="u1",
+                tenant_id="t1",
+                username="owner",
+                email="owner@example.com",
+                hashed_password="x",
+                org_id="org-1",
+                is_active=True,
+            ),
+            GrafanaFolder(
+                id="db-folder",
+                tenant_id="t1",
+                created_by="u1",
+                grafana_uid="f1",
+                grafana_id=11,
+                title="Folder 1",
+                visibility="private",
+                hidden_by=[],
+            ),
+        ]
+    )
     db.commit()
 
     grafana = _FolderGrafanaStub()

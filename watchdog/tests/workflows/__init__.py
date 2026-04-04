@@ -1,1 +1,3 @@
-"""Workflow regression tests for Watchdog."""
+"""
+Workflow regression tests for Watchdog.
+"""

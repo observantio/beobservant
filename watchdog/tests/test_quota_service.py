@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -143,10 +143,18 @@ async def test_quota_service_falls_back_to_prometheus(monkeypatch):
     monkeypatch.setattr(quota_module.config, "QUOTA_PROMETHEUS_ENABLED", True, raising=False)
     monkeypatch.setattr(quota_module.config, "LOKI_QUOTA_NATIVE_PATH", "/native/loki", raising=False)
     monkeypatch.setattr(quota_module.config, "TEMPO_QUOTA_NATIVE_PATH", "/native/tempo", raising=False)
-    monkeypatch.setattr(quota_module.config, "LOKI_QUOTA_PROM_LIMIT_QUERY", "loki_limit{tenant=\"{tenant_id}\"}", raising=False)
-    monkeypatch.setattr(quota_module.config, "LOKI_QUOTA_PROM_USED_QUERY", "loki_used{tenant=\"{tenant_id}\"}", raising=False)
-    monkeypatch.setattr(quota_module.config, "TEMPO_QUOTA_PROM_LIMIT_QUERY", "tempo_limit{tenant=\"{tenant_id}\"}", raising=False)
-    monkeypatch.setattr(quota_module.config, "TEMPO_QUOTA_PROM_USED_QUERY", "tempo_used{tenant=\"{tenant_id}\"}", raising=False)
+    monkeypatch.setattr(
+        quota_module.config, "LOKI_QUOTA_PROM_LIMIT_QUERY", 'loki_limit{tenant="{tenant_id}"}', raising=False
+    )
+    monkeypatch.setattr(
+        quota_module.config, "LOKI_QUOTA_PROM_USED_QUERY", 'loki_used{tenant="{tenant_id}"}', raising=False
+    )
+    monkeypatch.setattr(
+        quota_module.config, "TEMPO_QUOTA_PROM_LIMIT_QUERY", 'tempo_limit{tenant="{tenant_id}"}', raising=False
+    )
+    monkeypatch.setattr(
+        quota_module.config, "TEMPO_QUOTA_PROM_USED_QUERY", 'tempo_used{tenant="{tenant_id}"}', raising=False
+    )
     monkeypatch.setattr(quota_module.config, "QUOTA_PROMETHEUS_BASE_URL", "http://mimir:9009", raising=False)
 
     class _Response:
@@ -156,7 +164,9 @@ async def test_quota_service_falls_back_to_prometheus(monkeypatch):
 
         def raise_for_status(self):
             if self._fail:
-                raise httpx.HTTPStatusError("bad", request=httpx.Request("GET", "http://x"), response=httpx.Response(500))
+                raise httpx.HTTPStatusError(
+                    "bad", request=httpx.Request("GET", "http://x"), response=httpx.Response(500)
+                )
 
         def json(self):
             return self._payload

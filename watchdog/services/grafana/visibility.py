@@ -1,0 +1,37 @@
+"""
+Visibility resolution for Grafana services.
+
+Copyright (c) 2026 Stefan Kumarasinghe
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
+"""
+
+from __future__ import annotations
+
+from typing import List, Optional
+
+from sqlalchemy.orm import Session
+
+
+def resolve_visibility_groups(
+    service: object,
+    db: Session,
+    user_id: str,
+    tenant_id: str,
+    visibility: str,
+    group_ids: List[str],
+    shared_group_ids: Optional[List[str]],
+    is_admin: bool,
+) -> List[object]:
+    if visibility != "group":
+        return []
+    return service._validate_group_visibility(  # type: ignore[attr-defined]
+        db,
+        user_id=user_id,
+        tenant_id=tenant_id,
+        group_ids=group_ids,
+        shared_group_ids=shared_group_ids,
+        is_admin=is_admin,
+    )

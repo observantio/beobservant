@@ -1,13 +1,17 @@
 """
-Service for managing authentication and authorization, providing functions for user management, group management, permission handling, API key management, and integration with external identity providers. This module includes logic for authenticating users, generating and validating access tokens, managing multi-factor authentication (MFA) using TOTP, and synchronizing user information from external OIDC providers. The service also handles the assignment of permissions to users and groups, the creation and management of API keys, and the logging of audit events related to authentication and authorization actions.
+Service for managing authentication and authorization, providing functions for user management, group management,
+permission handling, API key management, and integration with external identity providers. This module includes logic
+for authenticating users, generating and validating access tokens, managing multi-factor authentication (MFA) using
+TOTP, and synchronizing user information from external OIDC providers. The service also handles the assignment of
+permissions to users and groups, the creation and management of API keys, and the logging of audit events related to
+authentication and authorization actions.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
-
 
 import logging
 import hashlib
@@ -107,6 +111,7 @@ logger = logging.getLogger(__name__)
 class DatabaseAuthService:
     _MFA_SETUP_RESPONSE = "mfa_setup_required"
     _MFA_REQUIRED_RESPONSE = "mfa_required"
+
     def __init__(self) -> None:
         super().__init__()
         self._initialized = False
@@ -140,7 +145,6 @@ class DatabaseAuthService:
 
     def _ensure_default_api_key(self, db: Session, user: User) -> None:
         db_bootstrap.ensure_default_api_key(self, db, user)
-
 
     def hash_password(self, password: str) -> str:
         return db_password.hash_password(self, password)
@@ -222,9 +226,7 @@ class DatabaseAuthService:
             return None
         return authenticate_user_op(self, username, password)
 
-    def login(
-        self, username: str, password: str, mfa_code: Optional[str] = None
-    ) -> Optional[Union[Token, JSONDict]]:
+    def login(self, username: str, password: str, mfa_code: Optional[str] = None) -> Optional[Union[Token, JSONDict]]:
         return db_auth.login(self, username, password, mfa_code)
 
     def exchange_oidc_authorization_code(
@@ -261,11 +263,8 @@ class DatabaseAuthService:
             code_challenge_method=code_challenge_method,
         )
 
-    def provision_external_user(
-        self, *, email: str, username: str, full_name: Optional[str]
-    ) -> Optional[str]:
+    def provision_external_user(self, *, email: str, username: str, full_name: Optional[str]) -> Optional[str]:
         return db_auth.provision_external_user(self, email=email, username=username, full_name=full_name)
-
 
     def _extract_permissions_from_oidc_claims(self, claims: JSONDict) -> List[str]:
         return db_oidc.extract_permissions_from_oidc_claims(claims)
@@ -283,11 +282,8 @@ class DatabaseAuthService:
     ) -> User:
         return db_oidc.provision_oidc_user(self, db, email, preferred_username, full_name, subject)
 
-    def _update_oidc_user(
-        self, db: Session, user: User, email: str, full_name: Optional[str], subject: str
-    ) -> None:
+    def _update_oidc_user(self, db: Session, user: User, email: str, full_name: Optional[str], subject: str) -> None:
         db_oidc.update_oidc_user(db, user, email, full_name, subject)
-
 
     def get_user_permissions(self, user: User | UserSchema) -> List[str]:
         return db_permissions.get_user_permissions(self, user)
@@ -317,7 +313,12 @@ class DatabaseAuthService:
     def _to_group_schema(self, group: Group) -> GroupSchema:
         return db_schema.to_group_schema(group)
 
-    def get_user_by_id(self,user_id: str,tenant_id: Optional[str] = None,db: Optional[Session] = None,) -> Optional[UserSchema]:
+    def get_user_by_id(
+        self,
+        user_id: str,
+        tenant_id: Optional[str] = None,
+        db: Optional[Session] = None,
+    ) -> Optional[UserSchema]:
         return get_user_by_id_op(self, user_id, tenant_id=tenant_id, db=db)
 
     def get_user_by_id_in_tenant(self, user_id: str, tenant_id: str) -> Optional[UserSchema]:
@@ -421,12 +422,12 @@ class DatabaseAuthService:
     ) -> List[JSONDict]:
         return [
             share.model_dump()
-            for share in replace_api_key_shares_op(self, owner_user_id, tenant_id, key_id, user_ids, group_ids=group_ids)
+            for share in replace_api_key_shares_op(
+                self, owner_user_id, tenant_id, key_id, user_ids, group_ids=group_ids
+            )
         ]
 
-    def delete_api_key_share(
-        self, owner_user_id: str, tenant_id: str, key_id: str, shared_user_id: str
-    ) -> bool:
+    def delete_api_key_share(self, owner_user_id: str, tenant_id: str, key_id: str, shared_user_id: str) -> bool:
         return delete_api_key_share_op(self, owner_user_id, tenant_id, key_id, shared_user_id)
 
     def validate_otlp_token(self, token: str, *, suppress_errors: bool = True) -> Optional[str]:
@@ -434,7 +435,6 @@ class DatabaseAuthService:
 
     def backfill_otlp_tokens(self) -> None:
         backfill_otlp_tokens_op(self)
-
 
     def create_group(self, group_create: GroupCreate, tenant_id: str, creator_id: Optional[str] = None) -> GroupSchema:
         return create_group_op(self, group_create, tenant_id, creator_id)
@@ -564,6 +564,13 @@ class DatabaseAuthService:
         user_agent: Optional[str] = None,
     ) -> None:
         db_audit.log_audit(
-            db, tenant_id, user_id, action, resource_type, resource_id, details,
-            ip_address=ip_address, user_agent=user_agent,
+            db,
+            tenant_id,
+            user_id,
+            action,
+            resource_type,
+            resource_id,
+            details,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )

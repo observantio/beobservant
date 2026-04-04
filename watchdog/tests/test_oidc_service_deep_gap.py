@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -98,7 +98,9 @@ async def test_oidc_consume_transaction_expired_redirect_state_and_unknown_pkce(
     service._ttl_cache = _Cache()
     monkeypatch.setattr(mod.time, "time", lambda: 100)
     with pytest.raises(ValueError, match="invalid or expired"):
-        await service.consume_authorization_transaction_async(transaction_id=None, state="s1", redirect_uri="https://cb")
+        await service.consume_authorization_transaction_async(
+            transaction_id=None, state="s1", redirect_uri="https://cb"
+        )
 
     class _Cache2(_Cache):
         async def get(self, key):
@@ -117,7 +119,9 @@ async def test_oidc_consume_transaction_expired_redirect_state_and_unknown_pkce(
     service._ttl_cache = _Cache2()
     monkeypatch.setattr(mod.time, "time", lambda: 10)
     with pytest.raises(ValueError, match="invalid or expired"):
-        await service.consume_authorization_transaction_async(transaction_id=None, state="s1", redirect_uri="https://cb")
+        await service.consume_authorization_transaction_async(
+            transaction_id=None, state="s1", redirect_uri="https://cb"
+        )
 
     class _Cache3(_Cache):
         async def get(self, key):

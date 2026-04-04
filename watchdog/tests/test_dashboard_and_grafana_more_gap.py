@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -66,7 +66,10 @@ async def test_dashboard_ops_get_delete_toggle_and_uid_search_paths():
     class _Svc:
         async def get_dashboard(self, uid):
             if uid == "d1":
-                return {"meta": {"folderId": 0, "url": "/d/d1", "slug": "cpu"}, "dashboard": {"title": "CPU", "tags": []}}
+                return {
+                    "meta": {"folderId": 0, "url": "/d/d1", "slug": "cpu"},
+                    "dashboard": {"title": "CPU", "tags": []},
+                }
             return None
 
         async def search_dashboards(self, **_kwargs):
@@ -130,8 +133,10 @@ async def test_grafana_service_parse_error_and_update_folder_refreshed_none(monk
 
     service.get_folder = get_folder
     service._mutating_request = mutating_412
+
     async def get_none(_uid):
         return None
+
     service.get_folder = get_none
     assert await service.update_folder("f1", "New") is None
 

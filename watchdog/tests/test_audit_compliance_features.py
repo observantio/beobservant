@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import unittest
@@ -63,18 +63,23 @@ class AuditComplianceFeatureTests(unittest.TestCase):
     def test_internal_otlp_validate_endpoint(self):
         import os
         import sys
+
         os.environ["DATABASE_URL"] = "sqlite:///:memory:"
         import database
         from services import database_auth_service as das_mod
         from services.internal_service import InternalService
-        with patch.object(database, "init_database", lambda *args, **kwargs: None), patch.object(
-            database, "init_db", lambda *args, **kwargs: None
-        ), patch.object(das_mod.DatabaseAuthService, "_lazy_init", lambda self: None), patch.object(
-            das_mod.DatabaseAuthService, "_ensure_default_setup", lambda self: None
-        ), patch.object(das_mod.DatabaseAuthService, "backfill_otlp_tokens", lambda self: None), patch.object(
-            InternalService,
-            "_get_internal_token",
-            lambda self: "internal-test-token",
+
+        with (
+            patch.object(database, "init_database", lambda *args, **kwargs: None),
+            patch.object(database, "init_db", lambda *args, **kwargs: None),
+            patch.object(das_mod.DatabaseAuthService, "_lazy_init", lambda self: None),
+            patch.object(das_mod.DatabaseAuthService, "_ensure_default_setup", lambda self: None),
+            patch.object(das_mod.DatabaseAuthService, "backfill_otlp_tokens", lambda self: None),
+            patch.object(
+                InternalService,
+                "_get_internal_token",
+                lambda self: "internal-test-token",
+            ),
         ):
             # reload main in case it has been imported earlier by other tests
             sys.modules.pop("main", None)

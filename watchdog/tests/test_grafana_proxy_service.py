@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import os
@@ -12,9 +12,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-os.environ.setdefault('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/observantio_test')
-os.environ.setdefault('CORS_ALLOW_CREDENTIALS', 'False')
-os.environ.setdefault('CORS_ORIGINS', 'http://localhost')
+os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/observantio_test")
+os.environ.setdefault("CORS_ALLOW_CREDENTIALS", "False")
+os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
@@ -85,10 +85,11 @@ def test_validate_group_visibility_missing_ids_raises():
 
     svc = GrafanaProxyService()
     with pytest.raises(HTTPException) as exc:
-        svc._validate_group_visibility(db, tenant_id="t1", group_ids=["g1"], shared_group_ids=["g1", "g2"], is_admin=True)
+        svc._validate_group_visibility(
+            db, tenant_id="t1", group_ids=["g1"], shared_group_ids=["g1", "g2"], is_admin=True
+        )
     assert exc.value.status_code == 400
     assert "One or more group ids are invalid" in exc.value.detail
-
 
 
 def test_validate_group_visibility_non_admin_not_member_raises():
@@ -100,7 +101,9 @@ def test_validate_group_visibility_non_admin_not_member_raises():
 
     svc = GrafanaProxyService()
     with pytest.raises(HTTPException) as exc:
-        svc._validate_group_visibility(db, tenant_id="t1", group_ids=["g1"], shared_group_ids=["g1", "g2"], is_admin=False)
+        svc._validate_group_visibility(
+            db, tenant_id="t1", group_ids=["g1"], shared_group_ids=["g1", "g2"], is_admin=False
+        )
     assert exc.value.status_code == 403
     assert "User is not a member of one or more specified groups" in exc.value.detail
 
@@ -113,10 +116,14 @@ def test_validate_group_visibility_success_for_admin_and_member():
     db.commit()
 
     svc = GrafanaProxyService()
-    groups = svc._validate_group_visibility(db, tenant_id="t1", group_ids=[], shared_group_ids=["g1", "g2"], is_admin=True)
+    groups = svc._validate_group_visibility(
+        db, tenant_id="t1", group_ids=[], shared_group_ids=["g1", "g2"], is_admin=True
+    )
     assert {g.id for g in groups} == {"g1", "g2"}
 
-    groups2 = svc._validate_group_visibility(db, tenant_id="t1", group_ids=["g1", "g2"], shared_group_ids=["g1", "g2"], is_admin=False)
+    groups2 = svc._validate_group_visibility(
+        db, tenant_id="t1", group_ids=["g1", "g2"], shared_group_ids=["g1", "g2"], is_admin=False
+    )
     assert {g.id for g in groups2} == {"g1", "g2"}
 
 

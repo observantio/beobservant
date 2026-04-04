@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -23,7 +23,12 @@ except ImportError:
 ensure_test_env()
 
 from models.access.auth_models import Permission, Role, TokenData
-from models.observability.resolver_models import AnalyzeJobStatus, AnalyzeJobSummary, AnalyzeProxyPayload, AnalyzeRequestPayload
+from models.observability.resolver_models import (
+    AnalyzeJobStatus,
+    AnalyzeJobSummary,
+    AnalyzeProxyPayload,
+    AnalyzeRequestPayload,
+)
 from models.observability.loki_models import LogDirection, LogFilterRequest, LogSearchRequest
 from routers.observability import resolver_router, loki_router
 from pydantic import ValidationError
@@ -112,14 +117,51 @@ async def test_loki_router_endpoints_and_timeout_wrapper(monkeypatch):
     monkeypatch.setattr(loki_router.loki_service, "aggregate_logs", fake_aggregate_logs)
     monkeypatch.setattr(loki_router.loki_service, "get_log_volume", fake_get_log_volume)
 
-    assert (await loki_router.query_logs(_request(), query="{app=\"api\"}", limit=5, start=1, end=2, direction=LogDirection.FORWARD, step=15, current_user=current_user))["data"]["tenant"] == "tenant"
-    assert (await loki_router.query_logs_instant(_request(), query="rate", time=1, limit=2, current_user=current_user))["data"]["limit"] == 2
+    assert (
+        await loki_router.query_logs(
+            _request(),
+            query='{app="api"}',
+            limit=5,
+            start=1,
+            end=2,
+            direction=LogDirection.FORWARD,
+            step=15,
+            current_user=current_user,
+        )
+    )["data"]["tenant"] == "tenant"
+    assert (await loki_router.query_logs_instant(_request(), query="rate", time=1, limit=2, current_user=current_user))[
+        "data"
+    ]["limit"] == 2
     assert (await loki_router.get_labels(_request(), start=1, end=2, current_user=current_user))["data"][2] == "tenant"
-    assert (await loki_router.get_label_values(_request(), label="service", start=1, end=2, query="{job=\"api\"}", current_user=current_user))["data"][0] == "service"
-    assert (await loki_router.search_logs(_request(), LogSearchRequest(pattern="error", labels={"job": "api"}, start=1, end=2, limit=5), current_user=current_user))["data"]["pattern"] == "error"
-    assert (await loki_router.filter_logs(_request(), LogFilterRequest(labels={"job": "api"}, filters=["error"], start=1, end=2, limit=5), current_user=current_user))["data"]["filters"] == ["error"]
-    assert (await loki_router.aggregate_logs(_request(), query="sum(rate())", start=1, end=2, step=60, current_user=current_user))["step"] == 60
-    assert (await loki_router.get_log_volume(_request(), query="{job=\"api\"}", start=1, end=2, step=300, current_user=current_user))["tenant"] == "tenant"
+    assert (
+        await loki_router.get_label_values(
+            _request(), label="service", start=1, end=2, query='{job="api"}', current_user=current_user
+        )
+    )["data"][0] == "service"
+    assert (
+        await loki_router.search_logs(
+            _request(),
+            LogSearchRequest(pattern="error", labels={"job": "api"}, start=1, end=2, limit=5),
+            current_user=current_user,
+        )
+    )["data"]["pattern"] == "error"
+    assert (
+        await loki_router.filter_logs(
+            _request(),
+            LogFilterRequest(labels={"job": "api"}, filters=["error"], start=1, end=2, limit=5),
+            current_user=current_user,
+        )
+    )["data"]["filters"] == ["error"]
+    assert (
+        await loki_router.aggregate_logs(
+            _request(), query="sum(rate())", start=1, end=2, step=60, current_user=current_user
+        )
+    )["step"] == 60
+    assert (
+        await loki_router.get_log_volume(
+            _request(), query='{job="api"}', start=1, end=2, step=300, current_user=current_user
+        )
+    )["tenant"] == "tenant"
 
     async def timeout_coro():
         raise asyncio.TimeoutError()
@@ -139,7 +181,9 @@ async def test_resolver_router_remaining_wrappers_and_helpers(monkeypatch):
 
     monkeypatch.setattr(resolver_router, "resolve_tenant_id", fake_resolve_tenant_id)
     monkeypatch.setattr(resolver_router, "correlation_id", lambda _request: "corr-1")
-    monkeypatch.setattr(resolver_router, "inject_tenant", lambda payload, tenant_id: {**payload, "tenant_id": tenant_id})
+    monkeypatch.setattr(
+        resolver_router, "inject_tenant", lambda payload, tenant_id: {**payload, "tenant_id": tenant_id}
+    )
 
     async def fake_request_json(**kwargs):
         calls.append(kwargs)
@@ -230,20 +274,27 @@ async def test_resolver_router_remaining_wrappers_and_helpers(monkeypatch):
         proxied = await handler(_request(path), payload, current_user)
         assert proxied["path"] == path
 
-    assert (await resolver_router.ml_weights(_request("/api/resolver/ml/weights"), current_user))["path"] == "/api/v1/ml/weights"
-    assert (await resolver_router.events_deployments(_request("/api/resolver/events/deployments"), current_user))["path"] == "/api/v1/events/deployments"
+    assert (await resolver_router.ml_weights(_request("/api/resolver/ml/weights"), current_user))[
+        "path"
+    ] == "/api/v1/ml/weights"
+    assert (await resolver_router.events_deployments(_request("/api/resolver/events/deployments"), current_user))[
+        "path"
+    ] == "/api/v1/events/deployments"
 
     async def fake_request_json_non_dict(**_kwargs):
         return SimpleNamespace()
 
     monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json_non_dict)
-    assert await resolver_router._proxy_post(
-        request=_request(),
-        current_user=current_user,
-        upstream_path="/api/v1/test",
-        payload={"raw": True},
-        audit_action="audit.test",
-    ) == {}
+    assert (
+        await resolver_router._proxy_post(
+            request=_request(),
+            current_user=current_user,
+            upstream_path="/api/v1/test",
+            payload={"raw": True},
+            audit_action="audit.test",
+        )
+        == {}
+    )
 
 
 @pytest.mark.asyncio

@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -157,15 +157,24 @@ def test_jwt_helpers_create_and_decode_token(monkeypatch):
     assert decoded.permissions == ["read:users"]
     assert decoded.group_ids == ["g1"]
 
-    mfa_token = auth_mod.create_mfa_setup_token(SimpleNamespace(id="u1", username="alice", tenant_id="tenant"), minutes=999)
+    mfa_token = auth_mod.create_mfa_setup_token(
+        SimpleNamespace(id="u1", username="alice", tenant_id="tenant"), minutes=999
+    )
     decoded_mfa = auth_mod.decode_token(_service(), mfa_token.access_token)
     assert decoded_mfa and decoded_mfa.is_mfa_setup is True
     assert mfa_token.expires_in == auth_mod.MAX_MFA_SETUP_TOKEN_MINUTES * 60
 
     assert auth_mod.decode_token(_service(), "bad.token") is None
-    payload = auth_mod.decode_token(_service(), auth_mod.jwt.encode({"sub": "u1"}, auth_mod._jwt_signing_key(), algorithm=auth_mod.config.JWT_ALGORITHM))
+    payload = auth_mod.decode_token(
+        _service(),
+        auth_mod.jwt.encode({"sub": "u1"}, auth_mod._jwt_signing_key(), algorithm=auth_mod.config.JWT_ALGORITHM),
+    )
     assert payload is None
-    bad_role = auth_mod.jwt.encode({"sub": "u1", "username": "alice", "role": "bad", "tenant_id": "tenant", "permissions": "x", "group_ids": "y"}, auth_mod._jwt_signing_key(), algorithm=auth_mod.config.JWT_ALGORITHM)
+    bad_role = auth_mod.jwt.encode(
+        {"sub": "u1", "username": "alice", "role": "bad", "tenant_id": "tenant", "permissions": "x", "group_ids": "y"},
+        auth_mod._jwt_signing_key(),
+        algorithm=auth_mod.config.JWT_ALGORITHM,
+    )
     decoded_bad_role = auth_mod.decode_token(_service(), bad_role)
     assert decoded_bad_role and decoded_bad_role.role == Role.USER
     assert auth_mod._normalize_username(" Alice ") == "alice"
@@ -217,33 +226,76 @@ def test_authenticate_update_password_and_validate_otlp(monkeypatch):
     assert auth_mod.authenticate_user(_service(), "alice", "pw") is None
 
     with pytest.raises(ValueError):
-        auth_mod.update_password(_service(), "u1", UserPasswordUpdate(current_password="pw", new_password="short"), "tenant")
+        auth_mod.update_password(
+            _service(), "u1", UserPasswordUpdate(current_password="pw", new_password="short"), "tenant"
+        )
 
     db = _DB(None)
     monkeypatch.setattr(auth_mod, "get_db_session", lambda: _ctx(db))
-    assert auth_mod.update_password(_service(), "u1", UserPasswordUpdate(current_password="pw", new_password="newpassword123"), "tenant") is False
+    assert (
+        auth_mod.update_password(
+            _service(), "u1", UserPasswordUpdate(current_password="pw", new_password="newpassword123"), "tenant"
+        )
+        is False
+    )
 
-    user = SimpleNamespace(id="u1", tenant_id="tenant", auth_provider="oidc", needs_password_change=False, hashed_password="pw")
+    user = SimpleNamespace(
+        id="u1", tenant_id="tenant", auth_provider="oidc", needs_password_change=False, hashed_password="pw"
+    )
     db = _DB(user)
     monkeypatch.setattr(auth_mod, "get_db_session", lambda: _ctx(db))
     with pytest.raises(ValueError):
-        auth_mod.update_password(_service(), "u1", UserPasswordUpdate(current_password="pw", new_password="newpassword123"), "tenant")
+        auth_mod.update_password(
+            _service(), "u1", UserPasswordUpdate(current_password="pw", new_password="newpassword123"), "tenant"
+        )
 
-    user = SimpleNamespace(id="u1", tenant_id="tenant", auth_provider="local", needs_password_change=False, hashed_password="pw")
+    user = SimpleNamespace(
+        id="u1", tenant_id="tenant", auth_provider="local", needs_password_change=False, hashed_password="pw"
+    )
     db = _DB(user)
     monkeypatch.setattr(auth_mod, "get_db_session", lambda: _ctx(db))
-    assert auth_mod.update_password(_service(verify_password=lambda raw, hashed: False), "u1", UserPasswordUpdate(current_password="bad", new_password="newpassword123"), "tenant") is False
+    assert (
+        auth_mod.update_password(
+            _service(verify_password=lambda raw, hashed: False),
+            "u1",
+            UserPasswordUpdate(current_password="bad", new_password="newpassword123"),
+            "tenant",
+        )
+        is False
+    )
 
-    user = SimpleNamespace(id="u1", tenant_id="tenant", auth_provider="local", needs_password_change=False, hashed_password="samepass")
+    user = SimpleNamespace(
+        id="u1", tenant_id="tenant", auth_provider="local", needs_password_change=False, hashed_password="samepass"
+    )
     db = _DB(user)
     monkeypatch.setattr(auth_mod, "get_db_session", lambda: _ctx(db))
     with pytest.raises(ValueError):
-        auth_mod.update_password(_service(verify_password=lambda raw, hashed: raw == hashed), "u1", UserPasswordUpdate(current_password="samepass", new_password="samepass"), "tenant")
+        auth_mod.update_password(
+            _service(verify_password=lambda raw, hashed: raw == hashed),
+            "u1",
+            UserPasswordUpdate(current_password="samepass", new_password="samepass"),
+            "tenant",
+        )
 
-    user = SimpleNamespace(id="u1", tenant_id="tenant", auth_provider="oidc", needs_password_change=True, hashed_password="oldpass", session_invalid_before="x")
+    user = SimpleNamespace(
+        id="u1",
+        tenant_id="tenant",
+        auth_provider="oidc",
+        needs_password_change=True,
+        hashed_password="oldpass",
+        session_invalid_before="x",
+    )
     db = _DB(user)
     monkeypatch.setattr(auth_mod, "get_db_session", lambda: _ctx(db))
-    assert auth_mod.update_password(_service(verify_password=lambda raw, hashed: raw == hashed), "u1", UserPasswordUpdate(current_password="ignored", new_password="newpassword123"), "tenant") is True
+    assert (
+        auth_mod.update_password(
+            _service(verify_password=lambda raw, hashed: raw == hashed),
+            "u1",
+            UserPasswordUpdate(current_password="ignored", new_password="newpassword123"),
+            "tenant",
+        )
+        is True
+    )
     assert user.auth_provider == "local"
     assert user.hashed_password == "hashed:newpassword123"
     assert user.session_invalid_before is None

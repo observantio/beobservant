@@ -3,9 +3,9 @@ Folder management endpoints for Watchdog Grafana proxy router.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -16,7 +16,11 @@ from fastapi import Body, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
 
 from database import get_db
-from middleware.dependencies import require_any_permission_with_scope, require_authenticated_with_scope, require_permission_with_scope
+from middleware.dependencies import (
+    require_any_permission_with_scope,
+    require_authenticated_with_scope,
+    require_permission_with_scope,
+)
 from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, TokenData
 from models.grafana.grafana_folder_models import Folder

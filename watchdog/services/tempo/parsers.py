@@ -1,12 +1,12 @@
 """
-Tempo parsers for processing trace responses from Tempo, providing functions to extract
-and normalize trace and span data into application models.
+Tempo parsers for processing trace responses from Tempo, providing functions to extract and normalize trace and span
+data into application models.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from typing import List, Optional
@@ -82,19 +82,21 @@ def parse_span(
     span_id = span_data.get("spanId")
     operation_name = span_data.get("name")
 
-    return Span.model_validate({
-        "spanID": span_id if isinstance(span_id, str) else "",
-        "traceID": trace_id,
-        "parentSpanID": parent_span_id,
-        "operationName": operation_name if isinstance(operation_name, str) else "",
-        "startTime": start_time,
-        "duration": end_time - start_time,
-        "tags": [{"key": t.key, "value": t.value} for t in tags],
-        "serviceName": service_name,
-        "attributes": attr_map,
-        "processID": process_id,
-        "warnings": None,
-    })
+    return Span.model_validate(
+        {
+            "spanID": span_id if isinstance(span_id, str) else "",
+            "traceID": trace_id,
+            "parentSpanID": parent_span_id,
+            "operationName": operation_name if isinstance(operation_name, str) else "",
+            "startTime": start_time,
+            "duration": end_time - start_time,
+            "tags": [{"key": t.key, "value": t.value} for t in tags],
+            "serviceName": service_name,
+            "attributes": attr_map,
+            "processID": process_id,
+            "warnings": None,
+        }
+    )
 
 
 def parse_tempo_trace(trace_id: str, data: JSONDict) -> Trace:
@@ -161,9 +163,11 @@ def build_summary_trace(trace_data: JSONDict) -> Optional[Trace]:
         "warnings": ["Trace summary only"],
     }
 
-    return Trace.model_validate({
-        "traceID": trace_id,
-        "spans": [summary_span],
-        "processes": {},
-        "warnings": ["Trace summary only"],
-    })
+    return Trace.model_validate(
+        {
+            "traceID": trace_id,
+            "spans": [summary_span],
+            "processes": {},
+            "warnings": ["Trace summary only"],
+        }
+    )

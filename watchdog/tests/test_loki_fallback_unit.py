@@ -90,29 +90,37 @@ async def test_run_fallback_queries_returns_first_non_empty_result_and_ignores_n
 async def test_run_fallback_queries_returns_none_when_no_candidates_or_no_hits():
     async with httpx.AsyncClient() as client:
         no_candidates_client = FakeHttpClient([])
-        assert await fallback.run_fallback_queries(
-            "http://loki.test/query",
-            {"limit": 5},
-            {},
-            '{service="api"}',
-            client,
-            no_candidates_client,
-            max_fallbacks=0,
-        ) is None
+        assert (
+            await fallback.run_fallback_queries(
+                "http://loki.test/query",
+                {"limit": 5},
+                {},
+                '{service="api"}',
+                client,
+                no_candidates_client,
+                max_fallbacks=0,
+            )
+            is None
+        )
         assert no_candidates_client.calls == []
 
-        http_client = FakeHttpClient([
-            {"data": {"result": []}},
-            None,
-            {"data": "bad"},
-        ])
-        assert await fallback.run_fallback_queries(
-            "http://loki.test/query",
-            {"limit": 5},
-            {},
-            '{service.name="api"}',
-            client,
-            http_client,
-            max_fallbacks=3,
-            concurrency=1,
-        ) is None
+        http_client = FakeHttpClient(
+            [
+                {"data": {"result": []}},
+                None,
+                {"data": "bad"},
+            ]
+        )
+        assert (
+            await fallback.run_fallback_queries(
+                "http://loki.test/query",
+                {"limit": 5},
+                {},
+                '{service.name="api"}',
+                client,
+                http_client,
+                max_fallbacks=3,
+                concurrency=1,
+            )
+            is None
+        )

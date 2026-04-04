@@ -3,9 +3,9 @@ Database authentication service utilities for handling OpenID Connect (OIDC) use
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -104,12 +104,7 @@ def _get_user_by_email(db: Session, email: str, tenant_id: Optional[str]) -> Opt
 def _subject_is_owned_by_other(db: Session, subject: str, user_id: str) -> bool:
     if not subject:
         return False
-    return (
-        db.query(User)
-        .filter(User.external_subject == subject, User.id != user_id)
-        .first()
-        is not None
-    )
+    return db.query(User).filter(User.external_subject == subject, User.id != user_id).first() is not None
 
 
 def _resolve_existing_user(
@@ -314,18 +309,26 @@ def update_oidc_user(
     user.auth_provider = config.AUTH_PROVIDER
 
     if subject and user.external_subject != subject:
-        conflict = db.query(User).filter(
-            User.external_subject == subject,
-            User.id != user.id,
-        ).first()
+        conflict = (
+            db.query(User)
+            .filter(
+                User.external_subject == subject,
+                User.id != user.id,
+            )
+            .first()
+        )
         if not conflict:
             user.external_subject = subject
 
     if email and user.email.lower() != email:
-        conflict = db.query(User).filter(
-            func.lower(User.email) == email,
-            User.id != user.id,
-        ).first()
+        conflict = (
+            db.query(User)
+            .filter(
+                func.lower(User.email) == email,
+                User.id != user.id,
+            )
+            .first()
+        )
         if not conflict:
             user.email = email
 

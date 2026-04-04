@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -27,7 +27,9 @@ class FakeQuery:
         self._items = list(items)
 
     def filter_by(self, **kwargs):
-        self._items = [item for item in self._items if all(getattr(item, key, None) == value for key, value in kwargs.items())]
+        self._items = [
+            item for item in self._items if all(getattr(item, key, None) == value for key, value in kwargs.items())
+        ]
         return self
 
     def first(self):
@@ -124,7 +126,9 @@ class FakeApiKeyService:
         self._keys[record.id] = record
         self._valid_tokens[token] = record.key
         self._users[owner_id].org_id = record.key
-        return SimpleNamespace(id=record.id, key=record.key, name=record.name, otlp_token=token, is_default=record.is_default)
+        return SimpleNamespace(
+            id=record.id, key=record.key, name=record.name, otlp_token=token, is_default=record.is_default
+        )
 
     def replace_api_key_shares(self, owner_id, tenant_id, key_id, user_ids, group_ids=None):
         record = self._keys[key_id]
@@ -137,28 +141,32 @@ class FakeApiKeyService:
         result = []
         for record in self._keys.values():
             if record.owner_id == user_id:
-                result.append(SimpleNamespace(
-                    id=record.id,
-                    key=record.key,
-                    name=record.name,
-                    is_shared=False,
-                    is_default=record.is_default,
-                    is_enabled=record.is_enabled,
-                    otlp_token=None,
-                ))
+                result.append(
+                    SimpleNamespace(
+                        id=record.id,
+                        key=record.key,
+                        name=record.name,
+                        is_shared=False,
+                        is_default=record.is_default,
+                        is_enabled=record.is_enabled,
+                        otlp_token=None,
+                    )
+                )
             elif user_id in self._shares.get(record.id, []):
                 owner = self._users[record.owner_id]
-                result.append(SimpleNamespace(
-                    id=record.id,
-                    key=record.key,
-                    name=record.name,
-                    is_shared=True,
-                    is_default=False,
-                    is_enabled=(self._users[user_id].org_id == record.key),
-                    otlp_token=None,
-                    owner_user_id=owner.id,
-                    owner_username=owner.username,
-                ))
+                result.append(
+                    SimpleNamespace(
+                        id=record.id,
+                        key=record.key,
+                        name=record.name,
+                        is_shared=True,
+                        is_default=False,
+                        is_enabled=(self._users[user_id].org_id == record.key),
+                        otlp_token=None,
+                        owner_user_id=owner.id,
+                        owner_username=owner.username,
+                    )
+                )
         return result
 
     def delete_api_key(self, actor_id, key_id):

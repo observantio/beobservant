@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -63,13 +63,23 @@ def test_list_api_keys_skip_shared_none_seen_and_hidden(monkeypatch):
     owner = _seed_user(db, "u-owner")
     viewer = _seed_user(db, "u-viewer", org_id="scope-shared")
 
-    owned = UserApiKey(id="k1", tenant_id="t1", user_id=viewer.id, name="Owned", key="scope-own", is_default=False, is_enabled=False)
-    shared_real = UserApiKey(id="k2", tenant_id="t1", user_id=owner.id, name="Shared", key="scope-shared", is_default=False, is_enabled=True)
+    owned = UserApiKey(
+        id="k1", tenant_id="t1", user_id=viewer.id, name="Owned", key="scope-own", is_default=False, is_enabled=False
+    )
+    shared_real = UserApiKey(
+        id="k2", tenant_id="t1", user_id=owner.id, name="Shared", key="scope-shared", is_default=False, is_enabled=True
+    )
     db.add_all([owned, shared_real])
     db.flush()
     # duplicate share (same as owned id) and null api_key record path
-    db.add(ApiKeyShare(tenant_id="t1", api_key_id=owned.id, owner_user_id=owner.id, shared_user_id=viewer.id, can_use=True))
-    db.add(ApiKeyShare(tenant_id="t1", api_key_id=shared_real.id, owner_user_id=owner.id, shared_user_id=viewer.id, can_use=True))
+    db.add(
+        ApiKeyShare(tenant_id="t1", api_key_id=owned.id, owner_user_id=owner.id, shared_user_id=viewer.id, can_use=True)
+    )
+    db.add(
+        ApiKeyShare(
+            tenant_id="t1", api_key_id=shared_real.id, owner_user_id=owner.id, shared_user_id=viewer.id, can_use=True
+        )
+    )
     db.add(HiddenApiKey(tenant_id="t1", user_id=viewer.id, api_key_id=shared_real.id))
     db.commit()
 
@@ -86,8 +96,16 @@ def test_list_api_keys_skip_shared_none_seen_and_hidden(monkeypatch):
 def test_create_and_update_api_key_owner_paths(monkeypatch):
     db = _session()
     owner = _seed_user(db, "u1", org_id="scope-a")
-    db.add(UserApiKey(id="k-a", tenant_id="t1", user_id=owner.id, name="A", key="scope-a", is_default=False, is_enabled=True))
-    db.add(UserApiKey(id="k-b", tenant_id="t1", user_id=owner.id, name="B", key="scope-b", is_default=False, is_enabled=False))
+    db.add(
+        UserApiKey(
+            id="k-a", tenant_id="t1", user_id=owner.id, name="A", key="scope-a", is_default=False, is_enabled=True
+        )
+    )
+    db.add(
+        UserApiKey(
+            id="k-b", tenant_id="t1", user_id=owner.id, name="B", key="scope-b", is_default=False, is_enabled=False
+        )
+    )
     db.commit()
 
     @contextmanager
@@ -112,8 +130,12 @@ def test_update_shared_missing_link_and_rotate_default_forbidden(monkeypatch):
     db = _session()
     owner = _seed_user(db, "u1")
     viewer = _seed_user(db, "u2")
-    key = UserApiKey(id="k1", tenant_id="t1", user_id=owner.id, name="K", key="scope", is_default=False, is_enabled=True)
-    default_key = UserApiKey(id="kdef", tenant_id="t1", user_id=owner.id, name="Def", key="scope-def", is_default=True, is_enabled=False)
+    key = UserApiKey(
+        id="k1", tenant_id="t1", user_id=owner.id, name="K", key="scope", is_default=False, is_enabled=True
+    )
+    default_key = UserApiKey(
+        id="kdef", tenant_id="t1", user_id=owner.id, name="Def", key="scope-def", is_default=True, is_enabled=False
+    )
     db.add_all([key, default_key])
     db.commit()
 
@@ -134,7 +156,9 @@ def test_update_shared_missing_link_and_rotate_default_forbidden(monkeypatch):
 def test_replace_api_key_shares_missing_key_and_empty_combined(monkeypatch):
     db = _session()
     owner = _seed_user(db, "u1")
-    key = UserApiKey(id="k1", tenant_id="t1", user_id=owner.id, name="K", key="scope", is_default=False, is_enabled=True)
+    key = UserApiKey(
+        id="k1", tenant_id="t1", user_id=owner.id, name="K", key="scope", is_default=False, is_enabled=True
+    )
     db.add(key)
     db.commit()
 
@@ -146,17 +170,25 @@ def test_replace_api_key_shares_missing_key_and_empty_combined(monkeypatch):
     service = _service()
 
     with pytest.raises(ValueError, match="API key not found"):
-        api_key_ops.replace_api_key_shares(service, owner_user_id=owner.id, tenant_id="t1", key_id="missing", user_ids=[], group_ids=[])
+        api_key_ops.replace_api_key_shares(
+            service, owner_user_id=owner.id, tenant_id="t1", key_id="missing", user_ids=[], group_ids=[]
+        )
 
     # empty normalized users/groups path -> clear shares and return []
-    out = api_key_ops.replace_api_key_shares(service, owner_user_id=owner.id, tenant_id="t1", key_id=key.id, user_ids=[" "], group_ids=[" "])
+    out = api_key_ops.replace_api_key_shares(
+        service, owner_user_id=owner.id, tenant_id="t1", key_id=key.id, user_ids=[" "], group_ids=[" "]
+    )
     assert out == []
 
 
 def test_create_api_key_respects_max_api_keys_limit(monkeypatch):
     db = _session()
     owner = _seed_user(db, "u1")
-    db.add(UserApiKey(id="k1", tenant_id="t1", user_id=owner.id, name="K1", key="scope-1", is_default=False, is_enabled=True))
+    db.add(
+        UserApiKey(
+            id="k1", tenant_id="t1", user_id=owner.id, name="K1", key="scope-1", is_default=False, is_enabled=True
+        )
+    )
     db.commit()
 
     @contextmanager

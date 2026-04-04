@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from .agent_models import (
@@ -55,44 +55,44 @@ from .tempo_models import (
 
 __all__ = [
     # agent models
-    'AgentHeartbeat',
-    'AgentInfo',
+    "AgentHeartbeat",
+    "AgentInfo",
     # resolver models
-    'AnalyzeRequestPayload',
-    'AnalyzeProxyPayload',
-    'AnalyzeJobStatus',
-    'AnalyzeJobCreateResponse',
-    'AnalyzeJobSummary',
-    'AnalyzeJobListResponse',
-    'AnalysisQualityPayload',
-    'ServiceLatencyPayload',
-    'RootCausePayload',
-    'AnalyzeResultPayload',
-    'AnalyzeJobResultResponse',
-    'AnalyzeReportResponse',
-    'AnalyzeReportDeleteResponse',
+    "AnalyzeRequestPayload",
+    "AnalyzeProxyPayload",
+    "AnalyzeJobStatus",
+    "AnalyzeJobCreateResponse",
+    "AnalyzeJobSummary",
+    "AnalyzeJobListResponse",
+    "AnalysisQualityPayload",
+    "ServiceLatencyPayload",
+    "RootCausePayload",
+    "AnalyzeResultPayload",
+    "AnalyzeJobResultResponse",
+    "AnalyzeReportResponse",
+    "AnalyzeReportDeleteResponse",
     # grafana request models
-    'GrafanaBootstrapSessionRequest',
-    'GrafanaDatasourceQueryRequest',
-    'GrafanaDashboardPayloadRequest',
-    'GrafanaHiddenToggleRequest',
-    'GrafanaCreateFolderRequest',
+    "GrafanaBootstrapSessionRequest",
+    "GrafanaDatasourceQueryRequest",
+    "GrafanaDashboardPayloadRequest",
+    "GrafanaHiddenToggleRequest",
+    "GrafanaCreateFolderRequest",
     # loki models
-    'LogLevel',
-    'LogDirection',
-    'LogEntry',
-    'LogStream',
-    'LogQuery',
-    'LogStatsResponse',
-    'LogResponse',
-    'LogLabelsResponse',
-    'LogLabelValuesResponse',
-    'LogFilterRequest',
-    'LogSearchRequest',
+    "LogLevel",
+    "LogDirection",
+    "LogEntry",
+    "LogStream",
+    "LogQuery",
+    "LogStatsResponse",
+    "LogResponse",
+    "LogLabelsResponse",
+    "LogLabelValuesResponse",
+    "LogFilterRequest",
+    "LogSearchRequest",
     # tempo models
-    'SpanAttribute',
-    'Span',
-    'Trace',
-    'TraceQuery',
-    'TraceResponse',
+    "SpanAttribute",
+    "Span",
+    "Trace",
+    "TraceQuery",
+    "TraceResponse",
 ]

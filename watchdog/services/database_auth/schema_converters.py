@@ -1,11 +1,16 @@
 """
-Database authentication service schema converters for converting between database models and Pydantic schemas used in the API layer. This module provides functions to convert user, group, and API key database models into their corresponding Pydantic schemas defined in the models.access package, allowing for a clear separation between the database layer and the API layer while ensuring that data is properly transformed and validated when being sent to or received from the API. The converters handle the necessary transformations of fields, including permissions aggregation for users and formatting of related data such as group memberships and API key information.
+Database authentication service schema converters for converting between database models and Pydantic schemas used in
+the API layer. This module provides functions to convert user, group, and API key database models into their
+corresponding Pydantic schemas defined in the models.access package, allowing for a clear separation between the
+database layer and the API layer while ensuring that data is properly transformed and validated when being sent to or
+received from the API. The converters handle the necessary transformations of fields, including permissions aggregation
+for users and formatting of related data such as group memberships and API key information.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ from models.access.user_models import UserResponse
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
+
 
 def to_user_schema(service: DatabaseAuthService, user: User) -> UserSchema:
     groups = user.groups or []
@@ -59,6 +65,7 @@ def to_user_schema(service: DatabaseAuthService, user: User) -> UserSchema:
         kwargs["grafana_user_id"] = grafana_uid
 
     return UserSchema.model_validate(kwargs)
+
 
 def build_user_response(
     service: DatabaseAuthService,

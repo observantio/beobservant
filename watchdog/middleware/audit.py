@@ -1,14 +1,13 @@
 """
 Middleware and helpers for request auditing and security headers.
 
-The constants and helper functions are also available for tests and other
-modules.
+The constants and helper functions are also available for tests and other modules.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -145,7 +144,9 @@ def _write_resource_view_audit(
         )
 
 
-async def security_headers_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+async def security_headers_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     path = request.url.path
     request_ip = client_ip(request)
     user_agent = request.headers.get("user-agent")

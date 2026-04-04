@@ -1,11 +1,14 @@
 """
-Encryption utilities for symmetrically encrypting and decrypting sensitive configuration data using Fernet encryption. This module provides functions to encrypt and decrypt dictionary configurations, ensuring that sensitive information such as API keys and channel credentials are stored securely in the database and can be recovered only with the correct encryption key.
+Encryption utilities for symmetrically encrypting and decrypting sensitive configuration data using Fernet encryption.
+This module provides functions to encrypt and decrypt dictionary configurations, ensuring that sensitive information
+such as API keys and channel credentials are stored securely in the database and can be recovered only with the correct
+encryption key.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import json
@@ -15,6 +18,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from config import config as app_config
 from custom_types.json import JSONDict
+
 
 @lru_cache(maxsize=8)
 def _get_fernet_for_key(key: str) -> Fernet:

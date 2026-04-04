@@ -1,11 +1,12 @@
 """
-User operations for managing user accounts, including creating, updating, deleting users, and managing user permissions and group memberships.
+User operations for managing user accounts, including creating, updating, deleting users, and managing user permissions
+and group memberships.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from datetime import datetime, timezone
@@ -132,7 +133,10 @@ def _role_default_permissions(role_value: str) -> Set[str]:
         if str(getattr(perm, "value", perm)).strip()
     }
 
-def get_user_by_id(service: "DatabaseAuthService", user_id: str,tenant_id: Optional[str] = None, db: Optional[Session] = None) -> Optional[UserSchema]:
+
+def get_user_by_id(
+    service: "DatabaseAuthService", user_id: str, tenant_id: Optional[str] = None, db: Optional[Session] = None
+) -> Optional[UserSchema]:
     if not user_id:
         return None
 
@@ -165,12 +169,7 @@ def get_user_by_username(service: "DatabaseAuthService", username: str) -> Optio
     service._lazy_init()
     username = (username or "").strip().lower()
     with get_db_session() as db:
-        user = (
-            db.query(User)
-            .options(joinedload(User.api_keys))
-            .filter(func.lower(User.username) == username)
-            .first()
-        )
+        user = db.query(User).options(joinedload(User.api_keys)).filter(func.lower(User.username) == username).first()
         if not user:
             return None
         return UserSchema.model_validate(service._to_user_schema(user))
@@ -206,13 +205,17 @@ def create_user(
             actor_role_text = Role.USER.value
 
         actor_is_admin = _is_admin_actor(actor_role=actor_role_text, actor_is_superuser=actor_is_superuser)
-        actor_perm_set = _resolve_actor_permissions(
-            service,
-            db=db,
-            actor_user_id=creator_id,
-            tenant_id=tenant_id,
-            actor_permissions=actor_permissions,
-        ) if creator_id else set()
+        actor_perm_set = (
+            _resolve_actor_permissions(
+                service,
+                db=db,
+                actor_user_id=creator_id,
+                tenant_id=tenant_id,
+                actor_permissions=actor_permissions,
+            )
+            if creator_id
+            else set()
+        )
 
         if not actor_is_admin:
             if _role_rank(requested_role) > _role_rank(actor_role_text):
@@ -297,9 +300,7 @@ def create_user(
 
         if user_create.group_ids:
             groups = (
-                db.query(Group)
-                .filter(and_(Group.id.in_(user_create.group_ids), Group.tenant_id == tenant_id))
-                .all()
+                db.query(Group).filter(and_(Group.id.in_(user_create.group_ids), Group.tenant_id == tenant_id)).all()
             )
             user.groups.extend(groups)
 
@@ -341,9 +342,7 @@ def list_users(
 
     with get_db_session() as db:
         query = (
-            db.query(User)
-            .options(joinedload(User.groups), joinedload(User.api_keys))
-            .filter_by(tenant_id=tenant_id)
+            db.query(User).options(joinedload(User.groups), joinedload(User.api_keys)).filter_by(tenant_id=tenant_id)
         )
         query_text = str(q or "").strip()
         if query_text:
@@ -417,11 +416,7 @@ def update_user(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Cannot assign a role higher than your own",
                 )
-            if (
-                _is_admin_user(user)
-                and str(user_id) != str(updater_id)
-                and (set(update_data.keys()) - {"is_active"})
-            ):
+            if _is_admin_user(user) and str(user_id) != str(updater_id) and (set(update_data.keys()) - {"is_active"}):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Admin accounts can only be activated or deactivated by another admin",
@@ -460,11 +455,7 @@ def update_user(
         requested_group_ids = update_data.pop("group_ids", None) if "group_ids" in update_data else None
         if requested_group_ids is not None:
             existing_group_ids = {str(g.id) for g in (user.groups or [])}
-            groups = (
-                db.query(Group)
-                .filter(and_(Group.id.in_(requested_group_ids), Group.tenant_id == tenant_id))
-                .all()
-            )
+            groups = db.query(Group).filter(and_(Group.id.in_(requested_group_ids), Group.tenant_id == tenant_id)).all()
             user.groups = groups
             updated_group_ids = {str(g.id) for g in groups}
             removed_group_ids = sorted(existing_group_ids - updated_group_ids)
@@ -534,7 +525,9 @@ def delete_user(service: "DatabaseAuthService", user_id: str, tenant_id: str, de
         if deleter_id:
             if not deleter:
                 return False
-            if _role_to_text(getattr(deleter, "role", None)) != Role.ADMIN.value and not getattr(deleter, "is_superuser", False):
+            if _role_to_text(getattr(deleter, "role", None)) != Role.ADMIN.value and not getattr(
+                deleter, "is_superuser", False
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Only administrators can delete users",
@@ -610,9 +603,7 @@ def update_user_permissions(
 
         normalized_requested = _normalize_permissions(permission_names)
         existing_permissions = {
-            str(getattr(p, "name", "")).strip()
-            for p in (user.permissions or [])
-            if str(getattr(p, "name", "")).strip()
+            str(getattr(p, "name", "")).strip() for p in (user.permissions or []) if str(getattr(p, "name", "")).strip()
         }
 
         requested_for_actor_scope = normalized_requested

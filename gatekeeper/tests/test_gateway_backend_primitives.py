@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -64,7 +64,11 @@ def test_gateway_service_proxy_and_allowlist_edge_cases(monkeypatch):
 def test_validate_otlp_token_reraises_database_unavailable(monkeypatch):
     service = GatewayAuthService(rate_limit_per_minute=10, ip_allowlist="127.0.0.1")
     assert service.validate_otlp_token("") is None
-    monkeypatch.setattr(GatewayAuthService, "_fetch_org_from_api", lambda self, token: (_ for _ in ()).throw(DatabaseUnavailable("down")))
+    monkeypatch.setattr(
+        GatewayAuthService,
+        "_fetch_org_from_api",
+        lambda self, token: (_ for _ in ()).throw(DatabaseUnavailable("down")),
+    )
     with pytest.raises(DatabaseUnavailable):
         service.validate_otlp_token("tok")
 
@@ -147,7 +151,9 @@ def test_reload_optional_redis_and_vault_import_fallbacks(monkeypatch):
 
     redis_compat_module = importlib.import_module("services.token_cache._redis_compat")
     original_redis = redis_compat_module.redis
-    monkeypatch.setattr(importlib, "import_module", lambda name, package=None: (_ for _ in ()).throw(ImportError("missing")))
+    monkeypatch.setattr(
+        importlib, "import_module", lambda name, package=None: (_ for _ in ()).throw(ImportError("missing"))
+    )
     importlib.reload(redis_compat_module)
     assert redis_compat_module.redis is None
     monkeypatch.setattr(importlib, "import_module", original_import_module)

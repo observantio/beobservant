@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -99,7 +99,9 @@ def test_api_key_db_helpers_and_schema_mapping():
     )
     db.add(key)
     db.flush()
-    share = ApiKeyShare(tenant_id="t1", api_key_id=key.id, owner_user_id=owner.id, shared_user_id=other.id, can_use=True)
+    share = ApiKeyShare(
+        tenant_id="t1", api_key_id=key.id, owner_user_id=owner.id, shared_user_id=other.id, can_use=True
+    )
     db.add(share)
     db.commit()
     key.user = owner
@@ -124,7 +126,9 @@ def test_api_key_db_helpers_and_schema_mapping():
     assert shares[0].user_id == other.id
     assert shares[0].username == other.username
 
-    owner_schema = api_key_ops._api_key_to_schema(key, is_shared=False, can_use=True, viewer_enabled=True, is_hidden=True)
+    owner_schema = api_key_ops._api_key_to_schema(
+        key, is_shared=False, can_use=True, viewer_enabled=True, is_hidden=True
+    )
     assert owner_schema.otlp_token == "secret"
     assert owner_schema.is_hidden is True
     assert owner_schema.shared_with[0].user_id == other.id
@@ -138,8 +142,12 @@ def test_api_key_db_helpers_and_schema_mapping():
 def test_api_key_state_helpers_update_org_and_enabled_flags():
     db = _session()
     owner = _seed_user(db)
-    key_a = UserApiKey(id="a", tenant_id="t1", user_id=owner.id, name="A", key="scope-a", is_enabled=True, is_default=False)
-    key_b = UserApiKey(id="b", tenant_id="t1", user_id=owner.id, name="B", key="scope-b", is_enabled=False, is_default=False)
+    key_a = UserApiKey(
+        id="a", tenant_id="t1", user_id=owner.id, name="A", key="scope-a", is_enabled=True, is_default=False
+    )
+    key_b = UserApiKey(
+        id="b", tenant_id="t1", user_id=owner.id, name="B", key="scope-b", is_enabled=False, is_default=False
+    )
     db.add_all([key_a, key_b])
     db.commit()
 
@@ -160,8 +168,12 @@ def test_set_api_key_hidden_and_delete_share_paths(monkeypatch):
     db = _session()
     owner = _seed_user(db)
     other = _seed_user(db, user_id="u2", username="user2", email="u2@example.com")
-    key = UserApiKey(id="k1", tenant_id="t1", user_id=owner.id, name="Key", key="scope-1", is_enabled=True, is_default=False)
-    share = ApiKeyShare(tenant_id="t1", api_key_id=key.id, owner_user_id=owner.id, shared_user_id=other.id, can_use=True)
+    key = UserApiKey(
+        id="k1", tenant_id="t1", user_id=owner.id, name="Key", key="scope-1", is_enabled=True, is_default=False
+    )
+    share = ApiKeyShare(
+        tenant_id="t1", api_key_id=key.id, owner_user_id=owner.id, shared_user_id=other.id, can_use=True
+    )
     db.add_all([key, share])
     db.commit()
 
@@ -194,8 +206,18 @@ def test_create_update_delete_and_backfill_api_keys(monkeypatch):
     toggle_owner = _seed_user(db, user_id="u5", username="toggleowner", email="u5@example.com", org_id="toggle-org")
     solo_owner = _seed_user(db, user_id="u6", username="soloowner", email="u6@example.com", org_id="solo-org")
     foreign_tenant = Tenant(id="t2", name="tenant-t2", display_name="T2", is_active=True)
-    foreign_user = User(id="u3", tenant_id="t2", username="user3", email="u3@example.com", hashed_password="x", org_id="org-x", is_active=True)
-    foreign_key = UserApiKey(id="k-foreign", tenant_id="t2", user_id="u3", name="Foreign", key="dup-scope", is_enabled=True)
+    foreign_user = User(
+        id="u3",
+        tenant_id="t2",
+        username="user3",
+        email="u3@example.com",
+        hashed_password="x",
+        org_id="org-x",
+        is_active=True,
+    )
+    foreign_key = UserApiKey(
+        id="k-foreign", tenant_id="t2", user_id="u3", name="Foreign", key="dup-scope", is_enabled=True
+    )
     db.add_all([foreign_tenant, foreign_user, foreign_key])
     db.commit()
 
@@ -219,13 +241,53 @@ def test_create_update_delete_and_backfill_api_keys(monkeypatch):
         api_key_ops.create_api_key(service, owner.id, "t1", ApiKeyCreate(name="KeyA", key="other-scope"))
 
     owner_key = db.query(UserApiKey).filter_by(id=created.id).first()
-    shared_key = UserApiKey(id="k-shared", tenant_id="t1", user_id=share_owner.id, name="Shared", key="scope-shared", is_default=False, is_enabled=True)
-    toggle_enabled = UserApiKey(id="k-toggle-enabled", tenant_id="t1", user_id=toggle_owner.id, name="Enabled", key="scope-enabled", is_default=False, is_enabled=True)
-    toggle_disabled = UserApiKey(id="k-toggle-disabled", tenant_id="t1", user_id=toggle_owner.id, name="Disabled", key="scope-disabled", is_default=False, is_enabled=False)
-    solo_key = UserApiKey(id="k-solo", tenant_id="t1", user_id=solo_owner.id, name="Solo", key="scope-solo", is_default=False, is_enabled=True)
+    shared_key = UserApiKey(
+        id="k-shared",
+        tenant_id="t1",
+        user_id=share_owner.id,
+        name="Shared",
+        key="scope-shared",
+        is_default=False,
+        is_enabled=True,
+    )
+    toggle_enabled = UserApiKey(
+        id="k-toggle-enabled",
+        tenant_id="t1",
+        user_id=toggle_owner.id,
+        name="Enabled",
+        key="scope-enabled",
+        is_default=False,
+        is_enabled=True,
+    )
+    toggle_disabled = UserApiKey(
+        id="k-toggle-disabled",
+        tenant_id="t1",
+        user_id=toggle_owner.id,
+        name="Disabled",
+        key="scope-disabled",
+        is_default=False,
+        is_enabled=False,
+    )
+    solo_key = UserApiKey(
+        id="k-solo",
+        tenant_id="t1",
+        user_id=solo_owner.id,
+        name="Solo",
+        key="scope-solo",
+        is_default=False,
+        is_enabled=True,
+    )
     db.add_all([shared_key, toggle_enabled, toggle_disabled, solo_key])
     db.flush()
-    db.add(ApiKeyShare(tenant_id="t1", api_key_id=shared_key.id, owner_user_id=share_owner.id, shared_user_id=other.id, can_use=True))
+    db.add(
+        ApiKeyShare(
+            tenant_id="t1",
+            api_key_id=shared_key.id,
+            owner_user_id=share_owner.id,
+            shared_user_id=other.id,
+            can_use=True,
+        )
+    )
     db.commit()
 
     with pytest.raises(ValueError, match="only be selected as active"):
@@ -236,7 +298,11 @@ def test_create_update_delete_and_backfill_api_keys(monkeypatch):
     assert shared_selected.is_shared is True
     assert db.query(User).filter_by(id=other.id).first().org_id == shared_key.key
 
-    db.add(ApiKeyShare(tenant_id="t1", api_key_id=owner_key.id, owner_user_id=owner.id, shared_user_id=other.id, can_use=True))
+    db.add(
+        ApiKeyShare(
+            tenant_id="t1", api_key_id=owner_key.id, owner_user_id=owner.id, shared_user_id=other.id, can_use=True
+        )
+    )
     db.commit()
     with pytest.raises(ValueError, match="Remove shares first"):
         api_key_ops.update_api_key(service, owner.id, owner_key.id, ApiKeyUpdate(is_default=True))
@@ -267,7 +333,16 @@ def test_create_update_delete_and_backfill_api_keys(monkeypatch):
         api_key_ops.delete_api_key(service, owner.id, owner_key.id)
     assert api_key_ops.delete_api_key(service, toggle_owner.id, toggle_disabled.id) is True
 
-    no_hash = UserApiKey(id="k-backfill", tenant_id="t1", user_id=owner.id, name="Backfill", key="scope-backfill", otlp_token="plain", otlp_token_hash=None, is_enabled=False)
+    no_hash = UserApiKey(
+        id="k-backfill",
+        tenant_id="t1",
+        user_id=owner.id,
+        name="Backfill",
+        key="scope-backfill",
+        otlp_token="plain",
+        otlp_token_hash=None,
+        is_enabled=False,
+    )
     db.add(no_hash)
     db.commit()
     api_key_ops.backfill_otlp_tokens(service)

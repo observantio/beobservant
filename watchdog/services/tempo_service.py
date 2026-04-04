@@ -1,12 +1,12 @@
 """
-Service for managing Tempo integration, providing functions to query and retrieve trace data
-from Tempo based on trace ID, service name, and time range.
+Service for managing Tempo integration, providing functions to query and retrieve trace data from Tempo based on trace
+ID, service name, and time range.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
@@ -130,36 +130,44 @@ class TempoService:
                                 warnings=["Trace details unavailable"],
                             )
 
-                traces = list(await asyncio.gather(
-                    *[_fetch_one(str(t["traceID"])) for t in raw_traces if isinstance(t.get("traceID"), str) and t.get("traceID")],
-                ))
+                traces = list(
+                    await asyncio.gather(
+                        *[
+                            _fetch_one(str(t["traceID"]))
+                            for t in raw_traces
+                            if isinstance(t.get("traceID"), str) and t.get("traceID")
+                        ],
+                    )
+                )
             else:
                 traces = [t for t in (tempo_parsers.build_summary_trace(r) for r in raw_traces) if t]
 
-            return TraceResponse.model_validate({
-                "data": traces,
-                "total": len(traces),
-                "limit": query.limit,
-                "offset": 0,
-            })
+            return TraceResponse.model_validate(
+                {
+                    "data": traces,
+                    "total": len(traces),
+                    "limit": query.limit,
+                    "offset": 0,
+                }
+            )
         except httpx.HTTPError as e:
             logger.error("Error searching traces: %s", e)
-            return TraceResponse.model_validate({
-                "data": [],
-                "total": 0,
-                "limit": query.limit,
-                "errors": [str(e)],
-                "offset": 0,
-            })
+            return TraceResponse.model_validate(
+                {
+                    "data": [],
+                    "total": 0,
+                    "limit": query.limit,
+                    "errors": [str(e)],
+                    "offset": 0,
+                }
+            )
 
     @with_retry(max_retries=1, backoff=0.2)
     @with_timeout()
     async def get_trace(self, trace_id: str, tenant_id: str = config.DEFAULT_ORG_ID) -> Optional[Trace]:
         headers = self._get_headers(tenant_id)
         try:
-            response = await self._client.get(
-                f"{self.tempo_url}/api/traces/{trace_id}", headers=headers
-            )
+            response = await self._client.get(f"{self.tempo_url}/api/traces/{trace_id}", headers=headers)
             response.raise_for_status()
             if not response.content:
                 return None
@@ -168,7 +176,11 @@ class TempoService:
             except json.JSONDecodeError:
                 logger.debug("Non-JSON response for trace %s", trace_id)
                 return None
-            return tempo_parsers.parse_tempo_trace(trace_id, data) if isinstance(data, dict) and "batches" in data else None
+            return (
+                tempo_parsers.parse_tempo_trace(trace_id, data)
+                if isinstance(data, dict) and "batches" in data
+                else None
+            )
         except (httpx.HTTPError, ValueError) as e:
             logger.error("Error fetching trace %s: %s", trace_id, e)
             return None
@@ -192,9 +204,7 @@ class TempoService:
                     if tag not in SERVICE_KEYS:
                         continue
                     try:
-                        resp = await self._client.get(
-                            f"{self.tempo_url}/api/search/tag/{tag}/values", headers=headers
-                        )
+                        resp = await self._client.get(f"{self.tempo_url}/api/search/tag/{tag}/values", headers=headers)
                         resp.raise_for_status()
                         vd = resp.json()
                         raw_values: List[object] = []

@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -52,8 +52,7 @@ def test_normalize_grafana_next_path_variants():
     assert normalize_grafana_next_path("/grafana") == "/dashboards"
     assert normalize_grafana_next_path("/grafana/explore") == "/explore"
     assert (
-        normalize_grafana_next_path("/grafana/?org-key=observantio-default&orgId=1")
-        == "/?org-key=observantio-default"
+        normalize_grafana_next_path("/grafana/?org-key=observantio-default&orgId=1") == "/?org-key=observantio-default"
     )
     assert (
         normalize_grafana_next_path("/grafana/d/abc?var-service=api&orgId=1#panel-3")

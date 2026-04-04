@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -41,7 +41,9 @@ def test_root_health_ready_system_and_internal_workflow(client, monkeypatch: pyt
     monkeypatch.setitem(ready_endpoint.__globals__, "_upstream_reachable", fake_upstream_reachable)
     monkeypatch.setattr(system_router.system_service, "get_all_metrics", lambda: {"uptime": 123, "agents": 2})
     monkeypatch.setattr(internal_router.internal_service, "_get_internal_token", lambda: "internal-token")
-    monkeypatch.setattr(internal_router.internal_service._auth_service, "validate_otlp_token", state.validate_otlp_token)
+    monkeypatch.setattr(
+        internal_router.internal_service._auth_service, "validate_otlp_token", state.validate_otlp_token
+    )
 
     api_key = state.create_api_key("u-admin", state.tenant_id, SimpleNamespace(name="gateway", key="scope-gateway"))
 
@@ -84,20 +86,39 @@ def test_tempo_and_loki_advanced_filter_workflow(client, monkeypatch: pytest.Mon
     tempo_calls: list[dict[str, Any]] = []
     loki_calls: list[tuple[str, dict[str, Any]]] = []
 
-    async def fake_search_traces(query: Any, tenant_id: str | None = None, fetch_full_traces: bool = False) -> dict[str, Any]:
-        tempo_calls.append({
-            "service": query.service,
-            "operation": query.operation,
-            "min": query.min_duration,
-            "max": query.max_duration,
-            "start": query.start,
-            "end": query.end,
-            "limit": query.limit,
-            "tenant_id": tenant_id,
-            "fetch_full": fetch_full_traces,
-        })
+    async def fake_search_traces(
+        query: Any, tenant_id: str | None = None, fetch_full_traces: bool = False
+    ) -> dict[str, Any]:
+        tempo_calls.append(
+            {
+                "service": query.service,
+                "operation": query.operation,
+                "min": query.min_duration,
+                "max": query.max_duration,
+                "start": query.start,
+                "end": query.end,
+                "limit": query.limit,
+                "tenant_id": tenant_id,
+                "fetch_full": fetch_full_traces,
+            }
+        )
         return {
-            "data": [{"traceID": "trace-1", "spans": [{"spanID": "span-1", "traceID": "trace-1", "operationName": "GET /cart", "startTime": 1, "duration": 20, "tags": [], "serviceName": query.service or "cart"}]}],
+            "data": [
+                {
+                    "traceID": "trace-1",
+                    "spans": [
+                        {
+                            "spanID": "span-1",
+                            "traceID": "trace-1",
+                            "operationName": "GET /cart",
+                            "startTime": 1,
+                            "duration": 20,
+                            "tags": [],
+                            "serviceName": query.service or "cart",
+                        }
+                    ],
+                }
+            ],
             "total": 1,
             "limit": query.limit,
             "offset": 0,
@@ -105,7 +126,20 @@ def test_tempo_and_loki_advanced_filter_workflow(client, monkeypatch: pytest.Mon
 
     async def fake_get_trace(trace_id: str, tenant_id: str | None = None) -> dict[str, Any]:
         tempo_calls.append({"trace_id": trace_id, "tenant_id": tenant_id})
-        return {"traceID": trace_id, "spans": [{"spanID": "span-1", "traceID": trace_id, "operationName": "GET /cart", "startTime": 1, "duration": 20, "tags": [], "serviceName": "cart"}]}
+        return {
+            "traceID": trace_id,
+            "spans": [
+                {
+                    "spanID": "span-1",
+                    "traceID": trace_id,
+                    "operationName": "GET /cart",
+                    "startTime": 1,
+                    "duration": 20,
+                    "tags": [],
+                    "serviceName": "cart",
+                }
+            ],
+        }
 
     async def fake_get_services(tenant_id: str | None = None) -> list[str]:
         tempo_calls.append({"services": True, "tenant_id": tenant_id})
@@ -116,10 +150,24 @@ def test_tempo_and_loki_advanced_filter_workflow(client, monkeypatch: pytest.Mon
         return ["GET /cart", "POST /cart"]
 
     async def fake_query_logs(log_query: Any, tenant_id: str | None = None) -> dict[str, Any]:
-        loki_calls.append(("query", {"query": log_query.query, "start": log_query.start, "end": log_query.end, "direction": log_query.direction.value, "step": log_query.step, "tenant_id": tenant_id}))
+        loki_calls.append(
+            (
+                "query",
+                {
+                    "query": log_query.query,
+                    "start": log_query.start,
+                    "end": log_query.end,
+                    "direction": log_query.direction.value,
+                    "step": log_query.step,
+                    "tenant_id": tenant_id,
+                },
+            )
+        )
         return {"status": "success", "data": {"result": []}}
 
-    async def fake_query_logs_instant(query: str, time: int | None, tenant_id: str | None = None, limit: int | None = None) -> dict[str, Any]:
+    async def fake_query_logs_instant(
+        query: str, time: int | None, tenant_id: str | None = None, limit: int | None = None
+    ) -> dict[str, Any]:
         loki_calls.append(("query_instant", {"query": query, "time": time, "tenant_id": tenant_id, "limit": limit}))
         return {"status": "success", "data": {"result": []}}
 
@@ -127,8 +175,12 @@ def test_tempo_and_loki_advanced_filter_workflow(client, monkeypatch: pytest.Mon
         loki_calls.append(("labels", {"start": start, "end": end, "tenant_id": tenant_id}))
         return {"status": "success", "data": ["service", "level"]}
 
-    async def fake_get_label_values(label: str, start: int | None, end: int | None, query: str | None, tenant_id: str | None = None) -> dict[str, Any]:
-        loki_calls.append(("label_values", {"label": label, "start": start, "end": end, "query": query, "tenant_id": tenant_id}))
+    async def fake_get_label_values(
+        label: str, start: int | None, end: int | None, query: str | None, tenant_id: str | None = None
+    ) -> dict[str, Any]:
+        loki_calls.append(
+            ("label_values", {"label": label, "start": start, "end": end, "query": query, "tenant_id": tenant_id})
+        )
         return {"status": "success", "data": ["checkout"]}
 
     async def fake_search_logs_by_pattern(**kwargs: Any) -> dict[str, Any]:
@@ -139,12 +191,20 @@ def test_tempo_and_loki_advanced_filter_workflow(client, monkeypatch: pytest.Mon
         loki_calls.append(("filter", kwargs))
         return {"status": "success", "data": {"result": []}}
 
-    async def fake_aggregate_logs(query: str, start: int | None, end: int | None, step: int, tenant_id: str | None = None) -> dict[str, Any]:
-        loki_calls.append(("aggregate", {"query": query, "start": start, "end": end, "step": step, "tenant_id": tenant_id}))
+    async def fake_aggregate_logs(
+        query: str, start: int | None, end: int | None, step: int, tenant_id: str | None = None
+    ) -> dict[str, Any]:
+        loki_calls.append(
+            ("aggregate", {"query": query, "start": start, "end": end, "step": step, "tenant_id": tenant_id})
+        )
         return {"query": query, "step": step, "tenant_id": tenant_id}
 
-    async def fake_get_log_volume(query: str, start: int | None, end: int | None, step: int, tenant_id: str | None = None) -> dict[str, Any]:
-        loki_calls.append(("volume", {"query": query, "start": start, "end": end, "step": step, "tenant_id": tenant_id}))
+    async def fake_get_log_volume(
+        query: str, start: int | None, end: int | None, step: int, tenant_id: str | None = None
+    ) -> dict[str, Any]:
+        loki_calls.append(
+            ("volume", {"query": query, "start": start, "end": end, "step": step, "tenant_id": tenant_id})
+        )
         return {"query": query, "step": step, "tenant_id": tenant_id}
 
     monkeypatch.setattr(tempo_router.tempo_service, "search_traces", fake_search_traces)
@@ -162,23 +222,88 @@ def test_tempo_and_loki_advanced_filter_workflow(client, monkeypatch: pytest.Mon
 
     headers = state.auth_header("token-u-admin")
 
-    assert client.get(
-        "/api/tempo/traces/search",
-        headers=headers,
-        params={"service": "checkout", "operation": "POST /cart", "minDuration": "10ms", "maxDuration": "500ms", "start": 10, "end": 20, "limit": 5, "fetchFull": True},
-    ).status_code == 200
+    assert (
+        client.get(
+            "/api/tempo/traces/search",
+            headers=headers,
+            params={
+                "service": "checkout",
+                "operation": "POST /cart",
+                "minDuration": "10ms",
+                "maxDuration": "500ms",
+                "start": 10,
+                "end": 20,
+                "limit": 5,
+                "fetchFull": True,
+            },
+        ).status_code
+        == 200
+    )
     assert client.get("/api/tempo/traces/trace-1", headers=headers).status_code == 200
     assert client.get("/api/tempo/services", headers=headers).status_code == 200
     assert client.get("/api/tempo/services/cart/operations", headers=headers).status_code == 200
 
-    assert client.get("/api/loki/query", headers=headers, params={"query": "{service=\"checkout\"}", "start": 1, "end": 2, "direction": "forward", "step": 30}).status_code == 200
-    assert client.get("/api/loki/query_instant", headers=headers, params={"query": "sum(rate(errors[5m]))", "time": 3, "limit": 2}).status_code == 200
+    assert (
+        client.get(
+            "/api/loki/query",
+            headers=headers,
+            params={"query": '{service="checkout"}', "start": 1, "end": 2, "direction": "forward", "step": 30},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            "/api/loki/query_instant", headers=headers, params={"query": "sum(rate(errors[5m]))", "time": 3, "limit": 2}
+        ).status_code
+        == 200
+    )
     assert client.get("/api/loki/labels", headers=headers, params={"start": 1, "end": 2}).status_code == 200
-    assert client.get("/api/loki/label/service/values", headers=headers, params={"start": 1, "end": 2, "query": "{service=\"checkout\"}"}).status_code == 200
-    assert client.post("/api/loki/search", headers=headers, json={"pattern": "timeout|error", "labels": {"service": "checkout"}, "start": 1, "end": 2, "limit": 10}).status_code == 200
-    assert client.post("/api/loki/filter", headers=headers, json={"labels": {"service": "checkout", "level": "error"}, "filters": ["timeout", "db"], "start": 1, "end": 2, "limit": 10}).status_code == 200
-    assert client.get("/api/loki/aggregate", headers=headers, params={"query": "sum(rate({service=\"checkout\"}[5m]))", "start": 1, "end": 2, "step": 60}).status_code == 200
-    assert client.get("/api/loki/volume", headers=headers, params={"query": "{service=\"checkout\"}", "start": 1, "end": 2, "step": 300}).status_code == 200
+    assert (
+        client.get(
+            "/api/loki/label/service/values",
+            headers=headers,
+            params={"start": 1, "end": 2, "query": '{service="checkout"}'},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/loki/search",
+            headers=headers,
+            json={"pattern": "timeout|error", "labels": {"service": "checkout"}, "start": 1, "end": 2, "limit": 10},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/loki/filter",
+            headers=headers,
+            json={
+                "labels": {"service": "checkout", "level": "error"},
+                "filters": ["timeout", "db"],
+                "start": 1,
+                "end": 2,
+                "limit": 10,
+            },
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            "/api/loki/aggregate",
+            headers=headers,
+            params={"query": 'sum(rate({service="checkout"}[5m]))', "start": 1, "end": 2, "step": 60},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            "/api/loki/volume",
+            headers=headers,
+            params={"query": '{service="checkout"}', "start": 1, "end": 2, "step": 300},
+        ).status_code
+        == 200
+    )
 
     assert tempo_calls[0]["tenant_id"] == "org-a"
     assert any(call[0] == "filter" and call[1]["tenant_id"] == "org-a" for call in loki_calls)
@@ -188,9 +313,14 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
     state = WorkflowState()
     patch_auth_service(monkeypatch, state)
 
-    viewer = state.create_user(SimpleNamespace(username="viewer", email="viewer@example.com", password="password123", role="viewer"), state.tenant_id)
+    viewer = state.create_user(
+        SimpleNamespace(username="viewer", email="viewer@example.com", password="password123", role="viewer"),
+        state.tenant_id,
+    )
     viewer_id = viewer.id
-    agent_key = state.create_api_key("u-admin", state.tenant_id, SimpleNamespace(name="tenant-scope", key="tenant-scope"))
+    agent_key = state.create_api_key(
+        "u-admin", state.tenant_id, SimpleNamespace(name="tenant-scope", key="tenant-scope")
+    )
 
     resolver_calls: list[dict[str, Any]] = []
     forward_calls: list[dict[str, Any]] = []
@@ -207,15 +337,55 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
                 "file_name": "resolver-rca-defaults.yaml",
             }
         if path == "/api/v1/jobs/analyze":
-            return {"job_id": "job-1", "report_id": "report-1", "status": "accepted", "created_at": "2024-01-01T00:00:00Z", "tenant_id": kwargs["payload"]["tenant_id"], "requested_by": kwargs["current_user"].user_id}
+            return {
+                "job_id": "job-1",
+                "report_id": "report-1",
+                "status": "accepted",
+                "created_at": "2024-01-01T00:00:00Z",
+                "tenant_id": kwargs["payload"]["tenant_id"],
+                "requested_by": kwargs["current_user"].user_id,
+            }
         if path == "/api/v1/jobs":
-            return {"items": [{"job_id": "job-1", "report_id": "report-1", "status": "running", "created_at": "2024-01-01T00:00:00Z", "tenant_id": kwargs["tenant_id"], "requested_by": kwargs["current_user"].user_id}], "next_cursor": "cursor-1"}
+            return {
+                "items": [
+                    {
+                        "job_id": "job-1",
+                        "report_id": "report-1",
+                        "status": "running",
+                        "created_at": "2024-01-01T00:00:00Z",
+                        "tenant_id": kwargs["tenant_id"],
+                        "requested_by": kwargs["current_user"].user_id,
+                    }
+                ],
+                "next_cursor": "cursor-1",
+            }
         if path == "/api/v1/jobs/job-1":
-            return {"job_id": "job-1", "report_id": "report-1", "status": "completed", "created_at": "2024-01-01T00:00:00Z", "tenant_id": kwargs["tenant_id"], "requested_by": kwargs["current_user"].user_id}
+            return {
+                "job_id": "job-1",
+                "report_id": "report-1",
+                "status": "completed",
+                "created_at": "2024-01-01T00:00:00Z",
+                "tenant_id": kwargs["tenant_id"],
+                "requested_by": kwargs["current_user"].user_id,
+            }
         if path == "/api/v1/jobs/job-1/result":
-            return {"job_id": "job-1", "report_id": "report-1", "status": "completed", "tenant_id": kwargs["tenant_id"], "requested_by": kwargs["current_user"].user_id, "result": {"quality": {"gating_profile": "strict"}}}
+            return {
+                "job_id": "job-1",
+                "report_id": "report-1",
+                "status": "completed",
+                "tenant_id": kwargs["tenant_id"],
+                "requested_by": kwargs["current_user"].user_id,
+                "result": {"quality": {"gating_profile": "strict"}},
+            }
         if path == "/api/v1/reports/report-1":
-            return {"job_id": "job-1", "report_id": "report-1", "status": "completed", "tenant_id": kwargs["tenant_id"], "requested_by": kwargs["current_user"].user_id, "result": {"summary": "ok"}}
+            return {
+                "job_id": "job-1",
+                "report_id": "report-1",
+                "status": "completed",
+                "tenant_id": kwargs["tenant_id"],
+                "requested_by": kwargs["current_user"].user_id,
+                "result": {"summary": "ok"},
+            }
         if path == "/api/v1/reports/report-1" and kwargs["method"] == "DELETE":
             return {"report_id": "report-1", "status": "deleted", "deleted": True}
         return {"ok": True, "path": path, "tenant_id": kwargs.get("tenant_id"), "params": kwargs.get("params")}
@@ -233,15 +403,35 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
     monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
     monkeypatch.setattr(alertmanager_router, "enforce_public_endpoint_security", lambda *args, **kwargs: None)
     monkeypatch.setattr(alertmanager_router.notifier_proxy_service, "forward", fake_forward)
-    monkeypatch.setattr(alertmanager_router, "validate_and_normalize_silence_payload", lambda payload, _user: {"id": payload.get("id", "sil-1"), "visibility": payload.get("visibility", "private")})
-    monkeypatch.setattr(alertmanager_router, "extract_silence_id", lambda path, payload: (payload or {}).get("id") or path.split("/")[-1])
+    monkeypatch.setattr(
+        alertmanager_router,
+        "validate_and_normalize_silence_payload",
+        lambda payload, _user: {"id": payload.get("id", "sil-1"), "visibility": payload.get("visibility", "private")},
+    )
+    monkeypatch.setattr(
+        alertmanager_router,
+        "extract_silence_id",
+        lambda path, payload: (payload or {}).get("id") or path.split("/")[-1],
+    )
     monkeypatch.setattr(alertmanager_router, "find_silence_for_mutation", fake_find_silence_for_mutation)
     monkeypatch.setattr(alertmanager_router, "assert_silence_owner", lambda current_user, silence: None)
     monkeypatch.setattr(agents_router, "enforce_public_endpoint_security", lambda *args, **kwargs: None)
     monkeypatch.setattr(agents_router, "enforce_header_token", lambda *args, **kwargs: None)
-    monkeypatch.setattr(agents_router.agent_service, "list_agents", lambda: [SimpleNamespace(model_dump=lambda: {"id": "agent-1", "name": "edge", "tenant_id": agent_key.key}, tenant_id=agent_key.key, host_name="edge-1")])
+    monkeypatch.setattr(
+        agents_router.agent_service,
+        "list_agents",
+        lambda: [
+            SimpleNamespace(
+                model_dump=lambda: {"id": "agent-1", "name": "edge", "tenant_id": agent_key.key},
+                tenant_id=agent_key.key,
+                host_name="edge-1",
+            )
+        ],
+    )
     monkeypatch.setattr(agents_router.agent_service, "key_activity", fake_key_activity)
-    monkeypatch.setattr(agents_router.agent_service, "update_from_heartbeat", lambda payload: heartbeats.append(payload.model_dump()))
+    monkeypatch.setattr(
+        agents_router.agent_service, "update_from_heartbeat", lambda payload: heartbeats.append(payload.model_dump())
+    )
 
     admin_headers = state.auth_header("token-u-admin")
     viewer_headers = state.auth_header(f"token-{viewer_id}")
@@ -250,8 +440,22 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
     assert template_response.status_code == 200
     assert template_response.json()["file_name"] == "resolver-rca-defaults.yaml"
 
-    assert client.post("/api/resolver/analyze/jobs", headers=admin_headers, json={"start": 1, "end": 2, "services": ["api"], "log_query": "{service=\"api\"}"}).status_code == 202
-    assert client.get("/api/resolver/analyze/jobs", headers=admin_headers, params={"status": "running", "limit": 5, "cursor": "cursor-0"}).status_code == 200
+    assert (
+        client.post(
+            "/api/resolver/analyze/jobs",
+            headers=admin_headers,
+            json={"start": 1, "end": 2, "services": ["api"], "log_query": '{service="api"}'},
+        ).status_code
+        == 202
+    )
+    assert (
+        client.get(
+            "/api/resolver/analyze/jobs",
+            headers=admin_headers,
+            params={"status": "running", "limit": 5, "cursor": "cursor-0"},
+        ).status_code
+        == 200
+    )
     assert client.get("/api/resolver/analyze/jobs/job-1", headers=admin_headers).status_code == 200
     assert client.get("/api/resolver/analyze/jobs/job-1/result", headers=admin_headers).status_code == 200
     assert client.get("/api/resolver/reports/report-1", headers=admin_headers).status_code == 200
@@ -272,7 +476,14 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
         assert client.post(path, headers=admin_headers, json={"service": "api", "window": "15m"}).status_code == 200
 
     assert client.get("/api/resolver/ml/weights", headers=admin_headers).status_code == 200
-    assert client.post("/api/resolver/ml/weights/feedback", headers=admin_headers, params={"signal": "traces", "was_correct": "true"}).status_code == 200
+    assert (
+        client.post(
+            "/api/resolver/ml/weights/feedback",
+            headers=admin_headers,
+            params={"signal": "traces", "was_correct": "true"},
+        ).status_code
+        == 200
+    )
     assert client.post("/api/resolver/ml/weights/reset", headers=admin_headers).status_code == 200
     assert client.get("/api/resolver/events/deployments", headers=admin_headers).status_code == 200
 
@@ -280,17 +491,46 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
     assert client.get("/api/alertmanager/rules", headers=viewer_headers).status_code == 200
     assert client.get("/api/alertmanager/silences", headers=viewer_headers).status_code == 200
     assert client.post("/api/alertmanager/alerts", headers=viewer_headers, json={"alerts": []}).status_code == 403
-    assert client.post("/api/alertmanager/silences", headers=admin_headers, json={"id": "sil-1", "visibility": "private"}).status_code == 200
-    assert client.put("/api/alertmanager/silences/sil-1", headers=admin_headers, json={"id": "sil-1", "visibility": "private"}).status_code == 200
+    assert (
+        client.post(
+            "/api/alertmanager/silences", headers=admin_headers, json={"id": "sil-1", "visibility": "private"}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.put(
+            "/api/alertmanager/silences/sil-1", headers=admin_headers, json={"id": "sil-1", "visibility": "private"}
+        ).status_code
+        == 200
+    )
     assert client.delete("/api/alertmanager/silences/sil-1", headers=admin_headers).status_code == 200
     assert client.post("/api/alertmanager/channels", headers=admin_headers, json={"name": "email"}).status_code == 200
-    assert client.put("/api/alertmanager/channels/chan-1", headers=admin_headers, json={"name": "pagerduty"}).status_code == 200
+    assert (
+        client.put("/api/alertmanager/channels/chan-1", headers=admin_headers, json={"name": "pagerduty"}).status_code
+        == 200
+    )
     assert client.delete("/api/alertmanager/channels/chan-1", headers=admin_headers).status_code == 200
     assert client.get("/api/alertmanager/jira/config", headers=admin_headers).status_code == 200
-    assert client.post("/api/alertmanager/jira/issues", headers=admin_headers, json={"summary": "Issue"}).status_code == 200
-    assert client.post("/api/alertmanager/integrations/slack", headers=admin_headers, json={"method": "webhook"}).status_code == 200
-    assert client.post("/api/alertmanager/integrations/teams", headers=admin_headers, json={"method": "oauth"}).status_code == 200
-    assert client.patch("/api/alertmanager/incidents/inc-1", headers=admin_headers, json={"status": "acknowledged"}).status_code == 200
+    assert (
+        client.post("/api/alertmanager/jira/issues", headers=admin_headers, json={"summary": "Issue"}).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/alertmanager/integrations/slack", headers=admin_headers, json={"method": "webhook"}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post("/api/alertmanager/integrations/teams", headers=admin_headers, json={"method": "oauth"}).status_code
+        == 200
+    )
+    assert (
+        client.patch(
+            "/api/alertmanager/incidents/inc-1", headers=admin_headers, json={"status": "acknowledged"}
+        ).status_code
+        == 200
+    )
 
     assert client.get("/api/agents/", headers=admin_headers).status_code == 200
     active_agents_response = client.get("/api/agents/active", headers=admin_headers)
@@ -298,7 +538,12 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
     assert active_agents_response.json()[0]["active"] is True
     heartbeat_response = client.post(
         "/api/agents/heartbeat",
-        json={"name": "edge", "tenant_id": agent_key.key, "signal": "logs", "timestamp": datetime.now(timezone.utc).isoformat()},
+        json={
+            "name": "edge",
+            "tenant_id": agent_key.key,
+            "signal": "logs",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
     )
     assert heartbeat_response.status_code == 200
     assert heartbeats[0]["tenant_id"] == agent_key.key

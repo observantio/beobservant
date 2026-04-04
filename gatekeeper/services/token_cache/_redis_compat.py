@@ -1,4 +1,6 @@
-"""Optional Redis dependency loader for token cache implementations."""
+"""
+Optional Redis dependency loader for token cache implementations.
+"""
 
 from __future__ import annotations
 

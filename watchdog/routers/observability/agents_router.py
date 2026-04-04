@@ -1,11 +1,12 @@
 """
-Router for OTLP agent management, including listing known agents, checking active agents per API key, and receiving heartbeat payloads.
+Router for OTLP agent management, including listing known agents, checking active agents per API key, and receiving
+heartbeat payloads.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
@@ -44,12 +45,16 @@ async def close_mimir_client() -> None:
 
 
 @router.get("/")
-async def list_agents(_current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents"))) -> list[dict[str, object]]:
+async def list_agents(
+    _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents"))
+) -> list[dict[str, object]]:
     return [agent.model_dump() for agent in agent_service.list_agents()]
 
 
 @router.get("/active")
-async def list_active_agents(current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents"))) -> list[dict[str, object]]:
+async def list_active_agents(
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents"))
+) -> list[dict[str, object]]:
     api_keys = await rtp(auth_service.list_api_keys, current_user.user_id)
 
     tasks: list[asyncio.Task[KeyActivity]] = []
@@ -67,33 +72,37 @@ async def list_active_agents(current_user: TokenData = Depends(require_permissio
     activity: list[dict[str, object]] = []
     for key, result in zip(api_keys, results):
         if isinstance(result, BaseException):
-            activity.append({
-                "name": key.name,
-                "tenant_id": key.key,
-                "is_enabled": key.is_enabled,
-                "active": False,
-                "success": False,
-                "clean": False,
-                "host_names": [],
-                "metrics_active": False,
-                "metrics_count": 0,
-                "agent_estimate": 0,
-                "host_estimate": 0,
-            })
+            activity.append(
+                {
+                    "name": key.name,
+                    "tenant_id": key.key,
+                    "is_enabled": key.is_enabled,
+                    "active": False,
+                    "success": False,
+                    "clean": False,
+                    "host_names": [],
+                    "metrics_active": False,
+                    "metrics_count": 0,
+                    "agent_estimate": 0,
+                    "host_estimate": 0,
+                }
+            )
             continue
 
         active = bool(result.get("metrics_active"))
         host_names = sorted(host_names_by_tenant.get(key.key, set()))
-        activity.append({
-            **result,
-            "name": key.name,
-            "tenant_id": key.key,
-            "is_enabled": key.is_enabled,
-            "active": active,
-            "success": True,
-            "clean": active,
-            "host_names": host_names,
-        })
+        activity.append(
+            {
+                **result,
+                "name": key.name,
+                "tenant_id": key.key,
+                "is_enabled": key.is_enabled,
+                "active": active,
+                "success": True,
+                "clean": active,
+                "host_names": host_names,
+            }
+        )
 
     return activity
 

@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -104,7 +104,11 @@ async def test_alertmanager_public_rules_and_proxy_branches(monkeypatch):
 
     monkeypatch.setattr(alertmanager_router, "required_permissions", lambda *_args: ["read:alerts"])
     checked = []
-    monkeypatch.setattr(alertmanager_router, "check_permissions", lambda current_user, required: checked.append((current_user.user_id, required)))
+    monkeypatch.setattr(
+        alertmanager_router,
+        "check_permissions",
+        lambda current_user, required: checked.append((current_user.user_id, required)),
+    )
     monkeypatch.setattr(alertmanager_router, "apply_scoped_rate_limit", lambda *_args: checked.append("rate"))
     monkeypatch.setattr(alertmanager_router, "is_mutating", lambda method: method.upper() != "GET")
 
@@ -116,7 +120,11 @@ async def test_alertmanager_public_rules_and_proxy_branches(monkeypatch):
     assert result["path"].endswith("/alerts")
     assert checked
 
-    monkeypatch.setattr(alertmanager_router, "validate_and_normalize_silence_payload", lambda payload, _user: {"id": payload.get("id", "sil-1")})
+    monkeypatch.setattr(
+        alertmanager_router,
+        "validate_and_normalize_silence_payload",
+        lambda payload, _user: {"id": payload.get("id", "sil-1")},
+    )
     monkeypatch.setattr(alertmanager_router, "extract_silence_id", lambda path, payload: (payload or {}).get("id"))
 
     async def fake_find_silence(*_args, **_kwargs):
@@ -124,7 +132,11 @@ async def test_alertmanager_public_rules_and_proxy_branches(monkeypatch):
 
     monkeypatch.setattr(alertmanager_router, "find_silence_for_mutation", fake_find_silence)
     ownership_checks = []
-    monkeypatch.setattr(alertmanager_router, "assert_silence_owner", lambda current_user, silence: ownership_checks.append((current_user.user_id, silence["id"])))
+    monkeypatch.setattr(
+        alertmanager_router,
+        "assert_silence_owner",
+        lambda current_user, silence: ownership_checks.append((current_user.user_id, silence["id"])),
+    )
 
     put_request = _request(
         method="PUT",
@@ -157,7 +169,9 @@ async def test_agents_router_list_active_and_heartbeat(monkeypatch):
             self.name = name
             self.is_enabled = is_enabled
 
-    monkeypatch.setattr(agents_router.auth_service, "list_api_keys", lambda *_args: [Key("tenant-a", "A"), Key("tenant-b", "B", False)])
+    monkeypatch.setattr(
+        agents_router.auth_service, "list_api_keys", lambda *_args: [Key("tenant-a", "A"), Key("tenant-b", "B", False)]
+    )
     monkeypatch.setattr(
         agents_router.agent_service,
         "list_agents",
@@ -173,10 +187,14 @@ async def test_agents_router_list_active_and_heartbeat(monkeypatch):
         return {"metrics_active": True, "metrics_count": 4}
 
     monkeypatch.setattr(agents_router.agent_service, "key_activity", fake_key_activity)
-    monkeypatch.setattr(agents_router.agent_service, "list_agents", lambda: [
-        SimpleNamespace(model_dump=lambda: {"id": "agent-a"}, tenant_id="tenant-a", host_name="host-a"),
-        SimpleNamespace(model_dump=lambda: {"id": "agent-b"}, tenant_id="tenant-a", host_name=None),
-    ])
+    monkeypatch.setattr(
+        agents_router.agent_service,
+        "list_agents",
+        lambda: [
+            SimpleNamespace(model_dump=lambda: {"id": "agent-a"}, tenant_id="tenant-a", host_name="host-a"),
+            SimpleNamespace(model_dump=lambda: {"id": "agent-b"}, tenant_id="tenant-a", host_name=None),
+        ],
+    )
 
     listed = await agents_router.list_agents(current_user)
     assert listed == [{"id": "agent-a"}, {"id": "agent-b"}]
@@ -226,9 +244,13 @@ async def test_agents_router_list_active_and_heartbeat(monkeypatch):
     }
 
     called = []
-    monkeypatch.setattr(agents_router, "enforce_public_endpoint_security", lambda *_args, **_kwargs: called.append("public"))
+    monkeypatch.setattr(
+        agents_router, "enforce_public_endpoint_security", lambda *_args, **_kwargs: called.append("public")
+    )
     monkeypatch.setattr(agents_router, "enforce_header_token", lambda *_args, **_kwargs: called.append("header"))
-    monkeypatch.setattr(agents_router.agent_service, "update_from_heartbeat", lambda payload: called.append(payload.name))
+    monkeypatch.setattr(
+        agents_router.agent_service, "update_from_heartbeat", lambda payload: called.append(payload.name)
+    )
     monkeypatch.setattr(config, "AGENT_INGEST_IP_ALLOWLIST", None)
     monkeypatch.setattr(config, "AGENT_HEARTBEAT_TOKEN", "secret")
     result = await agents_router.heartbeat(

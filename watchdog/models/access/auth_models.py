@@ -3,19 +3,22 @@ This module defines Pydantic models for authentication and authorization data st
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
+
 from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, Field
+
 
 class Role(str, Enum):
     PROVISIONING = "provisioning"
     ADMIN = "admin"
     USER = "user"
     VIEWER = "viewer"
+
 
 class Permission(str, Enum):
     READ_AUDIT_LOGS = "read:audit_logs"
@@ -80,6 +83,7 @@ class Permission(str, Enum):
     READ_GROUPS = "read:groups"
     MANAGE_TENANTS = "manage:tenants"
 
+
 ROLE_PERMISSIONS = {
     Role.ADMIN: list(Permission),
     Role.USER: [
@@ -121,13 +125,15 @@ ROLE_PERMISSIONS = {
         Permission.READ_FOLDERS,
         Permission.READ_AGENTS,
     ],
-    Role.PROVISIONING: []
+    Role.PROVISIONING: [],
 }
+
 
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+
 
 class TokenData(BaseModel):
     user_id: str
@@ -141,12 +147,14 @@ class TokenData(BaseModel):
     iat: Optional[int] = None
     is_mfa_setup: bool = False
 
+
 class OIDCAuthURLRequest(BaseModel):
     redirect_uri: str = Field(..., min_length=1)
     state: Optional[str] = None
     nonce: Optional[str] = None
     code_challenge: Optional[str] = None
     code_challenge_method: Optional[str] = None
+
 
 class OIDCCodeExchangeRequest(BaseModel):
     code: str
@@ -155,10 +163,12 @@ class OIDCCodeExchangeRequest(BaseModel):
     transaction_id: Optional[str] = None
     code_verifier: Optional[str] = None
 
+
 class OIDCAuthURLResponse(BaseModel):
     authorization_url: str
     transaction_id: Optional[str] = None
     state: Optional[str] = None
+
 
 class AuthModeResponse(BaseModel):
     provider: str

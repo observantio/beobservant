@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -112,12 +112,16 @@ def test_ready_not_ready_when_upstream_is_down_workflow(client, monkeypatch: pyt
     assert ready_response.json()["status"] == "not_ready"
 
 
-def test_internal_otlp_validation_rejects_invalid_service_token_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_internal_otlp_validation_rejects_invalid_service_token_workflow(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
     state = WorkflowState()
     patch_auth_service(monkeypatch, state)
 
     monkeypatch.setattr(internal_router.internal_service, "_get_internal_token", lambda: "expected-token")
-    monkeypatch.setattr(internal_router.internal_service._auth_service, "validate_otlp_token", state.validate_otlp_token)
+    monkeypatch.setattr(
+        internal_router.internal_service._auth_service, "validate_otlp_token", state.validate_otlp_token
+    )
 
     key = state.create_api_key("u-admin", state.tenant_id, SimpleNamespace(name="gateway", key="scope-gateway"))
 
@@ -412,7 +416,7 @@ def test_resolver_create_job_requires_create_rca_permission_workflow(client, mon
     denied_create = client.post(
         "/api/resolver/analyze/jobs",
         headers=user_headers,
-        json={"start": 1, "end": 2, "services": ["checkout"], "log_query": "{service=\"checkout\"}"},
+        json={"start": 1, "end": 2, "services": ["checkout"], "log_query": '{service="checkout"}'},
     )
     assert denied_create.status_code == 403
 
@@ -426,7 +430,7 @@ def test_resolver_create_job_requires_create_rca_permission_workflow(client, mon
     allowed_create = client.post(
         "/api/resolver/analyze/jobs",
         headers=user_headers,
-        json={"start": 1, "end": 2, "services": ["checkout"], "log_query": "{service=\"checkout\"}"},
+        json={"start": 1, "end": 2, "services": ["checkout"], "log_query": '{service="checkout"}'},
     )
     assert allowed_create.status_code == 202
     assert allowed_create.json()["job_id"] == "job-1"
@@ -459,7 +463,7 @@ def test_resolver_read_jobs_requires_read_rca_permission_workflow(client, monkey
     create_job = client.post(
         "/api/resolver/analyze/jobs",
         headers=user_headers,
-        json={"start": 1, "end": 2, "services": ["checkout"], "log_query": "{service=\"checkout\"}"},
+        json={"start": 1, "end": 2, "services": ["checkout"], "log_query": '{service="checkout"}'},
     )
     assert create_job.status_code == 202
 
@@ -478,7 +482,9 @@ def test_resolver_read_jobs_requires_read_rca_permission_workflow(client, monkey
     assert allowed_list.json()["items"][0]["job_id"] == "job-1"
 
 
-def test_resolver_delete_report_requires_delete_rca_permission_workflow(client, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolver_delete_report_requires_delete_rca_permission_workflow(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
     state = WorkflowState()
     patch_auth_service(monkeypatch, state)
     resolver_calls: list[dict[str, Any]] = []
@@ -514,4 +520,6 @@ def test_resolver_delete_report_requires_delete_rca_permission_workflow(client, 
     allowed_delete = client.delete("/api/resolver/reports/report-1", headers=user_headers)
     assert allowed_delete.status_code == 200
     assert allowed_delete.json()["deleted"] is True
-    assert any(call["upstream_path"] == "/api/v1/reports/report-1" and call["method"] == "DELETE" for call in resolver_calls)
+    assert any(
+        call["upstream_path"] == "/api/v1/reports/report-1" and call["method"] == "DELETE" for call in resolver_calls
+    )

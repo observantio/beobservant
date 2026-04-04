@@ -3,9 +3,9 @@ Resilience decorators for service calls.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -92,8 +92,10 @@ def with_retry(
                     )
                     await asyncio.sleep(delay)
 
-            raise last_exc if last_exc is not None else RuntimeError(
-                f"Retry wrapper exited unexpectedly for {func.__name__}"
+            raise (
+                last_exc
+                if last_exc is not None
+                else RuntimeError(f"Retry wrapper exited unexpectedly for {func.__name__}")
             )
 
         return wrapper

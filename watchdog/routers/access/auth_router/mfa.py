@@ -3,9 +3,9 @@ MFA management endpoints for Watchdog authentication router.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -33,7 +33,9 @@ async def mfa_enroll(current_user: TokenData = Depends(get_current_user_or_mfa_s
 
 
 @router.post("/mfa/verify", response_model=RecoveryCodesResponse)
-async def mfa_verify(payload: MfaVerifyRequest, current_user: TokenData = Depends(get_current_user_or_mfa_setup)) -> RecoveryCodesResponse:
+async def mfa_verify(
+    payload: MfaVerifyRequest, current_user: TokenData = Depends(get_current_user_or_mfa_setup)
+) -> RecoveryCodesResponse:
     try:
         codes = await rtp(auth_service.verify_enable_totp, current_user.user_id, payload.code)
         return RecoveryCodesResponse(recovery_codes=codes)
@@ -42,9 +44,7 @@ async def mfa_verify(payload: MfaVerifyRequest, current_user: TokenData = Depend
         detail = (
             "TOTP not enrolled for user"
             if "not enrolled" in msg
-            else "Invalid TOTP code"
-            if "Invalid TOTP code" in msg
-            else msg
+            else "Invalid TOTP code" if "Invalid TOTP code" in msg else msg
         )
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail) from exc
 

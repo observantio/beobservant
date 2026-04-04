@@ -3,9 +3,9 @@ Database authentication service utilities for handling password hashing and veri
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -117,7 +117,9 @@ def _require_user_in_tenant(db: Session, user_id: str, tenant_id: str, *, for_up
     return user
 
 
-def reset_user_password_temp(service: DatabaseAuthService, actor_user_id: str, target_user_id: str, tenant_id: str) -> Dict[str, str]:
+def reset_user_password_temp(
+    service: DatabaseAuthService, actor_user_id: str, target_user_id: str, tenant_id: str
+) -> Dict[str, str]:
     with get_db_session() as db:
         actor_query = db.query(User).filter_by(id=actor_user_id, tenant_id=tenant_id)
         if hasattr(actor_query, "with_for_update"):

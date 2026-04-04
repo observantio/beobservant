@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -198,7 +198,9 @@ def test_init_database_returns_when_initialized_inside_lock(monkeypatch):
 
     create_engine_calls = []
     monkeypatch.setattr(database_module, "_init_lock", LockStub())
-    monkeypatch.setattr(database_module, "create_engine", lambda *args, **kwargs: create_engine_calls.append((args, kwargs)))
+    monkeypatch.setattr(
+        database_module, "create_engine", lambda *args, **kwargs: create_engine_calls.append((args, kwargs))
+    )
 
     database_module.init_database("sqlite:///tmp.db")
     assert create_engine_calls == []
@@ -249,7 +251,9 @@ def test_schema_converters_and_shared_helper_paths():
     assert user_schema.grafana_user_id == 42
     assert user_schema.api_keys[0].name == "default"
 
-    response = schema_mod.build_user_response(service, user_schema, fallback_permissions=[PermissionEnum.READ_ALERTS.value])
+    response = schema_mod.build_user_response(
+        service, user_schema, fallback_permissions=[PermissionEnum.READ_ALERTS.value]
+    )
     assert response.permissions == [PermissionEnum.READ_USERS, PermissionEnum.READ_GROUPS]
     assert response.direct_permissions == [PermissionEnum.READ_USERS.value]
 
@@ -277,14 +281,25 @@ def test_schema_converters_and_shared_helper_paths():
             description="Ops",
             created_at=now,
             updated_at=now,
-            permissions=[SimpleNamespace(id="p1", name="read:users", display_name="Read", description="desc", resource_type="users", action="read")],
+            permissions=[
+                SimpleNamespace(
+                    id="p1",
+                    name="read:users",
+                    display_name="Read",
+                    description="desc",
+                    resource_type="users",
+                    action="read",
+                )
+            ],
         )
     )
     assert group_schema.permissions[0].name == "read:users"
     assert schema_mod._coerce_permission(PermissionEnum.READ_USERS) is PermissionEnum.READ_USERS
     assert schema_mod._coerce_permission(PermissionEnum.READ_GROUPS.value) is PermissionEnum.READ_GROUPS
 
-    sync_service = SimpleNamespace(_sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=True, username="oidc"))
+    sync_service = SimpleNamespace(
+        _sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=True, username="oidc")
+    )
     assert shared_mod.sync_active_user_from_claims(sync_service, None) is None
     assert shared_mod.sync_active_user_from_claims(sync_service, {"sub": "1"}).username == "oidc"
     sync_service = SimpleNamespace(_sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=False))
@@ -304,9 +319,14 @@ def test_token_helpers_and_decode_paths(monkeypatch):
     service = SimpleNamespace(
         get_user_permissions=lambda db_user: [PermissionEnum.READ_GROUPS.value],
         is_external_auth_enabled=lambda: True,
-        oidc_service=SimpleNamespace(verify_access_token=lambda token: {"iat": 123, "scp": [PermissionEnum.READ_USERS.value, "unknown"]}),
+        oidc_service=SimpleNamespace(
+            verify_access_token=lambda token: {"iat": 123, "scp": [PermissionEnum.READ_USERS.value, "unknown"]}
+        ),
         _extract_permissions_from_oidc_claims=lambda claims: [PermissionEnum.READ_USERS.value, "unknown"],
-        list_all_permissions=lambda: [{"name": PermissionEnum.READ_USERS.value}, {"name": PermissionEnum.READ_GROUPS.value}],
+        list_all_permissions=lambda: [
+            {"name": PermissionEnum.READ_USERS.value},
+            {"name": PermissionEnum.READ_GROUPS.value},
+        ],
     )
     token_data = token_mod.build_token_data_for_user(service, user)
     assert token_data.role is Role.USER
@@ -338,4 +358,7 @@ def test_token_helpers_and_decode_paths(monkeypatch):
     assert token_mod.decode_token(service, "tok") is None
     assert token_mod._safe_role(Role.ADMIN.value) is Role.ADMIN
     assert token_mod._safe_role("invalid") is Role.USER
-    assert token_mod._known_permission_names(service) == {PermissionEnum.READ_USERS.value, PermissionEnum.READ_GROUPS.value}
+    assert token_mod._known_permission_names(service) == {
+        PermissionEnum.READ_USERS.value,
+        PermissionEnum.READ_GROUPS.value,
+    }

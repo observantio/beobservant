@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -39,10 +39,14 @@ def _rsa_keypair_pem() -> tuple[str, str]:
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode("utf-8")
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("utf-8")
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
     return private_pem, public_pem
 
 
@@ -137,7 +141,9 @@ def test_config_vault_optional_warning_and_secret_loading_paths(monkeypatch):
         assert module.config.get_secret("MAX_QUERY_LIMIT") == str(module.config.MAX_QUERY_LIMIT)
         module.config.MISSING_VALUE = None
         original_secret_provider = module.config._secret_provider
-        module.config._secret_provider = types.SimpleNamespace(get=lambda key: (_ for _ in ()).throw(RuntimeError("boom")))
+        module.config._secret_provider = types.SimpleNamespace(
+            get=lambda key: (_ for _ in ()).throw(RuntimeError("boom"))
+        )
         assert module.config.get_secret("MISSING_VALUE") is None
         module.config._secret_provider = original_secret_provider
 
@@ -205,11 +211,26 @@ def test_config_accepts_strong_production_secrets_and_legacy_jwt_secret(monkeypa
 @pytest.mark.parametrize(
     ("env_updates", "expected_message"),
     [
-        ({"APP_ENV": "production", "JWT_AUTO_GENERATE_KEYS": "true"}, "JWT_AUTO_GENERATE_KEYS must be disabled in production"),
-        ({"APP_ENV": "production", "DEFAULT_ADMIN_PASSWORD": ""}, "DEFAULT_ADMIN_PASSWORD must be set to a strong value in production"),
-        ({"APP_ENV": "production", "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "true"}, "DEFAULT_ADMIN_BOOTSTRAP_ENABLED must be false in production"),
-        ({"REQUIRE_TOTP_ENCRYPTION_KEY": "true", "DATA_ENCRYPTION_KEY": ""}, "DATA_ENCRYPTION_KEY is required when REQUIRE_TOTP_ENCRYPTION_KEY is enabled"),
-        ({"APP_ENV": "production", "DATA_ENCRYPTION_KEY": "", "REQUIRE_TOTP_ENCRYPTION_KEY": "false"}, "DATA_ENCRYPTION_KEY must be configured in production"),
+        (
+            {"APP_ENV": "production", "JWT_AUTO_GENERATE_KEYS": "true"},
+            "JWT_AUTO_GENERATE_KEYS must be disabled in production",
+        ),
+        (
+            {"APP_ENV": "production", "DEFAULT_ADMIN_PASSWORD": ""},
+            "DEFAULT_ADMIN_PASSWORD must be set to a strong value in production",
+        ),
+        (
+            {"APP_ENV": "production", "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "true"},
+            "DEFAULT_ADMIN_BOOTSTRAP_ENABLED must be false in production",
+        ),
+        (
+            {"REQUIRE_TOTP_ENCRYPTION_KEY": "true", "DATA_ENCRYPTION_KEY": ""},
+            "DATA_ENCRYPTION_KEY is required when REQUIRE_TOTP_ENCRYPTION_KEY is enabled",
+        ),
+        (
+            {"APP_ENV": "production", "DATA_ENCRYPTION_KEY": "", "REQUIRE_TOTP_ENCRYPTION_KEY": "false"},
+            "DATA_ENCRYPTION_KEY must be configured in production",
+        ),
         ({"RESOLVER_CONTEXT_ALGORITHM": "RS256"}, "Unsupported RESOLVER_CONTEXT_ALGORITHM"),
         ({"NOTIFIER_CONTEXT_TTL_SECONDS": "0"}, "NOTIFIER_CONTEXT_TTL_SECONDS must be greater than 0"),
         ({"RESOLVER_CONTEXT_TTL_SECONDS": "0"}, "RESOLVER_CONTEXT_TTL_SECONDS must be greater than 0"),
@@ -226,9 +247,15 @@ def test_config_accepts_strong_production_secrets_and_legacy_jwt_secret(monkeypa
         ({"TEMPO_TRACE_FETCH_CONCURRENCY": "0"}, "TEMPO_TRACE_FETCH_CONCURRENCY must be greater than 0"),
         ({"TEMPO_VOLUME_BUCKET_CONCURRENCY": "0"}, "TEMPO_VOLUME_BUCKET_CONCURRENCY must be greater than 0"),
         ({"TEMPO_COUNT_QUERY_CONCURRENCY": "0"}, "TEMPO_COUNT_QUERY_CONCURRENCY must be greater than 0"),
-        ({"RESOLVER_PROXY_CACHE_TTL_SECONDS": "-1"}, "RESOLVER_PROXY_CACHE_TTL_SECONDS must be greater than or equal to 0"),
+        (
+            {"RESOLVER_PROXY_CACHE_TTL_SECONDS": "-1"},
+            "RESOLVER_PROXY_CACHE_TTL_SECONDS must be greater than or equal to 0",
+        ),
         ({"RESOLVER_ANALYZE_MAX_CONCURRENCY": "0"}, "RESOLVER_ANALYZE_MAX_CONCURRENCY must be greater than 0"),
-        ({"RESOLVER_ANALYZE_MAX_RETAINED_PER_USER": "0"}, "RESOLVER_ANALYZE_MAX_RETAINED_PER_USER must be greater than 0"),
+        (
+            {"RESOLVER_ANALYZE_MAX_RETAINED_PER_USER": "0"},
+            "RESOLVER_ANALYZE_MAX_RETAINED_PER_USER must be greater than 0",
+        ),
         ({"RESOLVER_ANALYZE_JOB_TTL_SECONDS": "0"}, "RESOLVER_ANALYZE_JOB_TTL_SECONDS must be greater than 0"),
         ({"PASSWORD_RESET_INTERVAL_DAYS": "-1"}, "PASSWORD_RESET_INTERVAL_DAYS must be >= 0"),
         ({"TEMP_PASSWORD_LENGTH": "11"}, "TEMP_PASSWORD_LENGTH must be >= 12"),

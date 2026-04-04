@@ -3,9 +3,9 @@ Lightweight service class that delegates the core work to helper functions.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from custom_types.json import JSONDict
@@ -23,6 +23,7 @@ from services.agent.helpers import (
     query_key_activity,
     query_key_volume_series,
 )
+
 
 class AgentService:
     def __init__(self) -> None:

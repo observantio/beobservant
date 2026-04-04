@@ -118,7 +118,9 @@ def test_install_custom_openapi_cache_and_non_dict_schema(monkeypatch) -> None:
     openapi_middleware.install_custom_openapi(app3)
     fake_schema = {
         "paths": {
-            "/api/auth/login/{id}": {"post": {"security": [{"WatchdogCookieAuth": []}], "requestBody": {"content": {}}}},
+            "/api/auth/login/{id}": {
+                "post": {"security": [{"WatchdogCookieAuth": []}], "requestBody": {"content": {}}}
+            },
             "/api/skip": "skip",
             "/api/trace": {"trace": "skip"},
         }
@@ -153,7 +155,8 @@ def test_install_custom_openapi_dedupes_operation_ids_and_hardens_response_schem
                 }
             },
         },
-        "components": {"schemas": {"JSONValue-Output": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+        "components": {
+            "schemas": {"JSONValue-Output": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
         },
     }
     monkeypatch.setattr(openapi_middleware, "get_openapi", lambda **kwargs: fake_schema)
@@ -226,13 +229,18 @@ def test_openapi_helper_guards_cover_remaining_branches() -> None:
     openapi_middleware._ensure_operation_docs("/api/test", "GET", non_string_description)  # type: ignore[arg-type]
     assert "description" not in non_string_description
 
-    assert openapi_middleware._iter_method_operations({
-        "/api/test": {
-            "summary": "skip",
-            "x-custom": {},
-            "get": "not-a-dict",
-        }
-    }) == []
+    assert (
+        openapi_middleware._iter_method_operations(
+            {
+                "/api/test": {
+                    "summary": "skip",
+                    "x-custom": {},
+                    "get": "not-a-dict",
+                }
+            }
+        )
+        == []
+    )
 
     unique_paths: dict[str, object] = {
         "/api/test": {
@@ -269,21 +277,11 @@ def test_openapi_helper_guards_cover_remaining_branches() -> None:
         "/api/b": {"get": {"responses": {"200": "skip"}}},
         "/api/c": {"get": {"responses": {"200": {"content": {"application/json": "skip"}}}}},
         "/api/d": {"get": {"responses": {"200": {"content": {"application/json": {"schema": "skip"}}}}}},
-        "/api/e": {
-            "get": {
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {"type": "object"}
-                            }
-                        }
-                    }
-                }
-            }
-        },
+        "/api/e": {"get": {"responses": {"200": {"content": {"application/json": {"schema": {"type": "object"}}}}}}},
     }
     openapi_middleware._harden_response_schemas(paths_with_guards)  # type: ignore[arg-type]
     assert paths_with_guards["/api/a"]["get"]["responses"] == []
     assert paths_with_guards["/api/b"]["get"]["responses"]["200"] == "skip"
-    assert paths_with_guards["/api/e"]["get"]["responses"]["200"]["content"]["application/json"]["schema"] == {"type": "object"}
+    assert paths_with_guards["/api/e"]["get"]["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "type": "object"
+    }

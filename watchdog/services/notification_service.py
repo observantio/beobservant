@@ -3,9 +3,9 @@ Notification service for sending emails related to incidents and user management
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -22,9 +22,9 @@ from services.common.http_client import create_async_client
 try:
     import aiosmtplib as _loaded_aiosmtplib
 except ImportError:
-    _aiosmtplib: ModuleType | None = None
+    _AIOSMTPLIB: ModuleType | None = None
 else:
-    _aiosmtplib = _loaded_aiosmtplib
+    _AIOSMTPLIB = _loaded_aiosmtplib
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +90,9 @@ class NotificationService:
         self._client = create_async_client(self.timeout)
 
     async def _send_smtp(self, *, message: EmailMessage, cfg: SMTPConfig) -> None:
-        if _aiosmtplib is None:
+        if _AIOSMTPLIB is None:
             raise RuntimeError("aiosmtplib is unavailable")
-        await _aiosmtplib.send(
+        await _AIOSMTPLIB.send(
             message,
             hostname=cfg["hostname"],
             port=cfg["port"],
@@ -137,14 +137,17 @@ class NotificationService:
             subject=f"[Incident Assigned] {incident_title}",
             cfg=cfg,
             recipient=recipient_email,
-            body="\n".join([
-                "You have been assigned an incident in Watchdog.", "",
-                f"Title: {incident_title}",
-                f"Status: {incident_status}",
-                f"Severity: {incident_severity}",
-                f"Updated by: {actor}",
-                f"Timestamp: {datetime.now(timezone.utc).isoformat()}",
-            ]),
+            body="\n".join(
+                [
+                    "You have been assigned an incident in Watchdog.",
+                    "",
+                    f"Title: {incident_title}",
+                    f"Status: {incident_status}",
+                    f"Severity: {incident_severity}",
+                    f"Updated by: {actor}",
+                    f"Timestamp: {datetime.now(timezone.utc).isoformat()}",
+                ]
+            ),
         )
         return await self._dispatch(cfg, msg, recipient_email)
 

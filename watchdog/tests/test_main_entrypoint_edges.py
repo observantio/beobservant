@@ -1,9 +1,9 @@
 """
-Copyright (c) 2026 Stefan Kumarasinghe
+Copyright (c) 2026 Stefan Kumarasinghe.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -91,9 +91,13 @@ async def test_upstream_reachable_and_lifespan_cleanup(monkeypatch):
                 raise self.error
             return self.response
 
-    monkeypatch.setattr(main_module.httpx, "AsyncClient", lambda **kwargs: FakeClient(response=types.SimpleNamespace(status_code=204)))
+    monkeypatch.setattr(
+        main_module.httpx, "AsyncClient", lambda **kwargs: FakeClient(response=types.SimpleNamespace(status_code=204))
+    )
     assert await main_module._upstream_reachable("http://tempo") is True
-    monkeypatch.setattr(main_module.httpx, "AsyncClient", lambda **kwargs: FakeClient(error=main_module.httpx.ConnectError("down")))
+    monkeypatch.setattr(
+        main_module.httpx, "AsyncClient", lambda **kwargs: FakeClient(error=main_module.httpx.ConnectError("down"))
+    )
     assert await main_module._upstream_reachable("http://tempo") is False
 
     class Closable:
@@ -107,9 +111,16 @@ async def test_upstream_reachable_and_lifespan_cleanup(monkeypatch):
     extra = Closable()
     monkeypatch.setattr(main_module.tempo_router, "tempo_service", types.SimpleNamespace(_client=shared), raising=False)
     monkeypatch.setattr(main_module.loki_router, "loki_service", types.SimpleNamespace(_client=shared), raising=False)
-    monkeypatch.setattr(main_module.alertmanager_router, "alertmanager_service", types.SimpleNamespace(_client=extra), raising=False)
+    monkeypatch.setattr(
+        main_module.alertmanager_router, "alertmanager_service", types.SimpleNamespace(_client=extra), raising=False
+    )
     monkeypatch.setattr(main_module.alertmanager_router, "notification_service", types.SimpleNamespace(), raising=False)
-    monkeypatch.setattr(main_module.grafana_router, "grafana_service", types.SimpleNamespace(_client=None, _mimir_client=extra), raising=False)
+    monkeypatch.setattr(
+        main_module.grafana_router,
+        "grafana_service",
+        types.SimpleNamespace(_client=None, _mimir_client=extra),
+        raising=False,
+    )
     monkeypatch.setattr(main_module.agents_router, "_mimir_client", extra, raising=False)
 
     async with main_module.lifespan(main_module.app):
@@ -126,7 +137,12 @@ async def test_lifespan_without_clients_is_a_noop(monkeypatch):
     monkeypatch.setattr(main_module.loki_router, "loki_service", None, raising=False)
     monkeypatch.setattr(main_module.alertmanager_router, "alertmanager_service", None, raising=False)
     monkeypatch.setattr(main_module.alertmanager_router, "notification_service", None, raising=False)
-    monkeypatch.setattr(main_module.grafana_router, "grafana_service", types.SimpleNamespace(_client=None, _mimir_client=None), raising=False)
+    monkeypatch.setattr(
+        main_module.grafana_router,
+        "grafana_service",
+        types.SimpleNamespace(_client=None, _mimir_client=None),
+        raising=False,
+    )
     monkeypatch.setattr(main_module.agents_router, "_mimir_client", None, raising=False)
 
     async with main_module.lifespan(main_module.app):
@@ -136,7 +152,9 @@ async def test_lifespan_without_clients_is_a_noop(monkeypatch):
 def test_dunder_main_runs_uvicorn(monkeypatch):
     _load_main(monkeypatch)
     captured = {}
-    monkeypatch.setitem(sys.modules, "uvicorn", types.SimpleNamespace(run=lambda app, **kwargs: captured.update({"app": app, **kwargs})))
+    monkeypatch.setitem(
+        sys.modules, "uvicorn", types.SimpleNamespace(run=lambda app, **kwargs: captured.update({"app": app, **kwargs}))
+    )
     runpy.run_module("main", run_name="__main__")
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 4319

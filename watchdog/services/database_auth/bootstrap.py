@@ -1,11 +1,15 @@
 """
-Database authentication service bootstrap utilities for ensuring that the default tenant, admin user, and permissions are created when the service starts up, allowing for a ready-to-use authentication setup with a default admin account and necessary permissions in place. This module provides functions to check for the existence of the default tenant and admin user, create them if they do not exist, and ensure that the required permissions are defined in the database, facilitating a smooth initial setup process for the database authentication service.
+Database authentication service bootstrap utilities for ensuring that the default tenant, admin user, and permissions
+are created when the service starts up, allowing for a ready-to-use authentication setup with a default admin account
+and necessary permissions in place. This module provides functions to check for the existence of the default tenant and
+admin user, create them if they do not exist, and ensure that the required permissions are defined in the database,
+facilitating a smooth initial setup process for the database authentication service.
 
 Copyright (c) 2026 Stefan Kumarasinghe
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
 
 BOOTSTRAP_PG_LOCK_KEY = 947201
+
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -95,9 +100,7 @@ def ensure_permissions(db: Session) -> None:
     if not wanted:
         return
 
-    existing = {
-        n for (n,) in db.query(Permission.name).filter(Permission.name.in_(wanted)).all()
-    }
+    existing = {n for (n,) in db.query(Permission.name).filter(Permission.name.in_(wanted)).all()}
 
     for name, display_name, description, resource_type, action in PERMISSION_DEFS:
         if name in existing:
@@ -117,15 +120,13 @@ def ensure_permissions(db: Session) -> None:
 def _disable_other_enabled_keys(db: Session, user_id: object, keep_id: object) -> None:
     now = _now_utc()
     db.execute(
-        text(
-            """
+        text("""
             UPDATE user_api_keys
             SET is_enabled = false, updated_at = :now
             WHERE user_id = :uid
               AND is_enabled = true
               AND id <> :keep
-            """
-        ),
+            """),
         {"uid": str(user_id), "keep": str(keep_id), "now": now},
     )
 
@@ -135,16 +136,9 @@ def ensure_default_api_key(service: DatabaseAuthService, db: Session, user: User
         return
 
     now = _now_utc()
-    is_system_user = _norm_lower(getattr(user, "username", "")) == _norm_lower(
-        config.DEFAULT_ADMIN_USERNAME
-    )
+    is_system_user = _norm_lower(getattr(user, "username", "")) == _norm_lower(config.DEFAULT_ADMIN_USERNAME)
 
-    existing = (
-        db.query(UserApiKey)
-        .filter_by(user_id=user.id, is_default=True)
-        .with_for_update()
-        .first()
-    )
+    existing = db.query(UserApiKey).filter_by(user_id=user.id, is_default=True).with_for_update().first()
 
     if existing:
         _disable_other_enabled_keys(db, existing.user_id, existing.id)
@@ -155,9 +149,8 @@ def ensure_default_api_key(service: DatabaseAuthService, db: Session, user: User
         if existing.name == "Default" and is_system_user:
             desired_raw = service._resolve_default_otlp_token()
             desired_hash = service._hash_otlp_token(desired_raw)
-            if (
-                not getattr(existing, "otlp_token_hash", None)
-                or (config.DEFAULT_OTLP_TOKEN and existing.otlp_token_hash != desired_hash)
+            if not getattr(existing, "otlp_token_hash", None) or (
+                config.DEFAULT_OTLP_TOKEN and existing.otlp_token_hash != desired_hash
             ):
                 existing.otlp_token_hash = desired_hash
                 existing.otlp_token = None
@@ -171,11 +164,7 @@ def ensure_default_api_key(service: DatabaseAuthService, db: Session, user: User
             existing.updated_at = now
         return
 
-    raw_token = (
-        service._resolve_default_otlp_token()
-        if is_system_user
-        else service._generate_otlp_token()
-    )
+    raw_token = service._resolve_default_otlp_token() if is_system_user else service._generate_otlp_token()
     new_key = UserApiKey(
         tenant_id=user.tenant_id,
         user_id=user.id,
@@ -203,9 +192,7 @@ def ensure_default_setup(service: DatabaseAuthService) -> None:
 
                 ensure_permissions(db)
 
-                default_tenant = (
-                    db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
-                )
+                default_tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
 
                 if not config.DEFAULT_ADMIN_BOOTSTRAP_ENABLED:
                     if not default_tenant:
@@ -239,10 +226,7 @@ def ensure_default_setup(service: DatabaseAuthService) -> None:
                     db.query(User)
                     .filter(
                         User.tenant_id == default_tenant.id,
-                        (
-                            (func.lower(User.username) == admin_username)
-                            | (func.lower(User.email) == admin_email)
-                        ),
+                        ((func.lower(User.username) == admin_username) | (func.lower(User.email) == admin_email)),
                     )
                     .with_for_update()
                     .first()
@@ -267,9 +251,7 @@ def ensure_default_setup(service: DatabaseAuthService) -> None:
                     db.add(admin_user)
                     db.flush()
                     admin_user.permissions.extend(db.query(Permission).all())
-                    service.logger.info(
-                        "Created default admin user: %s", config.DEFAULT_ADMIN_USERNAME
-                    )
+                    service.logger.info("Created default admin user: %s", config.DEFAULT_ADMIN_USERNAME)
 
                 ensure_default_api_key(service, db, admin_user)
                 db.commit()
@@ -321,16 +303,12 @@ def _ensure_grafana_folder_columns(db: Session) -> None:
 
 
 def _backfill_password_changed_at(db: Session) -> None:
-    db.execute(
-        text(
-            """
+    db.execute(text("""
             UPDATE users
             SET password_changed_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)
             WHERE auth_provider = 'local'
               AND password_changed_at IS NULL
-            """
-        )
-    )
+            """))
     db.flush()
 
 
@@ -349,14 +327,26 @@ def _ensure_api_key_constraints(db: Session) -> None:
     if dialect == "postgresql":
         statements = [
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_api_keys_otlp_token_hash ON user_api_keys (otlp_token_hash)",
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_api_keys_user_default_true ON user_api_keys (user_id) WHERE is_default = true",
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_api_keys_user_enabled_true ON user_api_keys (user_id) WHERE is_enabled = true",
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_api_keys_user_default_true "
+                "ON user_api_keys (user_id) WHERE is_default = true"
+            ),
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_api_keys_user_enabled_true "
+                "ON user_api_keys (user_id) WHERE is_enabled = true"
+            ),
         ]
     elif dialect == "sqlite":
         statements = [
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_api_keys_otlp_token_hash ON user_api_keys (otlp_token_hash)",
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_api_keys_user_default_true ON user_api_keys (user_id) WHERE is_default = 1",
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_api_keys_user_enabled_true ON user_api_keys (user_id) WHERE is_enabled = 1",
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_api_keys_user_default_true "
+                "ON user_api_keys (user_id) WHERE is_default = 1"
+            ),
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_api_keys_user_enabled_true "
+                "ON user_api_keys (user_id) WHERE is_enabled = 1"
+            ),
         ]
     else:
         statements = []
