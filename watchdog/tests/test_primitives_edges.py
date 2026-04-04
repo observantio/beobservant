@@ -618,6 +618,40 @@ async def test_ojo_release_returns_fallback_payload_on_upstream_error(monkeypatc
     assert payload["releases_ok"] is False
 
 
+@pytest.mark.asyncio
+async def test_ojo_release_returns_stale_cached_payload_on_upstream_error(monkeypatch):
+    class _FailingAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, *args, **kwargs):
+            raise httpx.ConnectError("boom")
+
+    cached = {
+        "latest": {"tag_name": "v1.2.3"},
+        "releases": [{"tag_name": "v1.2.3"}],
+        "latest_ok": True,
+        "releases_ok": True,
+    }
+
+    monkeypatch.setattr(system_router.httpx, "AsyncClient", _FailingAsyncClient)
+    monkeypatch.setattr(system_router, "ojo_release_cache_payload", cached)
+    monkeypatch.setattr(system_router, "ojo_release_cache_expires_at", 0.0)
+
+    payload = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
+    assert payload["latest"]["tag_name"] == "v1.2.3"
+    assert payload["releases"][0]["tag_name"] == "v1.2.3"
+    assert payload["latest_ok"] is True
+    assert payload["releases_ok"] is True
+    assert payload["cache_stale"] is True
+
+
 def test_encryption_edges(monkeypatch):
     encryption_module._get_fernet.cache_clear()
     monkeypatch.setattr(encryption_module.app_config, "DATA_ENCRYPTION_KEY", None)
