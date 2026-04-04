@@ -2,21 +2,29 @@
 
 # Observantio's Watchdog
 
-<img src="assets/settings.png" alt="Watchdog settings preview" width="150" />
+  <img src="assets/star.png" alt="Watchdog settings preview" width="150" />
 
-<p>
-  <img src="https://img.shields.io/badge/stack-Grafana%20%7C%20Loki%20%7C%20Tempo%20%7C%20Mimir%20%7C%20Alertmanager-1f2937?style=flat-square" alt="Stack" />
-  <img src="https://img.shields.io/badge/control%20plane-Watchdog-0f766e?style=flat-square" alt="Control Plane" />
-  <img src="https://img.shields.io/badge/RCA-AI--assisted-7c3aed?style=flat-square" alt="RCA" />
+  <p>
+    <img src="https://img.shields.io/badge/Stack-Grafana%20%7C%20Loki%20%7C%20Tempo%20%7C%20Mimir%20%7C%20Alertmanager-1f2937?style=flat-square" alt="Stack" />
+    <img src="https://img.shields.io/badge/Control%20plane-Watchdog-0f766e?style=flat-square" alt="Control Plane" />
+    <img src="https://img.shields.io/badge/RCA-AI--assisted-7c3aed?style=flat-square" alt="RCA" />
+  </p>
+  <p>
+    <a href="https://github.com/observantio/watchdog/blob/main/DEPLOYMENT.md">
+      <img src="https://img.shields.io/badge/🚀%20Deploy-Quick%20Setup-0ea5e9?style=flat-square&logo=docker&logoColor=white" alt="Deploy" />
+    </a>
+    <a href="https://github.com/observantio/watchdog/blob/main/USER%20GUIDE.md">
+      <img src="https://img.shields.io/badge/📘%20User%20Guide-Read%20Docs-16a34a?style=flat-square&logo=readthedocs&logoColor=white" alt="User Guide" />
+    </a>
 </p>
-
 </div>
 <div>
-<p><strong>Self-hosted observability control plane for multi-tenant teams.</strong></p>
-
-<p>
-Watchdog is built around Grafana, Loki, Tempo, Mimir, and Alertmanager, with application services that add tenancy, access control, alert workflows, and AI-assisted root cause analysis.
-</p>
+  <p> 
+    <strong>Self-hosted observability control plane for multi-tenant teams</strong>
+  </p>
+  <p>
+  Watchdog is built around Grafana, Loki, Tempo, Mimir, and Alertmanager, with application services that add tenancy, access control, alert workflows, and AI-assisted root cause analysis.
+  </p>
 </div>
 
 
