@@ -15,6 +15,8 @@ import {
 import {
   DEFAULT_FORM,
   RULE_TEMPLATES,
+  filterSelectableChannels,
+  normalizeRuleOrChannelVisibility,
   validateRuleForm,
   createLabelPairsFromRule,
 } from "./ruleEditorUtils";
@@ -355,11 +357,55 @@ export default function RuleEditor({
     }
   };
 
+  const normalizedRuleVisibility = useMemo(
+    () => normalizeRuleOrChannelVisibility(formData.visibility),
+    [formData.visibility],
+  );
+
+  const selectableChannels = useMemo(
+    () =>
+      filterSelectableChannels(channels || [], normalizedRuleVisibility, {
+        ruleSharedGroupIds: Array.from(selectedGroups),
+      }),
+    [channels, normalizedRuleVisibility, selectedGroups],
+  );
+
+  const selectableChannelIds = useMemo(
+    () => new Set(selectableChannels.map((channel) => String(channel.id || ""))),
+    [selectableChannels],
+  );
+
+  const invalidSelectedChannels = useMemo(() => {
+    const selected = Array.isArray(formData.notificationChannels)
+      ? formData.notificationChannels.map((id) => String(id || "")).filter(Boolean)
+      : [];
+    if (!selected.length) return [];
+    const byId = new Map((channels || []).map((channel) => [String(channel.id || ""), channel]));
+    return selected
+      .filter((channelId) => !selectableChannelIds.has(channelId))
+      .map((channelId) => byId.get(channelId))
+      .filter(Boolean);
+  }, [formData.notificationChannels, channels, selectableChannelIds]);
+
+  const computeFormValidation = useCallback(() => {
+    const { errors: baseErrors, warnings } = validateRuleForm(formData, labelPairs);
+    const errors = { ...baseErrors };
+    if (invalidSelectedChannels.length > 0) {
+      const invalidNames = invalidSelectedChannels
+        .map((channel) => String(channel?.name || "").trim())
+        .filter(Boolean);
+      errors.notificationChannels = invalidNames.length
+        ? `The selected channels are not allowed for ${normalizedRuleVisibility} visibility: ${invalidNames.join(", ")}`
+        : `One or more selected channels are not allowed for ${normalizedRuleVisibility} visibility.`;
+    }
+    return { errors, warnings };
+  }, [formData, labelPairs, invalidSelectedChannels, normalizedRuleVisibility]);
+
   useEffect(() => {
-    const { errors, warnings } = validateRuleForm(formData, labelPairs);
+    const { errors, warnings } = computeFormValidation();
     setValidationErrors(errors);
     setValidationWarnings(warnings);
-  }, [formData, labelPairs]);
+  }, [computeFormValidation]);
 
   const loadMetrics = useCallback(async () => {
     const requestId = metricsLoadRequestRef.current + 1;
@@ -748,7 +794,7 @@ export default function RuleEditor({
   };
 
   const canProceedToNextStep = () => {
-    const { errors } = validateRuleForm(formData, labelPairs);
+    const { errors } = computeFormValidation();
     switch (currentStep) {
       case 0: 
         return Boolean(!errors.name && formData.name.trim());
@@ -759,7 +805,7 @@ export default function RuleEditor({
       case 2: 
         return true;
       case 3: 
-        return true; 
+        return Boolean(!errors.notificationChannels); 
       default:
         return false;
     }
@@ -784,7 +830,7 @@ export default function RuleEditor({
   };
 
   const handleWizardSubmit = async () => {
-    const { errors } = validateRuleForm(formData, labelPairs);
+    const { errors } = computeFormValidation();
     if (Object.keys(errors).length > 0) return;
 
     setSaving(true);
@@ -1732,15 +1778,20 @@ export default function RuleEditor({
                         Notification Channels
                       </h4>
                       <p className="text-sm text-sre-text-muted">
-                        {channels?.length > 0
-                          ? `${channels.length} channel${channels.length !== 1 ? "s" : ""} configured`
+                        {selectableChannels.length > 0
+                          ? `${selectableChannels.length} channel${selectableChannels.length !== 1 ? "s" : ""} can be selected for ${normalizedRuleVisibility} visibility`
                           : "No channels configured"}
                       </p>
                     </div>
                   </div>
 
+                  <p className="text-xs text-sre-text-muted leading-relaxed">
+                    Visibility hierarchy for channel selection:
+                    private rules can select private channels only, group rules can select private channels and group channels shared to the same group(s), and tenant/public rules can select private channels plus group channels across groups.
+                  </p>
+
                   <div className="space-y-3">
-                    {channels?.length > 0 ? (
+                    {selectableChannels.length > 0 ? (
                       <>
                         {/* All Channels Option */}
                         <div
@@ -1752,7 +1803,7 @@ export default function RuleEditor({
                             ) {
                               newChannels = [];
                             } else {
-                              newChannels = channels.map((c) => c.id);
+                              newChannels = selectableChannels.map((c) => c.id);
                             }
                             setFormData({
                               ...formData,
@@ -1787,7 +1838,7 @@ export default function RuleEditor({
                                 All Channels
                               </div>
                               <div className="text-sm text-sre-text-muted">
-                                Use all enabled notification channels (default)
+                                Use all eligible channels for this visibility (default)
                               </div>
                             </div>
                           </div>
@@ -1795,7 +1846,7 @@ export default function RuleEditor({
 
                         {/* Individual Channels */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                          {channels.map((channel) => {
+                          {selectableChannels.map((channel) => {
                             const isSelected =
                               formData.notificationChannels?.includes(
                                 channel.id,
@@ -1864,6 +1915,9 @@ export default function RuleEditor({
                                     <div className="font-semibold text-sre-text mb-1">
                                       {channel.name}
                                     </div>
+                                    <div className="text-xs text-sre-text-muted mb-1">
+                                      Visibility: {normalizeRuleOrChannelVisibility(channel.visibility)}
+                                    </div>
                                     {channel.config?.channel && (
                                       <div className="text-sm text-sre-text-muted">
                                         Channel: {channel.config.channel}
@@ -1891,6 +1945,12 @@ export default function RuleEditor({
                             );
                           })}
                         </div>
+                        {validationErrors.notificationChannels && (
+                          <p className="text-sm text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
+                            <span className="material-icons text-sm">error</span>
+                            {validationErrors.notificationChannels}
+                          </p>
+                        )}
                       </>
                     ) : (
                       <div className="text-center py-8 px-6 rounded-xl border-2 border-dashed border-sre-border bg-sre-bg-alt">
@@ -1898,9 +1958,15 @@ export default function RuleEditor({
                           notifications_off
                         </span>
                         <h4 className="text-base font-semibold text-sre-text mb-2">
-                          No Channels Configured
+                          {canReadChannels && channels?.length > 0
+                            ? "No Eligible Channels"
+                            : "No Channels Configured"}
                         </h4>
-                        {canReadChannels ? (
+                        {canReadChannels && channels?.length > 0 ? (
+                          <p className="text-sre-text-muted mb-4">
+                            No channels match the current rule visibility. Change visibility to select channels.
+                          </p>
+                        ) : canReadChannels ? (
                           <>
                             <p className="text-sre-text-muted mb-4">
                               Configure notification channels before assigning

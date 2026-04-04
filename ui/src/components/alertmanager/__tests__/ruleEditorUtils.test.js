@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   DURATION_PATTERN,
   DEFAULT_FORM,
+  filterSelectableChannels,
+  isChannelSelectableForRuleVisibility,
+  normalizeRuleOrChannelVisibility,
   RULE_TEMPLATES,
   createLabelPairsFromRule,
   validateRuleForm,
@@ -55,5 +58,40 @@ describe("ruleEditorUtils", () => {
     expect(pairs).toHaveLength(2);
     expect(pairs[0].id).toContain("label-0-");
     expect(pairs.map((item) => item.key)).toEqual(expect.arrayContaining(["env", "team"]));
+  });
+
+  it("applies channel visibility hierarchy for selection", () => {
+    expect(normalizeRuleOrChannelVisibility("tenant")).toBe("public");
+    expect(isChannelSelectableForRuleVisibility("private", "private")).toBe(true);
+    expect(isChannelSelectableForRuleVisibility("private", "tenant")).toBe(false);
+    expect(isChannelSelectableForRuleVisibility("group", "private")).toBe(true);
+    expect(
+      isChannelSelectableForRuleVisibility("group", "group", {
+        ruleSharedGroupIds: ["g1"],
+        channelSharedGroupIds: ["g1"],
+      }),
+    ).toBe(true);
+    expect(
+      isChannelSelectableForRuleVisibility("group", "group", {
+        ruleSharedGroupIds: ["g1"],
+        channelSharedGroupIds: ["g2"],
+      }),
+    ).toBe(false);
+    expect(isChannelSelectableForRuleVisibility("group", "tenant")).toBe(false);
+    expect(isChannelSelectableForRuleVisibility("tenant", "private")).toBe(true);
+    expect(isChannelSelectableForRuleVisibility("tenant", "group")).toBe(true);
+    expect(isChannelSelectableForRuleVisibility("tenant", "tenant")).toBe(false);
+
+    const filtered = filterSelectableChannels(
+      [
+        { id: "a", visibility: "private", sharedGroupIds: [] },
+        { id: "b", visibility: "group", sharedGroupIds: ["g1"] },
+        { id: "d", visibility: "group", sharedGroupIds: ["g2"] },
+        { id: "c", visibility: "tenant" },
+      ],
+      "group",
+      { ruleSharedGroupIds: ["g1"] },
+    );
+    expect(filtered.map((channel) => channel.id)).toEqual(["a", "b"]);
   });
 });

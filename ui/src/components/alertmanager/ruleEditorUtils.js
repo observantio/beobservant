@@ -83,6 +83,57 @@ export const DEFAULT_FORM = {
 
 const VALID_SEVERITIES = new Set(["info", "warning", "critical"]);
 
+export function normalizeRuleOrChannelVisibility(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "tenant" || normalized === "public") return "public";
+  if (normalized === "group") return "group";
+  return "private";
+}
+
+function _normalizedSet(values) {
+  return new Set((values || []).map((value) => String(value || "").trim()).filter(Boolean));
+}
+
+export function isChannelSelectableForRuleVisibility(
+  ruleVisibility,
+  channelVisibility,
+  {
+    ruleSharedGroupIds = [],
+    channelSharedGroupIds = [],
+  } = {},
+) {
+  const ruleScope = normalizeRuleOrChannelVisibility(ruleVisibility);
+  const channelScope = normalizeRuleOrChannelVisibility(channelVisibility);
+  if (ruleScope === "private") return channelScope === "private";
+  if (ruleScope === "group") {
+    if (channelScope === "private") return true;
+    if (channelScope !== "group") return false;
+    const ruleGroups = _normalizedSet(ruleSharedGroupIds);
+    const channelGroups = _normalizedSet(channelSharedGroupIds);
+    for (const groupId of ruleGroups) {
+      if (channelGroups.has(groupId)) return true;
+    }
+    return false;
+  }
+  return channelScope === "private" || channelScope === "group";
+}
+
+export function filterSelectableChannels(
+  channels,
+  ruleVisibility,
+  {
+    ruleSharedGroupIds = [],
+  } = {},
+) {
+  return (channels || []).filter((channel) =>
+    isChannelSelectableForRuleVisibility(ruleVisibility, channel?.visibility, {
+      ruleSharedGroupIds,
+      channelSharedGroupIds:
+        channel?.sharedGroupIds || channel?.shared_group_ids || [],
+    }),
+  );
+}
+
 export function validateRuleForm(data, labelPairs) {
   const errors = {};
   const warnings = [];

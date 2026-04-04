@@ -259,7 +259,7 @@ const TOPICS = {
       "Use labels consistently across rules and configure silences with matching labels so muting applies to the right alert set.",
       "When a matching silence is active, the alert can still appear on the Alert Board for visibility, but it will not invoke notification channels and will not create incidents on the Incidents board.",
       "Add a correlation ID (or shared grouping label) to related rules so alerts can be grouped together and searched faster during triage.",
-      "Attach one or more notification channels from Integrations visible to you. Shared integrations can be selected for routing, but their underlying configuration cannot be viewed or edited unless you own or manage them.",
+      "Attach one or more notification channels from Integrations visible to you. Channel selection follows rule visibility hierarchy: private rules invoke private owner channels only; group rules invoke private channels plus group channels shared to the same group(s); tenant/public rules invoke private channels plus all group channels.",
       "Run a test trigger and confirm delivery to expected recipients.",
     ],
   },

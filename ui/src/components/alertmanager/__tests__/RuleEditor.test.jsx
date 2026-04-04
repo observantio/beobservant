@@ -52,6 +52,11 @@ const defaultProps = {
   onSave: noop,
   onCancel: noop,
 };
+const mixedChannels = [
+  { id: "c-private", name: "Private Channel", type: "slack", enabled: true, visibility: "private", config: {} },
+  { id: "c-group", name: "Group Channel", type: "email", enabled: true, visibility: "group", config: {} },
+  { id: "c-tenant", name: "Tenant Channel", type: "webhook", enabled: true, visibility: "tenant", config: {} },
+];
 const renderRuleEditor = async (props = {}) => {
   render(<RuleEditor {...defaultProps} {...props} />);
   await waitFor(() => {
@@ -91,6 +96,40 @@ describe("RuleEditor notification channel section", () => {
 
     expect(screen.getByText(/don't have permission/i)).toBeInTheDocument();
     expect(screen.queryByText("Manage Integrations")).not.toBeInTheDocument();
+  });
+
+  it("filters selectable channels by private visibility", async () => {
+    useAuth.mockReturnValue({ hasPermission: () => true, user: { id: "u-1" } });
+    await renderRuleEditor({
+      channels: mixedChannels,
+      rule: { ...baseRule, visibility: "private" },
+    });
+    advanceToStep4();
+
+    expect(screen.getByText("Private Channel")).toBeInTheDocument();
+    expect(screen.queryByText("Group Channel")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tenant Channel")).not.toBeInTheDocument();
+  });
+
+  it("shows channel-visibility error when selected channel becomes invalid after visibility change", async () => {
+    useAuth.mockReturnValue({ hasPermission: () => true, user: { id: "u-1" } });
+    await renderRuleEditor({
+      channels: mixedChannels,
+      rule: {
+        ...baseRule,
+        visibility: "tenant",
+        notificationChannels: ["c-tenant"],
+      },
+    });
+    advanceToStep4();
+
+    fireEvent.change(screen.getByLabelText(/Visibility/i), {
+      target: { value: "private" },
+    });
+
+    expect(
+      screen.getByText(/not allowed for private visibility/i),
+    ).toBeInTheDocument();
   });
 });
 

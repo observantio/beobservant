@@ -14,6 +14,10 @@ All notable changes to this project are documented here.
 - Updated global and service Schemathesis scripts to standardize OIDC-bearer fallback handling and consistent snapshot publication behavior.
 - Updated gateway contract handling to use middleware-based dynamic OpenAPI response inference, matching the existing cross-service pattern.
 - Resolved validation gaps identified by Schemathesis and fuzz-style tests; the provided verification scripts now run fully green (100%).
+- Updated AlertManager rule-channel compatibility UX and Guide documentation to reflect explicit visibility hierarchy:
+  - private rules can invoke private owner channels only.
+  - group rules can invoke private channels and overlapping group channels.
+  - tenant/public rules can invoke private channels and any group channel.
 
 ## [v0.0.2] - 2026-03-26
 
