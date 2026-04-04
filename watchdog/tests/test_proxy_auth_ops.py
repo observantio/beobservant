@@ -179,7 +179,7 @@ def test_proxy_small_helper_branches(monkeypatch):
 
     proxy_auth_ops.clear_proxy_auth_cache()
     proxy_auth_ops.PROXY_AUTH_CACHE["stale"] = {"expires": 0.0, "headers": {"stale": "1"}}
-    monkeypatch.setattr(proxy_auth_ops, "proxy_auth_cache_ops", proxy_auth_ops.PROXY_AUTH_CACHE_GC_EVERY - 1)
+    monkeypatch.setattr(proxy_auth_ops, "PROXY_AUTH_CACHE_OPS", proxy_auth_ops.PROXY_AUTH_CACHE_GC_EVERY - 1)
     monkeypatch.setattr(time, "monotonic", lambda: 5.0)
     proxy_auth_ops._cache_set("tok-2", "GET", "/grafana/api/search", "tenant-a", {"fresh": "1"})
     assert "stale" not in proxy_auth_ops.PROXY_AUTH_CACHE

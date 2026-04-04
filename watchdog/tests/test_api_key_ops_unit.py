@@ -25,6 +25,7 @@ ensure_test_env()
 from db_models import ApiKeyShare, Base, Group, HiddenApiKey, Tenant, User, UserApiKey
 from models.access.api_key_models import ApiKeyCreate, ApiKeyUpdate
 from services.auth import api_key_ops
+from services.auth import api_key_schema
 
 
 def _session():
@@ -76,8 +77,8 @@ def test_api_key_helper_functions_cover_edge_cases():
         api_key_ops._normalize_scope_key("a$")
 
     now = datetime.now(timezone.utc)
-    assert api_key_ops._share_created_at(SimpleNamespace(created_at=now)) == now
-    assert isinstance(api_key_ops._share_created_at(SimpleNamespace(created_at=None)), datetime)
+    assert api_key_schema.share_created_at(SimpleNamespace(created_at=now)) == now
+    assert isinstance(api_key_schema.share_created_at(SimpleNamespace(created_at=None)), datetime)
     assert api_key_ops._normalize_api_key_name(" name ") == "name"
     with pytest.raises(ValueError, match="name is required"):
         api_key_ops._normalize_api_key_name(" ")
@@ -122,18 +123,18 @@ def test_api_key_db_helpers_and_schema_mapping():
     with pytest.raises(ValueError, match="name already exists"):
         api_key_ops._assert_unique_api_key_name(db, tenant_id="t1", owner_user_id=owner.id, name="key one")
 
-    shares = api_key_ops._list_api_key_shares_in_session(db, tenant_id="t1", key_id=key.id)
+    shares = api_key_ops.list_api_key_shares_in_session(db, tenant_id="t1", key_id=key.id)
     assert shares[0].user_id == other.id
     assert shares[0].username == other.username
 
-    owner_schema = api_key_ops._api_key_to_schema(
+    owner_schema = api_key_ops.api_key_to_schema(
         key, is_shared=False, can_use=True, viewer_enabled=True, is_hidden=True
     )
     assert owner_schema.otlp_token == "secret"
     assert owner_schema.is_hidden is True
     assert owner_schema.shared_with[0].user_id == other.id
 
-    shared_schema = api_key_ops._api_key_to_schema(key, is_shared=True, can_use=True, viewer_enabled=False)
+    shared_schema = api_key_ops.api_key_to_schema(key, is_shared=True, can_use=True, viewer_enabled=False)
     assert shared_schema.otlp_token is None
     assert shared_schema.is_shared is True
     assert shared_schema.owner_username == owner.username

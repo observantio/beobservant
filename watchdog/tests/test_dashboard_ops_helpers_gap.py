@@ -20,6 +20,7 @@ ensure_test_env()
 
 from db_models import Base, GrafanaDashboard, Group, Tenant, User
 from services.grafana import dashboard_ops
+from services.grafana import dashboard_helpers
 
 
 def _session():
@@ -58,10 +59,10 @@ def _seed(db):
 def test_dashboard_helper_json_and_folder_id_parsers():
     assert dashboard_ops._json_dict({"a": 1}) == {"a": 1}
     assert dashboard_ops._json_dict([]) == {}
-    assert dashboard_ops._json_dict_list([{"a": 1}, 1, "x"]) == [{"a": 1}]
-    assert dashboard_ops._json_dict_list({"a": 1}) == []
+    assert dashboard_helpers._json_dict_list([{"a": 1}, 1, "x"]) == [{"a": 1}]
+    assert dashboard_helpers._json_dict_list({"a": 1}) == []
     assert dashboard_ops._cap(10000, -2)[0] >= 1
-    assert dashboard_ops._normalize_title(" CPU ") == "cpu"
+    assert dashboard_helpers._normalize_title(" CPU ") == "cpu"
 
     assert dashboard_ops._is_general_folder_id(0) is True
     assert dashboard_ops._is_general_folder_id("0") is True

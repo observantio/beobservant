@@ -289,7 +289,7 @@ def test_rate_limit_primitives_and_ip_edges(monkeypatch):
         ).hit("d", limit=2, window_seconds=60)
 
     monkeypatch.setattr(observability_module.logger, "warning", lambda message, *args: warnings.append((message, args)))
-    monkeypatch.setattr(observability_module, "_rate_limit_fallback_total", 0)
+    monkeypatch.setattr(observability_module, "_RATE_LIMIT_FALLBACK_TOTAL", 0)
     monkeypatch.setattr(observability_module, "_rate_limit_fallback_by_mode", {"memory": 0, "deny": 0, "allow": 0})
     observability_module.record_fallback_event("custom", "manual")
     assert observability_module.get_rate_limit_observability_snapshot() == {
@@ -640,8 +640,8 @@ async def test_internal_and_system_router_edges(monkeypatch):
     monkeypatch.setattr(system_router.httpx, "AsyncClient", lambda *args, **kwargs: fake_client)
     base_time = 1_000_000.0
     monkeypatch.setattr(system_router.time, "monotonic", lambda: base_time)
-    monkeypatch.setattr(system_router, "ojo_release_cache_payload", None)
-    monkeypatch.setattr(system_router, "ojo_release_cache_expires_at", 0.0)
+    monkeypatch.setattr(system_router, "OJO_RELEASE_CACHE_PAYLOAD", None)
+    monkeypatch.setattr(system_router, "OJO_RELEASE_CACHE_EXPIRES_AT", 0.0)
 
     first = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
     second = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
@@ -666,8 +666,8 @@ async def test_ojo_release_returns_fallback_payload_on_upstream_error(monkeypatc
             raise httpx.ConnectError("boom")
 
     monkeypatch.setattr(system_router.httpx, "AsyncClient", _FailingAsyncClient)
-    monkeypatch.setattr(system_router, "ojo_release_cache_payload", None)
-    monkeypatch.setattr(system_router, "ojo_release_cache_expires_at", 0.0)
+    monkeypatch.setattr(system_router, "OJO_RELEASE_CACHE_PAYLOAD", None)
+    monkeypatch.setattr(system_router, "OJO_RELEASE_CACHE_EXPIRES_AT", 0.0)
 
     payload = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
     assert payload["latest"] == {}
@@ -699,8 +699,8 @@ async def test_ojo_release_returns_stale_cached_payload_on_upstream_error(monkey
     }
 
     monkeypatch.setattr(system_router.httpx, "AsyncClient", _FailingAsyncClient)
-    monkeypatch.setattr(system_router, "ojo_release_cache_payload", cached)
-    monkeypatch.setattr(system_router, "ojo_release_cache_expires_at", 0.0)
+    monkeypatch.setattr(system_router, "OJO_RELEASE_CACHE_PAYLOAD", cached)
+    monkeypatch.setattr(system_router, "OJO_RELEASE_CACHE_EXPIRES_AT", 0.0)
 
     payload = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
     assert payload["latest"]["tag_name"] == "v1.2.3"

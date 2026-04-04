@@ -10,13 +10,27 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Protocol
 
+from db_models import Group
 from sqlalchemy.orm import Session
 
 
+class _GroupVisibilityService(Protocol):
+    def _validate_group_visibility(
+        self,
+        db: Session,
+        *,
+        user_id: str,
+        tenant_id: str,
+        group_ids: List[str],
+        shared_group_ids: Optional[List[str]],
+        is_admin: bool,
+    ) -> List[Group]: ...
+
+
 def resolve_visibility_groups(
-    service: object,
+    service: _GroupVisibilityService,
     db: Session,
     user_id: str,
     tenant_id: str,
@@ -24,10 +38,10 @@ def resolve_visibility_groups(
     group_ids: List[str],
     shared_group_ids: Optional[List[str]],
     is_admin: bool,
-) -> List[object]:
+) -> List[Group]:
     if visibility != "group":
         return []
-    return service._validate_group_visibility(  # type: ignore[attr-defined]
+    return service._validate_group_visibility(
         db,
         user_id=user_id,
         tenant_id=tenant_id,

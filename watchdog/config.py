@@ -11,7 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 import logging
 import os
 import secrets
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
@@ -106,215 +106,215 @@ def _slug_token(value: Optional[str], default: str) -> str:
 
 
 def _populate_config(cfg: "Config") -> None:
-    cfg.APP_ENV: str = _env_name()
-    cfg.IS_PRODUCTION: bool = _is_production_env()
+    cfg.APP_ENV = _env_name()
+    cfg.IS_PRODUCTION = _is_production_env()
 
-    cfg.HOST: str = os.getenv("HOST", "127.0.0.1")
-    cfg.PORT: int = int(os.getenv("PORT", "4319"))
-    cfg.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
-    cfg.ENABLE_API_DOCS: bool = _to_bool(os.getenv("ENABLE_API_DOCS"), default=not cfg.IS_PRODUCTION)
-    cfg.SKIP_STARTUP_DB_INIT: bool = _to_bool(os.getenv("SKIP_STARTUP_DB_INIT"), default=False)
+    cfg.HOST = os.getenv("HOST", "127.0.0.1")
+    cfg.PORT = int(os.getenv("PORT", "4319"))
+    cfg.LOG_LEVEL = os.getenv("LOG_LEVEL", "info")
+    cfg.ENABLE_API_DOCS = _to_bool(os.getenv("ENABLE_API_DOCS"), default=not cfg.IS_PRODUCTION)
+    cfg.SKIP_STARTUP_DB_INIT = _to_bool(os.getenv("SKIP_STARTUP_DB_INIT"), default=False)
 
-    cfg.TEMPO_URL: str = os.getenv("TEMPO_URL", "http://tempo:3200")
-    cfg.LOKI_URL: str = os.getenv("LOKI_URL", "http://loki:3100")
-    cfg.ALERTMANAGER_URL: str = os.getenv("ALERTMANAGER_URL", "http://alertmanager:9093")
-    cfg.NOTIFIER_URL: str = os.getenv("NOTIFIER_URL", "http://notifier:4323")
-    cfg.RESOLVER_URL: str = os.getenv("RESOLVER_URL", "http://resolver:4322")
-    cfg.GRAFANA_URL: str = os.getenv("GRAFANA_URL", "http://grafana:3000")
-    cfg.MIMIR_URL: str = os.getenv("MIMIR_URL", "http://mimir:9009")
+    cfg.TEMPO_URL = os.getenv("TEMPO_URL", "http://tempo:3200")
+    cfg.LOKI_URL = os.getenv("LOKI_URL", "http://loki:3100")
+    cfg.ALERTMANAGER_URL = os.getenv("ALERTMANAGER_URL", "http://alertmanager:9093")
+    cfg.NOTIFIER_URL = os.getenv("NOTIFIER_URL", "http://notifier:4323")
+    cfg.RESOLVER_URL = os.getenv("RESOLVER_URL", "http://resolver:4322")
+    cfg.GRAFANA_URL = os.getenv("GRAFANA_URL", "http://grafana:3000")
+    cfg.MIMIR_URL = os.getenv("MIMIR_URL", "http://mimir:9009")
 
-    cfg.GRAFANA_USERNAME: str = os.getenv("GRAFANA_USERNAME", "admin")
-    cfg.GRAFANA_PASSWORD: str = os.getenv("GRAFANA_PASSWORD", "admin")
-    cfg.GRAFANA_API_KEY: Optional[str] = os.getenv("GRAFANA_API_KEY")
+    cfg.GRAFANA_USERNAME = os.getenv("GRAFANA_USERNAME", "admin")
+    cfg.GRAFANA_PASSWORD = os.getenv("GRAFANA_PASSWORD", "admin")
+    cfg.GRAFANA_API_KEY = os.getenv("GRAFANA_API_KEY")
 
-    cfg.DATA_ENCRYPTION_KEY: Optional[str] = os.getenv("DATA_ENCRYPTION_KEY")
+    cfg.DATA_ENCRYPTION_KEY = os.getenv("DATA_ENCRYPTION_KEY")
 
-    cfg.DATABASE_URL: str = os.getenv("DATABASE_URL", cfg.EXAMPLE_DATABASE_URL)
+    cfg.DATABASE_URL = os.getenv("DATABASE_URL", cfg.EXAMPLE_DATABASE_URL)
 
-    cfg.DEFAULT_TIMEOUT: float = float(os.getenv("DEFAULT_TIMEOUT", "30.0"))
-    cfg.NOTIFIER_TIMEOUT_SECONDS: float = float(os.getenv("NOTIFIER_TIMEOUT_SECONDS", "15.0"))
-    cfg.RESOLVER_TIMEOUT_SECONDS: float = float(os.getenv("RESOLVER_TIMEOUT_SECONDS", "20.0"))
-    cfg.MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
-    cfg.RETRY_BACKOFF: float = float(os.getenv("RETRY_BACKOFF", "1.0"))
-    cfg.RETRY_MAX_BACKOFF: float = float(os.getenv("RETRY_MAX_BACKOFF", "8.0"))
-    cfg.RETRY_JITTER: float = float(os.getenv("RETRY_JITTER", "0.1"))
+    cfg.DEFAULT_TIMEOUT = float(os.getenv("DEFAULT_TIMEOUT", "30.0"))
+    cfg.NOTIFIER_TIMEOUT_SECONDS = float(os.getenv("NOTIFIER_TIMEOUT_SECONDS", "15.0"))
+    cfg.RESOLVER_TIMEOUT_SECONDS = float(os.getenv("RESOLVER_TIMEOUT_SECONDS", "20.0"))
+    cfg.MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+    cfg.RETRY_BACKOFF = float(os.getenv("RETRY_BACKOFF", "1.0"))
+    cfg.RETRY_MAX_BACKOFF = float(os.getenv("RETRY_MAX_BACKOFF", "8.0"))
+    cfg.RETRY_JITTER = float(os.getenv("RETRY_JITTER", "0.1"))
 
-    cfg.HTTP_CLIENT_MAX_CONNECTIONS: int = int(os.getenv("HTTP_CLIENT_MAX_CONNECTIONS", "100"))
-    cfg.HTTP_CLIENT_MAX_KEEPALIVE_CONNECTIONS: int = int(os.getenv("HTTP_CLIENT_MAX_KEEPALIVE_CONNECTIONS", "40"))
-    cfg.HTTP_CLIENT_KEEPALIVE_EXPIRY: float = float(os.getenv("HTTP_CLIENT_KEEPALIVE_EXPIRY", "30"))
+    cfg.HTTP_CLIENT_MAX_CONNECTIONS = int(os.getenv("HTTP_CLIENT_MAX_CONNECTIONS", "100"))
+    cfg.HTTP_CLIENT_MAX_KEEPALIVE_CONNECTIONS = int(os.getenv("HTTP_CLIENT_MAX_KEEPALIVE_CONNECTIONS", "40"))
+    cfg.HTTP_CLIENT_KEEPALIVE_EXPIRY = float(os.getenv("HTTP_CLIENT_KEEPALIVE_EXPIRY", "30"))
 
-    cfg.LOKI_FALLBACK_CONCURRENCY: int = int(os.getenv("LOKI_FALLBACK_CONCURRENCY", "4"))
-    cfg.LOKI_MAX_FALLBACK_QUERIES: int = int(os.getenv("LOKI_MAX_FALLBACK_QUERIES", "4"))
-    cfg.LOKI_VOLUME_CACHE_TTL_SECONDS: int = int(os.getenv("LOKI_VOLUME_CACHE_TTL_SECONDS", "30"))
-    cfg.TEMPO_TRACE_FETCH_CONCURRENCY: int = int(os.getenv("TEMPO_TRACE_FETCH_CONCURRENCY", "8"))
-    cfg.TEMPO_VOLUME_BUCKET_CONCURRENCY: int = int(os.getenv("TEMPO_VOLUME_BUCKET_CONCURRENCY", "8"))
-    cfg.TEMPO_COUNT_QUERY_CONCURRENCY: int = int(os.getenv("TEMPO_COUNT_QUERY_CONCURRENCY", "4"))
-    cfg.TEMPO_USE_METRICS_FOR_COUNT: bool = _to_bool(os.getenv("TEMPO_USE_METRICS_FOR_COUNT"), default=True)
-    cfg.SERVICE_CACHE_TTL_SECONDS: int = int(os.getenv("SERVICE_CACHE_TTL_SECONDS", "30"))
+    cfg.LOKI_FALLBACK_CONCURRENCY = int(os.getenv("LOKI_FALLBACK_CONCURRENCY", "4"))
+    cfg.LOKI_MAX_FALLBACK_QUERIES = int(os.getenv("LOKI_MAX_FALLBACK_QUERIES", "4"))
+    cfg.LOKI_VOLUME_CACHE_TTL_SECONDS = int(os.getenv("LOKI_VOLUME_CACHE_TTL_SECONDS", "30"))
+    cfg.TEMPO_TRACE_FETCH_CONCURRENCY = int(os.getenv("TEMPO_TRACE_FETCH_CONCURRENCY", "8"))
+    cfg.TEMPO_VOLUME_BUCKET_CONCURRENCY = int(os.getenv("TEMPO_VOLUME_BUCKET_CONCURRENCY", "8"))
+    cfg.TEMPO_COUNT_QUERY_CONCURRENCY = int(os.getenv("TEMPO_COUNT_QUERY_CONCURRENCY", "4"))
+    cfg.TEMPO_USE_METRICS_FOR_COUNT = _to_bool(os.getenv("TEMPO_USE_METRICS_FOR_COUNT"), default=True)
+    cfg.SERVICE_CACHE_TTL_SECONDS = int(os.getenv("SERVICE_CACHE_TTL_SECONDS", "30"))
 
-    cfg.CORS_ORIGINS: List[str] = _to_list(os.getenv("CORS_ORIGINS"), default=["*"])
-    cfg.CORS_ALLOW_CREDENTIALS: bool = _to_bool(os.getenv("CORS_ALLOW_CREDENTIALS"), default=True)
+    cfg.CORS_ORIGINS = _to_list(os.getenv("CORS_ORIGINS"), default=["*"])
+    cfg.CORS_ALLOW_CREDENTIALS = _to_bool(os.getenv("CORS_ALLOW_CREDENTIALS"), default=True)
 
-    cfg.MAX_QUERY_LIMIT: int = int(os.getenv("MAX_QUERY_LIMIT", "1000"))
-    cfg.DEFAULT_QUERY_LIMIT: int = int(os.getenv("DEFAULT_QUERY_LIMIT", "20"))
-    cfg.MAX_API_KEYS_PER_USER: int = int(os.getenv("MAX_API_KEYS_PER_USER", "10"))
+    cfg.MAX_QUERY_LIMIT = int(os.getenv("MAX_QUERY_LIMIT", "1000"))
+    cfg.DEFAULT_QUERY_LIMIT = int(os.getenv("DEFAULT_QUERY_LIMIT", "20"))
+    cfg.MAX_API_KEYS_PER_USER = int(os.getenv("MAX_API_KEYS_PER_USER", "10"))
 
-    cfg.QUOTA_NATIVE_ENABLED: bool = _to_bool(os.getenv("QUOTA_NATIVE_ENABLED") or None, default=True)
-    cfg.QUOTA_NATIVE_TIMEOUT_SECONDS: float = float(os.getenv("QUOTA_NATIVE_TIMEOUT_SECONDS", "5.0"))
-    cfg.LOKI_QUOTA_NATIVE_PATH: str = (os.getenv("LOKI_QUOTA_NATIVE_PATH") or "/loki/api/v1/status/limits").strip()
-    cfg.TEMPO_QUOTA_NATIVE_PATH: str = (os.getenv("TEMPO_QUOTA_NATIVE_PATH") or "/status/overrides").strip()
-    cfg.LOKI_QUOTA_NATIVE_LIMIT_FIELD: str = (
+    cfg.QUOTA_NATIVE_ENABLED = _to_bool(os.getenv("QUOTA_NATIVE_ENABLED") or None, default=True)
+    cfg.QUOTA_NATIVE_TIMEOUT_SECONDS = float(os.getenv("QUOTA_NATIVE_TIMEOUT_SECONDS", "5.0"))
+    cfg.LOKI_QUOTA_NATIVE_PATH = (os.getenv("LOKI_QUOTA_NATIVE_PATH") or "/loki/api/v1/status/limits").strip()
+    cfg.TEMPO_QUOTA_NATIVE_PATH = (os.getenv("TEMPO_QUOTA_NATIVE_PATH") or "/status/overrides").strip()
+    cfg.LOKI_QUOTA_NATIVE_LIMIT_FIELD = (
         os.getenv("LOKI_QUOTA_NATIVE_LIMIT_FIELD") or "max_streams_per_user"
     ).strip()
-    cfg.LOKI_QUOTA_NATIVE_USED_FIELD: str = (os.getenv("LOKI_QUOTA_NATIVE_USED_FIELD") or "").strip()
-    cfg.TEMPO_QUOTA_NATIVE_LIMIT_FIELD: str = (
+    cfg.LOKI_QUOTA_NATIVE_USED_FIELD = (os.getenv("LOKI_QUOTA_NATIVE_USED_FIELD") or "").strip()
+    cfg.TEMPO_QUOTA_NATIVE_LIMIT_FIELD = (
         os.getenv("TEMPO_QUOTA_NATIVE_LIMIT_FIELD") or "max_traces_per_user"
     ).strip()
-    cfg.TEMPO_QUOTA_NATIVE_USED_FIELD: str = (os.getenv("TEMPO_QUOTA_NATIVE_USED_FIELD") or "").strip()
-    cfg.QUOTA_USAGE_WINDOW_SECONDS: int = int(os.getenv("QUOTA_USAGE_WINDOW_SECONDS", "3600"))
+    cfg.TEMPO_QUOTA_NATIVE_USED_FIELD = (os.getenv("TEMPO_QUOTA_NATIVE_USED_FIELD") or "").strip()
+    cfg.QUOTA_USAGE_WINDOW_SECONDS = int(os.getenv("QUOTA_USAGE_WINDOW_SECONDS", "3600"))
 
-    cfg.QUOTA_PROMETHEUS_ENABLED: bool = _to_bool(os.getenv("QUOTA_PROMETHEUS_ENABLED") or None, default=True)
-    cfg.QUOTA_PROMETHEUS_TIMEOUT_SECONDS: float = float(os.getenv("QUOTA_PROMETHEUS_TIMEOUT_SECONDS", "5.0"))
-    cfg.QUOTA_PROMETHEUS_BASE_URL: str = (os.getenv("QUOTA_PROMETHEUS_BASE_URL") or cfg.MIMIR_URL).strip()
-    cfg.LOKI_QUOTA_PROM_LIMIT_QUERY: str = (os.getenv("LOKI_QUOTA_PROM_LIMIT_QUERY") or "").strip()
-    cfg.LOKI_QUOTA_PROM_USED_QUERY: str = (os.getenv("LOKI_QUOTA_PROM_USED_QUERY") or "").strip()
-    cfg.TEMPO_QUOTA_PROM_LIMIT_QUERY: str = (os.getenv("TEMPO_QUOTA_PROM_LIMIT_QUERY") or "").strip()
-    cfg.TEMPO_QUOTA_PROM_USED_QUERY: str = (os.getenv("TEMPO_QUOTA_PROM_USED_QUERY") or "").strip()
+    cfg.QUOTA_PROMETHEUS_ENABLED = _to_bool(os.getenv("QUOTA_PROMETHEUS_ENABLED") or None, default=True)
+    cfg.QUOTA_PROMETHEUS_TIMEOUT_SECONDS = float(os.getenv("QUOTA_PROMETHEUS_TIMEOUT_SECONDS", "5.0"))
+    cfg.QUOTA_PROMETHEUS_BASE_URL = (os.getenv("QUOTA_PROMETHEUS_BASE_URL") or cfg.MIMIR_URL).strip()
+    cfg.LOKI_QUOTA_PROM_LIMIT_QUERY = (os.getenv("LOKI_QUOTA_PROM_LIMIT_QUERY") or "").strip()
+    cfg.LOKI_QUOTA_PROM_USED_QUERY = (os.getenv("LOKI_QUOTA_PROM_USED_QUERY") or "").strip()
+    cfg.TEMPO_QUOTA_PROM_LIMIT_QUERY = (os.getenv("TEMPO_QUOTA_PROM_LIMIT_QUERY") or "").strip()
+    cfg.TEMPO_QUOTA_PROM_USED_QUERY = (os.getenv("TEMPO_QUOTA_PROM_USED_QUERY") or "").strip()
 
-    cfg.MAX_REQUEST_BYTES: int = int(os.getenv("MAX_REQUEST_BYTES", "1048576"))
-    cfg.MAX_CONCURRENT_REQUESTS: int = int(os.getenv("MAX_CONCURRENT_REQUESTS", "200"))
-    cfg.CONCURRENCY_ACQUIRE_TIMEOUT: float = float(os.getenv("CONCURRENCY_ACQUIRE_TIMEOUT", "1.0"))
+    cfg.MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", "1048576"))
+    cfg.MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "200"))
+    cfg.CONCURRENCY_ACQUIRE_TIMEOUT = float(os.getenv("CONCURRENCY_ACQUIRE_TIMEOUT", "1.0"))
 
-    cfg.RATE_LIMIT_USER_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_USER_PER_MINUTE", "600"))
-    cfg.RATE_LIMIT_PUBLIC_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PUBLIC_PER_MINUTE", "120"))
-    cfg.RATE_LIMIT_LOGIN_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_LOGIN_PER_MINUTE", "10"))
-    cfg.RATE_LIMIT_REGISTER_PER_HOUR: int = int(os.getenv("RATE_LIMIT_REGISTER_PER_HOUR", "5"))
-    cfg.RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE", "3000"))
-    cfg.GRAFANA_PROXY_CACHE_TTL: int = int(os.getenv("GRAFANA_PROXY_CACHE_TTL", "30"))
-    cfg.RATE_LIMIT_REDIS_URL: str = os.getenv("RATE_LIMIT_REDIS_URL", "").strip()
-    cfg.TTL_CACHE_REDIS_URL: str = os.getenv("TTL_CACHE_REDIS_URL", "").strip()
-    cfg.TTL_CACHE_KEY_PREFIX: str = os.getenv("TTL_CACHE_KEY_PREFIX", "watchdog:ttl").strip()
+    cfg.RATE_LIMIT_USER_PER_MINUTE = int(os.getenv("RATE_LIMIT_USER_PER_MINUTE", "600"))
+    cfg.RATE_LIMIT_PUBLIC_PER_MINUTE = int(os.getenv("RATE_LIMIT_PUBLIC_PER_MINUTE", "120"))
+    cfg.RATE_LIMIT_LOGIN_PER_MINUTE = int(os.getenv("RATE_LIMIT_LOGIN_PER_MINUTE", "10"))
+    cfg.RATE_LIMIT_REGISTER_PER_HOUR = int(os.getenv("RATE_LIMIT_REGISTER_PER_HOUR", "5"))
+    cfg.RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE = int(os.getenv("RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE", "3000"))
+    cfg.GRAFANA_PROXY_CACHE_TTL = int(os.getenv("GRAFANA_PROXY_CACHE_TTL", "30"))
+    cfg.RATE_LIMIT_REDIS_URL = os.getenv("RATE_LIMIT_REDIS_URL", "").strip()
+    cfg.TTL_CACHE_REDIS_URL = os.getenv("TTL_CACHE_REDIS_URL", "").strip()
+    cfg.TTL_CACHE_KEY_PREFIX = os.getenv("TTL_CACHE_KEY_PREFIX", "watchdog:ttl").strip()
 
-    cfg.TRUST_PROXY_HEADERS: bool = _to_bool(os.getenv("TRUST_PROXY_HEADERS"), default=False)
-    cfg.AUTH_PUBLIC_IP_ALLOWLIST: Optional[str] = os.getenv("AUTH_PUBLIC_IP_ALLOWLIST")
-    cfg.GATEWAY_IP_ALLOWLIST: Optional[str] = os.getenv("GATEWAY_IP_ALLOWLIST")
-    cfg.WEBHOOK_IP_ALLOWLIST: Optional[str] = os.getenv("WEBHOOK_IP_ALLOWLIST")
-    cfg.AGENT_INGEST_IP_ALLOWLIST: Optional[str] = os.getenv("AGENT_INGEST_IP_ALLOWLIST")
-    cfg.GRAFANA_PROXY_IP_ALLOWLIST: Optional[str] = os.getenv("GRAFANA_PROXY_IP_ALLOWLIST")
-    cfg.AGENT_HEARTBEAT_TOKEN: Optional[str] = os.getenv("AGENT_HEARTBEAT_TOKEN")
+    cfg.TRUST_PROXY_HEADERS = _to_bool(os.getenv("TRUST_PROXY_HEADERS"), default=False)
+    cfg.AUTH_PUBLIC_IP_ALLOWLIST = os.getenv("AUTH_PUBLIC_IP_ALLOWLIST")
+    cfg.GATEWAY_IP_ALLOWLIST = os.getenv("GATEWAY_IP_ALLOWLIST")
+    cfg.WEBHOOK_IP_ALLOWLIST = os.getenv("WEBHOOK_IP_ALLOWLIST")
+    cfg.AGENT_INGEST_IP_ALLOWLIST = os.getenv("AGENT_INGEST_IP_ALLOWLIST")
+    cfg.GRAFANA_PROXY_IP_ALLOWLIST = os.getenv("GRAFANA_PROXY_IP_ALLOWLIST")
+    cfg.AGENT_HEARTBEAT_TOKEN = os.getenv("AGENT_HEARTBEAT_TOKEN")
 
-    cfg.INBOUND_WEBHOOK_TOKEN: Optional[str] = os.getenv("INBOUND_WEBHOOK_TOKEN")
-    cfg.OTLP_INGEST_TOKEN: Optional[str] = os.getenv("OTLP_INGEST_TOKEN")
+    cfg.INBOUND_WEBHOOK_TOKEN = os.getenv("INBOUND_WEBHOOK_TOKEN")
+    cfg.OTLP_INGEST_TOKEN = os.getenv("OTLP_INGEST_TOKEN")
 
-    cfg.GATEWAY_INTERNAL_SERVICE_TOKEN: Optional[str] = os.getenv("GATEWAY_INTERNAL_SERVICE_TOKEN")
-    cfg.NOTIFIER_SERVICE_TOKEN: Optional[str] = os.getenv("NOTIFIER_SERVICE_TOKEN")
-    cfg.NOTIFIER_CONTEXT_SIGNING_KEY: Optional[str] = os.getenv("NOTIFIER_CONTEXT_SIGNING_KEY")
-    cfg.NOTIFIER_CONTEXT_ISSUER: str = os.getenv("NOTIFIER_CONTEXT_ISSUER", "watchdog-main")
-    cfg.NOTIFIER_CONTEXT_AUDIENCE: str = os.getenv("NOTIFIER_CONTEXT_AUDIENCE", "notifier")
-    cfg.NOTIFIER_CONTEXT_ALGORITHM: str = os.getenv("NOTIFIER_CONTEXT_ALGORITHM", "HS256").strip().upper()
-    cfg.NOTIFIER_CONTEXT_TTL_SECONDS: int = int(os.getenv("NOTIFIER_CONTEXT_TTL_SECONDS", "90"))
-    cfg.NOTIFIER_TLS_ENABLED: bool = _to_bool(os.getenv("NOTIFIER_TLS_ENABLED"), default=False)
-    cfg.NOTIFIER_CA_CERT_PATH: Optional[str] = os.getenv("NOTIFIER_CA_CERT_PATH")
+    cfg.GATEWAY_INTERNAL_SERVICE_TOKEN = os.getenv("GATEWAY_INTERNAL_SERVICE_TOKEN")
+    cfg.NOTIFIER_SERVICE_TOKEN = os.getenv("NOTIFIER_SERVICE_TOKEN")
+    cfg.NOTIFIER_CONTEXT_SIGNING_KEY = os.getenv("NOTIFIER_CONTEXT_SIGNING_KEY")
+    cfg.NOTIFIER_CONTEXT_ISSUER = os.getenv("NOTIFIER_CONTEXT_ISSUER", "watchdog-main")
+    cfg.NOTIFIER_CONTEXT_AUDIENCE = os.getenv("NOTIFIER_CONTEXT_AUDIENCE", "notifier")
+    cfg.NOTIFIER_CONTEXT_ALGORITHM = os.getenv("NOTIFIER_CONTEXT_ALGORITHM", "HS256").strip().upper()
+    cfg.NOTIFIER_CONTEXT_TTL_SECONDS = int(os.getenv("NOTIFIER_CONTEXT_TTL_SECONDS", "90"))
+    cfg.NOTIFIER_TLS_ENABLED = _to_bool(os.getenv("NOTIFIER_TLS_ENABLED"), default=False)
+    cfg.NOTIFIER_CA_CERT_PATH = os.getenv("NOTIFIER_CA_CERT_PATH")
 
-    cfg.RESOLVER_SERVICE_TOKEN: Optional[str] = os.getenv("RESOLVER_SERVICE_TOKEN")
-    cfg.RESOLVER_CONTEXT_SIGNING_KEY: Optional[str] = os.getenv("RESOLVER_CONTEXT_SIGNING_KEY")
-    cfg.RESOLVER_CONTEXT_ISSUER: str = os.getenv("RESOLVER_CONTEXT_ISSUER", "watchdog-main")
-    cfg.RESOLVER_CONTEXT_AUDIENCE: str = os.getenv("RESOLVER_CONTEXT_AUDIENCE", "resolver")
-    cfg.RESOLVER_CONTEXT_ALGORITHM: str = os.getenv("RESOLVER_CONTEXT_ALGORITHM", "HS256").strip().upper()
-    cfg.RESOLVER_CONTEXT_TTL_SECONDS: int = int(os.getenv("RESOLVER_CONTEXT_TTL_SECONDS", "120"))
-    cfg.RESOLVER_PROXY_CACHE_TTL_SECONDS: int = int(os.getenv("RESOLVER_PROXY_CACHE_TTL_SECONDS", "15"))
-    cfg.RESOLVER_TLS_ENABLED: bool = _to_bool(os.getenv("RESOLVER_TLS_ENABLED"), default=False)
-    cfg.RESOLVER_CA_CERT_PATH: Optional[str] = os.getenv("RESOLVER_CA_CERT_PATH")
+    cfg.RESOLVER_SERVICE_TOKEN = os.getenv("RESOLVER_SERVICE_TOKEN")
+    cfg.RESOLVER_CONTEXT_SIGNING_KEY = os.getenv("RESOLVER_CONTEXT_SIGNING_KEY")
+    cfg.RESOLVER_CONTEXT_ISSUER = os.getenv("RESOLVER_CONTEXT_ISSUER", "watchdog-main")
+    cfg.RESOLVER_CONTEXT_AUDIENCE = os.getenv("RESOLVER_CONTEXT_AUDIENCE", "resolver")
+    cfg.RESOLVER_CONTEXT_ALGORITHM = os.getenv("RESOLVER_CONTEXT_ALGORITHM", "HS256").strip().upper()
+    cfg.RESOLVER_CONTEXT_TTL_SECONDS = int(os.getenv("RESOLVER_CONTEXT_TTL_SECONDS", "120"))
+    cfg.RESOLVER_PROXY_CACHE_TTL_SECONDS = int(os.getenv("RESOLVER_PROXY_CACHE_TTL_SECONDS", "15"))
+    cfg.RESOLVER_TLS_ENABLED = _to_bool(os.getenv("RESOLVER_TLS_ENABLED"), default=False)
+    cfg.RESOLVER_CA_CERT_PATH = os.getenv("RESOLVER_CA_CERT_PATH")
 
-    cfg.RESOLVER_ANALYZE_MAX_CONCURRENCY: int = int(os.getenv("RESOLVER_ANALYZE_MAX_CONCURRENCY", "4"))
-    cfg.RESOLVER_ANALYZE_MAX_RETAINED_PER_USER: int = int(os.getenv("RESOLVER_ANALYZE_MAX_RETAINED_PER_USER", "50"))
-    cfg.RESOLVER_ANALYZE_JOB_TTL_SECONDS: int = int(os.getenv("RESOLVER_ANALYZE_JOB_TTL_SECONDS", "900"))
+    cfg.RESOLVER_ANALYZE_MAX_CONCURRENCY = int(os.getenv("RESOLVER_ANALYZE_MAX_CONCURRENCY", "4"))
+    cfg.RESOLVER_ANALYZE_MAX_RETAINED_PER_USER = int(os.getenv("RESOLVER_ANALYZE_MAX_RETAINED_PER_USER", "50"))
+    cfg.RESOLVER_ANALYZE_JOB_TTL_SECONDS = int(os.getenv("RESOLVER_ANALYZE_JOB_TTL_SECONDS", "900"))
 
-    cfg.JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "RS256").strip().upper()
-    cfg.JWT_EXPIRATION_MINUTES: int = int(os.getenv("JWT_EXPIRATION_MINUTES", "1440"))
-    cfg.JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
-    cfg.JWT_PRIVATE_KEY: Optional[str] = os.getenv("JWT_PRIVATE_KEY")
-    cfg.JWT_PUBLIC_KEY: Optional[str] = os.getenv("JWT_PUBLIC_KEY")
-    cfg.JWT_AUTO_GENERATE_KEYS: bool = _to_bool(os.getenv("JWT_AUTO_GENERATE_KEYS"), default=not cfg.IS_PRODUCTION)
+    cfg.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "RS256").strip().upper()
+    cfg.JWT_EXPIRATION_MINUTES = int(os.getenv("JWT_EXPIRATION_MINUTES", "1440"))
+    cfg.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+    cfg.JWT_PRIVATE_KEY = os.getenv("JWT_PRIVATE_KEY")
+    cfg.JWT_PUBLIC_KEY = os.getenv("JWT_PUBLIC_KEY")
+    cfg.JWT_AUTO_GENERATE_KEYS = _to_bool(os.getenv("JWT_AUTO_GENERATE_KEYS"), default=not cfg.IS_PRODUCTION)
 
-    cfg.AUTH_PROVIDER: str = os.getenv("AUTH_PROVIDER", "local").strip().lower()
-    cfg.AUTH_PASSWORD_FLOW_ENABLED: bool = _to_bool(os.getenv("AUTH_PASSWORD_FLOW_ENABLED"), default=False)
-    cfg.OIDC_ISSUER_URL: Optional[str] = os.getenv("OIDC_ISSUER_URL")
-    cfg.OIDC_CLIENT_ID: Optional[str] = os.getenv("OIDC_CLIENT_ID")
-    cfg.OIDC_CLIENT_SECRET: Optional[str] = os.getenv("OIDC_CLIENT_SECRET")
-    cfg.OIDC_AUDIENCE: Optional[str] = os.getenv("OIDC_AUDIENCE")
-    cfg.OIDC_JWKS_URL: Optional[str] = os.getenv("OIDC_JWKS_URL")
-    cfg.OIDC_SCOPES: str = os.getenv("OIDC_SCOPES", "openid profile email")
-    cfg.OIDC_CLOCK_SKEW_LEEWAY_SECONDS: int = max(
+    cfg.AUTH_PROVIDER = os.getenv("AUTH_PROVIDER", "local").strip().lower()
+    cfg.AUTH_PASSWORD_FLOW_ENABLED = _to_bool(os.getenv("AUTH_PASSWORD_FLOW_ENABLED"), default=False)
+    cfg.OIDC_ISSUER_URL = os.getenv("OIDC_ISSUER_URL")
+    cfg.OIDC_CLIENT_ID = os.getenv("OIDC_CLIENT_ID")
+    cfg.OIDC_CLIENT_SECRET = os.getenv("OIDC_CLIENT_SECRET")
+    cfg.OIDC_AUDIENCE = os.getenv("OIDC_AUDIENCE")
+    cfg.OIDC_JWKS_URL = os.getenv("OIDC_JWKS_URL")
+    cfg.OIDC_SCOPES = os.getenv("OIDC_SCOPES", "openid profile email")
+    cfg.OIDC_CLOCK_SKEW_LEEWAY_SECONDS = max(
         0,
         int(os.getenv("OIDC_CLOCK_SKEW_LEEWAY_SECONDS", "60")),
     )
-    cfg.OIDC_AUTO_PROVISION_USERS: bool = _to_bool(os.getenv("OIDC_AUTO_PROVISION_USERS"), default=True)
-    cfg.OIDC_AUTO_LINK_BY_EMAIL: bool = _to_bool(os.getenv("OIDC_AUTO_LINK_BY_EMAIL"), default=True)
-    cfg.OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK: bool = _to_bool(
+    cfg.OIDC_AUTO_PROVISION_USERS = _to_bool(os.getenv("OIDC_AUTO_PROVISION_USERS"), default=True)
+    cfg.OIDC_AUTO_LINK_BY_EMAIL = _to_bool(os.getenv("OIDC_AUTO_LINK_BY_EMAIL"), default=True)
+    cfg.OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK = _to_bool(
         os.getenv("OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK"), default=True
     )
 
-    cfg.SKIP_LOCAL_MFA_FOR_EXTERNAL: bool = _to_bool(os.getenv("SKIP_LOCAL_MFA_FOR_EXTERNAL"), default=True)
+    cfg.SKIP_LOCAL_MFA_FOR_EXTERNAL = _to_bool(os.getenv("SKIP_LOCAL_MFA_FOR_EXTERNAL"), default=True)
 
-    cfg.KEYCLOAK_ADMIN_URL: Optional[str] = os.getenv("KEYCLOAK_ADMIN_URL")
-    cfg.KEYCLOAK_ADMIN_REALM: Optional[str] = os.getenv("KEYCLOAK_ADMIN_REALM")
-    cfg.KEYCLOAK_ADMIN_CLIENT_ID: Optional[str] = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID")
-    cfg.KEYCLOAK_ADMIN_CLIENT_SECRET: Optional[str] = os.getenv("KEYCLOAK_ADMIN_CLIENT_SECRET")
-    cfg.KEYCLOAK_USER_PROVISIONING_ENABLED: bool = _to_bool(
+    cfg.KEYCLOAK_ADMIN_URL = os.getenv("KEYCLOAK_ADMIN_URL")
+    cfg.KEYCLOAK_ADMIN_REALM = os.getenv("KEYCLOAK_ADMIN_REALM")
+    cfg.KEYCLOAK_ADMIN_CLIENT_ID = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID")
+    cfg.KEYCLOAK_ADMIN_CLIENT_SECRET = os.getenv("KEYCLOAK_ADMIN_CLIENT_SECRET")
+    cfg.KEYCLOAK_USER_PROVISIONING_ENABLED = _to_bool(
         os.getenv("KEYCLOAK_USER_PROVISIONING_ENABLED"),
         default=False,
     )
 
-    cfg.DEFAULT_ADMIN_BOOTSTRAP_ENABLED: bool = _to_bool(
+    cfg.DEFAULT_ADMIN_BOOTSTRAP_ENABLED = _to_bool(
         os.getenv("DEFAULT_ADMIN_BOOTSTRAP_ENABLED"),
         default=not cfg.IS_PRODUCTION,
     )
-    cfg.REQUIRE_TOTP_ENCRYPTION_KEY: bool = _to_bool(
+    cfg.REQUIRE_TOTP_ENCRYPTION_KEY = _to_bool(
         os.getenv("REQUIRE_TOTP_ENCRYPTION_KEY"),
         default=cfg.IS_PRODUCTION,
     )
-    cfg.TRUSTED_PROXY_CIDRS: List[str] = _to_list(os.getenv("TRUSTED_PROXY_CIDRS"), default=[])
-    cfg.REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS: bool = _to_bool(
+    cfg.TRUSTED_PROXY_CIDRS = _to_list(os.getenv("TRUSTED_PROXY_CIDRS"), default=[])
+    cfg.REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS = _to_bool(
         os.getenv("REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS"),
         default=cfg.IS_PRODUCTION,
     )
 
-    cfg.FORCE_SECURE_COOKIES: bool = _to_bool(os.getenv("FORCE_SECURE_COOKIES"), default=cfg.IS_PRODUCTION)
-    cfg.ALLOWLIST_FAIL_OPEN: bool = _to_bool(os.getenv("ALLOWLIST_FAIL_OPEN"), default=False)
+    cfg.FORCE_SECURE_COOKIES = _to_bool(os.getenv("FORCE_SECURE_COOKIES"), default=cfg.IS_PRODUCTION)
+    cfg.ALLOWLIST_FAIL_OPEN = _to_bool(os.getenv("ALLOWLIST_FAIL_OPEN"), default=False)
 
-    cfg.RATE_LIMIT_GC_EVERY: int = int(os.getenv("RATE_LIMIT_GC_EVERY", "1024"))
-    cfg.RATE_LIMIT_STALE_AFTER_SECONDS: int = int(os.getenv("RATE_LIMIT_STALE_AFTER_SECONDS", "3600"))
-    cfg.RATE_LIMIT_MAX_STATES: int = int(os.getenv("RATE_LIMIT_MAX_STATES", "200000"))
-    cfg.RATE_LIMIT_FALLBACK_MODE: str = os.getenv("RATE_LIMIT_FALLBACK_MODE", "memory").strip().lower()
-    cfg.PASSWORD_HASH_MAX_CONCURRENCY: int = int(os.getenv("PASSWORD_HASH_MAX_CONCURRENCY", "8"))
-    cfg.PASSWORD_RESET_INTERVAL_DAYS: int = int(os.getenv("PASSWORD_RESET_INTERVAL_DAYS", "0"))
-    cfg.TEMP_PASSWORD_LENGTH: int = int(os.getenv("TEMP_PASSWORD_LENGTH", "20"))
+    cfg.RATE_LIMIT_GC_EVERY = int(os.getenv("RATE_LIMIT_GC_EVERY", "1024"))
+    cfg.RATE_LIMIT_STALE_AFTER_SECONDS = int(os.getenv("RATE_LIMIT_STALE_AFTER_SECONDS", "3600"))
+    cfg.RATE_LIMIT_MAX_STATES = int(os.getenv("RATE_LIMIT_MAX_STATES", "200000"))
+    cfg.RATE_LIMIT_FALLBACK_MODE = os.getenv("RATE_LIMIT_FALLBACK_MODE", "memory").strip().lower()
+    cfg.PASSWORD_HASH_MAX_CONCURRENCY = int(os.getenv("PASSWORD_HASH_MAX_CONCURRENCY", "8"))
+    cfg.PASSWORD_RESET_INTERVAL_DAYS = int(os.getenv("PASSWORD_RESET_INTERVAL_DAYS", "0"))
+    cfg.TEMP_PASSWORD_LENGTH = int(os.getenv("TEMP_PASSWORD_LENGTH", "20"))
 
-    cfg.DEFAULT_ADMIN_USERNAME: str = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
-    cfg.DEFAULT_ADMIN_PASSWORD: str = os.getenv("DEFAULT_ADMIN_PASSWORD", "")
-    cfg.DEFAULT_ADMIN_EMAIL: str = os.getenv("DEFAULT_ADMIN_EMAIL", "admin@example.com")
-    cfg.DEFAULT_ADMIN_TENANT: str = os.getenv("DEFAULT_ADMIN_TENANT", "default")
+    cfg.DEFAULT_ADMIN_USERNAME = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
+    cfg.DEFAULT_ADMIN_PASSWORD = os.getenv("DEFAULT_ADMIN_PASSWORD", "")
+    cfg.DEFAULT_ADMIN_EMAIL = os.getenv("DEFAULT_ADMIN_EMAIL", "admin@example.com")
+    cfg.DEFAULT_ADMIN_TENANT = os.getenv("DEFAULT_ADMIN_TENANT", "default")
 
-    cfg.DEFAULT_ORG_ID: str = os.getenv("DEFAULT_ORG_ID", "default")
+    cfg.DEFAULT_ORG_ID = os.getenv("DEFAULT_ORG_ID", "default")
     app_org_key_default = (
         f"{_slug_token(os.getenv('APP_NAME', 'observantio'), 'observantio')}"
         f"-{_slug_token(cfg.DEFAULT_ORG_ID, 'default')}"
     )
-    cfg.APP_ORG_KEY: str = os.getenv("APP_ORG_KEY", app_org_key_default).strip()
-    cfg.OTLP_GATEWAY_URL: str = os.getenv("OTLP_GATEWAY_URL", "http://otlp-gateway:4320")
-    cfg.DEFAULT_OTLP_TOKEN: Optional[str] = os.getenv("DEFAULT_OTLP_TOKEN")
+    cfg.APP_ORG_KEY = os.getenv("APP_ORG_KEY", app_org_key_default).strip()
+    cfg.OTLP_GATEWAY_URL = os.getenv("OTLP_GATEWAY_URL", "http://otlp-gateway:4320")
+    cfg.DEFAULT_OTLP_TOKEN = os.getenv("DEFAULT_OTLP_TOKEN")
 
-    cfg.VAULT_ENABLED: bool = _to_bool(os.getenv("VAULT_ENABLED"), default=False)
-    cfg.VAULT_ADDR: Optional[str] = os.getenv("VAULT_ADDR")
-    cfg.VAULT_TOKEN: Optional[str] = os.getenv("VAULT_TOKEN")
-    cfg.VAULT_ROLE_ID: Optional[str] = os.getenv("VAULT_ROLE_ID")
-    cfg.VAULT_SECRET_ID: Optional[str] = os.getenv("VAULT_SECRET_ID")
-    cfg.VAULT_CACERT: Optional[str] = os.getenv("VAULT_CACERT")
-    cfg.VAULT_SECRETS_PREFIX: str = os.getenv("VAULT_SECRETS_PREFIX", "secret")
-    cfg.VAULT_KV_VERSION: int = int(os.getenv("VAULT_KV_VERSION", "2"))
-    cfg.VAULT_TIMEOUT: float = float(os.getenv("VAULT_TIMEOUT", "2.0"))
-    cfg.VAULT_FAIL_ON_MISSING: bool = _to_bool(os.getenv("VAULT_FAIL_ON_MISSING"), default=cfg.IS_PRODUCTION)
+    cfg.VAULT_ENABLED = _to_bool(os.getenv("VAULT_ENABLED"), default=False)
+    cfg.VAULT_ADDR = os.getenv("VAULT_ADDR")
+    cfg.VAULT_TOKEN = os.getenv("VAULT_TOKEN")
+    cfg.VAULT_ROLE_ID = os.getenv("VAULT_ROLE_ID")
+    cfg.VAULT_SECRET_ID = os.getenv("VAULT_SECRET_ID")
+    cfg.VAULT_CACERT = os.getenv("VAULT_CACERT")
+    cfg.VAULT_SECRETS_PREFIX = os.getenv("VAULT_SECRETS_PREFIX", "secret")
+    cfg.VAULT_KV_VERSION = int(os.getenv("VAULT_KV_VERSION", "2"))
+    cfg.VAULT_TIMEOUT = float(os.getenv("VAULT_TIMEOUT", "2.0"))
+    cfg.VAULT_FAIL_ON_MISSING = _to_bool(os.getenv("VAULT_FAIL_ON_MISSING"), default=cfg.IS_PRODUCTION)
 
     try:
         cfg._load_vault_secrets()
@@ -324,13 +324,13 @@ def _populate_config(cfg: "Config") -> None:
         logger.warning("Vault not available or misconfigured; continuing with environment variables: %s", exc)
 
     if not hasattr(cfg, "_secret_provider") or cfg._secret_provider is None:
-        from services.secrets.provider import EnvSecretProvider, SecretProvider
+        from services.secrets.provider import EnvSecretProvider
 
-        cfg._secret_provider: SecretProvider = EnvSecretProvider()
+        cfg._secret_provider = EnvSecretProvider()
 
-    cfg.DEFAULT_RULE_GROUP: str = os.getenv("DEFAULT_RULE_GROUP", "default")
-    cfg.DEFAULT_SLACK_CHANNEL: str = os.getenv("DEFAULT_SLACK_CHANNEL", "default")
-    cfg.ENABLED_NOTIFICATION_CHANNEL_TYPES: list[str] = [
+    cfg.DEFAULT_RULE_GROUP = os.getenv("DEFAULT_RULE_GROUP", "default")
+    cfg.DEFAULT_SLACK_CHANNEL = os.getenv("DEFAULT_SLACK_CHANNEL", "default")
+    cfg.ENABLED_NOTIFICATION_CHANNEL_TYPES = [
         channel_type.strip().lower()
         for channel_type in os.getenv(
             "ENABLED_NOTIFICATION_CHANNEL_TYPES",
@@ -347,6 +347,166 @@ class Config:
     ALLOWED_JWT_ALGORITHMS = {"RS256", "ES256"}
     ALLOWED_CONTEXT_ALGORITHMS = {"HS256", "HS384", "HS512"}
     EXAMPLE_DATABASE_URL = "postgresql://watchdog:changeme123@localhost:5432/watchdog"
+
+    _secret_provider: Any | None
+    APP_ENV: str
+    IS_PRODUCTION: bool
+    HOST: str
+    PORT: int
+    LOG_LEVEL: str
+    ENABLE_API_DOCS: bool
+    SKIP_STARTUP_DB_INIT: bool
+    TEMPO_URL: str
+    LOKI_URL: str
+    ALERTMANAGER_URL: str
+    NOTIFIER_URL: str
+    RESOLVER_URL: str
+    GRAFANA_URL: str
+    MIMIR_URL: str
+    GRAFANA_USERNAME: str
+    GRAFANA_PASSWORD: str
+    GRAFANA_API_KEY: Optional[str]
+    DATA_ENCRYPTION_KEY: Optional[str]
+    DATABASE_URL: str
+    DEFAULT_TIMEOUT: float
+    NOTIFIER_TIMEOUT_SECONDS: float
+    RESOLVER_TIMEOUT_SECONDS: float
+    MAX_RETRIES: int
+    RETRY_BACKOFF: float
+    RETRY_MAX_BACKOFF: float
+    RETRY_JITTER: float
+    HTTP_CLIENT_MAX_CONNECTIONS: int
+    HTTP_CLIENT_MAX_KEEPALIVE_CONNECTIONS: int
+    HTTP_CLIENT_KEEPALIVE_EXPIRY: float
+    LOKI_FALLBACK_CONCURRENCY: int
+    LOKI_MAX_FALLBACK_QUERIES: int
+    LOKI_VOLUME_CACHE_TTL_SECONDS: int
+    TEMPO_TRACE_FETCH_CONCURRENCY: int
+    TEMPO_VOLUME_BUCKET_CONCURRENCY: int
+    TEMPO_COUNT_QUERY_CONCURRENCY: int
+    TEMPO_USE_METRICS_FOR_COUNT: bool
+    SERVICE_CACHE_TTL_SECONDS: int
+    CORS_ORIGINS: List[str]
+    CORS_ALLOW_CREDENTIALS: bool
+    MAX_QUERY_LIMIT: int
+    DEFAULT_QUERY_LIMIT: int
+    MAX_API_KEYS_PER_USER: int
+    QUOTA_NATIVE_ENABLED: bool
+    QUOTA_NATIVE_TIMEOUT_SECONDS: float
+    LOKI_QUOTA_NATIVE_PATH: str
+    TEMPO_QUOTA_NATIVE_PATH: str
+    LOKI_QUOTA_NATIVE_LIMIT_FIELD: str
+    LOKI_QUOTA_NATIVE_USED_FIELD: str
+    TEMPO_QUOTA_NATIVE_LIMIT_FIELD: str
+    TEMPO_QUOTA_NATIVE_USED_FIELD: str
+    QUOTA_USAGE_WINDOW_SECONDS: int
+    QUOTA_PROMETHEUS_ENABLED: bool
+    QUOTA_PROMETHEUS_TIMEOUT_SECONDS: float
+    QUOTA_PROMETHEUS_BASE_URL: str
+    LOKI_QUOTA_PROM_LIMIT_QUERY: str
+    LOKI_QUOTA_PROM_USED_QUERY: str
+    TEMPO_QUOTA_PROM_LIMIT_QUERY: str
+    TEMPO_QUOTA_PROM_USED_QUERY: str
+    MAX_REQUEST_BYTES: int
+    MAX_CONCURRENT_REQUESTS: int
+    CONCURRENCY_ACQUIRE_TIMEOUT: float
+    RATE_LIMIT_USER_PER_MINUTE: int
+    RATE_LIMIT_PUBLIC_PER_MINUTE: int
+    RATE_LIMIT_LOGIN_PER_MINUTE: int
+    RATE_LIMIT_REGISTER_PER_HOUR: int
+    RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE: int
+    GRAFANA_PROXY_CACHE_TTL: int
+    RATE_LIMIT_REDIS_URL: str
+    TTL_CACHE_REDIS_URL: str
+    TTL_CACHE_KEY_PREFIX: str
+    TRUST_PROXY_HEADERS: bool
+    AUTH_PUBLIC_IP_ALLOWLIST: Optional[str]
+    GATEWAY_IP_ALLOWLIST: Optional[str]
+    WEBHOOK_IP_ALLOWLIST: Optional[str]
+    AGENT_INGEST_IP_ALLOWLIST: Optional[str]
+    GRAFANA_PROXY_IP_ALLOWLIST: Optional[str]
+    AGENT_HEARTBEAT_TOKEN: Optional[str]
+    INBOUND_WEBHOOK_TOKEN: Optional[str]
+    OTLP_INGEST_TOKEN: Optional[str]
+    GATEWAY_INTERNAL_SERVICE_TOKEN: Optional[str]
+    NOTIFIER_SERVICE_TOKEN: Optional[str]
+    NOTIFIER_CONTEXT_SIGNING_KEY: Optional[str]
+    NOTIFIER_CONTEXT_ISSUER: str
+    NOTIFIER_CONTEXT_AUDIENCE: str
+    NOTIFIER_CONTEXT_ALGORITHM: str
+    NOTIFIER_CONTEXT_TTL_SECONDS: int
+    NOTIFIER_TLS_ENABLED: bool
+    NOTIFIER_CA_CERT_PATH: Optional[str]
+    RESOLVER_SERVICE_TOKEN: Optional[str]
+    RESOLVER_CONTEXT_SIGNING_KEY: Optional[str]
+    RESOLVER_CONTEXT_ISSUER: str
+    RESOLVER_CONTEXT_AUDIENCE: str
+    RESOLVER_CONTEXT_ALGORITHM: str
+    RESOLVER_CONTEXT_TTL_SECONDS: int
+    RESOLVER_PROXY_CACHE_TTL_SECONDS: int
+    RESOLVER_TLS_ENABLED: bool
+    RESOLVER_CA_CERT_PATH: Optional[str]
+    RESOLVER_ANALYZE_MAX_CONCURRENCY: int
+    RESOLVER_ANALYZE_MAX_RETAINED_PER_USER: int
+    RESOLVER_ANALYZE_JOB_TTL_SECONDS: int
+    JWT_ALGORITHM: str
+    JWT_EXPIRATION_MINUTES: int
+    JWT_SECRET_KEY: str
+    JWT_PRIVATE_KEY: Optional[str]
+    JWT_PUBLIC_KEY: Optional[str]
+    JWT_AUTO_GENERATE_KEYS: bool
+    AUTH_PROVIDER: str
+    AUTH_PASSWORD_FLOW_ENABLED: bool
+    OIDC_ISSUER_URL: Optional[str]
+    OIDC_CLIENT_ID: Optional[str]
+    OIDC_CLIENT_SECRET: Optional[str]
+    OIDC_AUDIENCE: Optional[str]
+    OIDC_JWKS_URL: Optional[str]
+    OIDC_SCOPES: str
+    OIDC_CLOCK_SKEW_LEEWAY_SECONDS: int
+    OIDC_AUTO_PROVISION_USERS: bool
+    OIDC_AUTO_LINK_BY_EMAIL: bool
+    OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK: bool
+    SKIP_LOCAL_MFA_FOR_EXTERNAL: bool
+    KEYCLOAK_ADMIN_URL: Optional[str]
+    KEYCLOAK_ADMIN_REALM: Optional[str]
+    KEYCLOAK_ADMIN_CLIENT_ID: Optional[str]
+    KEYCLOAK_ADMIN_CLIENT_SECRET: Optional[str]
+    KEYCLOAK_USER_PROVISIONING_ENABLED: bool
+    DEFAULT_ADMIN_BOOTSTRAP_ENABLED: bool
+    REQUIRE_TOTP_ENCRYPTION_KEY: bool
+    TRUSTED_PROXY_CIDRS: List[str]
+    REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS: bool
+    FORCE_SECURE_COOKIES: bool
+    ALLOWLIST_FAIL_OPEN: bool
+    RATE_LIMIT_GC_EVERY: int
+    RATE_LIMIT_STALE_AFTER_SECONDS: int
+    RATE_LIMIT_MAX_STATES: int
+    RATE_LIMIT_FALLBACK_MODE: str
+    PASSWORD_HASH_MAX_CONCURRENCY: int
+    PASSWORD_RESET_INTERVAL_DAYS: int
+    TEMP_PASSWORD_LENGTH: int
+    DEFAULT_ADMIN_USERNAME: str
+    DEFAULT_ADMIN_PASSWORD: str
+    DEFAULT_ADMIN_EMAIL: str
+    DEFAULT_ADMIN_TENANT: str
+    DEFAULT_ORG_ID: str
+    APP_ORG_KEY: str
+    OTLP_GATEWAY_URL: str
+    DEFAULT_OTLP_TOKEN: Optional[str]
+    VAULT_ENABLED: bool
+    VAULT_ADDR: Optional[str]
+    VAULT_TOKEN: Optional[str]
+    VAULT_ROLE_ID: Optional[str]
+    VAULT_SECRET_ID: Optional[str]
+    VAULT_CACERT: Optional[str]
+    VAULT_SECRETS_PREFIX: str
+    VAULT_KV_VERSION: int
+    VAULT_TIMEOUT: float
+    VAULT_FAIL_ON_MISSING: bool
+    DEFAULT_RULE_GROUP: str
+    DEFAULT_SLACK_CHANNEL: str
+    ENABLED_NOTIFICATION_CHANNEL_TYPES: list[str]
 
     def __init__(self) -> None:
         self._secret_provider = None
@@ -420,8 +580,12 @@ class Config:
         val = getattr(self, key, None)
         if val:
             return val if isinstance(val, str) else str(val)
+        provider = self._secret_provider
+        if provider is None:
+            return None
         try:
-            return self._secret_provider.get(key)
+            value = provider.get(key)
+            return value if value is None else str(value)
         except (OSError, RuntimeError, TypeError, ValueError):
             return None
 

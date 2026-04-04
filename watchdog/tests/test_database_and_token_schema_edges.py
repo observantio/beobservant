@@ -78,10 +78,10 @@ def test_database_lifecycle_and_session_paths(monkeypatch):
     database_module.init_database("sqlite:///tmp.db", echo=True, pool_size=5)
     database_module.init_database("sqlite:///tmp.db")
     assert create_engine_calls[0][1] == {"pool_pre_ping": True, "echo": True, "future": True}
-    if database_module._engine is None:
-        database_module._engine = fake_engine
-    if database_module._session_local is None:
-        database_module._session_local = lambda: fake_session
+    if database_module._ENGINE is None:
+        database_module._ENGINE = fake_engine
+    if database_module._SESSION_LOCAL is None:
+        database_module._SESSION_LOCAL = lambda: fake_session
 
     with database_module.get_db_session() as session:
         assert session is fake_session
@@ -98,13 +98,13 @@ def test_database_lifecycle_and_session_paths(monkeypatch):
         rollback=lambda: failed_commit_events.append("rollback"),
         close=lambda: failed_commit_events.append("close"),
     )
-    database_module._session_local = lambda: failing_commit_session
+    database_module._SESSION_LOCAL = lambda: failing_commit_session
     with pytest.raises(RuntimeError, match="commit failed"):
         with database_module.get_db_session() as session:
             assert session is failing_commit_session
     assert failed_commit_events == ["rollback", "close"]
 
-    database_module._session_local = lambda: fake_session
+    database_module._SESSION_LOCAL = lambda: fake_session
 
     yielded = next(database_module.get_db())
     assert yielded is fake_session
@@ -119,11 +119,11 @@ def test_database_lifecycle_and_session_paths(monkeypatch):
         def dispose(self):
             created.append(("disposed", None))
 
-    database_module._engine = BrokenEngine()
+    database_module._ENGINE = BrokenEngine()
     assert database_module.connection_test() is False
     database_module.dispose_database()
-    assert database_module._engine is None
-    assert database_module._session_local is None
+    assert database_module._ENGINE is None
+    assert database_module._SESSION_LOCAL is None
     with pytest.raises(RuntimeError):
         database_module._require_session_factory()
 
@@ -164,7 +164,7 @@ def test_database_remaining_helper_branches(monkeypatch):
         rollback=lambda: session_events.append("rollback"),
         close=lambda: session_events.append("close"),
     )
-    database_module._session_local = lambda: managed_session
+    database_module._SESSION_LOCAL = lambda: managed_session
     with database_module._session_scope() as session:
         assert session is managed_session
     assert session_events == ["commit", "close"]
@@ -177,7 +177,7 @@ def test_database_remaining_helper_branches(monkeypatch):
 
     context = database_module._SessionContext()
     assert context.__exit__(None, None, None) is None
-    database_module._session_local = None
+    database_module._SESSION_LOCAL = None
 
 
 def test_init_database_returns_when_initialized_inside_lock(monkeypatch):
@@ -189,15 +189,15 @@ def test_init_database_returns_when_initialized_inside_lock(monkeypatch):
 
     class LockStub:
         def __enter__(self):
-            database_module._engine = EngineStub()
-            database_module._session_local = cast(Any, lambda: SimpleNamespace())
+            database_module._ENGINE = EngineStub()
+            database_module._SESSION_LOCAL = cast(Any, lambda: SimpleNamespace())
             return self
 
         def __exit__(self, exc_type, exc, tb):
             return False
 
     create_engine_calls = []
-    monkeypatch.setattr(database_module, "_init_lock", LockStub())
+    monkeypatch.setattr(database_module, "_INIT_LOCK", LockStub())
     monkeypatch.setattr(
         database_module, "create_engine", lambda *args, **kwargs: create_engine_calls.append((args, kwargs))
     )

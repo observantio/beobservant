@@ -169,10 +169,10 @@ async def test_system_router_ojo_releases_returns_cached_inside_lock(monkeypatch
 
     monkeypatch.setattr(
         system_router,
-        "ojo_release_cache_payload",
+        "OJO_RELEASE_CACHE_PAYLOAD",
         {"latest": {}, "releases": [], "latest_ok": True, "releases_ok": True},
     )
-    monkeypatch.setattr(system_router, "ojo_release_cache_expires_at", 10_000_000.0)
+    monkeypatch.setattr(system_router, "OJO_RELEASE_CACHE_EXPIRES_AT", 10_000_000.0)
     monkeypatch.setattr(system_router.time, "monotonic", lambda: 1_000_000.0)
 
     system_router.ojo_release_cache_lock.release()
