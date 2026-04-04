@@ -116,12 +116,15 @@ vi.mock("../../components/grafana/GrafanaContent", () => ({
     activeTab,
     query,
     setQuery,
+    filters,
+    setFilters,
     openDashboardEditor,
     openDatasourceEditor,
     onCreateFolder,
     onEditFolder,
     onSearch,
     onClearFilters,
+    hasActiveFilters,
     onOpenGrafana,
     onDeleteDashboard,
     onToggleDashboardHidden,
@@ -135,12 +138,25 @@ vi.mock("../../components/grafana/GrafanaContent", () => ({
   }) => (
     <div>
       <div data-testid="active-query">{query || ""}</div>
+      <div data-testid="active-filters">{JSON.stringify(filters || {})}</div>
+      <div data-testid="has-active-filters">{String(Boolean(hasActiveFilters))}</div>
       <button
         onClick={() =>
           setQuery(activeTab === "dashboards" ? "dashboard-only" : "datasource-only")
         }
       >
         Set Active Query
+      </button>
+      <button
+        onClick={() =>
+          setFilters?.({
+            teamId: "g-1",
+            folderKey: "folder-1",
+            showHidden: true,
+          })
+        }
+      >
+        Set Active Filters
       </button>
       <button onClick={() => openDashboardEditor()}>Open Dashboard Editor</button>
       <button onClick={() => openDatasourceEditor?.()}>Open Datasource Editor</button>
@@ -412,6 +428,42 @@ describe("GrafanaPage state behavior", () => {
         "dashboard-only",
       ),
     );
+  });
+
+  it("resets grafana filters when switching tabs", async () => {
+    render(<GrafanaPage />);
+
+    expect(screen.getByTestId("active-filters")).toHaveTextContent(
+      JSON.stringify({
+        teamId: "",
+        folderKey: "",
+        showHidden: false,
+      }),
+    );
+
+    expect(screen.getByTestId("has-active-filters")).toHaveTextContent("false");
+
+    fireEvent.click(screen.getByText("Set Active Filters"));
+    expect(screen.getByTestId("active-filters")).toHaveTextContent(
+      JSON.stringify({
+        teamId: "g-1",
+        folderKey: "folder-1",
+        showHidden: true,
+      }),
+    );
+    expect(screen.getByTestId("has-active-filters")).toHaveTextContent("true");
+
+    fireEvent.click(screen.getByRole("tab", { name: /Datasources/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId("active-filters")).toHaveTextContent(
+        JSON.stringify({
+          teamId: "",
+          folderKey: "",
+          showHidden: false,
+        }),
+      ),
+    );
+    expect(screen.getByTestId("has-active-filters")).toHaveTextContent("false");
   });
 
   it("prompts to sync datasource visibility only for owned non-default datasources", async () => {

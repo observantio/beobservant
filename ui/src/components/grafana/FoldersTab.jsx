@@ -115,7 +115,7 @@ export default function FoldersTab({
                       </div>
                       <div className="min-w-0">
                         <h3
-                          className="font-semibold text-sre-text text-lg truncate"
+                          className="font-semibold text-sre-text text-base truncate"
                           title={folder.title}
                         >
                           {folder.title}

@@ -275,7 +275,7 @@ export default function DashboardsTab({
                       </svg>
                     </div>
                       <div className="min-w-0">
-                        <h3 className="font-semibold text-sre-text text-xl flex items-center gap-2 min-w-0">
+                        <h3 className="font-semibold text-sre-text text-lg flex items-center gap-2 min-w-0">
                         <span className="truncate" title={d.title}>
                           {d.title}
                         </span>

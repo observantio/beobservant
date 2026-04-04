@@ -150,7 +150,7 @@ export function NavItem({
 }) {
   const baseClasses =
     variant === "sidebar"
-      ? "w-full rounded-lg text-[14px] font-medium flex items-center gap-2.5 transition-colors px-3 py-2.5"
+      ? "w-full rounded-lg text-[14px] font-normal flex items-center gap-2.5 transition-colors px-3 py-2.5"
       : isMobile
         ? "rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-2 transition-all px-3 py-1.5 border border-transparent"
         : "px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 border-b-2 border-transparent min-w-0";
@@ -160,13 +160,13 @@ export function NavItem({
     : baseClasses;
   const activeClasses =
     variant === "sidebar"
-      ? "text-sre-primary bg-sre-primary/10 dark:text-sre-success dark:bg-sre-success/10"
+      ? "text-black bg-sre-primary/10 dark:text-sre-success dark:bg-sre-success/10"
       : isMobile
         ? "text-sre-primary bg-sre-primary/10 border-sre-primary/50"
         : "text-sre-primary border-sre-primary bg-sre-primary/5";
   const inactiveClasses =
     variant === "sidebar"
-      ? "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light/60"
+      ? "text-black dark:text-sre-text-muted hover:text-black dark:hover:text-sre-text hover:bg-sre-surface-light/60"
       : isMobile
         ? "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light hover:border-sre-border/70"
         : "text-sre-text-muted hover:text-sre-text hover:border-sre-border";

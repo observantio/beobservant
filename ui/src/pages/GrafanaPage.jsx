@@ -37,6 +37,12 @@ import {
 } from "../utils/grafanaUtils";
 import { buildGrafanaLaunchUrl } from "../utils/grafanaLaunchUtils";
 
+const DEFAULT_GRAFANA_FILTERS = {
+  teamId: "",
+  folderKey: "",
+  showHidden: false,
+};
+
 function collectDatasourceReferences(node, refs) {
   if (!node || typeof node !== "object") return;
   if (Array.isArray(node)) {
@@ -99,9 +105,7 @@ export default function GrafanaPage() {
   const [loading, setLoading] = useState(true);
 
   const [filters, setFilters] = useState({
-    teamId: "",
-    folderKey: "__general__",
-    showHidden: false,
+    ...DEFAULT_GRAFANA_FILTERS,
   });
 
   const toast = useToast();
@@ -154,6 +158,19 @@ export default function GrafanaPage() {
   useEffect(() => {
     filtersRef.current = filters;
   }, [filters]);
+
+  useEffect(() => {
+    setFilters((prev) => {
+      if (
+        prev.teamId === DEFAULT_GRAFANA_FILTERS.teamId &&
+        prev.folderKey === DEFAULT_GRAFANA_FILTERS.folderKey &&
+        prev.showHidden === DEFAULT_GRAFANA_FILTERS.showHidden
+      ) {
+        return prev;
+      }
+      return { ...DEFAULT_GRAFANA_FILTERS };
+    });
+  }, [activeTab]);
 
   const handleApiError = useCallback(
     (e) => {
@@ -439,7 +456,7 @@ export default function GrafanaPage() {
   }
 
   function clearFilters() {
-    setFilters({ teamId: "", folderKey: "__general__", showHidden: false });
+    setFilters({ ...DEFAULT_GRAFANA_FILTERS });
     if (activeTab === "dashboards") {
       setDashboardQuery("");
     } else if (activeTab === "datasources") {
@@ -1166,7 +1183,13 @@ export default function GrafanaPage() {
     return found ? found.icon : "🔧";
   }
 
-  const hasActiveFilters = filters.teamId || filters.folderKey || filters.showHidden;
+  const hasActiveFilters = Boolean(
+    String(filters?.teamId || "").trim() ||
+      (activeTab === "dashboards" &&
+        String(filters?.folderKey || "").trim() &&
+        String(filters?.folderKey || "").trim() !== "__general__") ||
+      Boolean(filters?.showHidden),
+  );
 
   return (
     <div className="animate-fade-in grafana-page">
