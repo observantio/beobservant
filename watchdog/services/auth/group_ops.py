@@ -564,27 +564,6 @@ def update_group_members(
                 removed_user_ids=removed_member_ids,
             )
 
-        if not members:
-            service._log_audit(
-                db,
-                tenant_id,
-                actor_user_id,
-                "delete_group",
-                "groups",
-                group_id,
-                {"reason": "auto_delete_empty_group", "name": group.name},
-            )
-            db.delete(group)
-            db.commit()
-            if removed_member_ids:
-                _propagate_removed_member_group_shares(
-                    tenant_id=tenant_id,
-                    group_id=group_id,
-                    removed_user_ids=removed_member_ids,
-                    removed_usernames=removed_member_usernames,
-                )
-            return True
-
         service._log_audit(
             db,
             tenant_id,

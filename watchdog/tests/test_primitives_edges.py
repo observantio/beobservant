@@ -78,6 +78,7 @@ def _request(
 
 
 def test_json_helpers_and_audit_utility_edges(monkeypatch):
+    assert error_handlers_module._json_safe("\udba9\udf72") == "\\udba9\\udf72"
     assert json_types.is_json_value({"items": [1, 2.5, None, {"ok": True}]}) is True
     assert json_types.is_json_value({1: "bad-key"}) is False
     assert json_types.is_json_value(b"bad") is False
@@ -589,6 +590,32 @@ async def test_internal_and_system_router_edges(monkeypatch):
     assert first["latest"]["tag_name"] == "v0.0.2"
     assert second["latest"]["tag_name"] == "v0.0.2"
     assert len(fake_client.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_ojo_release_returns_fallback_payload_on_upstream_error(monkeypatch):
+    class _FailingAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, *args, **kwargs):
+            raise httpx.ConnectError("boom")
+
+    monkeypatch.setattr(system_router.httpx, "AsyncClient", _FailingAsyncClient)
+    monkeypatch.setattr(system_router, "ojo_release_cache_payload", None)
+    monkeypatch.setattr(system_router, "ojo_release_cache_expires_at", 0.0)
+
+    payload = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
+    assert payload["latest"] == {}
+    assert payload["releases"] == []
+    assert payload["latest_ok"] is False
+    assert payload["releases_ok"] is False
 
 
 def test_encryption_edges(monkeypatch):

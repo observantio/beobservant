@@ -25,6 +25,8 @@ RouteResult = TypeVar("RouteResult")
 def _json_safe(value: object) -> object:
     if isinstance(value, BaseException):
         return str(value)
+    if isinstance(value, str):
+        return value.encode("utf-8", "backslashreplace").decode("utf-8")
     if isinstance(value, dict):
         return {k: _json_safe(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):

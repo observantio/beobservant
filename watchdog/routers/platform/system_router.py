@@ -73,6 +73,18 @@ async def get_system_quotas(
 async def get_ojo_releases(
     _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
 ) -> JSONDict:
+    def _fallback_payload(*, cached_payload: Optional[JSONDict] = None) -> JSONDict:
+        payload: JSONDict = {
+            "latest": {},
+            "releases": [],
+            "latest_ok": False,
+            "releases_ok": False,
+        }
+        if cached_payload:
+            payload.update(cached_payload)
+            payload["cache_stale"] = True
+        return payload
+
     now = time.monotonic()
     if ojo_release_cache_payload is not None and now < ojo_release_cache_expires_at:
         return ojo_release_cache_payload
@@ -84,15 +96,20 @@ async def get_ojo_releases(
 
         timeout = httpx.Timeout(8.0)
         headers = {"Accept": "application/vnd.github+json"}
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            latest_res, list_res = await client.get(
-                GITHUB_OJO_LATEST_RELEASE_URL,
-                headers=headers,
-            ), await client.get(
-                GITHUB_OJO_RELEASES_URL,
-                params={"per_page": 8},
-                headers=headers,
-            )
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                latest_res, list_res = await client.get(
+                    GITHUB_OJO_LATEST_RELEASE_URL,
+                    headers=headers,
+                ), await client.get(
+                    GITHUB_OJO_RELEASES_URL,
+                    params={"per_page": 8},
+                    headers=headers,
+                )
+        except httpx.HTTPError:
+            if ojo_release_cache_payload is not None:
+                return _fallback_payload(cached_payload=ojo_release_cache_payload)
+            return _fallback_payload()
 
         latest_payload = latest_res.json() if latest_res.is_success else {}
         list_payload = list_res.json() if list_res.is_success else []

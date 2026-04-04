@@ -167,7 +167,9 @@ def test_group_permission_and_member_updates(monkeypatch):
     assert {user.id for user in db.query(Group).filter_by(id=group.id).first().members} == {member.id}
 
     assert group_ops.update_group_members(service, group.id, [], "t1", actor_user_id=admin.id, actor_role="admin") is True
-    assert db.query(Group).filter_by(id=group.id).first() is None
+    persisted_group = db.query(Group).filter_by(id=group.id).first()
+    assert persisted_group is not None
+    assert persisted_group.members == []
 
 
 def test_notifier_prune_http_branches(monkeypatch):
