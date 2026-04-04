@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
-import { Button, Input, Select, Textarea } from "../ui";
+import { Button, Input, Modal, Select, Textarea } from "../ui";
 import RuleEditorWizard from "./RuleEditorWizard";
 import HelpTooltip from "../HelpTooltip";
 import { useAuth } from "../../contexts/AuthContext";
@@ -67,6 +67,7 @@ export default function RuleEditor({
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [isTestResultModalOpen, setIsTestResultModalOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const totalSteps = 4;
   const [issuesCollapsed, setIssuesCollapsed] = useState(true);
@@ -810,8 +811,10 @@ export default function RuleEditor({
     try {
       const result = await testAlertRule(rule.id);
       setTestResult(result?.message || "Test notification sent.");
+      setIsTestResultModalOpen(true);
     } catch (e) {
       setTestResult(e?.message || "Failed to send test notification.");
+      setIsTestResultModalOpen(true);
     } finally {
       setTesting(false);
     }
@@ -2234,14 +2237,28 @@ export default function RuleEditor({
               </span>{" "}
               {testing ? "Testing..." : "Test Current Rule"}
             </Button>
-            {testResult && (
-              <p className="text-sm text-sre-text-muted text-center ">
-                {testResult}
-              </p>
-            )}
           </div>
         )}
       </form>
+
+      <Modal
+        isOpen={isTestResultModalOpen && Boolean(testResult)}
+        onClose={() => setIsTestResultModalOpen(false)}
+        title="Rule Test Result"
+        size="sm"
+        zIndex={11000}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-sre-text whitespace-pre-wrap break-words">
+            {testResult}
+          </p>
+          <div className="flex justify-end">
+            <Button type="button" onClick={() => setIsTestResultModalOpen(false)}>
+              OK
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

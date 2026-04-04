@@ -9,6 +9,7 @@ vi.mock("../../ui", () => ({
     </button>
   ),
   Input: (props) => <input {...props} />,
+  Modal: ({ isOpen, children }) => (isOpen ? <div>{children}</div> : null),
   Textarea: (props) => <textarea {...props} />,
   Select: ({ children, onChange, ...props }) => (
     <select {...props} onChange={onChange}>

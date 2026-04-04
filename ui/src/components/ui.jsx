@@ -649,6 +649,7 @@ export function Modal({
   showCloseButton = true,
   closeOnOverlayClick = true,
   className,
+  zIndex = 9999,
 }) {
   const sizes = {
     sm: "max-w-md",
@@ -754,7 +755,8 @@ export function Modal({
 
   const content = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center animate-fade-in overflow-y-auto bg-black/35 backdrop-blur-xl dark:bg-black/50"
+      className="fixed inset-0 flex items-center justify-center animate-fade-in overflow-y-auto bg-black/35 backdrop-blur-xl dark:bg-black/50"
+      style={{ zIndex }}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "modal-title" : undefined}
@@ -769,7 +771,7 @@ export function Modal({
           sizes[size],
           className,
         )}
-        style={{ zIndex: 10000, maxHeight: "calc(100vh - 4rem)" }}
+        style={{ zIndex: zIndex + 1, maxHeight: "calc(100vh - 4rem)" }}
         ref={contentRef}
         tabIndex={-1}
       >
@@ -834,6 +836,7 @@ Modal.propTypes = {
   showCloseButton: PropTypes.bool,
   closeOnOverlayClick: PropTypes.bool,
   className: PropTypes.string,
+  zIndex: PropTypes.number,
 };
 
 /**
