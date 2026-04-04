@@ -10,35 +10,24 @@ This guide explains how to deploy Observantio from the release tarball, what to 
 
 ## Install From Release Tarball
 
-Quick install script:
+Quick install:
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+curl -fsSL https://raw.githubusercontent.com/observantio/watchdog/main/download.sh -o download.sh
+bash download.sh
 
-VERSION="${1:-v0.0.2}"
-ARCH="${2:-multi}" # amd64 | arm64 | multi
-REPO="observantio/watchdog"
-ASSET="observantio-${VERSION}-linux-${ARCH}.tar.gz"
-URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
-
-mkdir -p "$HOME/observantio" && cd "$HOME/observantio"
-
-if command -v curl >/dev/null 2>&1; then
-  curl -fL -o "${ASSET}" "${URL}"
-elif command -v wget >/dev/null 2>&1; then
-  wget -O "${ASSET}" "${URL}"
-else
-  echo "Need curl or wget to download release asset." >&2
-  exit 1
-fi
-
-tar -xzf "${ASSET}"
-cd "observantio-${VERSION}-linux-${ARCH}"
-
-chmod +x install.sh restart.sh uninstall.sh
-./install.sh
+# Optional:
+# bash download.sh v0.0.2 arm64
+# bash download.sh v0.0.2 amd64
 ```
+
+`download.sh` defaults to the latest GitHub release and `multi` architecture. Before it downloads anything, it checks that:
+
+- Docker is installed and usable by the current user
+- Docker Compose is available as `docker compose` or `docker-compose`
+- Docker and Compose do not require `sudo` for this install flow
+
+If Docker or Compose only work through `sudo`, the script exits early with a clear error so the host can be fixed before install.
 
 The installer will:
 - Create `.env` from `.env.example` if missing
@@ -48,6 +37,8 @@ The installer will:
 - Pull images and optionally start the stack
 
 ## Day-2 Operations
+
+From the extracted release directory:
 
 - Restart:
   `./restart.sh`
