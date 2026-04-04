@@ -11,6 +11,9 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- Applied a broad pylint-focused cleanup/refactor pass across Watchdog and Gatekeeper with safe formatting-only and naming-only updates.
+- Tightened readability defaults in lint configuration (reduced max line length/module size) and normalized wrapping/structure in touched files.
+- Enforced stricter naming alignment for variables/attributes/constants across updated modules to match current pylint policy without intended runtime behavior changes.
 - Updated global and service Schemathesis scripts to standardize OIDC-bearer fallback handling and consistent snapshot publication behavior.
 - Updated gateway contract handling to use middleware-based dynamic OpenAPI response inference, matching the existing cross-service pattern.
 - Resolved validation gaps identified by Schemathesis and fuzz-style tests; the provided verification scripts now run fully green (100%).
