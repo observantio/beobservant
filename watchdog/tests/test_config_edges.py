@@ -146,6 +146,8 @@ def test_config_vault_optional_warning_and_secret_loading_paths(monkeypatch):
         )
         assert module.config.get_secret("MISSING_VALUE") is None
         module.config._secret_provider = original_secret_provider
+        module.config._secret_provider = None
+        assert module.config.get_secret("MISSING_VALUE") is None
 
 
 def test_config_vault_secret_id_callback_path(monkeypatch):

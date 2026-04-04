@@ -7,10 +7,9 @@ VENV_COVERAGE="${ROOT_DIR}/.venv/bin/coverage"
 REPORT_DIR="${ROOT_DIR}/test-reports"
 COVERAGE_DIR="${REPORT_DIR}/coverage"
 JUNIT_DIR="${REPORT_DIR}/junit"
-COVERAGE_THRESHOLD="${COVERAGE_THRESHOLD:-0}"
+COVERAGE_THRESHOLD="${COVERAGE_THRESHOLD:-100}"
 
 SERVICES=(
-  resolver
   gatekeeper
   notifier
   watchdog
