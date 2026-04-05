@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from typing import List, Optional, Protocol
 
-from db_models import Group
 from sqlalchemy.orm import Session
+
+from db_models import Group
 
 
 class _GroupVisibilityService(Protocol):
