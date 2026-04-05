@@ -18,7 +18,7 @@ echo
 echo
 (
   cd "${ROOT_DIR}"
-  "${VENV_PYLINT}" --rcfile pyproject.toml gatekeeper
+  PYLINT_PATH_FIRST=gatekeeper "${VENV_PYLINT}" --rcfile pyproject.toml gatekeeper
 )
 
 echo
@@ -30,7 +30,7 @@ echo
 echo
 (
   cd "${ROOT_DIR}"
-  "${VENV_PYLINT}" --rcfile pyproject.toml watchdog
+  PYLINT_PATH_FIRST=watchdog "${VENV_PYLINT}" --rcfile pyproject.toml watchdog
 )
 
 echo

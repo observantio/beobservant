@@ -72,7 +72,7 @@ def test_database_lifecycle_and_session_paths(monkeypatch):
         "create_engine",
         lambda *args, **kwargs: create_engine_calls.append((args, kwargs)) or fake_engine,
     )
-    monkeypatch.setattr(database_module, "sessionmaker", lambda **kwargs: (lambda: fake_session))
+    monkeypatch.setattr(database_module, "create_session_factory", lambda **kwargs: (lambda: fake_session))
     monkeypatch.setattr(database_module.Base.metadata, "create_all", lambda bind: created.append(("create_all", bind)))
 
     database_module.init_database("sqlite:///tmp.db", echo=True, pool_size=5)
@@ -143,7 +143,7 @@ def test_database_remaining_helper_branches(monkeypatch):
         "create_engine",
         lambda *args, **kwargs: create_engine_calls.append((args, kwargs)) or fake_engine,
     )
-    monkeypatch.setattr(database_module, "sessionmaker", lambda **kwargs: (lambda: SimpleNamespace()))
+    monkeypatch.setattr(database_module, "create_session_factory", lambda **kwargs: (lambda: SimpleNamespace()))
     database_module.init_database("postgresql://db/app", echo=False, pool_size=7)
     engine_kwargs = create_engine_calls[0][1]
     assert engine_kwargs["pool_size"] == 7
@@ -178,6 +178,28 @@ def test_database_remaining_helper_branches(monkeypatch):
     context = database_module._SessionContext()
     assert context.__exit__(None, None, None) is None
     database_module._SESSION_LOCAL = None
+
+
+def test_create_session_factory_requires_bind():
+    database_module.dispose_database()
+    with pytest.raises(TypeError, match="bind"):
+        database_module.create_session_factory()
+
+
+def test_create_session_factory_yields_executable_session():
+    database_module.dispose_database()
+    engine = database_module.create_engine("sqlite:///:memory:", future=True)
+    try:
+        factory = database_module.create_session_factory(
+            bind=engine,
+            autoflush=False,
+            expire_on_commit=False,
+            future=True,
+        )
+        with factory() as session:
+            assert session.execute(database_module.text("SELECT 1")).scalar_one() == 1
+    finally:
+        engine.dispose()
 
 
 def test_init_database_returns_when_initialized_inside_lock(monkeypatch):

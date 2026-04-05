@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from typing import List, Optional, Set, TypeAlias
+import importlib
 import logging
 
 from sqlalchemy import String, or_
@@ -53,9 +54,8 @@ AUDIT_SENSITIVE_EXACT_KEYS = {
 
 def invalidate_grafana_proxy_auth_cache() -> None:
     try:
-        from services.grafana.proxy_auth_ops import clear_proxy_auth_cache
-
-        clear_proxy_auth_cache()
+        mod = importlib.import_module("services.grafana.proxy_auth_ops")
+        mod.clear_proxy_auth_cache()
     except (AttributeError, ImportError) as exc:
         logger.warning("Failed to invalidate Grafana proxy auth cache: %s", exc)
 

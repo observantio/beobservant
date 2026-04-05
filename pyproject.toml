@@ -9,9 +9,7 @@ description = "Observantio mono-repo shared developer tooling and test dependenc
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-authors = [
-  { name = "Observantio" }
-]
+authors = [{ name = "Observantio" }]
 keywords = ["observability", "lgtm", "fastapi", "telemetry", "grafana"]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -107,42 +105,21 @@ resolver = [
   "redis",
 ]
 
-test = [
-  "observantio[dev,watchdog,gatekeeper,notifier,resolver]",
-]
+test = ["observantio[dev,watchdog,gatekeeper,notifier,resolver]"]
 
 [tool.pytest.ini_options]
 minversion = "9.0"
-testpaths = [
-  "resolver/tests",
-  "gatekeeper/tests",
-  "notifier/tests",
-  "watchdog/tests",
-]
+testpaths = ["resolver/tests", "gatekeeper/tests", "notifier/tests", "watchdog/tests"]
 addopts = "-q"
-pythonpath = [
-  "resolver",
-  "gatekeeper",
-  "notifier",
-  "watchdog",
-]
+pythonpath = ["resolver", "gatekeeper", "notifier", "watchdog"]
 asyncio_mode = "auto"
-filterwarnings = [
-  "ignore::pytest.PytestRemovedIn9Warning",
-]
 
 [tool.coverage.run]
 branch = true
-omit = [
-  "tests/*",
-  "ui/*",
-  "showcase/*",
-]
+omit = ["tests/*", "ui/*", "showcase/*"]
 
 [tool.coverage.report]
-exclude_also = [
-  "if TYPE_CHECKING:",
-]
+exclude_also = ["if TYPE_CHECKING:"]
 show_missing = true
 
 [tool.mypy]
@@ -155,22 +132,31 @@ explicit_package_bases = true
 exclude_gitignore = true
 ignore_missing_imports = true
 exclude = [
-  "^(ui/|showcase/|configs/|tests/|build/|dist/|venv/|\\.venv/|__pycache__/|watchdog/tests/|gatekeeper/tests/|notifier/tests/|resolver/tests/)",
+  "^(ui|showcase|configs|tests|build|dist|venv|\\.venv|__pycache__|watchdog/tests|gatekeeper/tests|notifier/tests|resolver/tests)/",
 ]
 
 [tool.pylint.main]
 jobs = 1
+extension-pkg-allow-list = ["sqlalchemy", "sqlalchemy.orm"]
 ignore = [".git", "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "venv", "node_modules", "build", "dist", "tmp", "vendor"]
 ignore-paths = [
-  "^\\./?resolver/tests/.*$",
-  "^\\./?gatekeeper/tests/.*$",
-  "^\\./?notifier/tests/.*$",
-  "^\\./?watchdog/tests/.*$",
-  "^\\./?tests/.*$",
-  "^\\./?ui/.*$",
-  "^\\./?showcase/.*$",
+  "^\\./?(?:resolver|gatekeeper|notifier|watchdog)/tests/.*$",
+  "^\\./?(?:ui|showcase)/.*$",
 ]
-init-hook = "import os,sys; root=os.getcwd(); [sys.path.insert(0,p) for p in [f'{root}/resolver',f'{root}/gatekeeper',f'{root}/notifier',f'{root}/watchdog'] if p not in sys.path]"
+init-hook = """
+import os, sys
+root = os.getcwd()
+services = ['resolver', 'gatekeeper', 'notifier', 'watchdog']
+first = (os.environ.get('PYLINT_PATH_FIRST') or '').strip()
+ordered = [first, *[s for s in services if s != first]] if first in services else list(reversed(services))
+for svc in reversed(ordered):
+    path = f'{root}/{svc}'
+    try:
+        sys.path.remove(path)
+    except ValueError:
+        pass
+    sys.path.insert(0, path)
+"""
 
 [tool.pylint.messages_control]
 disable = [
@@ -181,12 +167,7 @@ disable = [
   "too-many-positional-arguments",
   "too-many-locals",
   "too-many-branches",
-  "unused-argument",
   "not-callable",
-  "import-error",
-  "no-name-in-module",
-  "no-member",
-  "import-outside-toplevel",
 ]
 
 [tool.pylint.format]
@@ -196,18 +177,17 @@ max-module-lines = 800
 [tool.pylint.design]
 max-args = 6
 max-positional-arguments = 6
-max-attributes = 20
-max-public-methods = 60
+max-attributes = 200
+max-public-methods = 35
 max-returns = 30
-max-nested-blocks = 8
-max-statements = 250
+max-nested-blocks = 6
+max-statements = 180
 min-public-methods = 0
 
 [tool.pylint.basic]
 variable-naming-style = "snake_case"
 argument-naming-style = "snake_case"
 attr-naming-style = "snake_case"
-
 const-naming-style = "UPPER_CASE"
 class-const-naming-style = "UPPER_CASE"
 

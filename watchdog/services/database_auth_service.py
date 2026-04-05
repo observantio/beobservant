@@ -17,33 +17,46 @@ from __future__ import annotations
 
 import logging
 import hashlib
+import importlib
 import importlib.util
+import os
 import secrets
+import sys
 import threading
-from typing import Dict, List, Optional, Union, cast
+from types import ModuleType
+from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
 
 from cryptography.fernet import Fernet
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-try:
-    from db_models import Group, User, UserApiKey
-except ImportError as exc:
-    import os
-    import sys
 
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    db_models_path = os.path.join(repo_root, "db_models.py")
-    if not os.path.exists(db_models_path):
-        raise
-    spec = importlib.util.spec_from_file_location("db_models", db_models_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Unable to load db_models from {db_models_path}") from exc
-    db_models = importlib.util.module_from_spec(spec)
-    sys.modules["db_models"] = db_models
-    spec.loader.exec_module(db_models)
-    from db_models import Group, User, UserApiKey
+def _load_db_models_module() -> ModuleType:
+    try:
+        return importlib.import_module("db_models")
+    except ImportError as exc:
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        db_models_path = os.path.join(repo_root, "db_models.py")
+        if not os.path.exists(db_models_path):
+            raise
+        spec = importlib.util.spec_from_file_location("db_models", db_models_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load db_models from {db_models_path}") from exc
+        db_models = importlib.util.module_from_spec(spec)
+        sys.modules["db_models"] = db_models
+        spec.loader.exec_module(db_models)
+        return db_models
 
+
+if TYPE_CHECKING:
+    from db_models import Group, User, UserApiKey
+else:
+    _db_models_mod = _load_db_models_module()
+    Group = _db_models_mod.Group
+    User = _db_models_mod.User
+    UserApiKey = _db_models_mod.UserApiKey
+
+# pylint: disable=wrong-import-position
 from config import config
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyUpdate
 from models.access.auth_models import Token, TokenData
@@ -107,6 +120,7 @@ from services.database_auth import (
 )
 from services.secrets.provider import SecretProvider
 from services.database_auth.service_state import DatabaseAuthServiceState
+# pylint: enable=wrong-import-position
 
 logger = logging.getLogger(__name__)
 

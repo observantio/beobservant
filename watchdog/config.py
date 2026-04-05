@@ -8,6 +8,7 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
+import importlib
 import logging
 import os
 import secrets
@@ -16,6 +17,8 @@ from typing import Any, List, Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
+
+from services.secrets.provider import EnvSecretProvider, SecretProvider
 
 logger = logging.getLogger(__name__)
 
@@ -324,8 +327,6 @@ def _populate_config(cfg: "Config") -> None:
         logger.warning("Vault not available or misconfigured; continuing with environment variables: %s", exc)
 
     if not hasattr(cfg, "secret_provider") or cfg.secret_provider is None:
-        from services.secrets.provider import EnvSecretProvider
-
         cfg.secret_provider = EnvSecretProvider()
 
     cfg.DEFAULT_RULE_GROUP = os.getenv("DEFAULT_RULE_GROUP", "default")
@@ -516,8 +517,7 @@ class Config:
         if not self.VAULT_ENABLED:
             return
 
-        from services.secrets.provider import SecretProvider
-        from services.secrets.vault_client import VaultSecretProvider
+        vault_mod = importlib.import_module("services.secrets.vault_client")
 
         if not self.VAULT_ADDR:
             raise ValueError("VAULT_ADDR must be set when VAULT_ENABLED=true")
@@ -531,7 +531,7 @@ class Config:
 
             secret_id_fn = _secret_id_fn
 
-        provider: SecretProvider = VaultSecretProvider(
+        provider: SecretProvider = vault_mod.VaultSecretProvider(
             address=self.VAULT_ADDR,
             token=self.VAULT_TOKEN,
             role_id=self.VAULT_ROLE_ID,
