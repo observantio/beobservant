@@ -16,19 +16,53 @@ import os
 import threading
 from contextlib import contextmanager
 from types import TracebackType
-from typing import Any, Callable, Generator, Iterator, Optional
+from typing import Any, Generator, Iterator, Optional, Protocol, cast
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from db_models import Base
 
 logger = logging.getLogger(__name__)
 
+
+class _SessionFactory(Protocol):
+    def __call__(self) -> Session: ...
+
+
+def _new_session(factory: _SessionFactory) -> Session:
+    return factory()
+
+
+class _BoundSessionFactory:
+    __slots__ = ("_engine",)
+
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+
+    def __call__(self) -> Session:
+        return Session(
+            bind=self._engine,
+            autoflush=False,
+            expire_on_commit=False,
+            future=True,
+        )
+
+
+def create_session_factory(**kwargs: Any) -> _SessionFactory:
+    bind = kwargs.get("bind")
+    if bind is None:
+        raise TypeError("create_session_factory() missing 1 required keyword-only argument: 'bind'")
+    return _BoundSessionFactory(cast(Engine, bind))
+
+
+sessionmaker = create_session_factory
+
+
 _ENGINE: Optional[Engine] = None
-_SESSION_LOCAL: Optional[Callable[[], Session]] = None
+_SESSION_LOCAL: Optional[_SessionFactory] = None
 _INIT_LOCK = threading.Lock()
 
 
@@ -48,6 +82,8 @@ def init_database(
     echo: bool = False,
     pool_size: Optional[int] = None,
 ) -> None:
+    global _ENGINE, _SESSION_LOCAL  # pylint: disable=global-statement
+
     if _ENGINE is not None and _SESSION_LOCAL is not None:
         return
 
@@ -79,27 +115,26 @@ def init_database(
             **engine_kwargs,
         )
 
-        session_local = sessionmaker(
+        _ENGINE = engine
+        _SESSION_LOCAL = create_session_factory(
             bind=engine,
-            autocommit=False,
             autoflush=False,
             expire_on_commit=False,
             future=True,
         )
-        globals()["_ENGINE"] = engine
-        globals()["_SESSION_LOCAL"] = session_local
 
 
-def _require_session_factory() -> Callable[[], Session]:
-    session_local = _SESSION_LOCAL
-    if session_local is None:
+def _require_session_factory() -> _SessionFactory:
+    factory = _SESSION_LOCAL
+    if factory is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
-    return session_local
+    return factory
 
 
 @contextmanager
 def _session_scope() -> Iterator[Session]:
-    session = _require_session_factory()()
+    maker = _require_session_factory()
+    session = _new_session(maker)
     try:
         yield session
         session.commit()
@@ -115,7 +150,8 @@ class _SessionContext:
         self._session: Optional[Session] = None
 
     def __enter__(self) -> Session:
-        self._session = _require_session_factory()()
+        maker = _require_session_factory()
+        self._session = _new_session(maker)
         return self._session
 
     def __exit__(
@@ -163,13 +199,15 @@ def connection_test() -> bool:
 
 
 def dispose_database() -> None:
+    global _ENGINE, _SESSION_LOCAL  # pylint: disable=global-statement
+
     with _INIT_LOCK:
-        globals()["_SESSION_LOCAL"] = None
+        _SESSION_LOCAL = None
         if _ENGINE is not None:
             try:
                 _ENGINE.dispose()
             finally:
-                globals()["_ENGINE"] = None
+                _ENGINE = None
 
 
 def init_db() -> None:

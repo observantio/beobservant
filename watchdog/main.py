@@ -26,29 +26,30 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import ENCODERS_BY_TYPE
 from pydantic import BaseModel
 import httpx
+import uvicorn
 
 from config import config, constants
-from routers import (
-    tempo_router,
-    loki_router,
-    alertmanager_router,
-    grafana_router,
-    resolver_router,
-    auth_router,
-    agents_router,
-    system_router,
-    internal_router,
-)
-import database as database_module
-from middleware.request_size_limit import RequestSizeLimitMiddleware
-from middleware.concurrency_limit import ConcurrencyLimitMiddleware
-
 from middleware.audit import security_headers_middleware
+from middleware.concurrency_limit import ConcurrencyLimitMiddleware
+from middleware.dependencies import auth_service
 from middleware.error_handlers import (
-    validation_exception_handler,
     general_exception_handler,
+    validation_exception_handler,
 )
 from middleware.openapi import install_custom_openapi
+from middleware.request_size_limit import RequestSizeLimitMiddleware
+from routers import (
+    agents_router,
+    alertmanager_router,
+    auth_router,
+    grafana_router,
+    internal_router,
+    loki_router,
+    resolver_router,
+    system_router,
+    tempo_router,
+)
+import database as database_module
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL.upper()), format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -79,8 +80,6 @@ if not config.SKIP_STARTUP_DB_INIT:
     database_module.init_db()
     logger.info("✓ Database initialized")
     logger.info("✓ Database schema ready")
-
-    from middleware.dependencies import auth_service
 
     auth_service.ensure_initialized()
     auth_service.backfill_otlp_tokens()
@@ -252,8 +251,6 @@ async def ready() -> JSONResponse:
 
 
 if __name__ == "__main__":
-    import uvicorn
-
     logger.info("Starting %s v%s", constants.APP_NAME, constants.APP_VERSION)
 
     uvicorn.run(app, host=config.HOST, port=config.PORT, loop="uvloop", log_level=config.LOG_LEVEL)

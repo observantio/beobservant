@@ -16,6 +16,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import hashlib
+import importlib
 import secrets
 import time
 import threading
@@ -68,14 +69,13 @@ def _is_recent_totp_reuse(user_id: str, code: str) -> bool:
 
 
 def get_mfa_fernet(_service: DatabaseAuthService) -> Optional[Fernet]:
-    from config import config as cfg
-
-    if not cfg.DATA_ENCRYPTION_KEY:
-        if cfg.REQUIRE_TOTP_ENCRYPTION_KEY:
+    app_cfg = importlib.import_module("config").config
+    if not app_cfg.DATA_ENCRYPTION_KEY:
+        if app_cfg.REQUIRE_TOTP_ENCRYPTION_KEY:
             raise ValueError("DATA_ENCRYPTION_KEY must be configured for MFA/TOTP operations")
         return None
     try:
-        return Fernet(cfg.DATA_ENCRYPTION_KEY)
+        return Fernet(app_cfg.DATA_ENCRYPTION_KEY)
     except (TypeError, ValueError) as exc:
         raise ValueError("Invalid DATA_ENCRYPTION_KEY format") from exc
 

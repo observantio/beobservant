@@ -26,6 +26,7 @@ from config import config
 from database import get_db_session
 from db_models import Permission, Tenant, User, UserApiKey
 from models.access.auth_models import Role
+from services.auth.permission_defs import PERMISSION_DEFS
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -94,8 +95,6 @@ def _ensure_indexes(db: Session, statements: Iterable[str]) -> None:
 
 
 def ensure_permissions(db: Session) -> None:
-    from services.auth.permission_defs import PERMISSION_DEFS
-
     wanted = [p[0] for p in PERMISSION_DEFS]
     if not wanted:
         return
