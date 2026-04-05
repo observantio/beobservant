@@ -110,9 +110,12 @@ class FakeAuthService:
         self._counter += 1
         return f"{prefix}-{self._counter}"
 
-    def create_user(self, user_create, tenant_id, **kwargs):
+    def create_user(self, user_create, tenant_id, actor=None, **kwargs):
         creator_id = kwargs.get("creator_id")
         actor_role = kwargs.get("actor_role")
+        if actor is not None:
+            creator_id = actor.user_id
+            actor_role = actor.role if actor_role is None else actor_role
         requested_role = getattr(user_create, "role", Role.USER)
         requested_role_value = requested_role.value if hasattr(requested_role, "value") else requested_role
         if creator_id and actor_role == "user" and requested_role_value == Role.ADMIN.value:
@@ -151,8 +154,11 @@ class FakeAuthService:
         return group
 
     def update_group_permissions(
-        self, group_id, permission_names, tenant_id, actor_user_id=None, actor_role=None, **kwargs
+        self, group_id, permission_names, tenant_id, actor=None, actor_user_id=None, actor_role=None, **kwargs
     ):
+        if actor is not None:
+            actor_user_id = actor.user_id
+            actor_role = actor.role if actor_role is None else actor_role
         if "manage:users" in permission_names and actor_role == "user":
             raise HTTPException(status_code=403, detail="forbidden")
         row = AuditLog(
@@ -166,7 +172,8 @@ class FakeAuthService:
         self.db.add(row)
         return True
 
-    def update_group_members(self, group_id, user_ids, tenant_id, actor_user_id=None, actor_role=None, **kwargs):
+    def update_group_members(self, group_id, user_ids, tenant_id, actor=None, **_kwargs):
+        _ = actor
         group = next(group for group in self.db.groups if group.id == group_id)
         group.members = [user for user in self.db.users if user.id in user_ids]
         allowed = set(user_ids)

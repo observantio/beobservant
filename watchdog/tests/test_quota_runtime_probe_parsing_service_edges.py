@@ -32,8 +32,8 @@ from services.quota_service.parsing import (
     response_payload,
 )
 from services.quota_service import parsing as parsing_module
-from services.quota_service.runtime_probe import QuotaProbe, RuntimeQuotaProbe
-from services.quota_service.service import QuotaService
+from services.quota_service.runtime_probe import NativeQuotaFetchParams, QuotaProbe, RuntimeQuotaProbe
+from services.quota_service.service import QuotaService, RuntimeQuotaResolveParams
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -341,23 +341,27 @@ async def test_fetch_tempo_used_traces_all_paths():
 async def test_fetch_native_quota_paths():
     probe_disabled = _probe_with(lambda _u, **_k: _Resp({}), cfg_overrides={"QUOTA_NATIVE_ENABLED": False})
     out = await probe_disabled.fetch_native_quota(
-        service_name="loki",
-        base_url="http://loki:3100",
-        path_template="/x",
-        tenant_id="org-a",
-        limit_field="limit",
-        used_field="used",
+        NativeQuotaFetchParams(
+            service_name="loki",
+            base_url="http://loki:3100",
+            path_template="/x",
+            tenant_id="org-a",
+            limit_field="limit",
+            used_field="used",
+        )
     )
     assert out.source == "none"
 
     probe_no_paths = _probe_with(lambda _u, **_k: _Resp({}))
     out2 = await probe_no_paths.fetch_native_quota(
-        service_name="other",
-        base_url="http://x",
-        path_template="",
-        tenant_id="org-a",
-        limit_field="limit",
-        used_field="used",
+        NativeQuotaFetchParams(
+            service_name="other",
+            base_url="http://x",
+            path_template="",
+            tenant_id="org-a",
+            limit_field="limit",
+            used_field="used",
+        )
     )
     assert out2.source == "none"
 
@@ -366,12 +370,14 @@ async def test_fetch_native_quota_paths():
 
     probe_generic = _probe_with(_generic)
     out3 = await probe_generic.fetch_native_quota(
-        service_name="other",
-        base_url="http://x",
-        path_template="/quota",
-        tenant_id="org-a",
-        limit_field="limit",
-        used_field="used",
+        NativeQuotaFetchParams(
+            service_name="other",
+            base_url="http://x",
+            path_template="/quota",
+            tenant_id="org-a",
+            limit_field="limit",
+            used_field="used",
+        )
     )
     assert out3.source == "native"
     assert out3.limit == 10.0 and out3.used == 4.0
@@ -386,12 +392,14 @@ async def test_fetch_native_quota_paths():
 
     probe_partial = _probe_with(_partial)
     out4 = await probe_partial.fetch_native_quota(
-        service_name="other",
-        base_url="http://x",
-        path_template="/quota",
-        tenant_id="org-a",
-        limit_field="limit",
-        used_field="used",
+        NativeQuotaFetchParams(
+            service_name="other",
+            base_url="http://x",
+            path_template="/quota",
+            tenant_id="org-a",
+            limit_field="limit",
+            used_field="used",
+        )
     )
     assert out4.limit == 12.0 and out4.used is None
 
@@ -400,12 +408,14 @@ async def test_fetch_native_quota_paths():
 
     probe_errors = _probe_with(_all_errors)
     out5 = await probe_errors.fetch_native_quota(
-        service_name="other",
-        base_url="http://x",
-        path_template="/quota",
-        tenant_id="org-a",
-        limit_field="limit",
-        used_field="used",
+        NativeQuotaFetchParams(
+            service_name="other",
+            base_url="http://x",
+            path_template="/quota",
+            tenant_id="org-a",
+            limit_field="limit",
+            used_field="used",
+        )
     )
     assert out5.message == "Other runtime quota endpoint unavailable"
 
@@ -422,12 +432,14 @@ async def test_fetch_native_quota_handles_fallback_exceptions(monkeypatch):
 
     monkeypatch.setattr(probe, "fetch_loki_used_streams", _boom_loki)
     out = await probe.fetch_native_quota(
-        service_name="loki",
-        base_url="http://loki:3100",
-        path_template="/quota",
-        tenant_id="org-a",
-        limit_field="limit",
-        used_field="used",
+        NativeQuotaFetchParams(
+            service_name="loki",
+            base_url="http://loki:3100",
+            path_template="/quota",
+            tenant_id="org-a",
+            limit_field="limit",
+            used_field="used",
+        )
     )
     assert out.limit == 30.0 and out.used is None
 
@@ -436,12 +448,14 @@ async def test_fetch_native_quota_handles_fallback_exceptions(monkeypatch):
 
     monkeypatch.setattr(probe, "fetch_tempo_used_traces", _boom_tempo)
     out2 = await probe.fetch_native_quota(
-        service_name="tempo",
-        base_url="http://tempo:3200",
-        path_template="/quota",
-        tenant_id="org-a",
-        limit_field="limit",
-        used_field="used",
+        NativeQuotaFetchParams(
+            service_name="tempo",
+            base_url="http://tempo:3200",
+            path_template="/quota",
+            tenant_id="org-a",
+            limit_field="limit",
+            used_field="used",
+        )
     )
     assert out2.limit == 30.0 and out2.used is None
 
@@ -521,7 +535,7 @@ async def test_quota_service_resolve_runtime_quota_degraded_messages():
             self.native = native
             self.prom = prom
 
-        async def fetch_native_quota(self, **_kwargs):
+        async def fetch_native_quota(self, *_args, **_kwargs):
             return self.native
 
         async def fetch_prometheus_quota(self, **_kwargs):
@@ -550,14 +564,16 @@ async def test_quota_service_resolve_runtime_quota_degraded_messages():
         runtime_probe=_Probe(QuotaProbe("native", None, 7.0), QuotaProbe("none", None, None)),
     )
     out1 = await svc_usage_only._resolve_runtime_quota(
-        service_name="loki",
-        base_url="http://loki:3100",
-        native_path="/x",
-        native_limit_field="limit",
-        native_used_field="used",
-        prom_limit_query="",
-        prom_used_query="",
-        tenant_id="org-1",
+        RuntimeQuotaResolveParams(
+            service_name="loki",
+            base_url="http://loki:3100",
+            native_path="/x",
+            native_limit_field="limit",
+            native_used_field="used",
+            prom_limit_query="",
+            prom_used_query="",
+            tenant_id="org-1",
+        )
     )
     assert out1.status == "degraded"
     assert "usage is available" in str(out1.message)
@@ -568,14 +584,16 @@ async def test_quota_service_resolve_runtime_quota_degraded_messages():
         runtime_probe=_Probe(QuotaProbe("native", 11.0, None), QuotaProbe("none", None, None)),
     )
     out2 = await svc_limit_only._resolve_runtime_quota(
-        service_name="tempo",
-        base_url="http://tempo:3200",
-        native_path="/x",
-        native_limit_field="limit",
-        native_used_field="used",
-        prom_limit_query="",
-        prom_used_query="",
-        tenant_id="org-1",
+        RuntimeQuotaResolveParams(
+            service_name="tempo",
+            base_url="http://tempo:3200",
+            native_path="/x",
+            native_limit_field="limit",
+            native_used_field="used",
+            prom_limit_query="",
+            prom_used_query="",
+            tenant_id="org-1",
+        )
     )
     assert out2.status == "degraded"
     assert "limit is available" in str(out2.message)
@@ -586,14 +604,16 @@ async def test_quota_service_resolve_runtime_quota_degraded_messages():
         runtime_probe=_Probe(QuotaProbe("native", 15.0, None), QuotaProbe("prometheus", None, 6.0)),
     )
     out3 = await svc_mixed_partial._resolve_runtime_quota(
-        service_name="loki",
-        base_url="http://loki:3100",
-        native_path="/x",
-        native_limit_field="limit",
-        native_used_field="used",
-        prom_limit_query="ql",
-        prom_used_query="qu",
-        tenant_id="org-1",
+        RuntimeQuotaResolveParams(
+            service_name="loki",
+            base_url="http://loki:3100",
+            native_path="/x",
+            native_limit_field="limit",
+            native_used_field="used",
+            prom_limit_query="ql",
+            prom_used_query="qu",
+            tenant_id="org-1",
+        )
     )
     assert out3.status == "degraded"
     assert out3.source == "native"
@@ -605,14 +625,16 @@ async def test_quota_service_resolve_runtime_quota_degraded_messages():
         runtime_probe=_Probe(QuotaProbe("native", None, None), QuotaProbe("prometheus", None, None)),
     )
     out4 = await svc_none._resolve_runtime_quota(
-        service_name="tempo",
-        base_url="http://tempo:3200",
-        native_path="/x",
-        native_limit_field="limit",
-        native_used_field="used",
-        prom_limit_query="ql",
-        prom_used_query="qu",
-        tenant_id="org-1",
+        RuntimeQuotaResolveParams(
+            service_name="tempo",
+            base_url="http://tempo:3200",
+            native_path="/x",
+            native_limit_field="limit",
+            native_used_field="used",
+            prom_limit_query="ql",
+            prom_used_query="qu",
+            tenant_id="org-1",
+        )
     )
     assert out4.status == "unavailable"
     assert out4.source == "none"
@@ -626,14 +648,16 @@ async def test_quota_service_resolve_runtime_quota_degraded_messages():
         ),
     )
     out5 = await svc_with_messages._resolve_runtime_quota(
-        service_name="loki",
-        base_url="http://loki:3100",
-        native_path="/x",
-        native_limit_field="limit",
-        native_used_field="used",
-        prom_limit_query="ql",
-        prom_used_query="qu",
-        tenant_id="org-1",
+        RuntimeQuotaResolveParams(
+            service_name="loki",
+            base_url="http://loki:3100",
+            native_path="/x",
+            native_limit_field="limit",
+            native_used_field="used",
+            prom_limit_query="ql",
+            prom_used_query="qu",
+            tenant_id="org-1",
+        )
     )
     assert out5.status == "degraded"
     assert out5.message == "native unavailable; prom unavailable"
@@ -650,8 +674,8 @@ async def test_quota_service_get_quotas_resolves_scope_and_api_key_count():
     captured = {}
 
     class _Probe:
-        async def fetch_native_quota(self, **kwargs):
-            captured.setdefault("native", []).append(kwargs["tenant_id"])
+        async def fetch_native_quota(self, params: NativeQuotaFetchParams):
+            captured.setdefault("native", []).append(params.tenant_id)
             return QuotaProbe("native", 20.0, 5.0)
 
         async def fetch_prometheus_quota(self, **kwargs):

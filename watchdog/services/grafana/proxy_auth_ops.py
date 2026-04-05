@@ -27,15 +27,35 @@ from db_models import GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group,
 from models.access.auth_models import Permission, Role, TokenData
 from custom_types.json import JSONDict
 from services.auth.delegation import role_to_text as _role_to_text
+from services.grafana.proxy_client import GrafanaProxyClient
+from services.grafana.proxy_path_permissions import required_permissions_for_path as _required_permissions_for_path
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
-    from services.grafana_proxy_service import GrafanaProxyService
 
 
 class ProxyAuthCacheEntry(TypedDict):
     expires: float
     headers: Dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardProxyAuthContext:
+    dashboard_uid: str | None
+    dashboard_obj: GrafanaDashboard | None
+    folder_obj: GrafanaFolder | None
+    original_path: str
+    original_method: str
+
+
+@dataclass(frozen=True, slots=True)
+class DatasourceProxyAuthContext:
+    datasource_uid: str | None
+    datasource_id: int | None
+    datasource_by_uid: GrafanaDatasource | None
+    datasource_by_id: GrafanaDatasource | None
+    original_path: str
+    original_method: str
 
 
 def _json_dict(value: object) -> JSONDict:
@@ -154,75 +174,6 @@ def _has_any_permission(token_data: TokenData, required: Set[str]) -> bool:
     return bool(set(token_data.permissions or []).intersection(required))
 
 
-def _required_permissions_for_path(path: str, method: str) -> Set[str]:
-    p = (path or "").lower()
-    m = (method or "GET").upper()
-
-    if p.startswith("/grafana/d/") or p.startswith("/grafana/d-solo/"):
-        return {Permission.READ_DASHBOARDS.value}
-    if p.startswith("/grafana/connections/datasources/edit/"):
-        return {Permission.UPDATE_DATASOURCES.value, Permission.CREATE_DATASOURCES.value}
-    if p.startswith("/grafana/api/search"):
-        return {Permission.READ_DASHBOARDS.value}
-    if p.startswith("/grafana/api/ds/query"):
-        return {Permission.QUERY_DATASOURCES.value}
-    if p.startswith("/grafana/api/query-history"):
-        if m in {"POST", "PUT", "PATCH", "DELETE"}:
-            return {Permission.QUERY_DATASOURCES.value}
-        return {Permission.QUERY_DATASOURCES.value, Permission.READ_DASHBOARDS.value}
-    if p.startswith("/grafana/api/frontend-metrics"):
-        return {Permission.READ_DASHBOARDS.value}
-    if p.startswith("/grafana/api/datasources/proxy/"):
-        return {Permission.QUERY_DATASOURCES.value}
-    if p.startswith("/grafana/api/dashboards/db") and m == "POST":
-        return {
-            Permission.CREATE_DASHBOARDS.value,
-            Permission.UPDATE_DASHBOARDS.value,
-            Permission.WRITE_DASHBOARDS.value,
-        }
-    if p.startswith("/grafana/api/dashboards/uid/"):
-        if m == "GET":
-            return {Permission.READ_DASHBOARDS.value}
-        if m == "DELETE":
-            return {Permission.DELETE_DASHBOARDS.value}
-    if p.startswith("/grafana/api/datasources/uid/"):
-        if "/resources/" in p or "/health" in p or p.endswith("/resources"):
-            if m in {"GET", "HEAD", "OPTIONS"}:
-                return {Permission.READ_DATASOURCES.value}
-            return {Permission.QUERY_DATASOURCES.value}
-        if m == "GET":
-            return {Permission.READ_DATASOURCES.value}
-        if m == "PUT":
-            return {Permission.UPDATE_DATASOURCES.value}
-        if m == "DELETE":
-            return {Permission.DELETE_DATASOURCES.value}
-    if p.startswith("/grafana/api/datasources/proxy/uid/"):
-        if m in {"GET", "HEAD", "OPTIONS"}:
-            return {Permission.READ_DATASOURCES.value}
-        return {Permission.QUERY_DATASOURCES.value}
-    if p.startswith("/grafana/api/datasources"):
-        if m == "GET":
-            return {Permission.READ_DATASOURCES.value}
-        if m == "POST":
-            return {Permission.CREATE_DATASOURCES.value}
-    if p.startswith("/grafana/api/folders"):
-        if m == "GET":
-            return {Permission.READ_FOLDERS.value}
-        if m == "POST":
-            return {Permission.CREATE_FOLDERS.value}
-        if m == "DELETE":
-            return {Permission.DELETE_FOLDERS.value}
-    if p.startswith("/grafana/api/live"):
-        return {Permission.READ_DASHBOARDS.value}
-    if m in {"GET", "HEAD", "OPTIONS"}:
-        return {
-            Permission.READ_DASHBOARDS.value,
-            Permission.READ_DATASOURCES.value,
-            Permission.READ_FOLDERS.value,
-        }
-    return set()
-
-
 def _is_blocked_proxy_path(path: str) -> bool:
     p = (path or "").lower()
     return any(p.startswith(prefix) for prefix in BLOCKED_GRAFANA_PROXY_PREFIXES)
@@ -253,7 +204,7 @@ def _is_folder_write_intent(path: str, method: str) -> bool:
     return p.startswith("/grafana/api/folders") and m in {"POST", "PUT", "PATCH", "DELETE"}
 
 
-async def _enforce_writable_datasource(service: GrafanaProxyService, datasource_uid: str) -> None:
+async def _enforce_writable_datasource(service: GrafanaProxyClient, datasource_uid: str) -> None:
     datasource = await service.grafana_service.get_datasource(datasource_uid)
     if datasource and (bool(getattr(datasource, "is_default", False)) or bool(getattr(datasource, "read_only", False))):
         raise HTTPException(status_code=403, detail="Default/read-only datasources are view/query only")
@@ -564,7 +515,7 @@ def _is_safe_system_datasource(datasource: object) -> bool:
 
 
 async def _lookup_safe_system_datasource(
-    service: GrafanaProxyService, *, datasource_uid: Optional[str], datasource_id: Optional[int]
+    service: GrafanaProxyClient, *, datasource_uid: Optional[str], datasource_id: Optional[int]
 ) -> bool:
     if datasource_uid:
         ds = await service.grafana_service.get_datasource(datasource_uid)
@@ -607,7 +558,7 @@ def _enforce_proxy_permission_gate(token_data: TokenData, *, original_path: str,
 
 
 async def _resolve_dashboard_folder_context(
-    service: GrafanaProxyService,
+    service: GrafanaProxyClient,
     token_data: TokenData,
     *,
     dashboard_uid: str,
@@ -638,27 +589,24 @@ async def _resolve_dashboard_folder_context(
 
 
 async def _authorize_dashboard_access(
-    service: GrafanaProxyService,
+    service: GrafanaProxyClient,
     token_data: TokenData,
-    *,
-    dashboard_uid: str | None,
-    dashboard_obj: GrafanaDashboard | None,
-    folder_obj: GrafanaFolder | None,
-    original_path: str,
-    original_method: str,
+    ctx: DashboardProxyAuthContext,
 ) -> GrafanaFolder | None:
-    if not dashboard_uid:
-        return folder_obj
+    if not ctx.dashboard_uid:
+        return ctx.folder_obj
 
-    dashboard_write_intent = _is_dashboard_write_intent(original_path, original_method)
-    if not dashboard_obj or not is_resource_accessible(dashboard_obj, token_data, require_write=dashboard_write_intent):
+    dashboard_write_intent = _is_dashboard_write_intent(ctx.original_path, ctx.original_method)
+    if not ctx.dashboard_obj or not is_resource_accessible(
+        ctx.dashboard_obj, token_data, require_write=dashboard_write_intent
+    ):
         raise HTTPException(status_code=403, detail="Dashboard access denied")
 
     folder_obj = await _resolve_dashboard_folder_context(
         service,
         token_data,
-        dashboard_uid=dashboard_uid,
-        folder_obj=folder_obj,
+        dashboard_uid=ctx.dashboard_uid,
+        folder_obj=ctx.folder_obj,
     )
     if folder_obj and not is_resource_accessible(folder_obj, token_data, require_write=False):
         raise HTTPException(status_code=403, detail="Folder access denied")
@@ -666,39 +614,41 @@ async def _authorize_dashboard_access(
 
 
 async def _authorize_datasource_access(
-    service: GrafanaProxyService,
+    service: GrafanaProxyClient,
     token_data: TokenData,
-    *,
-    datasource_uid: str | None,
-    datasource_id: int | None,
-    datasource_by_uid: GrafanaDatasource | None,
-    datasource_by_id: GrafanaDatasource | None,
-    original_path: str,
-    original_method: str,
+    ctx: DatasourceProxyAuthContext,
 ) -> None:
-    datasource_write_intent = _is_datasource_write_intent(original_path, original_method)
+    datasource_write_intent = _is_datasource_write_intent(ctx.original_path, ctx.original_method)
 
-    if datasource_uid:
-        if datasource_by_uid:
-            if not is_resource_accessible(datasource_by_uid, token_data, require_write=datasource_write_intent):
+    if ctx.datasource_uid:
+        if ctx.datasource_by_uid:
+            if not is_resource_accessible(
+                ctx.datasource_by_uid, token_data, require_write=datasource_write_intent
+            ):
                 raise HTTPException(status_code=403, detail="Datasource access denied")
-        elif not await _lookup_safe_system_datasource(service, datasource_uid=datasource_uid, datasource_id=None):
+        elif not await _lookup_safe_system_datasource(
+            service, datasource_uid=ctx.datasource_uid, datasource_id=None
+        ):
             raise HTTPException(status_code=403, detail="Datasource access denied")
         if datasource_write_intent:
-            if not datasource_by_uid:
+            if not ctx.datasource_by_uid:
                 raise HTTPException(status_code=403, detail="Default/read-only datasources are view/query only")
-            await _enforce_writable_datasource(service, str(getattr(datasource_by_uid, "grafana_uid", "")))
+            await _enforce_writable_datasource(service, str(getattr(ctx.datasource_by_uid, "grafana_uid", "")))
 
-    if datasource_id is not None:
-        if datasource_by_id:
-            if not is_resource_accessible(datasource_by_id, token_data, require_write=datasource_write_intent):
+    if ctx.datasource_id is not None:
+        if ctx.datasource_by_id:
+            if not is_resource_accessible(
+                ctx.datasource_by_id, token_data, require_write=datasource_write_intent
+            ):
                 raise HTTPException(status_code=403, detail="Datasource access denied")
-        elif not await _lookup_safe_system_datasource(service, datasource_uid=None, datasource_id=datasource_id):
+        elif not await _lookup_safe_system_datasource(
+            service, datasource_uid=None, datasource_id=ctx.datasource_id
+        ):
             raise HTTPException(status_code=403, detail="Datasource access denied")
         if datasource_write_intent:
-            if not datasource_by_id:
+            if not ctx.datasource_by_id:
                 raise HTTPException(status_code=403, detail="Default/read-only datasources are view/query only")
-            await _enforce_writable_datasource(service, str(getattr(datasource_by_id, "grafana_uid", "")))
+            await _enforce_writable_datasource(service, str(getattr(ctx.datasource_by_id, "grafana_uid", "")))
 
 
 def _authorize_folder_access(
@@ -714,7 +664,7 @@ def _authorize_folder_access(
 
 
 async def authorize_proxy_request(
-    service: GrafanaProxyService,
+    service: GrafanaProxyClient,
     request: Request,
     auth_service: DatabaseAuthService,
     token: Optional[str] = None,
@@ -766,21 +716,25 @@ async def authorize_proxy_request(
     folder_obj = await _authorize_dashboard_access(
         service,
         token_data,
-        dashboard_uid=dashboard_uid,
-        dashboard_obj=context.dashboard,
-        folder_obj=context.folder,
-        original_path=original_path,
-        original_method=original_method,
+        DashboardProxyAuthContext(
+            dashboard_uid=dashboard_uid,
+            dashboard_obj=context.dashboard,
+            folder_obj=context.folder,
+            original_path=original_path,
+            original_method=original_method,
+        ),
     )
     await _authorize_datasource_access(
         service,
         token_data,
-        datasource_uid=datasource_uid,
-        datasource_id=datasource_id,
-        datasource_by_uid=context.datasource_by_uid,
-        datasource_by_id=context.datasource_by_id,
-        original_path=original_path,
-        original_method=original_method,
+        DatasourceProxyAuthContext(
+            datasource_uid=datasource_uid,
+            datasource_id=datasource_id,
+            datasource_by_uid=context.datasource_by_uid,
+            datasource_by_id=context.datasource_by_id,
+            original_path=original_path,
+            original_method=original_method,
+        ),
     )
     _authorize_folder_access(token_data, folder_uid=folder_uid, folder_obj=folder_obj or context.folder)
 

@@ -44,13 +44,13 @@ def _request(client_host: str, headers: list[tuple[bytes, bytes]] | None = None)
 
 
 def test_gateway_service_proxy_and_allowlist_edge_cases(monkeypatch):
-    monkeypatch.setattr(gateway_service_module.gw_config, "TRUST_PROXY_HEADERS", True)
-    monkeypatch.setattr(gateway_service_module.gw_config, "TRUSTED_PROXY_CIDRS", ["bad-cidr"])
+    monkeypatch.setattr(gateway_service_module.settings, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(gateway_service_module.settings, "TRUSTED_PROXY_CIDRS", ["bad-cidr"])
     request = _request("127.0.0.1")
     assert GatewayAuthService._trusted_proxy_peer(request) is False
 
-    monkeypatch.setattr(gateway_service_module.gw_config, "TRUST_PROXY_HEADERS", True)
-    monkeypatch.setattr(gateway_service_module.gw_config, "TRUSTED_PROXY_CIDRS", [])
+    monkeypatch.setattr(gateway_service_module.settings, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(gateway_service_module.settings, "TRUSTED_PROXY_CIDRS", [])
     service = GatewayAuthService(rate_limit_per_minute=10, ip_allowlist="127.0.0.1")
     invalid_ip_request = _request("127.0.0.1", headers=[(b"x-forwarded-for", b"not-an-ip")])
     with pytest.raises(HTTPException) as exc:
@@ -81,7 +81,7 @@ def test_fetch_org_from_api_returns_none_for_empty_token():
 def test_rate_limiter_factory_warning_and_fallback_paths(monkeypatch):
     import services.rate_limit as rate_limit_module
 
-    monkeypatch.setattr(rate_limit_module.gw_config, "GATEWAY_RATE_LIMIT_STRICT", False)
+    monkeypatch.setattr(rate_limit_module.settings, "GATEWAY_RATE_LIMIT_STRICT", False)
     memory_limiter = make_default_rate_limiter(2, backend="redis", redis_url=None)
     assert isinstance(memory_limiter, TokenRateLimiter)
 
@@ -271,9 +271,11 @@ def test_vault_client_auth_and_payload_edge_branches(monkeypatch):
 
     monkeypatch.setattr(vault_module, "hvac", types.SimpleNamespace(Client=FakeClient))
     with pytest.raises(vault_module.VaultClientError):
-        vault_module.VaultSecretProvider(address="https://vault")
+        vault_module.VaultSecretProvider(vault_module.VaultSecretProviderSettings(address="https://vault"))
 
-    provider = vault_module.VaultSecretProvider(address="https://vault", token="token", cache_ttl=100)
+    provider = vault_module.VaultSecretProvider(
+        vault_module.VaultSecretProviderSettings(address="https://vault", token="token", cache_ttl=100),
+    )
     assert provider.get("missing") is None
     provider._approle_credentials = ("role-id", lambda: "secret-id")
     provider._approle_login()

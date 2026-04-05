@@ -117,7 +117,10 @@ def test_audit_helpers_and_filters(monkeypatch):
     assert db.query_obj.filters
 
     query = FakeQuery()
-    filtered = auth_helper.apply_audit_filters_func(query, "start", "end", "user-1", "login", "users", q="needle")
+    filtered = auth_helper.apply_audit_filters_func(
+        query,
+        auth_helper.AuditLogFilterParams("start", "end", "user-1", "login", "users", q="needle"),
+    )
     assert filtered is query
     assert len(query.filters) == 6
     assert auth_helper.audit_text_like_pattern("needle") == "%needle%"

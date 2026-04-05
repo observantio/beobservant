@@ -24,7 +24,7 @@ from middleware.dependencies import (
 )
 from models.access.auth_models import TokenData
 from custom_types.json import JSONDict
-from services.notifier_proxy_service import notifier_proxy_service
+from services.notifier_proxy_service import NotifierForwardRequest, notifier_proxy_service
 from services.alerts.helpers import (
     assert_silence_owner,
     check_permissions,
@@ -74,11 +74,13 @@ async def public_rules_proxy(request: Request) -> Any:
         allowlist=config.AUTH_PUBLIC_IP_ALLOWLIST,
     )
     return await notifier_proxy_service.forward(
-        request=request,
-        upstream_path="/internal/v1/api/alertmanager/public/rules",
-        current_user=None,
-        require_api_key=False,
-        audit_action="alertmanager.public_rules.proxy",
+        NotifierForwardRequest(
+            request=request,
+            upstream_path="/internal/v1/api/alertmanager/public/rules",
+            current_user=None,
+            require_api_key=False,
+            audit_action="alertmanager.public_rules.proxy",
+        ),
     )
 
 
@@ -117,10 +119,12 @@ async def alertmanager_proxy(
     apply_scoped_rate_limit(current_user, "alertmanager")
 
     return await notifier_proxy_service.forward(
-        request=request,
-        upstream_path=f"/internal/v1/api/alertmanager/{path}",
-        current_user=current_user,
-        require_api_key=is_mutating(request.method),
-        audit_action="alertmanager.proxy",
-        request_body=request_body,
+        NotifierForwardRequest(
+            request=request,
+            upstream_path=f"/internal/v1/api/alertmanager/{path}",
+            current_user=current_user,
+            require_api_key=is_mutating(request.method),
+            audit_action="alertmanager.proxy",
+            request_body=request_body,
+        ),
     )

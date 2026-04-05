@@ -12,6 +12,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Awaitable, Callable, Dict, List, Optional
 
@@ -31,6 +32,7 @@ from custom_types.json import JSONDict
 from services.common.http_client import create_async_client
 from services.common.ttl_cache import TTLCache
 from services.loki.fallback import (
+    LokiFallbackQueryRun,
     build_volume_fallback_queries,
     run_fallback_queries,
 )
@@ -43,6 +45,26 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 QueryParamValue = str | int | float | bool | None
 RequestQueryParamValue = str | int | float | bool | List[str | int | float | bool]
 RequestQueryParams = dict[str, RequestQueryParamValue]
+
+
+@dataclass(frozen=True, slots=True)
+class SearchLogsByPatternParams:
+    pattern: str
+    labels: Optional[Dict[str, str]] = None
+    start: Optional[int] = None
+    end: Optional[int] = None
+    limit: int = 100
+    tenant_id: str = config.DEFAULT_ORG_ID
+
+
+@dataclass(frozen=True, slots=True)
+class FilterLogsParams:
+    labels: Dict[str, str]
+    filters: Optional[List[str]] = None
+    start: Optional[int] = None
+    end: Optional[int] = None
+    limit: int = 100
+    tenant_id: str = config.DEFAULT_ORG_ID
 
 
 def _json_dict(value: object) -> JSONDict:
@@ -207,14 +229,16 @@ class LokiService:
             payload = _json_dict(data.get("data"))
             if query.query and not _object_list(payload.get("result")):
                 fallback = await run_fallback_queries(
-                    endpoint,
-                    params,
-                    headers,
-                    query.query,
-                    client=self._client,
-                    http_client=self._http,
-                    max_fallbacks=config.LOKI_MAX_FALLBACK_QUERIES,
-                    concurrency=config.LOKI_FALLBACK_CONCURRENCY,
+                    LokiFallbackQueryRun(
+                        endpoint=endpoint,
+                        base_params=params,
+                        headers=headers,
+                        query_str=query.query,
+                        client=self._client,
+                        http_client=self._http,
+                        max_fallbacks=config.LOKI_MAX_FALLBACK_QUERIES,
+                        concurrency=config.LOKI_FALLBACK_CONCURRENCY,
+                    )
                 )
                 if fallback:
                     self._observe("loki_query_fallbacks_total")
@@ -250,14 +274,16 @@ class LokiService:
             payload = _json_dict(data.get("data"))
             if query_str and not _object_list(payload.get("result")):
                 fallback = await run_fallback_queries(
-                    endpoint,
-                    params,
-                    headers,
-                    query_str,
-                    client=self._client,
-                    http_client=self._http,
-                    max_fallbacks=config.LOKI_MAX_FALLBACK_QUERIES,
-                    concurrency=config.LOKI_FALLBACK_CONCURRENCY,
+                    LokiFallbackQueryRun(
+                        endpoint=endpoint,
+                        base_params=params,
+                        headers=headers,
+                        query_str=query_str,
+                        client=self._client,
+                        http_client=self._http,
+                        max_fallbacks=config.LOKI_MAX_FALLBACK_QUERIES,
+                        concurrency=config.LOKI_FALLBACK_CONCURRENCY,
+                    )
                 )
                 if fallback:
                     self._observe("loki_query_fallbacks_total")
@@ -469,37 +495,35 @@ class LokiService:
 
     @with_retry()
     @with_timeout()
-    async def search_logs_by_pattern(
-        self,
-        pattern: str,
-        labels: Optional[Dict[str, str]] = None,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
-        limit: int = 100,
-        tenant_id: str = config.DEFAULT_ORG_ID,
-    ) -> LogResponse:
-        selector = self._label_selector(labels or {})
-        query_str = f'{selector} |= "{self._escape_logql(pattern)}"'
+    async def search_logs_by_pattern(self, params: SearchLogsByPatternParams) -> LogResponse:
+        selector = self._label_selector(params.labels or {})
+        query_str = f'{selector} |= "{self._escape_logql(params.pattern)}"'
         return await self.query_logs(
-            LogQuery(query=query_str, limit=limit, start=start, end=end, direction=LogDirection.BACKWARD, step=None),
-            tenant_id=tenant_id,
+            LogQuery(
+                query=query_str,
+                limit=params.limit,
+                start=params.start,
+                end=params.end,
+                direction=LogDirection.BACKWARD,
+                step=None,
+            ),
+            tenant_id=params.tenant_id,
         )
 
     @with_retry()
     @with_timeout()
-    async def filter_logs(
-        self,
-        labels: Dict[str, str],
-        filters: Optional[List[str]] = None,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
-        limit: int = 100,
-        tenant_id: str = config.DEFAULT_ORG_ID,
-    ) -> LogResponse:
-        query_str = self._label_selector(labels)
-        if filters:
-            query_str += "".join(f' |= "{self._escape_logql(f)}"' for f in filters)
+    async def filter_logs(self, params: FilterLogsParams) -> LogResponse:
+        query_str = self._label_selector(params.labels)
+        if params.filters:
+            query_str += "".join(f' |= "{self._escape_logql(f)}"' for f in params.filters)
         return await self.query_logs(
-            LogQuery(query=query_str, limit=limit, start=start, end=end, direction=LogDirection.BACKWARD, step=None),
-            tenant_id=tenant_id,
+            LogQuery(
+                query=query_str,
+                limit=params.limit,
+                start=params.start,
+                end=params.end,
+                direction=LogDirection.BACKWARD,
+                step=None,
+            ),
+            tenant_id=params.tenant_id,
         )

@@ -31,7 +31,7 @@ from models.observability.resolver_models import (
     AnalyzeRequestPayload,
     AnalyzeProxyPayload,
 )
-from services.resolver_proxy_service import resolver_proxy_service
+from services.resolver_proxy_service import ResolverProxyJsonRequest, resolver_proxy_service
 from services.aiops.helpers import inject_tenant, correlation_id
 from custom_types.json import JSONDict, JSONValue
 
@@ -63,12 +63,14 @@ async def get_analyze_config_template(
 ) -> AnalyzeConfigTemplateResponse:
     tenant_id = await resolve_tenant_id(request, current_user)
     upstream = await resolver_proxy_service.request_json(
-        method="GET",
-        upstream_path="/api/v1/analyze/config-template",
-        current_user=current_user,
-        tenant_id=tenant_id,
-        audit_action="resolver.analyze_job.template",
-        correlation_id=correlation_id(request),
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path="/api/v1/analyze/config-template",
+            current_user=current_user,
+            tenant_id=tenant_id,
+            audit_action="resolver.analyze_job.template",
+            correlation_id=correlation_id(request),
+        ),
     )
     return AnalyzeConfigTemplateResponse.model_validate(_json_dict(upstream))
 
@@ -81,13 +83,15 @@ async def create_analyze_job(
 ) -> AnalyzeJobCreateResponse:
     tenant_id = await resolve_tenant_id(request, current_user)
     upstream = await resolver_proxy_service.request_json(
-        method="POST",
-        upstream_path="/api/v1/jobs/analyze",
-        current_user=current_user,
-        tenant_id=tenant_id,
-        payload=inject_tenant(payload.model_dump(), tenant_id),
-        audit_action="resolver.analyze_job.create",
-        correlation_id=correlation_id(request),
+        ResolverProxyJsonRequest(
+            method="POST",
+            upstream_path="/api/v1/jobs/analyze",
+            current_user=current_user,
+            tenant_id=tenant_id,
+            payload=inject_tenant(payload.model_dump(), tenant_id),
+            audit_action="resolver.analyze_job.create",
+            correlation_id=correlation_id(request),
+        ),
     )
     return AnalyzeJobCreateResponse.model_validate(_json_dict(upstream))
 
@@ -107,13 +111,15 @@ async def list_analyze_jobs(
     if cursor:
         params["cursor"] = cursor
     upstream = await resolver_proxy_service.request_json(
-        method="GET",
-        upstream_path="/api/v1/jobs",
-        current_user=current_user,
-        tenant_id=tenant_id,
-        params=params,
-        audit_action="resolver.analyze_job.list",
-        correlation_id=correlation_id(request),
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path="/api/v1/jobs",
+            current_user=current_user,
+            tenant_id=tenant_id,
+            params=params,
+            audit_action="resolver.analyze_job.list",
+            correlation_id=correlation_id(request),
+        ),
     )
     return AnalyzeJobListResponse.model_validate(_json_dict(upstream))
 
@@ -126,12 +132,14 @@ async def get_analyze_job(
 ) -> AnalyzeJobSummary:
     tenant_id = await resolve_tenant_id(request, current_user)
     upstream = await resolver_proxy_service.request_json(
-        method="GET",
-        upstream_path=f"/api/v1/jobs/{job_id}",
-        current_user=current_user,
-        tenant_id=tenant_id,
-        audit_action="resolver.analyze_job.get",
-        correlation_id=correlation_id(request),
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path=f"/api/v1/jobs/{job_id}",
+            current_user=current_user,
+            tenant_id=tenant_id,
+            audit_action="resolver.analyze_job.get",
+            correlation_id=correlation_id(request),
+        ),
     )
     return AnalyzeJobSummary.model_validate(_json_dict(upstream))
 
@@ -146,12 +154,14 @@ async def get_analyze_job_result(
     corr_id = correlation_id(request)
     try:
         upstream = await resolver_proxy_service.request_json(
-            method="GET",
-            upstream_path=f"/api/v1/jobs/{job_id}/result",
-            current_user=current_user,
-            tenant_id=tenant_id,
-            audit_action="resolver.analyze_job.result",
-            correlation_id=corr_id,
+            ResolverProxyJsonRequest(
+                method="GET",
+                upstream_path=f"/api/v1/jobs/{job_id}/result",
+                current_user=current_user,
+                tenant_id=tenant_id,
+                audit_action="resolver.analyze_job.result",
+                correlation_id=corr_id,
+            ),
         )
         return AnalyzeJobResultResponse.model_validate(_json_dict(upstream))
     except HTTPException as exc:
@@ -161,12 +171,14 @@ async def get_analyze_job_result(
         # result payload is committed. Surface the job summary instead of
         # failing the UI poll loop.
         upstream = await resolver_proxy_service.request_json(
-            method="GET",
-            upstream_path=f"/api/v1/jobs/{job_id}",
-            current_user=current_user,
-            tenant_id=tenant_id,
-            audit_action="resolver.analyze_job.get",
-            correlation_id=corr_id,
+            ResolverProxyJsonRequest(
+                method="GET",
+                upstream_path=f"/api/v1/jobs/{job_id}",
+                current_user=current_user,
+                tenant_id=tenant_id,
+                audit_action="resolver.analyze_job.get",
+                correlation_id=corr_id,
+            ),
         )
         summary = AnalyzeJobSummary.model_validate(_json_dict(upstream))
         return _job_result_response_from_summary(summary)
@@ -180,12 +192,14 @@ async def get_report_by_id(
 ) -> AnalyzeReportResponse:
     tenant_id = await resolve_tenant_id(request, current_user)
     upstream = await resolver_proxy_service.request_json(
-        method="GET",
-        upstream_path=f"/api/v1/reports/{report_id}",
-        current_user=current_user,
-        tenant_id=tenant_id,
-        audit_action="resolver.report.get",
-        correlation_id=correlation_id(request),
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path=f"/api/v1/reports/{report_id}",
+            current_user=current_user,
+            tenant_id=tenant_id,
+            audit_action="resolver.report.get",
+            correlation_id=correlation_id(request),
+        ),
     )
     return AnalyzeReportResponse.model_validate(_json_dict(upstream))
 
@@ -198,12 +212,14 @@ async def delete_report_by_id(
 ) -> AnalyzeReportDeleteResponse:
     tenant_id = await resolve_tenant_id(request, current_user)
     upstream = await resolver_proxy_service.request_json(
-        method="DELETE",
-        upstream_path=f"/api/v1/reports/{report_id}",
-        current_user=current_user,
-        tenant_id=tenant_id,
-        audit_action="resolver.report.delete",
-        correlation_id=correlation_id(request),
+        ResolverProxyJsonRequest(
+            method="DELETE",
+            upstream_path=f"/api/v1/reports/{report_id}",
+            current_user=current_user,
+            tenant_id=tenant_id,
+            audit_action="resolver.report.delete",
+            correlation_id=correlation_id(request),
+        ),
     )
     return AnalyzeReportDeleteResponse.model_validate(_json_dict(upstream))
 
@@ -219,13 +235,15 @@ async def _proxy_post(
     tenant_id = await resolve_tenant_id(request, current_user)
     payload_data = payload.model_dump(exclude_none=True) if isinstance(payload, AnalyzeProxyPayload) else dict(payload)
     result = await resolver_proxy_service.request_json(
-        method="POST",
-        upstream_path=upstream_path,
-        current_user=current_user,
-        tenant_id=tenant_id,
-        payload=inject_tenant(payload_data, tenant_id),
-        audit_action=audit_action,
-        correlation_id=correlation_id(request),
+        ResolverProxyJsonRequest(
+            method="POST",
+            upstream_path=upstream_path,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            payload=inject_tenant(payload_data, tenant_id),
+            audit_action=audit_action,
+            correlation_id=correlation_id(request),
+        ),
     )
     return result if isinstance(result, dict) else {}
 
@@ -387,14 +405,16 @@ async def ml_weights(
 ) -> JSONDict:
     tenant_id = await resolve_tenant_id(request, current_user)
     result = await resolver_proxy_service.request_json(
-        method="GET",
-        upstream_path="/api/v1/ml/weights",
-        current_user=current_user,
-        tenant_id=tenant_id,
-        params={"tenant_id": tenant_id},
-        audit_action="resolver.proxy.ml.weights",
-        correlation_id=correlation_id(request),
-        cache_ttl_seconds=getattr(config, "RESOLVER_PROXY_CACHE_TTL_SECONDS", 15),
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path="/api/v1/ml/weights",
+            current_user=current_user,
+            tenant_id=tenant_id,
+            params={"tenant_id": tenant_id},
+            audit_action="resolver.proxy.ml.weights",
+            correlation_id=correlation_id(request),
+            cache_ttl_seconds=getattr(config, "RESOLVER_PROXY_CACHE_TTL_SECONDS", 15),
+        ),
     )
     return result if isinstance(result, dict) else {}
 
@@ -408,17 +428,19 @@ async def ml_weights_feedback(
 ) -> JSONDict:
     tenant_id = await resolve_tenant_id(request, current_user)
     result = await resolver_proxy_service.request_json(
-        method="POST",
-        upstream_path="/api/v1/ml/weights/feedback",
-        current_user=current_user,
-        tenant_id=tenant_id,
-        params={
-            "tenant_id": tenant_id,
-            "signal": signal,
-            "was_correct": str(bool(was_correct)).lower(),
-        },
-        audit_action="resolver.proxy.ml.weights.feedback",
-        correlation_id=correlation_id(request),
+        ResolverProxyJsonRequest(
+            method="POST",
+            upstream_path="/api/v1/ml/weights/feedback",
+            current_user=current_user,
+            tenant_id=tenant_id,
+            params={
+                "tenant_id": tenant_id,
+                "signal": signal,
+                "was_correct": str(bool(was_correct)).lower(),
+            },
+            audit_action="resolver.proxy.ml.weights.feedback",
+            correlation_id=correlation_id(request),
+        ),
     )
     return result if isinstance(result, dict) else {}
 
@@ -430,13 +452,15 @@ async def ml_weights_reset(
 ) -> JSONDict:
     tenant_id = await resolve_tenant_id(request, current_user)
     result = await resolver_proxy_service.request_json(
-        method="POST",
-        upstream_path="/api/v1/ml/weights/reset",
-        current_user=current_user,
-        tenant_id=tenant_id,
-        params={"tenant_id": tenant_id},
-        audit_action="resolver.proxy.ml.weights.reset",
-        correlation_id=correlation_id(request),
+        ResolverProxyJsonRequest(
+            method="POST",
+            upstream_path="/api/v1/ml/weights/reset",
+            current_user=current_user,
+            tenant_id=tenant_id,
+            params={"tenant_id": tenant_id},
+            audit_action="resolver.proxy.ml.weights.reset",
+            correlation_id=correlation_id(request),
+        ),
     )
     return result if isinstance(result, dict) else {}
 
@@ -448,14 +472,16 @@ async def events_deployments(
 ) -> JSONValue:
     tenant_id = await resolve_tenant_id(request, current_user)
     result = await resolver_proxy_service.request_json(
-        method="GET",
-        upstream_path="/api/v1/events/deployments",
-        current_user=current_user,
-        tenant_id=tenant_id,
-        params={"tenant_id": tenant_id},
-        audit_action="resolver.proxy.events.deployments",
-        correlation_id=correlation_id(request),
-        cache_ttl_seconds=getattr(config, "RESOLVER_PROXY_CACHE_TTL_SECONDS", 15),
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path="/api/v1/events/deployments",
+            current_user=current_user,
+            tenant_id=tenant_id,
+            params={"tenant_id": tenant_id},
+            audit_action="resolver.proxy.events.deployments",
+            correlation_id=correlation_id(request),
+            cache_ttl_seconds=getattr(config, "RESOLVER_PROXY_CACHE_TTL_SECONDS", 15),
+        ),
     )
     if isinstance(result, (dict, list)):
         return result

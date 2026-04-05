@@ -26,10 +26,13 @@ import bcrypt
 import pyotp
 from cryptography.fernet import Fernet, InvalidToken
 
-from services.auth.auth_ops import create_mfa_setup_token as create_mfa_setup_token_op
 from database import get_db_session
 from db_models import User
 from custom_types.json import JSONDict
+
+from services.auth.auth_ops import create_mfa_setup_token as create_mfa_setup_token_op
+
+from .audit import AuditLogRecord
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -164,7 +167,17 @@ def verify_enable_totp(service: DatabaseAuthService, user_id: str, code: str) ->
         user.must_setup_mfa = False
         codes = generate_recovery_codes(service)
         user.mfa_recovery_hashes = hash_recovery_codes(service, codes)
-        service.log_audit(db, user.tenant_id, user.id, "mfa.enabled", "users", user.id, {})
+        service.log_audit(
+            db,
+            AuditLogRecord(
+                tenant_id=user.tenant_id,
+                user_id=user.id,
+                action="mfa.enabled",
+                resource_type="users",
+                resource_id=user.id,
+                details={},
+            ),
+        )
         return codes
 
 
@@ -193,7 +206,17 @@ def disable_totp(
         user.mfa_enabled = False
         user.totp_secret = None
         user.mfa_recovery_hashes = None
-        service.log_audit(db, user.tenant_id, user.id, "mfa.disabled", "users", user.id, {})
+        service.log_audit(
+            db,
+            AuditLogRecord(
+                tenant_id=user.tenant_id,
+                user_id=user.id,
+                action="mfa.disabled",
+                resource_type="users",
+                resource_id=user.id,
+                details={},
+            ),
+        )
         return True
 
 
@@ -205,7 +228,17 @@ def reset_totp(service: DatabaseAuthService, user_id: str, admin_id: str) -> boo
         user.mfa_enabled = False
         user.totp_secret = None
         user.mfa_recovery_hashes = None
-        service.log_audit(db, user.tenant_id, admin_id, "mfa.reset", "users", user.id, {"admin_id": admin_id})
+        service.log_audit(
+            db,
+            AuditLogRecord(
+                tenant_id=user.tenant_id,
+                user_id=admin_id,
+                action="mfa.reset",
+                resource_type="users",
+                resource_id=user.id,
+                details={"admin_id": admin_id},
+            ),
+        )
         return True
 
 

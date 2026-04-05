@@ -185,66 +185,80 @@ class TempoService:
             logger.error("Error fetching trace %s: %s", trace_id, e)
             return None
 
+    async def _service_names_from_tag_values_payload(self, vd: object) -> List[str]:
+        out: List[str] = []
+        raw_values: List[object] = []
+        if isinstance(vd, dict):
+            raw_values = vd.get("tagValues") or vd.get("values") or vd.get("data") or []
+        elif isinstance(vd, list):
+            raw_values = vd
+        for v in raw_values:
+            if isinstance(v, dict):
+                val = v.get("value") or v.get("tagValue")
+                if val:
+                    out.append(str(val))
+            elif v:
+                out.append(str(v))
+        return out
+
+    async def _collect_services_from_service_tags(self, tag_names: List[str], headers: Dict[str, str]) -> List[str]:
+        services: List[str] = []
+        for tag in tag_names:
+            if tag not in SERVICE_KEYS:
+                continue
+            try:
+                resp = await self._client.get(f"{self.tempo_url}/api/search/tag/{tag}/values", headers=headers)
+                resp.raise_for_status()
+                services.extend(await self._service_names_from_tag_values_payload(resp.json()))
+            except httpx.HTTPError as e:
+                logger.warning("Failed to fetch tag values for %s: %s", tag, e)
+        return services
+
+    async def _infer_services_from_recent_traces(self, tenant_id: str) -> List[str]:
+        try:
+            trace_response = await self.search_traces(
+                TraceQuery.model_validate({"limit": 50}),
+                tenant_id=tenant_id,
+                fetch_full_traces=False,
+            )
+            return [
+                span.service_name
+                for trace in trace_response.data
+                for span in trace.spans
+                if span.service_name
+            ]
+        except (httpx.HTTPError, OSError, RuntimeError, ValueError) as e:
+            logger.warning("Failed to infer services from traces: %s", e)
+            return []
+
+    async def _discover_tempo_services(self, tenant_id: str) -> Optional[List[str]]:
+        headers = self._get_headers(tenant_id)
+        try:
+            data = await self._get_json(f"{self.tempo_url}/api/search/tags", headers=headers)
+            logger.debug("Tempo /api/search/tags response: %s", data)
+
+            tag_names: List[str] = []
+            if isinstance(data, dict):
+                tag_names = _string_list(data.get("tagNames"))
+                if not tag_names:
+                    tag_names = _string_list(_json_dict(data.get("data")).get("tagNames"))
+            services = await self._collect_services_from_service_tags(tag_names, headers)
+            if not services:
+                logger.debug("No services from tags, inferring from recent traces")
+                services = await self._infer_services_from_recent_traces(tenant_id)
+            return sorted(set(filter(None, services))) or None
+        except httpx.HTTPError as e:
+            logger.error("Error fetching services: %s", e)
+            return None
+
     @with_retry()
     @with_timeout()
     async def get_services(self, tenant_id: str = config.DEFAULT_ORG_ID) -> List[str]:
-        async def _fetch() -> Optional[List[str]]:
-            headers = self._get_headers(tenant_id)
-            try:
-                data = await self._get_json(f"{self.tempo_url}/api/search/tags", headers=headers)
-                logger.debug("Tempo /api/search/tags response: %s", data)
-
-                tag_names: List[str] = []
-                if isinstance(data, dict):
-                    tag_names = _string_list(data.get("tagNames"))
-                    if not tag_names:
-                        tag_names = _string_list(_json_dict(data.get("data")).get("tagNames"))
-                services: List[str] = []
-                for tag in tag_names:
-                    if tag not in SERVICE_KEYS:
-                        continue
-                    try:
-                        resp = await self._client.get(f"{self.tempo_url}/api/search/tag/{tag}/values", headers=headers)
-                        resp.raise_for_status()
-                        vd = resp.json()
-                        raw_values: List[object] = []
-                        if isinstance(vd, dict):
-                            raw_values = vd.get("tagValues") or vd.get("values") or vd.get("data") or []
-                        elif isinstance(vd, list):
-                            raw_values = vd
-                        for v in raw_values:
-                            if isinstance(v, dict):
-                                val = v.get("value") or v.get("tagValue")
-                                if val:
-                                    services.append(str(val))
-                            elif v:
-                                services.append(str(v))
-                    except httpx.HTTPError as e:
-                        logger.warning("Failed to fetch tag values for %s: %s", tag, e)
-
-                if not services:
-                    logger.debug("No services from tags, inferring from recent traces")
-                    try:
-                        trace_response = await self.search_traces(
-                            TraceQuery.model_validate({"limit": 50}),
-                            tenant_id=tenant_id,
-                            fetch_full_traces=False,
-                        )
-                        services = [
-                            span.service_name
-                            for trace in trace_response.data
-                            for span in trace.spans
-                            if span.service_name
-                        ]
-                    except (httpx.HTTPError, OSError, RuntimeError, ValueError) as e:
-                        logger.warning("Failed to infer services from traces: %s", e)
-
-                return sorted(set(filter(None, services))) or None
-            except httpx.HTTPError as e:
-                logger.error("Error fetching services: %s", e)
-                return None
-
-        result = await self._services_cache.get_or_set(tenant_id, _fetch, self._cache_ttl_seconds)
+        result = await self._services_cache.get_or_set(
+            tenant_id,
+            lambda: self._discover_tempo_services(tenant_id),
+            self._cache_ttl_seconds,
+        )
         return _string_list(result)
 
     @with_retry()

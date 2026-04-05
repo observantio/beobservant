@@ -20,6 +20,7 @@ os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 
 from db_models import Base, GrafanaFolder, Tenant, User
 from services.grafana import folder_ops
+from services.grafana.grafana_bundles import FolderListParams, GrafanaUserScope
 
 
 class _GrafanaServiceStub:
@@ -79,11 +80,8 @@ async def test_get_folders_hides_user_hidden_folder_by_default():
     result = await folder_ops.get_folders(
         service,
         db,
-        user_id="u2",
-        tenant_id="t1",
-        group_ids=[],
-        show_hidden=False,
-        is_admin=False,
+        GrafanaUserScope("u2", "t1", []),
+        FolderListParams(show_hidden=False, is_admin=False),
     )
     assert result == []
 
@@ -129,11 +127,8 @@ async def test_get_folders_can_include_hidden():
     result = await folder_ops.get_folders(
         service,
         db,
-        user_id="u2",
-        tenant_id="t1",
-        group_ids=[],
-        show_hidden=True,
-        is_admin=False,
+        GrafanaUserScope("u2", "t1", []),
+        FolderListParams(show_hidden=True, is_admin=False),
     )
     assert len(result) == 1
     assert result[0].is_hidden is True

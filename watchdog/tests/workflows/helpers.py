@@ -303,12 +303,19 @@ class WorkflowState:
             self._sync_user_tokens(user)
             return True
 
-    def create_user(self, payload: Any, tenant_id: str, *_args: Any) -> SimpleNamespace:
+    def create_user(self, payload: Any, tenant_id: str, *args: Any) -> SimpleNamespace:
         with self._lock:
-            creator_id = str(_args[0]) if len(_args) > 0 and _args[0] is not None else ""
-            actor_role_raw = _args[1] if len(_args) > 1 else None
-            actor_permissions = set(_args[2] or []) if len(_args) > 2 else set()
-            actor_is_superuser = bool(_args[3]) if len(_args) > 3 else False
+            if len(args) == 1 and args[0] is not None and hasattr(args[0], "user_id"):
+                ac = args[0]
+                creator_id = str(getattr(ac, "user_id", "") or "")
+                actor_role_raw = getattr(ac, "role", None)
+                actor_permissions = set(getattr(ac, "permissions", None) or [])
+                actor_is_superuser = bool(getattr(ac, "is_superuser", False))
+            else:
+                creator_id = str(args[0]) if len(args) > 0 and args[0] is not None else ""
+                actor_role_raw = args[1] if len(args) > 1 else None
+                actor_permissions = set(args[2] or []) if len(args) > 2 else set()
+                actor_is_superuser = bool(args[3]) if len(args) > 3 else False
 
             requested_role_raw = getattr(payload, "role", Role.USER)
             if isinstance(requested_role_raw, Role):
@@ -472,7 +479,7 @@ class WorkflowState:
         user_id: str,
         permission_names: list[str],
         tenant_id: str,
-        *_args: Any,
+        actor: Any = None,
     ) -> bool:
         with self._lock:
             user = self.users.get(user_id)
@@ -537,16 +544,21 @@ class WorkflowState:
             return True
 
     def update_group_permissions(
-        self, group_id: str, permission_names: list[str], tenant_id: str, *_args: Any, **_kwargs: Any
+        self,
+        group_id: str,
+        permission_names: list[str],
+        tenant_id: str,
+        actor: Any = None,
+        **_kwargs: Any,
     ) -> bool:
         with self._lock:
             group = self.get_group(group_id, tenant_id)
             if group is None:
                 return False
 
-            actor_role_raw = _args[1] if len(_args) > 1 else None
-            actor_permissions = set(_args[2] or []) if len(_args) > 2 else set()
-            actor_is_superuser = bool(_args[3]) if len(_args) > 3 else False
+            actor_role_raw = getattr(actor, "role", None) if actor is not None else None
+            actor_permissions = set(getattr(actor, "permissions", None) or []) if actor is not None else set()
+            actor_is_superuser = bool(getattr(actor, "is_superuser", False)) if actor is not None else False
 
             actor_role = (
                 actor_role_raw.value if isinstance(actor_role_raw, Role) else str(actor_role_raw or Role.USER.value)
@@ -776,17 +788,28 @@ class WorkflowState:
         dashboard = self.dashboards.get(uid or "")
         return {"uid_db_dashboard": dashboard if dashboard and dashboard.tenant_id == tenant_id else None}
 
+    @staticmethod
+    def _unwrap_grafana_payload(raw: object) -> dict[str, Any]:
+        if raw is None:
+            return {}
+        if hasattr(raw, "model_dump"):
+            dumped = raw.model_dump(by_alias=True)
+            return dict(dumped) if isinstance(dumped, dict) else {}
+        return dict(raw) if isinstance(raw, dict) else {}
+
     async def create_dashboard(
         self,
-        *,
-        dashboard_create: dict[str, Any],
-        user_id: str,
-        tenant_id: str,
-        visibility: str,
-        shared_group_ids: list[str],
-        actor_permissions: list[str] | None = None,
-        **_kwargs: Any,
+        db: object,
+        dashboard_create: Any,
+        subject: Any,
+        options: Any,
     ) -> dict[str, Any]:
+        del db
+        user_id = subject.user_id
+        tenant_id = subject.tenant_id
+        visibility = options.visibility
+        shared_group_ids = list(options.shared_group_ids or [])
+        actor_permissions = getattr(options, "actor_permissions", None)
         permissions = set(actor_permissions or [])
         if not (Permission.CREATE_DASHBOARDS.value in permissions or Permission.WRITE_DASHBOARDS.value in permissions):
             raise HTTPException(
@@ -794,10 +817,11 @@ class WorkflowState:
                 detail="Missing permission to create dashboards",
             )
 
-        payload = dashboard_create.get("dashboard", {}) if isinstance(dashboard_create, dict) else {}
+        body = self._unwrap_grafana_payload(dashboard_create)
+        payload = body.get("dashboard") if isinstance(body.get("dashboard"), dict) else {}
         uid = str(payload.get("uid") or f"dash-{self.next_dashboard_id}")
         title = str(payload.get("title") or uid)
-        folder_id = dashboard_create.get("folderId") if isinstance(dashboard_create, dict) else None
+        folder_id = body.get("folderId")
         folder_uid = None
         if folder_id is not None:
             folder_uid = next((folder.uid for folder in self.folders.values() if folder.id == folder_id), None)
@@ -817,17 +841,19 @@ class WorkflowState:
 
     async def update_dashboard(
         self,
-        *,
+        db: object,
         uid: str,
-        dashboard_update: dict[str, Any],
-        user_id: str,
-        tenant_id: str,
-        visibility: str | None,
-        shared_group_ids: list[str] | None,
-        is_admin: bool,
-        actor_permissions: list[str] | None = None,
-        **_kwargs: Any,
+        dashboard_update: Any,
+        subject: Any,
+        options: Any,
     ) -> dict[str, Any] | None:
+        del db
+        user_id = subject.user_id
+        tenant_id = subject.tenant_id
+        is_admin = options.is_admin
+        visibility = options.visibility
+        shared_group_ids = options.shared_group_ids
+        actor_permissions = getattr(options, "actor_permissions", None)
         permissions = set(actor_permissions or [])
         if not is_admin and not (
             Permission.UPDATE_DASHBOARDS.value in permissions or Permission.WRITE_DASHBOARDS.value in permissions
@@ -852,7 +878,8 @@ class WorkflowState:
             item.visibility, item.created_by, item.tenant_id, item.shared_group_ids, current_user
         ):
             return None
-        payload = dashboard_update.get("dashboard", {}) if isinstance(dashboard_update, dict) else {}
+        body = self._unwrap_grafana_payload(dashboard_update)
+        payload = body.get("dashboard") if isinstance(body.get("dashboard"), dict) else {}
         item.title = str(payload.get("title") or item.title)
         if visibility is not None:
             item.visibility = visibility
@@ -861,9 +888,11 @@ class WorkflowState:
         item.version += 1
         return {"id": item.id, "uid": uid, "status": "success", "version": item.version}
 
-    async def delete_dashboard(
-        self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], **_kwargs: Any
-    ) -> bool:
+    async def delete_dashboard(self, db: object, uid: str, subject: Any, **_kwargs: Any) -> bool:
+        del db
+        user_id = subject.user_id
+        tenant_id = subject.tenant_id
+        group_ids = list(subject.group_ids)
         current_user = TokenData(
             user_id=user_id,
             username="user",
@@ -883,14 +912,17 @@ class WorkflowState:
 
     async def search_dashboards(
         self,
-        *,
-        user_id: str,
-        tenant_id: str,
-        group_ids: list[str],
-        is_admin: bool,
-        show_hidden: bool = False,
+        db: object,
+        subject: Any,
+        params: Any,
         **_kwargs: Any,
     ) -> list[dict[str, Any]]:
+        del db
+        user_id = subject.user_id
+        tenant_id = subject.tenant_id
+        group_ids = list(subject.group_ids)
+        is_admin = getattr(params, "is_admin", False)
+        show_hidden = getattr(params, "show_hidden", False)
         current_user = TokenData(
             user_id=user_id,
             username=self.users[user_id].username,
@@ -934,8 +966,18 @@ class WorkflowState:
         return sorted(items, key=lambda item: item["uid"])
 
     async def get_dashboard(
-        self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], is_admin: bool, **_kwargs: Any
+        self,
+        db: object,
+        uid: str,
+        subject: Any,
+        *,
+        is_admin: bool = False,
+        **_kwargs: Any,
     ) -> dict[str, Any] | None:
+        del db
+        user_id = subject.user_id
+        tenant_id = subject.tenant_id
+        group_ids = list(subject.group_ids)
         current_user = TokenData(
             user_id=user_id,
             username=self.users[user_id].username,
@@ -976,14 +1018,16 @@ class WorkflowState:
 
     async def create_datasource(
         self,
-        *,
+        db: object,
         datasource_create: DatasourceCreate,
-        user_id: str,
-        tenant_id: str,
-        visibility: str,
-        shared_group_ids: list[str],
-        **_kwargs: Any,
+        scope: Any,
+        options: Any,
     ) -> Datasource:
+        del db
+        user_id = scope.user_id
+        tenant_id = scope.tenant_id
+        visibility = options.visibility
+        shared_group_ids = list(options.shared_group_ids or [])
         uid = f"ds-{self.next_datasource_id}"
         item = DatasourceState(
             id=self.next_datasource_id,
@@ -1034,8 +1078,12 @@ class WorkflowState:
         )
 
     async def get_datasource_by_name(
-        self, *, name: str, user_id: str, tenant_id: str, group_ids: list[str], **_kwargs: Any
+        self, db: object, name: str, scope: Any, **_kwargs: Any
     ) -> Datasource | None:
+        del db
+        user_id = scope.user_id
+        tenant_id = scope.tenant_id
+        group_ids = list(scope.group_ids)
         item = next((entry for entry in self.datasources.values() if entry.name == name), None)
         if item is None:
             return None
@@ -1053,8 +1101,15 @@ class WorkflowState:
         return self._datasource_model(item, self.users[user_id])
 
     async def get_datasources(
-        self, *, user_id: str, tenant_id: str, group_ids: list[str], show_hidden: bool = False, **_kwargs: Any
+        self, db: object, scope: Any, params: Any, **_kwargs: Any
     ) -> list[Datasource]:
+        del db
+        user_id = scope.user_id
+        tenant_id = scope.tenant_id
+        group_ids = list(scope.group_ids)
+        show_hidden = getattr(params, "show_hidden", False)
+        team_id = getattr(params, "team_id", None)
+        uid_filter = getattr(params, "uid", None)
         current = TokenData(
             user_id=user_id,
             username=self.users[user_id].username,
@@ -1072,12 +1127,20 @@ class WorkflowState:
                 continue
             if user_id in item.hidden_by and not show_hidden:
                 continue
+            if team_id is not None and not set(item.shared_group_ids).intersection({str(team_id)}):
+                continue
             results.append(self._datasource_model(item, self.users[user_id]))
+        if uid_filter:
+            results = [row for row in results if row.uid == uid_filter]
         return results
 
     async def get_datasource(
-        self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], **_kwargs: Any
+        self, db: object, uid: str, scope: Any, **_kwargs: Any
     ) -> Datasource | None:
+        del db
+        user_id = scope.user_id
+        tenant_id = scope.tenant_id
+        group_ids = list(scope.group_ids)
         item = self.datasources.get(uid)
         if item is None or user_id in item.hidden_by:
             return None
@@ -1096,15 +1159,17 @@ class WorkflowState:
 
     async def update_datasource(
         self,
-        *,
+        db: object,
         uid: str,
         datasource_update: DatasourceUpdate,
-        user_id: str,
-        tenant_id: str,
-        visibility: str | None,
-        shared_group_ids: list[str] | None,
-        **_kwargs: Any,
+        scope: Any,
+        options: Any,
     ) -> Datasource | None:
+        del db
+        user_id = scope.user_id
+        tenant_id = scope.tenant_id
+        visibility = options.visibility
+        shared_group_ids = options.shared_group_ids
         item = self.datasources.get(uid)
         if item is None or item.tenant_id != tenant_id:
             return None
@@ -1119,7 +1184,9 @@ class WorkflowState:
         item.version += 1
         return self._datasource_model(item, self.users[user_id])
 
-    async def delete_datasource(self, *, uid: str, user_id: str, **_kwargs: Any) -> bool:
+    async def delete_datasource(self, db: object, uid: str, scope: Any, **_kwargs: Any) -> bool:
+        del db
+        user_id = scope.user_id
         item = self.datasources.get(uid)
         if item is None or item.created_by != user_id:
             return False
@@ -1136,7 +1203,8 @@ class WorkflowState:
             item.hidden_by.discard(user_id)
         return True
 
-    async def enforce_datasource_query_access(self, **_kwargs: Any) -> None:
+    async def enforce_datasource_query_access(self, *_args: Any, **_kwargs: Any) -> None:
+        del _args
         return None
 
     async def query_datasource(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1144,15 +1212,17 @@ class WorkflowState:
 
     async def create_folder(
         self,
-        *,
+        db: object,
         title: str,
-        user_id: str,
-        tenant_id: str,
-        visibility: str,
-        shared_group_ids: list[str],
-        allow_dashboard_writes: bool,
-        **_kwargs: Any,
+        scope: Any,
+        options: Any,
     ) -> Folder:
+        del db
+        user_id = scope.user_id
+        tenant_id = scope.tenant_id
+        visibility = options.visibility
+        shared_group_ids = list(options.shared_group_ids or [])
+        allow_dashboard_writes = bool(options.allow_dashboard_writes)
         uid = f"folder-{self.next_folder_id}"
         item = FolderState(
             id=self.next_folder_id,
@@ -1184,14 +1254,17 @@ class WorkflowState:
 
     async def get_folders(
         self,
-        *,
-        user_id: str,
-        tenant_id: str,
-        group_ids: list[str],
-        show_hidden: bool = False,
-        is_admin: bool = False,
+        db: object,
+        scope: Any,
+        params: Any,
         **_kwargs: Any,
     ) -> list[Folder]:
+        del db
+        user_id = scope.user_id
+        tenant_id = scope.tenant_id
+        group_ids = list(scope.group_ids)
+        show_hidden = getattr(params, "show_hidden", False)
+        is_admin = getattr(params, "is_admin", False)
         current = TokenData(
             user_id=user_id,
             username=self.users[user_id].username,
@@ -1214,8 +1287,13 @@ class WorkflowState:
         return results
 
     async def get_folder(
-        self, *, uid: str, user_id: str, tenant_id: str, group_ids: list[str], is_admin: bool = False, **_kwargs: Any
+        self, db: object, uid: str, scope: Any, params: Any, **_kwargs: Any
     ) -> Folder | None:
+        del db
+        user_id = scope.user_id
+        tenant_id = scope.tenant_id
+        group_ids = list(scope.group_ids)
+        is_admin = getattr(params, "is_admin", False)
         item = self.folders.get(uid)
         if item is None or user_id in item.hidden_by:
             return None
@@ -1235,16 +1313,18 @@ class WorkflowState:
 
     async def update_folder(
         self,
-        *,
+        db: object,
         uid: str,
-        user_id: str,
-        tenant_id: str,
-        title: str | None,
-        visibility: str | None,
-        shared_group_ids: list[str] | None,
-        allow_dashboard_writes: bool | None,
-        **_kwargs: Any,
+        scope: Any,
+        options: Any,
     ) -> Folder | None:
+        del db
+        user_id = scope.user_id
+        tenant_id = scope.tenant_id
+        title = getattr(options, "title", None)
+        visibility = getattr(options, "visibility", None)
+        shared_group_ids = getattr(options, "shared_group_ids", None)
+        allow_dashboard_writes = getattr(options, "allow_dashboard_writes", None)
         item = self.folders.get(uid)
         if item is None or item.tenant_id != tenant_id:
             return None
@@ -1259,9 +1339,13 @@ class WorkflowState:
         item.version += 1
         return self._folder_model(item, self.users[user_id])
 
-    async def delete_folder(self, *, uid: str, user_id: str, **_kwargs: Any) -> bool:
+    async def delete_folder(self, db: object, uid: str, scope: Any, options: Any, **_kwargs: Any) -> bool:
+        del db
         item = self.folders.get(uid)
-        if item is None or item.created_by != user_id:
+        if item is None:
+            return False
+        is_admin = getattr(options, "is_admin", False)
+        if not is_admin and item.created_by != scope.user_id:
             return False
         self.folders.pop(uid, None)
         return True

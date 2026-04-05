@@ -291,9 +291,7 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
 
     monkeypatch.setattr(oidc_mod, "_resolve_existing_user", lambda service, db, **kwargs: None)
     provisioned = SimpleNamespace(id="u2", is_active=True)
-    monkeypatch.setattr(
-        oidc_mod, "provision_oidc_user", lambda service, db, email, preferred_username, full_name, subject: provisioned
-    )
+    monkeypatch.setattr(oidc_mod, "provision_oidc_user", lambda service, db, profile: provisioned)
     db = _DB(user=provisioned)
     monkeypatch.setattr(oidc_mod, "get_db_session", lambda: _ctx(db))
     assert oidc_mod.sync_user_from_oidc_claims(service, {"email": "b@c.d", "sub": "sub-2"}) is provisioned
@@ -321,7 +319,16 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     token_values = iter(["pw1", "pw2"])
     monkeypatch.setattr(oidc_mod.secrets, "token_urlsafe", lambda _n: next(token_values))
     db = _DB(flush_errors=[IntegrityError("stmt", {}, Exception("dup"))])
-    provisioned = oidc_mod.provision_oidc_user(service, db, "new@example.com", "alice", "Alice", "subject")
+    provisioned = oidc_mod.provision_oidc_user(
+        service,
+        db,
+        oidc_mod.OidcProvisionProfile(
+            email="new@example.com",
+            preferred_username="alice",
+            full_name="Alice",
+            subject="subject",
+        ),
+    )
     assert provisioned.username == "alice1"
     assert db.rollbacks == 0
     assert getattr(provisioned, "api_key_created", False) is True

@@ -10,6 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Callable, Literal, Optional
 
 from db_models import UserApiKey
@@ -17,12 +18,24 @@ from models.access.auth_models import TokenData
 from models.access.quota_models import ApiKeyQuota, QuotasResponse, RuntimeQuota
 
 from .parsing import compute_remaining, now_utc
-from .runtime_probe import RuntimeQuotaProbe
+from .runtime_probe import NativeQuotaFetchParams, RuntimeQuotaProbe
 
 ConfigGetter = Callable[[], Any]
 DbSessionFactory = Callable[[], Any]
 RuntimeService = Literal["loki", "tempo"]
 RuntimeSource = Literal["native", "prometheus", "none"]
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeQuotaResolveParams:
+    service_name: RuntimeService
+    base_url: str
+    native_path: str
+    native_limit_field: str
+    native_used_field: str
+    prom_limit_query: str
+    prom_used_query: str
+    tenant_id: str
 
 
 class QuotaService:
@@ -37,34 +50,25 @@ class QuotaService:
         self._db_session_factory = db_session_factory
         self._runtime_probe = runtime_probe
 
-    async def _resolve_runtime_quota(
-        self,
-        *,
-        service_name: RuntimeService,
-        base_url: str,
-        native_path: str,
-        native_limit_field: str,
-        native_used_field: str,
-        prom_limit_query: str,
-        prom_used_query: str,
-        tenant_id: str,
-    ) -> RuntimeQuota:
+    async def _resolve_runtime_quota(self, params: RuntimeQuotaResolveParams) -> RuntimeQuota:
         messages: list[str] = []
 
         native = await self._runtime_probe.fetch_native_quota(
-            service_name=service_name,
-            base_url=base_url,
-            path_template=native_path,
-            tenant_id=tenant_id,
-            limit_field=native_limit_field,
-            used_field=native_used_field,
+            NativeQuotaFetchParams(
+                service_name=params.service_name,
+                base_url=params.base_url,
+                path_template=params.native_path,
+                tenant_id=params.tenant_id,
+                limit_field=params.native_limit_field,
+                used_field=params.native_used_field,
+            )
         )
         if native.message:
             messages.append(native.message)
         if native.complete():
             return RuntimeQuota(
-                service=service_name,
-                tenant_id=tenant_id,
+                service=params.service_name,
+                tenant_id=params.tenant_id,
                 limit=native.limit,
                 used=native.used,
                 remaining=compute_remaining(native.limit, native.used),
@@ -75,17 +79,17 @@ class QuotaService:
             )
 
         prom = await self._runtime_probe.fetch_prometheus_quota(
-            service_name=service_name,
-            tenant_id=tenant_id,
-            limit_query=prom_limit_query,
-            used_query=prom_used_query,
+            service_name=params.service_name,
+            tenant_id=params.tenant_id,
+            limit_query=params.prom_limit_query,
+            used_query=params.prom_used_query,
         )
         if prom.message:
             messages.append(prom.message)
         if prom.complete():
             return RuntimeQuota(
-                service=service_name,
-                tenant_id=tenant_id,
+                service=params.service_name,
+                tenant_id=params.tenant_id,
                 limit=prom.limit,
                 used=prom.used,
                 remaining=compute_remaining(prom.limit, prom.used),
@@ -104,17 +108,21 @@ class QuotaService:
             if messages:
                 final_message = "; ".join(messages)
             elif final_limit is None and final_used is not None:
-                final_message = f"{service_name.capitalize()} usage is available, but upstream did not return a limit"
+                final_message = (
+                    f"{params.service_name.capitalize()} usage is available, but upstream did not return a limit"
+                )
             elif final_limit is not None and final_used is None:
-                final_message = f"{service_name.capitalize()} limit is available, but upstream did not return usage"
+                final_message = (
+                    f"{params.service_name.capitalize()} limit is available, but upstream did not return usage"
+                )
             else:
                 final_message = "Partial quota data available from upstream"
         else:
             final_message = "Runtime quota data is currently unavailable for this scope"
 
         return RuntimeQuota(
-            service=service_name,
-            tenant_id=tenant_id,
+            service=params.service_name,
+            tenant_id=params.tenant_id,
             limit=final_limit,
             used=final_used,
             remaining=compute_remaining(final_limit, final_used),
@@ -148,23 +156,27 @@ class QuotaService:
         return QuotasResponse(
             api_keys=self._api_key_quota(current_user.user_id, current_user.tenant_id),
             loki=await self._resolve_runtime_quota(
-                service_name="loki",
-                base_url=cfg.LOKI_URL,
-                native_path=cfg.LOKI_QUOTA_NATIVE_PATH,
-                native_limit_field=cfg.LOKI_QUOTA_NATIVE_LIMIT_FIELD,
-                native_used_field=cfg.LOKI_QUOTA_NATIVE_USED_FIELD,
-                prom_limit_query=cfg.LOKI_QUOTA_PROM_LIMIT_QUERY,
-                prom_used_query=cfg.LOKI_QUOTA_PROM_USED_QUERY,
-                tenant_id=resolved_scope,
+                RuntimeQuotaResolveParams(
+                    service_name="loki",
+                    base_url=cfg.LOKI_URL,
+                    native_path=cfg.LOKI_QUOTA_NATIVE_PATH,
+                    native_limit_field=cfg.LOKI_QUOTA_NATIVE_LIMIT_FIELD,
+                    native_used_field=cfg.LOKI_QUOTA_NATIVE_USED_FIELD,
+                    prom_limit_query=cfg.LOKI_QUOTA_PROM_LIMIT_QUERY,
+                    prom_used_query=cfg.LOKI_QUOTA_PROM_USED_QUERY,
+                    tenant_id=resolved_scope,
+                )
             ),
             tempo=await self._resolve_runtime_quota(
-                service_name="tempo",
-                base_url=cfg.TEMPO_URL,
-                native_path=cfg.TEMPO_QUOTA_NATIVE_PATH,
-                native_limit_field=cfg.TEMPO_QUOTA_NATIVE_LIMIT_FIELD,
-                native_used_field=cfg.TEMPO_QUOTA_NATIVE_USED_FIELD,
-                prom_limit_query=cfg.TEMPO_QUOTA_PROM_LIMIT_QUERY,
-                prom_used_query=cfg.TEMPO_QUOTA_PROM_USED_QUERY,
-                tenant_id=resolved_scope,
+                RuntimeQuotaResolveParams(
+                    service_name="tempo",
+                    base_url=cfg.TEMPO_URL,
+                    native_path=cfg.TEMPO_QUOTA_NATIVE_PATH,
+                    native_limit_field=cfg.TEMPO_QUOTA_NATIVE_LIMIT_FIELD,
+                    native_used_field=cfg.TEMPO_QUOTA_NATIVE_USED_FIELD,
+                    prom_limit_query=cfg.TEMPO_QUOTA_PROM_LIMIT_QUERY,
+                    prom_used_query=cfg.TEMPO_QUOTA_PROM_USED_QUERY,
+                    tenant_id=resolved_scope,
+                )
             ),
         )

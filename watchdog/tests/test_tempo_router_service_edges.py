@@ -359,14 +359,8 @@ async def test_tempo_router_edges(monkeypatch):
     request = types.SimpleNamespace(url=types.SimpleNamespace(path="/api/tempo/traces/search"))
     search_result = await tempo_router.search_traces(
         request,
-        service="svc",
-        operation="op",
-        min_duration="1ms",
-        max_duration="2ms",
-        start=1,
-        end=2,
-        limit=7,
-        fetch_full=True,
+        tempo_router.SearchTracesShapeParams("svc", "op", "1ms", "2ms"),
+        tempo_router.SearchTracesWindowParams(1, 2, 7, True),
         current_user=user,
     )
     assert search_result.total == 1
@@ -422,14 +416,8 @@ async def test_tempo_router_timeout_and_lifespan_edges(monkeypatch):
     with pytest.raises(HTTPException, match="Tempo search timed out"):
         await tempo_router.search_traces(
             request,
-            service=None,
-            operation=None,
-            min_duration=None,
-            max_duration=None,
-            start=None,
-            end=None,
-            limit=20,
-            fetch_full=False,
+            tempo_router.SearchTracesShapeParams(None, None, None, None),
+            tempo_router.SearchTracesWindowParams(None, None, 20, False),
             current_user=user,
         )
 

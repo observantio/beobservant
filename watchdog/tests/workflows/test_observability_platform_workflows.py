@@ -8,6 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
@@ -19,6 +20,7 @@ from fastapi.responses import JSONResponse
 from routers import internal_router
 from routers.observability import agents_router, alertmanager_router, resolver_router, loki_router, tempo_router
 from routers.platform import system_router
+from tests._proxy_stubs import unpack_notifier_forward, unpack_resolver_json_request
 
 from .helpers import WorkflowState, patch_auth_service
 
@@ -183,12 +185,12 @@ def test_tempo_and_loki_advanced_filter_workflow(client, monkeypatch: pytest.Mon
         )
         return {"status": "success", "data": ["checkout"]}
 
-    async def fake_search_logs_by_pattern(**kwargs: Any) -> dict[str, Any]:
-        loki_calls.append(("search", kwargs))
+    async def fake_search_logs_by_pattern(params: Any) -> dict[str, Any]:
+        loki_calls.append(("search", asdict(params)))
         return {"status": "success", "data": {"result": []}}
 
-    async def fake_filter_logs(**kwargs: Any) -> dict[str, Any]:
-        loki_calls.append(("filter", kwargs))
+    async def fake_filter_logs(params: Any) -> dict[str, Any]:
+        loki_calls.append(("filter", asdict(params)))
         return {"status": "success", "data": {"result": []}}
 
     async def fake_aggregate_logs(
@@ -326,7 +328,8 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
     forward_calls: list[dict[str, Any]] = []
     heartbeats: list[dict[str, Any]] = []
 
-    async def fake_request_json(**kwargs: Any) -> dict[str, Any]:
+    async def fake_request_json(req: Any, **_unused: Any) -> dict[str, Any]:
+        kwargs = unpack_resolver_json_request(req)
         resolver_calls.append(kwargs)
         path = kwargs["upstream_path"]
         if path == "/api/v1/analyze/config-template":
@@ -390,7 +393,8 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
             return {"report_id": "report-1", "status": "deleted", "deleted": True}
         return {"ok": True, "path": path, "tenant_id": kwargs.get("tenant_id"), "params": kwargs.get("params")}
 
-    async def fake_forward(**kwargs: Any):
+    async def fake_forward(fwd: Any, **_unused: Any):
+        kwargs = unpack_notifier_forward(fwd)
         forward_calls.append(kwargs)
         return JSONResponse({"ok": True, "path": kwargs["upstream_path"], "method": kwargs["request"].method})
 

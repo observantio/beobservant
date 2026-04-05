@@ -47,7 +47,7 @@ def test_oidc_select_jwk_cache_refresh_and_candidate_paths(monkeypatch):
 
 def test_oidc_verification_key_cache_and_close_runtime_path(monkeypatch):
     service = OIDCService()
-    monkeypatch.setattr(mod, "_jwk_to_verification_key", lambda *_args, **_kwargs: "vk")
+    monkeypatch.setattr(mod, "jwk_to_verification_key", lambda *_args, **_kwargs: "vk")
     assert service._verification_key_for({"kid": "k1"}, "RS256", "k1") == "vk"
     # second call must use cache
     assert service._verification_key_for({"kid": "k1"}, "RS256", "k1") == "vk"

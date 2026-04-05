@@ -18,6 +18,7 @@ from middleware.dependencies import auth_service, require_any_permission_with_sc
 from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, TokenData
 from models.access.group_models import Group, GroupCreate, GroupMembersUpdate, GroupUpdate
+from services.auth.actor_caps import AuthActorCaps
 from services.auth.helper import invalidate_grafana_proxy_auth_cache, perms_check
 
 from .shared import GROUP_NOT_FOUND, router, rtp
@@ -33,22 +34,14 @@ async def list_groups(
     ),
 ) -> List[Group]:
     query_text = str(q or "").strip()
-    if query_text:
-        return await rtp(
-            auth_service.list_groups,
-            current_user.tenant_id,
-            current_user.user_id,
-            current_user.role,
-            bool(getattr(current_user, "is_superuser", False)),
-            q=query_text,
-        )
-    return await rtp(
-        auth_service.list_groups,
-        current_user.tenant_id,
-        current_user.user_id,
-        current_user.role,
-        bool(getattr(current_user, "is_superuser", False)),
+    caps = AuthActorCaps(
+        user_id=current_user.user_id,
+        role=current_user.role,
+        is_superuser=bool(getattr(current_user, "is_superuser", False)),
     )
+    if query_text:
+        return await rtp(auth_service.list_groups, current_user.tenant_id, actor=caps, q=query_text)
+    return await rtp(auth_service.list_groups, current_user.tenant_id, actor=caps)
 
 
 @router.post("/groups", response_model=Group)
@@ -75,9 +68,11 @@ async def get_group(
         auth_service.get_group,
         group_id,
         current_user.tenant_id,
-        current_user.user_id,
-        current_user.role,
-        bool(getattr(current_user, "is_superuser", False)),
+        AuthActorCaps(
+            user_id=current_user.user_id,
+            role=current_user.role,
+            is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        ),
     )
     if not group:
         raise HTTPException(status.HTTP_404_NOT_FOUND, GROUP_NOT_FOUND)
@@ -98,9 +93,11 @@ async def update_group(
         group_id,
         group_update,
         current_user.tenant_id,
-        current_user.user_id,
-        current_user.role,
-        bool(getattr(current_user, "is_superuser", False)),
+        AuthActorCaps(
+            user_id=current_user.user_id,
+            role=current_user.role,
+            is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        ),
     )
     if not group:
         raise HTTPException(status.HTTP_404_NOT_FOUND, GROUP_NOT_FOUND)
@@ -119,9 +116,11 @@ async def delete_group(
         auth_service.delete_group,
         group_id,
         current_user.tenant_id,
-        current_user.user_id,
-        current_user.role,
-        bool(getattr(current_user, "is_superuser", False)),
+        AuthActorCaps(
+            user_id=current_user.user_id,
+            role=current_user.role,
+            is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        ),
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, GROUP_NOT_FOUND)
     invalidate_grafana_proxy_auth_cache()
@@ -145,10 +144,12 @@ async def update_group_permissions(
         group_id,
         permission_values,
         current_user.tenant_id,
-        current_user.user_id,
-        current_user.role,
-        list(perms_check(current_user)),
-        bool(getattr(current_user, "is_superuser", False)),
+        AuthActorCaps(
+            user_id=current_user.user_id,
+            role=current_user.role,
+            permissions=list(perms_check(current_user)),
+            is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        ),
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, GROUP_NOT_FOUND)
     invalidate_grafana_proxy_auth_cache()
@@ -169,10 +170,12 @@ async def update_group_members(
         group_id,
         members.user_ids,
         current_user.tenant_id,
-        current_user.user_id,
-        current_user.role,
-        list(perms_check(current_user)),
-        bool(getattr(current_user, "is_superuser", False)),
+        AuthActorCaps(
+            user_id=current_user.user_id,
+            role=current_user.role,
+            permissions=list(perms_check(current_user)),
+            is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        ),
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, GROUP_NOT_FOUND)
     invalidate_grafana_proxy_auth_cache()

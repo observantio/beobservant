@@ -14,7 +14,7 @@ import logging
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
 
-import config as gw_config
+import settings
 
 from .rate_limits.token_rate_limiter import TokenRateLimiter
 from .rate_limits.redis_token_rate_limiter import RedisTokenRateLimiter
@@ -41,7 +41,7 @@ def make_default_rate_limiter(
     max_connections: int = 50,
 ) -> TokenRateLimiter | RedisTokenRateLimiter | HybridTokenRateLimiter:
     backend = (backend or "auto").strip().lower()
-    strict = gw_config.GATEWAY_RATE_LIMIT_STRICT
+    strict = settings.GATEWAY_RATE_LIMIT_STRICT
 
     def _make_redis() -> RedisTokenRateLimiter:
         if not redis_url:

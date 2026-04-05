@@ -22,6 +22,7 @@ if ROOT not in sys.path:
 
 from services.grafana import proxy_auth_ops
 from services.grafana.grafana_service import GrafanaAPIError
+from services.grafana.grafana_bundles import GroupVisibilityValidation
 from services.grafana_proxy_service import GrafanaProxyService
 from db_models import Base, Group, Tenant, User
 from fastapi import HTTPException
@@ -71,7 +72,16 @@ def test_validate_group_visibility_no_groups_raises():
     db = make_session()
     svc = GrafanaProxyService()
     with pytest.raises(HTTPException) as exc:
-        svc.validate_group_visibility(db, tenant_id="t1", group_ids=["g1"], shared_group_ids=None, is_admin=False)
+        svc.validate_group_visibility(
+            db,
+            GroupVisibilityValidation(
+                user_id=None,
+                tenant_id="t1",
+                group_ids=["g1"],
+                shared_group_ids=None,
+                is_admin=False,
+            ),
+        )
     assert exc.value.status_code == 400
     assert "No groups provided" in str(exc.value.detail)
 
@@ -86,7 +96,14 @@ def test_validate_group_visibility_missing_ids_raises():
     svc = GrafanaProxyService()
     with pytest.raises(HTTPException) as exc:
         svc.validate_group_visibility(
-            db, tenant_id="t1", group_ids=["g1"], shared_group_ids=["g1", "g2"], is_admin=True
+            db,
+            GroupVisibilityValidation(
+                user_id=None,
+                tenant_id="t1",
+                group_ids=["g1"],
+                shared_group_ids=["g1", "g2"],
+                is_admin=True,
+            ),
         )
     assert exc.value.status_code == 400
     assert "One or more group ids are invalid" in exc.value.detail
@@ -102,7 +119,14 @@ def test_validate_group_visibility_non_admin_not_member_raises():
     svc = GrafanaProxyService()
     with pytest.raises(HTTPException) as exc:
         svc.validate_group_visibility(
-            db, tenant_id="t1", group_ids=["g1"], shared_group_ids=["g1", "g2"], is_admin=False
+            db,
+            GroupVisibilityValidation(
+                user_id=None,
+                tenant_id="t1",
+                group_ids=["g1"],
+                shared_group_ids=["g1", "g2"],
+                is_admin=False,
+            ),
         )
     assert exc.value.status_code == 403
     assert "User is not a member of one or more specified groups" in exc.value.detail
@@ -117,12 +141,26 @@ def test_validate_group_visibility_success_for_admin_and_member():
 
     svc = GrafanaProxyService()
     groups = svc.validate_group_visibility(
-        db, tenant_id="t1", group_ids=[], shared_group_ids=["g1", "g2"], is_admin=True
+        db,
+        GroupVisibilityValidation(
+            user_id=None,
+            tenant_id="t1",
+            group_ids=[],
+            shared_group_ids=["g1", "g2"],
+            is_admin=True,
+        ),
     )
     assert {g.id for g in groups} == {"g1", "g2"}
 
     groups2 = svc.validate_group_visibility(
-        db, tenant_id="t1", group_ids=["g1", "g2"], shared_group_ids=["g1", "g2"], is_admin=False
+        db,
+        GroupVisibilityValidation(
+            user_id=None,
+            tenant_id="t1",
+            group_ids=["g1", "g2"],
+            shared_group_ids=["g1", "g2"],
+            is_admin=False,
+        ),
     )
     assert {g.id for g in groups2} == {"g1", "g2"}
 
@@ -147,11 +185,13 @@ def test_validate_group_visibility_uses_live_db_membership_when_user_id_provided
     svc = GrafanaProxyService()
     groups = svc.validate_group_visibility(
         db,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        shared_group_ids=["g1"],
-        is_admin=False,
+        GroupVisibilityValidation(
+            user_id="u1",
+            tenant_id="t1",
+            group_ids=[],
+            shared_group_ids=["g1"],
+            is_admin=False,
+        ),
     )
     assert {g.id for g in groups} == {"g1"}
 
@@ -176,11 +216,13 @@ def test_validate_group_visibility_denies_when_live_membership_removed_even_with
     with pytest.raises(HTTPException) as exc:
         svc.validate_group_visibility(
             db,
-            user_id="u1",
-            tenant_id="t1",
-            group_ids=["g1"],
-            shared_group_ids=["g1"],
-            is_admin=False,
+            GroupVisibilityValidation(
+                user_id="u1",
+                tenant_id="t1",
+                group_ids=["g1"],
+                shared_group_ids=["g1"],
+                is_admin=False,
+            ),
         )
     assert exc.value.status_code == 403
     assert "User is not a member of one or more specified groups" in exc.value.detail

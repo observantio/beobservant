@@ -24,6 +24,7 @@ ensure_test_env()
 
 from models.access.auth_models import Permission, Role, TokenData
 from services.alerts import helpers as helpers_mod
+from tests._proxy_stubs import unpack_notifier_forward
 
 
 def _user(*, permissions=None, group_ids=None, is_superuser=False) -> TokenData:
@@ -294,7 +295,8 @@ async def test_webhook_route_enforces_security_and_forwards(monkeypatch):
     )
     monkeypatch.setattr(helpers_mod, "enforce_header_token", lambda *args, **kwargs: calls.append(("header", kwargs)))
 
-    async def fake_forward(**kwargs):
+    async def fake_forward(fwd, **_kwargs):
+        kwargs = unpack_notifier_forward(fwd)
         calls.append(("forward", kwargs))
         return Response(content=b"ok")
 

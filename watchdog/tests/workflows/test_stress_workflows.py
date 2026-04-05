@@ -24,6 +24,7 @@ from routers.access.auth_router import authentication as auth_routes
 from routers.access.auth_router import users as user_routes
 from routers.observability import alertmanager_router, loki_router, tempo_router
 from routers.observability.grafana_router import proxy as grafana_proxy_router
+from tests._proxy_stubs import unpack_notifier_forward
 
 from .helpers import WorkflowState, patch_auth_service
 
@@ -60,7 +61,8 @@ async def test_concurrent_50_user_regression_workflow(monkeypatch: pytest.Monkey
         del kwargs
         return True
 
-    async def fake_forward(**kwargs: Any) -> JSONResponse:
+    async def fake_forward(fwd: Any, **_unused: Any) -> JSONResponse:
+        kwargs = unpack_notifier_forward(fwd)
         path = kwargs["upstream_path"].removeprefix("/internal/v1/api/alertmanager/")
         if path == "rules":
             return JSONResponse([{"id": "rule-shared", "name": "shared-readiness"}])

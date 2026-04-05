@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from models.access.auth_models import TokenData, Role
-from services.notifier_proxy_service import NotifierProxyService
+from services.notifier_proxy_service import NotifierForwardRequest, NotifierProxyService
 from config import config
 
 
@@ -88,11 +88,13 @@ async def test_forward_removes_scope_header_when_user(monkeypatch):
 
     req = _request(headers=[(b"x-scope-orgid", b"tenant-b")])
     resp = await svc.forward(
-        request=req,
-        upstream_path="/foo",
-        current_user=_user(),
-        require_api_key=False,
-        audit_action="a",
+        NotifierForwardRequest(
+            request=req,
+            upstream_path="/foo",
+            current_user=_user(),
+            require_api_key=False,
+            audit_action="a",
+        ),
     )
     assert isinstance(resp, Response)
     assert "x-scope-orgid" not in {k.lower(): v for k, v in captured["headers"].items()}
@@ -113,11 +115,13 @@ async def test_forward_preserves_scope_header_for_anonymous(monkeypatch):
 
     req = _request(headers=[(b"x-scope-orgid", b"tenant-b")])
     resp = await svc.forward(
-        request=req,
-        upstream_path="/foo",
-        current_user=None,
-        require_api_key=False,
-        audit_action="a",
+        NotifierForwardRequest(
+            request=req,
+            upstream_path="/foo",
+            current_user=None,
+            require_api_key=False,
+            audit_action="a",
+        ),
     )
     assert isinstance(resp, Response)
     assert "x-scope-orgid" in {k.lower(): v for k, v in captured["headers"].items()}
@@ -239,11 +243,13 @@ async def test_forward_requires_api_key_and_records_timeout(monkeypatch):
     req = _request()
     with pytest.raises(HTTPException, match="No active API key"):
         await svc.forward(
-            request=req,
-            upstream_path="/foo",
-            current_user=_user(),
-            require_api_key=True,
-            audit_action="jira",
+            NotifierForwardRequest(
+                request=req,
+                upstream_path="/foo",
+                current_user=_user(),
+                require_api_key=True,
+                audit_action="jira",
+            ),
         )
 
     monkeypatch.setattr(svc, "_resolve_actor_api_key_id", lambda user: "key-1")
@@ -255,11 +261,13 @@ async def test_forward_requires_api_key_and_records_timeout(monkeypatch):
     svc._client.request = raise_timeout
     with pytest.raises(HTTPException, match="timed out"):
         await svc.forward(
-            request=req,
-            upstream_path="/foo",
-            current_user=_user(),
-            require_api_key=True,
-            audit_action="jira",
+            NotifierForwardRequest(
+                request=req,
+                upstream_path="/foo",
+                current_user=_user(),
+                require_api_key=True,
+                audit_action="jira",
+            ),
         )
     assert audits[-1]["action"] == "jira.timeout"
 
@@ -283,12 +291,14 @@ async def test_forward_records_http_errors_and_passes_webhook_header(monkeypatch
 
     with pytest.raises(HTTPException, match="Failed to contact Notifier"):
         await svc.forward(
-            request=req,
-            upstream_path="/foo",
-            current_user=_user(),
-            require_api_key=False,
-            audit_action="jira",
-            correlation_id="corr-1",
+            NotifierForwardRequest(
+                request=req,
+                upstream_path="/foo",
+                current_user=_user(),
+                require_api_key=False,
+                audit_action="jira",
+                correlation_id="corr-1",
+            ),
         )
 
     assert captured["headers"]["x-watchdog-webhook-token"] == "hook-1"
@@ -303,11 +313,13 @@ async def test_forward_requires_service_token_and_preserves_scope_header(monkeyp
 
     with pytest.raises(HTTPException, match="service token not configured"):
         await svc.forward(
-            request=_request(),
-            upstream_path="/foo",
-            current_user=None,
-            require_api_key=False,
-            audit_action="jira",
+            NotifierForwardRequest(
+                request=_request(),
+                upstream_path="/foo",
+                current_user=None,
+                require_api_key=False,
+                audit_action="jira",
+            ),
         )
 
     captured = {}
@@ -322,11 +334,13 @@ async def test_forward_requires_service_token_and_preserves_scope_header(monkeyp
     req = _request(headers=[(b"x-scope-orgid", b"tenant-uppercase")])
     req.scope["client"] = None
     response = await svc.forward(
-        request=req,
-        upstream_path="/foo",
-        current_user=None,
-        require_api_key=False,
-        audit_action="jira",
+        NotifierForwardRequest(
+            request=req,
+            upstream_path="/foo",
+            current_user=None,
+            require_api_key=False,
+            audit_action="jira",
+        ),
     )
 
     assert response.status_code == 200

@@ -70,14 +70,16 @@ async def test_run_fallback_queries_returns_first_non_empty_result_and_ignores_n
 
     async with httpx.AsyncClient() as client:
         payload = await fallback.run_fallback_queries(
-            "http://loki.test/loki/api/v1/query_range",
-            {"limit": 10},
-            {"X-Scope-OrgID": "tenant-1"},
-            '{service.name="payments"}',
-            client,
-            http_client,
-            max_fallbacks=3,
-            concurrency=2,
+            fallback.LokiFallbackQueryRun(
+                endpoint="http://loki.test/loki/api/v1/query_range",
+                base_params={"limit": 10},
+                headers={"X-Scope-OrgID": "tenant-1"},
+                query_str='{service.name="payments"}',
+                client=client,
+                http_client=http_client,
+                max_fallbacks=3,
+                concurrency=2,
+            )
         )
 
     assert payload == {"data": {"result": [{"stream": {"service_name": "payments"}}]}}
@@ -92,13 +94,15 @@ async def test_run_fallback_queries_returns_none_when_no_candidates_or_no_hits()
         no_candidates_client = FakeHttpClient([])
         assert (
             await fallback.run_fallback_queries(
-                "http://loki.test/query",
-                {"limit": 5},
-                {},
-                '{service="api"}',
-                client,
-                no_candidates_client,
-                max_fallbacks=0,
+                fallback.LokiFallbackQueryRun(
+                    endpoint="http://loki.test/query",
+                    base_params={"limit": 5},
+                    headers={},
+                    query_str='{service="api"}',
+                    client=client,
+                    http_client=no_candidates_client,
+                    max_fallbacks=0,
+                )
             )
             is None
         )
@@ -113,14 +117,16 @@ async def test_run_fallback_queries_returns_none_when_no_candidates_or_no_hits()
         )
         assert (
             await fallback.run_fallback_queries(
-                "http://loki.test/query",
-                {"limit": 5},
-                {},
-                '{service.name="api"}',
-                client,
-                http_client,
-                max_fallbacks=3,
-                concurrency=1,
+                fallback.LokiFallbackQueryRun(
+                    endpoint="http://loki.test/query",
+                    base_params={"limit": 5},
+                    headers={},
+                    query_str='{service.name="api"}',
+                    client=client,
+                    http_client=http_client,
+                    max_fallbacks=3,
+                    concurrency=1,
+                )
             )
             is None
         )

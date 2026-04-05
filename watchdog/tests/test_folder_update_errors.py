@@ -19,6 +19,7 @@ os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 
 from db_models import Base, GrafanaFolder, Tenant, User
 from services.grafana import folder_ops
+from services.grafana.grafana_bundles import FolderCreateOptions, FolderUpdateOptions, GrafanaUserScope
 from services.grafana.grafana_service import GrafanaAPIError
 
 
@@ -34,7 +35,7 @@ class _ProxyStub:
     def __init__(self):
         self.grafana_service = _GrafanaServiceStub()
 
-    def validate_group_visibility(self, db, *, user_id=None, tenant_id, group_ids, shared_group_ids, is_admin):
+    def validate_group_visibility(self, db, validation):
         return []
 
     @staticmethod
@@ -91,14 +92,14 @@ async def test_update_folder_maps_412_to_409():
         await folder_ops.update_folder(
             service,
             db,
-            uid="f1",
-            user_id="u1",
-            tenant_id="t1",
-            group_ids=[],
-            title="Ops",
-            visibility="private",
-            shared_group_ids=[],
-            is_admin=False,
+            "f1",
+            GrafanaUserScope("u1", "t1", []),
+            FolderUpdateOptions(
+                title="Ops",
+                visibility="private",
+                shared_group_ids=[],
+                is_admin=False,
+            ),
         )
 
     assert exc.value.status_code == 409
@@ -130,13 +131,13 @@ async def test_create_folder_maps_grafana_400_to_http_400_with_message():
         await folder_ops.create_folder(
             service,
             db,
-            title="Duplicate title",
-            user_id="u1",
-            tenant_id="t1",
-            group_ids=[],
-            visibility="private",
-            shared_group_ids=[],
-            is_admin=False,
+            "Duplicate title",
+            GrafanaUserScope("u1", "t1", []),
+            FolderCreateOptions(
+                visibility="private",
+                shared_group_ids=[],
+                is_admin=False,
+            ),
         )
 
     assert exc.value.status_code == 400

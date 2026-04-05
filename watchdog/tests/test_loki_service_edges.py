@@ -25,7 +25,14 @@ from tests._env import ensure_test_env
 ensure_test_env()
 
 from models.observability.loki_models import LogDirection, LogQuery
-from services.loki_service import LokiService, _json_dict, _object_list, _string_list
+from services.loki_service import (
+    FilterLogsParams,
+    LokiService,
+    SearchLogsByPatternParams,
+    _json_dict,
+    _object_list,
+    _string_list,
+)
 
 _loki_module = importlib.import_module(LokiService.__module__)
 
@@ -237,8 +244,10 @@ async def test_aggregate_volume_search_and_filter_cover_remaining_branches(monke
         return SimpleNamespace(status="success", data={"result": []})
 
     monkeypatch.setattr(service, "query_logs", query_logs)
-    await service.search_logs_by_pattern('error "quoted"', labels={"app": "web"}, limit=12)
-    await service.filter_logs({"app": "web"}, filters=["timeout", "5xx"], limit=7)
+    await service.search_logs_by_pattern(
+        SearchLogsByPatternParams(pattern='error "quoted"', labels={"app": "web"}, limit=12),
+    )
+    await service.filter_logs(FilterLogsParams(labels={"app": "web"}, filters=["timeout", "5xx"], limit=7))
     assert captured[0][0] == '{app="web"} |= "error \\"quoted\\""'
     assert captured[0][1] == 12
     assert captured[1][0] == '{app="web"} |= "timeout" |= "5xx"'

@@ -23,6 +23,8 @@ from config import config
 from database import get_db_session
 from db_models import User
 
+from .audit import AuditLogRecord
+
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
 
@@ -153,17 +155,19 @@ def reset_user_password_temp(
 
         service.log_audit(
             db,
-            tenant_id,
-            actor_user_id,
-            "password.reset_temp",
-            "users",
-            target_user_id,
-            {
-                "target_user_id": target_user_id,
-                "target_username": target.username,
-                "target_auth_provider_before": previous_auth_provider,
-                "target_auth_provider_after": target.auth_provider,
-            },
+            AuditLogRecord(
+                tenant_id=tenant_id,
+                user_id=actor_user_id,
+                action="password.reset_temp",
+                resource_type="users",
+                resource_id=target_user_id,
+                details={
+                    "target_user_id": target_user_id,
+                    "target_username": target.username,
+                    "target_auth_provider_before": previous_auth_provider,
+                    "target_auth_provider_after": target.auth_provider,
+                },
+            ),
         )
 
         db.flush()

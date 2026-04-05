@@ -18,7 +18,7 @@ from urllib.parse import quote
 import httpx
 from fastapi import HTTPException, Request, status
 
-import config as gw_config
+import settings
 from models.exceptions import DatabaseUnavailable
 from .rate_limit import make_default_rate_limiter
 from .token_cache import make_token_cache
@@ -40,11 +40,11 @@ def _parse_networks(allowlist: str) -> list[IPv4Network | IPv6Network]:
 
 
 def _http_verify_setting() -> str | bool:
-    if not gw_config.AUTH_API_URL.startswith("https"):
+    if not settings.AUTH_API_URL.startswith("https"):
         return False
-    if gw_config.SSL_CA_CERTS:
-        return gw_config.SSL_CA_CERTS
-    return bool(gw_config.SSL_VERIFY)
+    if settings.SSL_CA_CERTS:
+        return settings.SSL_CA_CERTS
+    return bool(settings.SSL_VERIFY)
 
 
 class GatewayAuthService:
@@ -60,21 +60,21 @@ class GatewayAuthService:
         rate_limit_redis_url: Optional[str] = None,
     ) -> None:
         self._rate_limiter = make_default_rate_limiter(
-            rate_limit_per_minute if rate_limit_per_minute is not None else gw_config.RATE_LIMIT_PER_MINUTE,
-            rate_limit_backend if rate_limit_backend is not None else gw_config.RATE_LIMIT_BACKEND,
-            rate_limit_redis_url if rate_limit_redis_url is not None else gw_config.RATE_LIMIT_REDIS_URL,
+            rate_limit_per_minute if rate_limit_per_minute is not None else settings.RATE_LIMIT_PER_MINUTE,
+            rate_limit_backend if rate_limit_backend is not None else settings.RATE_LIMIT_BACKEND,
+            rate_limit_redis_url if rate_limit_redis_url is not None else settings.RATE_LIMIT_REDIS_URL,
         )
-        self._networks = _parse_networks(ip_allowlist if ip_allowlist is not None else gw_config.IP_ALLOWLIST)
+        self._networks = _parse_networks(ip_allowlist if ip_allowlist is not None else settings.IP_ALLOWLIST)
         self._token_cache = make_token_cache(
-            token_cache_ttl if token_cache_ttl is not None else gw_config.TOKEN_CACHE_TTL,
-            gw_config.TOKEN_CACHE_REDIS_URL or None,
+            token_cache_ttl if token_cache_ttl is not None else settings.TOKEN_CACHE_TTL,
+            settings.TOKEN_CACHE_REDIS_URL or None,
         )
         self._http_verify = _http_verify_setting()
-        self._auth_api_url = gw_config.AUTH_API_URL
+        self._auth_api_url = settings.AUTH_API_URL
 
     @staticmethod
     def _trusted_proxy_peer(request: Request) -> bool:
-        if not gw_config.TRUST_PROXY_HEADERS:
+        if not settings.TRUST_PROXY_HEADERS:
             return False
         peer = request.client.host if request.client else ""
         if not peer:
@@ -83,9 +83,9 @@ class GatewayAuthService:
             peer_ip = ip_address(peer)
         except ValueError:
             return False
-        if not gw_config.TRUSTED_PROXY_CIDRS:
+        if not settings.TRUSTED_PROXY_CIDRS:
             return True
-        for cidr in gw_config.TRUSTED_PROXY_CIDRS:
+        for cidr in settings.TRUSTED_PROXY_CIDRS:
             try:
                 if peer_ip in ip_network(cidr, strict=False):
                     return True
@@ -112,7 +112,7 @@ class GatewayAuthService:
 
     def enforce_ip_allowlist(self, request: Request) -> None:
         if not self._networks:
-            if not gw_config.ALLOWLIST_FAIL_OPEN:
+            if not settings.ALLOWLIST_FAIL_OPEN:
                 raise HTTPException(status.HTTP_403_FORBIDDEN, "Source IP not allowed")
             return
 
@@ -131,8 +131,8 @@ class GatewayAuthService:
     @staticmethod
     def _auth_request_headers(token: str | None = None) -> dict[str, str]:
         headers: dict[str, str] = {}
-        if gw_config.INTERNAL_SERVICE_TOKEN:
-            headers["X-Internal-Token"] = gw_config.INTERNAL_SERVICE_TOKEN
+        if settings.INTERNAL_SERVICE_TOKEN:
+            headers["X-Internal-Token"] = settings.INTERNAL_SERVICE_TOKEN
         if token is not None:
             headers["X-OTLP-Token"] = token
             headers["Content-Type"] = "application/json"

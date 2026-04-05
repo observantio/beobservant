@@ -33,11 +33,13 @@ from services.auth.delegation import (
     role_rank as _shared_role_rank,
     role_to_text as _role_to_text,
 )
+from services.auth.actor_caps import AuthActorCaps
 from services.auth.group_ops import (
     _load_usernames_for_ids,
     _propagate_removed_member_group_shares,
     _prune_removed_member_grafana_group_shares,
 )
+from services.database_auth.audit import AuditLogRecord
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -181,11 +183,14 @@ def create_user(
     service: DatabaseAuthService,
     user_create: UserCreate,
     tenant_id: str,
-    creator_id: Optional[str] = None,
-    actor_role: Optional[str] = None,
-    actor_permissions: Optional[List[str]] = None,
-    actor_is_superuser: bool = False,
+    actor: Optional[AuthActorCaps] = None,
 ) -> UserSchema:
+    actor = actor or AuthActorCaps()
+    creator_id = actor.user_id
+    actor_role = actor.role
+    actor_permissions = actor.permissions
+    actor_is_superuser = actor.is_superuser
+
     service.ensure_initialized()
     with get_db_session() as db:
         requested_role = _role_to_text(getattr(user_create, "role", None) or Role.USER.value)
@@ -313,12 +318,14 @@ def create_user(
         if creator_id:
             service.log_audit(
                 db,
-                tenant_id,
-                creator_id,
-                "create_user",
-                "users",
-                user.id,
-                {"username": user.username, "role": user.role},
+                AuditLogRecord(
+                    tenant_id=tenant_id,
+                    user_id=creator_id,
+                    action="create_user",
+                    resource_type="users",
+                    resource_id=user.id,
+                    details={"username": user.username, "role": user.role},
+                ),
             )
 
         db.commit()
@@ -484,7 +491,17 @@ def update_user(
             audit_data["group_ids"] = [str(group.id) for group in (user.groups or [])]
 
         if updater_id:
-            service.log_audit(db, tenant_id, updater_id, "update_user", "users", user_id, audit_data)
+            service.log_audit(
+                db,
+                AuditLogRecord(
+                    tenant_id=tenant_id,
+                    user_id=updater_id,
+                    action="update_user",
+                    resource_type="users",
+                    resource_id=user_id,
+                    details=audit_data,
+                ),
+            )
 
         db.commit()
         for removed_group_id in removed_group_ids:
@@ -537,12 +554,14 @@ def delete_user(service: DatabaseAuthService, user_id: str, tenant_id: str, dele
 
             service.log_audit(
                 db,
-                tenant_id,
-                deleter_id,
-                "delete_user",
-                "users",
-                user_id,
-                {"username": user.username},
+                AuditLogRecord(
+                    tenant_id=tenant_id,
+                    user_id=deleter_id,
+                    action="delete_user",
+                    resource_type="users",
+                    resource_id=user_id,
+                    details={"username": user.username},
+                ),
             )
 
         db.delete(user)
@@ -555,11 +574,14 @@ def update_user_permissions(
     user_id: str,
     permission_names: List[str],
     tenant_id: str,
-    actor_user_id: Optional[str] = None,
-    actor_role: Optional[str] = None,
-    actor_permissions: Optional[List[str]] = None,
-    actor_is_superuser: bool = False,
+    actor: Optional[AuthActorCaps] = None,
 ) -> bool:
+    actor = actor or AuthActorCaps()
+    actor_user_id = actor.user_id
+    actor_role = actor.role
+    actor_permissions = actor.permissions
+    actor_is_superuser = actor.is_superuser
+
     service.ensure_initialized()
     with get_db_session() as db:
         if not actor_user_id:
@@ -572,8 +594,8 @@ def update_user_permissions(
         if not user:
             return False
 
-        actor = _get_user(db, user_id=actor_user_id, tenant_id=tenant_id)
-        if not actor:
+        actor_user_row = _get_user(db, user_id=actor_user_id, tenant_id=tenant_id)
+        if not actor_user_row:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Actor not found")
         if str(user_id) == str(actor_user_id):
             raise HTTPException(
@@ -581,8 +603,8 @@ def update_user_permissions(
                 detail="Users cannot change their own permissions",
             )
 
-        actor_role_text = _role_to_text(actor_role or getattr(actor, "role", None))
-        actor_is_superuser = bool(actor_is_superuser or getattr(actor, "is_superuser", False))
+        actor_role_text = _role_to_text(actor_role or getattr(actor_user_row, "role", None))
+        actor_is_superuser = bool(actor_is_superuser or getattr(actor_user_row, "is_superuser", False))
         actor_perm_set = _resolve_actor_permissions(
             service,
             db=db,
@@ -638,12 +660,14 @@ def update_user_permissions(
 
         service.log_audit(
             db,
-            tenant_id,
-            actor_user_id,
-            "update_user_permissions",
-            "users",
-            user_id,
-            {"permissions": sorted(known_names)},
+            AuditLogRecord(
+                tenant_id=tenant_id,
+                user_id=actor_user_id,
+                action="update_user_permissions",
+                resource_type="users",
+                resource_id=user_id,
+                details={"permissions": sorted(known_names)},
+            ),
         )
         db.commit()
         return True

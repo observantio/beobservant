@@ -4,7 +4,7 @@ Helper utilities for Grafana dashboard operations.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List, Optional, TypedDict
+from typing import Dict, List, Optional, TypedDict
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
@@ -14,11 +14,9 @@ from config import config
 from custom_types.json import JSONDict
 from db_models import GrafanaDashboard, Group
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
+from services.grafana.proxy_client import GrafanaProxyClient
+from services.grafana.grafana_bundles import AccessibleTitleConflictParams
 from services.grafana.shared_ops import group_id_strs
-
-if TYPE_CHECKING:
-    from services.grafana_proxy_service import GrafanaProxyService
-
 
 def _json_dict(value: object) -> JSONDict:
     return value if isinstance(value, dict) else {}
@@ -116,16 +114,11 @@ def _to_search_result(
 
 
 async def _has_accessible_title_conflict(
-    service: GrafanaProxyService,
+    service: GrafanaProxyClient,
     db: Session,
-    *,
-    tenant_id: str,
-    user_id: str,
-    group_ids: List[str],
-    title: str,
-    exclude_uid: Optional[str] = None,
+    params: AccessibleTitleConflictParams,
 ) -> bool:
-    target = _normalize_title(title)
+    target = _normalize_title(params.title)
     if not target:
         return False
     all_dashboards = await service.grafana_service.search_dashboards()
@@ -138,13 +131,16 @@ async def _has_accessible_title_conflict(
         return False
 
     q = db.query(GrafanaDashboard).filter(
-        GrafanaDashboard.tenant_id == tenant_id,
+        GrafanaDashboard.tenant_id == params.tenant_id,
         GrafanaDashboard.grafana_uid.in_(live_conflicting_uids),
     )
     for dash in q.all():
-        if exclude_uid and dash.grafana_uid == str(exclude_uid):
+        if params.exclude_uid and dash.grafana_uid == str(params.exclude_uid):
             continue
-        if check_dashboard_access(db, dash.grafana_uid, user_id, tenant_id, group_ids) is not None:
+        if (
+            check_dashboard_access(db, dash.grafana_uid, params.user_id, params.tenant_id, params.group_ids)
+            is not None
+        ):
             return True
     return False
 
@@ -307,7 +303,7 @@ def _is_non_general_folder_id(folder_id: object) -> bool:
         return False
 
 
-async def _resolve_folder_uid_by_id(service: GrafanaProxyService, folder_id: Optional[int]) -> Optional[str]:
+async def _resolve_folder_uid_by_id(service: GrafanaProxyClient, folder_id: Optional[int]) -> Optional[str]:
     if not folder_id:
         return None
     try:

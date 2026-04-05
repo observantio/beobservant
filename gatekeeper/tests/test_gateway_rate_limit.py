@@ -78,7 +78,7 @@ class GatewayRateLimitTests(unittest.TestCase):
         prev = os.environ.get("GATEWAY_ALLOWLIST_FAIL_OPEN")
         try:
             os.environ["GATEWAY_ALLOWLIST_FAIL_OPEN"] = "true"
-            importlib.reload(__import__("config", fromlist=["*"]))
+            importlib.reload(__import__("settings", fromlist=["*"]))
             importlib.reload(__import__("services.gateway_service", fromlist=["*"]))
             service = GatewayAuthService(rate_limit_per_minute=100, ip_allowlist="")
             service.enforce_ip_allowlist(_request("198.51.100.1"))
@@ -87,7 +87,7 @@ class GatewayRateLimitTests(unittest.TestCase):
                 os.environ.pop("GATEWAY_ALLOWLIST_FAIL_OPEN", None)
             else:
                 os.environ["GATEWAY_ALLOWLIST_FAIL_OPEN"] = prev  # pragma: no cover
-            importlib.reload(__import__("config", fromlist=["*"]))
+            importlib.reload(__import__("settings", fromlist=["*"]))
             importlib.reload(__import__("services.gateway_service", fromlist=["*"]))
 
     def test_validate_otlp_token_raises_database_unavailable_on_api_error(self):
@@ -187,14 +187,14 @@ class GatewayRateLimitTests(unittest.TestCase):
             tc_mod.redis = prev_redis
 
     def test_strict_rate_limiter_requires_redis(self):
-        import config as cfg
+        import settings as cfg
         import services.rate_limit as rl_mod
         from services.rate_limit import make_default_rate_limiter, RedisTokenRateLimiter
 
         prev_strict_cfg = cfg.GATEWAY_RATE_LIMIT_STRICT
-        prev_strict_rl = rl_mod.gw_config.GATEWAY_RATE_LIMIT_STRICT
+        prev_strict_rl = rl_mod.settings.GATEWAY_RATE_LIMIT_STRICT
         cfg.GATEWAY_RATE_LIMIT_STRICT = True
-        rl_mod.gw_config.GATEWAY_RATE_LIMIT_STRICT = True
+        rl_mod.settings.GATEWAY_RATE_LIMIT_STRICT = True
 
         orig_init = RedisTokenRateLimiter.__init__
         try:
@@ -217,7 +217,7 @@ class GatewayRateLimitTests(unittest.TestCase):
             self.assertIsInstance(limiter, RedisTokenRateLimiter)
         finally:
             cfg.GATEWAY_RATE_LIMIT_STRICT = prev_strict_cfg
-            rl_mod.gw_config.GATEWAY_RATE_LIMIT_STRICT = prev_strict_rl
+            rl_mod.settings.GATEWAY_RATE_LIMIT_STRICT = prev_strict_rl
             RedisTokenRateLimiter.__init__ = orig_init
 
     if __name__ == "__main__":  # pragma: no cover

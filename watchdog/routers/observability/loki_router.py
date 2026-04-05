@@ -10,7 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
-from typing import Awaitable, Optional, TypeVar
+from typing import Annotated, Awaitable, Optional, TypeVar
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
 
@@ -27,7 +27,7 @@ from models.observability.loki_models import (
     LogResponse,
     LogSearchRequest,
 )
-from services.loki_service import LokiService
+from services.loki_service import FilterLogsParams, LokiService, SearchLogsByPatternParams
 
 START_TIME_DESC = "Start time in nanoseconds"
 END_TIME_DESC = "End time in nanoseconds"
@@ -49,20 +49,47 @@ async def _handle_timeout(coro: Awaitable[ResponseT], detail: str) -> ResponseT:
         ) from exc
 
 
+class QueryLogsCoreParams:
+    def __init__(
+        self,
+        query: str = Query(..., description="LogQL query string"),
+        limit: int = Query(
+            config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT, description="Maximum log lines to return"
+        ),
+        direction: LogDirection = Query(LogDirection.BACKWARD, description="Query direction"),
+    ) -> None:
+        self.query = query
+        self.limit = limit
+        self.direction = direction
+
+
+class QueryLogsRangeParams:
+    def __init__(
+        self,
+        start: Optional[int] = Query(None, description=START_TIME_DESC),
+        end: Optional[int] = Query(None, description=END_TIME_DESC),
+        step: Optional[int] = Query(None, description="Query resolution step in seconds"),
+    ) -> None:
+        self.start = start
+        self.end = end
+        self.step = step
+
+
 @router.get("/query", response_model=LogResponse)
 async def query_logs(
     request: Request,
-    query: str = Query(..., description="LogQL query string"),
-    limit: int = Query(
-        config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT, description="Maximum log lines to return"
-    ),
-    start: Optional[int] = Query(None, description=START_TIME_DESC),
-    end: Optional[int] = Query(None, description=END_TIME_DESC),
-    direction: LogDirection = Query(LogDirection.BACKWARD, description="Query direction"),
-    step: Optional[int] = Query(None, description="Query resolution step in seconds"),
+    log_core: Annotated[QueryLogsCoreParams, Depends()],
+    log_range: Annotated[QueryLogsRangeParams, Depends()],
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki")),
 ) -> LogResponse:
-    log_query = LogQuery(query=query, limit=limit, start=start, end=end, direction=direction, step=step)
+    log_query = LogQuery(
+        query=log_core.query,
+        limit=log_core.limit,
+        start=log_range.start,
+        end=log_range.end,
+        direction=log_core.direction,
+        step=log_range.step,
+    )
     tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
         loki_service.query_logs(log_query, tenant_id=tenant_id),
@@ -126,12 +153,14 @@ async def search_logs(
     tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
         loki_service.search_logs_by_pattern(
-            pattern=payload.pattern,
-            labels=payload.labels or {},
-            start=payload.start,
-            end=payload.end,
-            limit=payload.limit,
-            tenant_id=tenant_id,
+            SearchLogsByPatternParams(
+                pattern=payload.pattern,
+                labels=payload.labels or {},
+                start=payload.start,
+                end=payload.end,
+                limit=payload.limit,
+                tenant_id=tenant_id,
+            ),
         ),
         "Loki search timed out",
     )
@@ -146,12 +175,14 @@ async def filter_logs(
     tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
         loki_service.filter_logs(
-            labels=payload.labels or {},
-            filters=payload.filters,
-            start=payload.start,
-            end=payload.end,
-            limit=payload.limit,
-            tenant_id=tenant_id,
+            FilterLogsParams(
+                labels=payload.labels or {},
+                filters=payload.filters,
+                start=payload.start,
+                end=payload.end,
+                limit=payload.limit,
+                tenant_id=tenant_id,
+            ),
         ),
         "Loki filter query timed out",
     )

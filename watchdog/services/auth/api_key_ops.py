@@ -26,6 +26,7 @@ from database import get_db_session
 from db_models import ApiKeyShare, Group, HiddenApiKey, User, UserApiKey
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUser, ApiKeyUpdate
 from services.auth.api_key_schema import api_key_to_schema, list_api_key_shares_in_session
+from services.database_auth.audit import AuditLogRecord
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -257,12 +258,14 @@ def set_api_key_hidden(service: DatabaseAuthService, user_id: str, key_id: str, 
 
         service.log_audit(
             db,
-            viewer.tenant_id,
-            user_id,
-            "api_key.hide" if hidden else "api_key.unhide",
-            "api_keys",
-            key_id,
-            {"hidden": bool(hidden)},
+            AuditLogRecord(
+                tenant_id=viewer.tenant_id,
+                user_id=user_id,
+                action="api_key.hide" if hidden else "api_key.unhide",
+                resource_type="api_keys",
+                resource_id=key_id,
+                details={"hidden": bool(hidden)},
+            ),
         )
         db.commit()
         return True
@@ -323,12 +326,14 @@ def create_api_key(service: DatabaseAuthService, user_id: str, tenant_id: str, k
 
         service.log_audit(
             db,
-            tenant_id,
-            user_id,
-            "api_key.create",
-            "api_keys",
-            api_key.id,
-            {"name": api_key.name},
+            AuditLogRecord(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action="api_key.create",
+                resource_type="api_keys",
+                resource_id=api_key.id,
+                details={"name": api_key.name},
+            ),
         )
         db.commit()
         db.refresh(api_key)
@@ -378,12 +383,14 @@ def update_api_key(service: DatabaseAuthService, user_id: str, key_id: str, key_
 
             service.log_audit(
                 db,
-                viewer.tenant_id,
-                user_id,
-                "api_key.use_shared",
-                "api_keys",
-                api_key.id,
-                {"owner_user_id": api_key.user_id, "name": api_key.name},
+                AuditLogRecord(
+                    tenant_id=viewer.tenant_id,
+                    user_id=user_id,
+                    action="api_key.use_shared",
+                    resource_type="api_keys",
+                    resource_id=api_key.id,
+                    details={"owner_user_id": api_key.user_id, "name": api_key.name},
+                ),
             )
             db.commit()
             db.refresh(api_key)
@@ -475,12 +482,14 @@ def update_api_key(service: DatabaseAuthService, user_id: str, key_id: str, key_
 
         service.log_audit(
             db,
-            api_key.tenant_id,
-            user_id,
-            "api_key.update",
-            "api_keys",
-            api_key.id,
-            key_update.model_dump(exclude_unset=True),
+            AuditLogRecord(
+                tenant_id=api_key.tenant_id,
+                user_id=user_id,
+                action="api_key.update",
+                resource_type="api_keys",
+                resource_id=api_key.id,
+                details=key_update.model_dump(exclude_unset=True),
+            ),
         )
         db.commit()
         db.refresh(api_key)
@@ -510,12 +519,14 @@ def regenerate_api_key_otlp_token(service: DatabaseAuthService, user_id: str, ke
 
         service.log_audit(
             db,
-            api_key.tenant_id,
-            user_id,
-            "api_key.rotate_otlp_token",
-            "api_keys",
-            api_key.id,
-            {"name": api_key.name},
+            AuditLogRecord(
+                tenant_id=api_key.tenant_id,
+                user_id=user_id,
+                action="api_key.rotate_otlp_token",
+                resource_type="api_keys",
+                resource_id=api_key.id,
+                details={"name": api_key.name},
+            ),
         )
         db.commit()
         db.refresh(api_key)
@@ -580,12 +591,14 @@ def delete_api_key(service: DatabaseAuthService, user_id: str, key_id: str) -> b
 
         service.log_audit(
             db,
-            tenant_id,
-            user_id,
-            "api_key.delete",
-            "api_keys",
-            key_id,
-            {"name": api_key_name},
+            AuditLogRecord(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action="api_key.delete",
+                resource_type="api_keys",
+                resource_id=key_id,
+                details={"name": api_key_name},
+            ),
         )
         db.commit()
         return True
@@ -695,12 +708,14 @@ def replace_api_key_shares(
 
         service.log_audit(
             db,
-            tenant_id,
-            owner_user_id,
-            "api_key.share",
-            "api_keys",
-            key_id,
-            {"shared_user_ids": combined_user_ids, "shared_group_ids": normalized_group_ids},
+            AuditLogRecord(
+                tenant_id=tenant_id,
+                user_id=owner_user_id,
+                action="api_key.share",
+                resource_type="api_keys",
+                resource_id=key_id,
+                details={"shared_user_ids": combined_user_ids, "shared_group_ids": normalized_group_ids},
+            ),
         )
         db.commit()
         return list_api_key_shares_in_session(db, tenant_id=tenant_id, key_id=key_id)
@@ -730,12 +745,14 @@ def delete_api_key_share(
         db.delete(share)
         service.log_audit(
             db,
-            tenant_id,
-            owner_user_id,
-            "api_key.unshare",
-            "api_keys",
-            key_id,
-            {"shared_user_id": shared_user_id},
+            AuditLogRecord(
+                tenant_id=tenant_id,
+                user_id=owner_user_id,
+                action="api_key.unshare",
+                resource_type="api_keys",
+                resource_id=key_id,
+                details={"shared_user_id": shared_user_id},
+            ),
         )
         db.commit()
         return True

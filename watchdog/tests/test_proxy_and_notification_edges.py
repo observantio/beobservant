@@ -25,6 +25,13 @@ from config import config
 from models.access.auth_models import Role, TokenData
 from routers.observability.grafana_router import proxy as proxy_router
 from services import notification_service as notification_mod
+from services.grafana.grafana_bundles import (
+    DashboardSearchParams,
+    DatasourceListParams,
+    FolderAccessCriteria,
+    FolderGetParams,
+    GrafanaUserScope,
+)
 from services.grafana_proxy_service import GrafanaProxyService
 
 
@@ -153,21 +160,21 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
     assert svc._normalize_group_ids([" g1 ", "g1", "", None, "g2"]) == ["g1", "g2"]
 
     monkeypatch.setattr(svc, "_effective_group_ids", lambda *_args, **_kwargs: ["live"])
-    monkeypatch.setitem(
-        svc.search_dashboards.__globals__, "search_dashboards", lambda *_args, **_kwargs: [{"uid": "d1"}]
-    )
 
     async def fake_search(*args, **kwargs):
-        return [{"uid": "d1", "groups": args[4]}]
+        scope = args[2]
+        return [{"uid": "d1", "groups": scope.group_ids}]
 
     async def fake_get_dashboard(*args, **kwargs):
-        return {"uid": args[2], "groups": args[5]}
+        return {"uid": args[2], "groups": args[3].group_ids}
 
     async def fake_get_datasources(*args, **kwargs):
-        return ["ds", args[4]]
+        scope = args[2]
+        return ["ds", scope.group_ids]
 
     async def fake_get_folder(*args, **kwargs):
-        return {"uid": args[2], "groups": args[5]}
+        scope = args[3]
+        return {"uid": args[2], "groups": scope.group_ids}
 
     monkeypatch.setitem(svc.search_dashboards.__globals__, "search_dashboards", fake_search)
     monkeypatch.setitem(svc.get_dashboard.__globals__, "get_dashboard", fake_get_dashboard)
@@ -181,17 +188,51 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
     monkeypatch.setitem(svc.check_folder_access.__globals__, "check_folder_access", lambda *_args, **_kwargs: "folder")
     monkeypatch.setitem(svc.is_folder_accessible.__globals__, "is_folder_accessible", lambda *_args, **_kwargs: True)
 
-    assert await svc.search_dashboards("db", "u1", "tenant", ["stale"]) == [{"uid": "d1", "groups": ["live"]}]
-    assert await svc.get_dashboard("db", "dash-1", "u1", "tenant", ["stale"]) == {"uid": "dash-1", "groups": ["live"]}
-    assert await svc.get_datasources("db", "u1", "tenant", ["stale"]) == ["ds", ["live"]]
-    assert await svc.get_folder("db", "folder-1", "u1", "tenant", ["stale"]) == {"uid": "folder-1", "groups": ["live"]}
+    db = "db"
+    assert await svc.search_dashboards(
+        db,
+        GrafanaUserScope("u1", "tenant", ["stale"]),
+        DashboardSearchParams(),
+    ) == [{"uid": "d1", "groups": ["live"]}]
+    assert await svc.get_dashboard(
+        db,
+        "dash-1",
+        GrafanaUserScope("u1", "tenant", ["stale"]),
+    ) == {"uid": "dash-1", "groups": ["live"]}
+    assert await svc.get_datasources(
+        "db",
+        GrafanaUserScope("u1", "tenant", ["stale"]),
+        DatasourceListParams(),
+    ) == ["ds", ["live"]]
+    assert await svc.get_folder(
+        "db",
+        "folder-1",
+        GrafanaUserScope("u1", "tenant", ["stale"]),
+        FolderGetParams(),
+    ) == {"uid": "folder-1", "groups": ["live"]}
     assert svc.get_dashboard_metadata("db", "tenant") == {"1": "one"}
     assert svc.get_datasource_metadata("db", "tenant") == {"2": "two"}
     assert svc.toggle_dashboard_hidden("db", "uid", "u1", "tenant", True) is True
     assert svc.toggle_datasource_hidden("db", "uid", "u1", "tenant", True) is True
     assert svc.toggle_folder_hidden("db", "uid", "u1", "tenant", True) is True
-    assert svc.check_folder_access("db", "uid", "u1", "tenant", ["g1"]) == "folder"
-    assert svc.is_folder_accessible("db", "uid", "u1", "tenant", ["g1"]) is True
+    assert (
+        svc.check_folder_access(
+            "db",
+            "uid",
+            GrafanaUserScope("u1", "tenant", ["g1"]),
+            FolderAccessCriteria(),
+        )
+        == "folder"
+    )
+    assert (
+        svc.is_folder_accessible(
+            "db",
+            "uid",
+            GrafanaUserScope("u1", "tenant", ["g1"]),
+            FolderAccessCriteria(),
+        )
+        is True
+    )
 
     token_data = TokenData(
         user_id="u1",

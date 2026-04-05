@@ -8,6 +8,7 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from typing import List, Optional, Set, TypeAlias
@@ -32,6 +33,17 @@ from middleware.dependencies import enforce_public_endpoint_security, require_pe
 logger = logging.getLogger(__name__)
 
 AuditLogQueryRow: TypeAlias = tuple[AuditLog, str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class AuditLogFilterParams:
+    start: object
+    end: object
+    user_id: Optional[str]
+    action: Optional[str]
+    resource_type: Optional[str]
+    q: Optional[str] = None
+
 
 AUDIT_SENSITIVE_SUBSTRINGS = (
     "token",
@@ -171,12 +183,7 @@ def is_admin_check(user: TokenData) -> bool:
 
 def apply_audit_filters_func(
     query: RowReturningQuery[AuditLogQueryRow],
-    start: object,
-    end: object,
-    user_id: Optional[str],
-    action: Optional[str],
-    resource_type: Optional[str],
-    q: Optional[str] = None,
+    params: AuditLogFilterParams,
 ) -> RowReturningQuery[AuditLogQueryRow]:
     def _normalize_bound(value: object, *, end_of_minute: bool) -> object:
         if not isinstance(value, datetime):
@@ -190,22 +197,22 @@ def apply_audit_filters_func(
             normalized = normalized.replace(second=59, microsecond=999999)
         return normalized
 
-    start = _normalize_bound(start, end_of_minute=False)
-    end = _normalize_bound(end, end_of_minute=True)
+    start = _normalize_bound(params.start, end_of_minute=False)
+    end = _normalize_bound(params.end, end_of_minute=True)
 
     if start:
         query = query.filter(AuditLog.created_at >= start)
     if end:
         query = query.filter(AuditLog.created_at <= end)
-    if user_id:
-        query = query.filter(AuditLog.user_id == user_id)
-    if action:
-        query = query.filter(AuditLog.action == action)
-    if resource_type:
-        resource_pattern = audit_text_like_pattern(resource_type)
+    if params.user_id:
+        query = query.filter(AuditLog.user_id == params.user_id)
+    if params.action:
+        query = query.filter(AuditLog.action == params.action)
+    if params.resource_type:
+        resource_pattern = audit_text_like_pattern(params.resource_type)
         query = query.filter(AuditLog.resource_type.ilike(resource_pattern, escape="\\"))
-    if q:
-        pattern = audit_text_like_pattern(q)
+    if params.q:
+        pattern = audit_text_like_pattern(params.q)
         query = query.filter(
             or_(
                 AuditLog.details.cast(String).ilike(pattern, escape="\\"),

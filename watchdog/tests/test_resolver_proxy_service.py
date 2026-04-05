@@ -15,7 +15,7 @@ from tests._env import ensure_test_env
 ensure_test_env()
 from config import config
 from models.access.auth_models import Role, TokenData
-from services.resolver_proxy_service import ResolverProxyService
+from services.resolver_proxy_service import ResolverProxyJsonRequest, ResolverProxyService
 
 
 def _user() -> TokenData:
@@ -97,10 +97,12 @@ async def test_resolver_proxy_timeout_maps_to_504(monkeypatch):
 
     with pytest.raises(HTTPException) as exc:
         await service.request_json(
-            method="GET",
-            upstream_path="/api/v1/ml/weights",
-            current_user=_user(),
-            tenant_id="tenant-a",
+            ResolverProxyJsonRequest(
+                method="GET",
+                upstream_path="/api/v1/ml/weights",
+                current_user=_user(),
+                tenant_id="tenant-a",
+            ),
         )
     assert exc.value.status_code == 504
     assert exc.value.headers.get("X-Request-ID")
@@ -119,10 +121,12 @@ async def test_resolver_proxy_missing_service_token_and_generic_error(monkeypatc
 
     with pytest.raises(HTTPException, match="service token not configured"):
         await service.request_json(
-            method="GET",
-            upstream_path="/api/v1/ml/weights",
-            current_user=_user(),
-            tenant_id="tenant-a",
+            ResolverProxyJsonRequest(
+                method="GET",
+                upstream_path="/api/v1/ml/weights",
+                current_user=_user(),
+                tenant_id="tenant-a",
+            ),
         )
 
     monkeypatch.setattr(
@@ -141,12 +145,14 @@ async def test_resolver_proxy_missing_service_token_and_generic_error(monkeypatc
     service._client = DummyClient()
     with pytest.raises(HTTPException, match="Failed to contact Resolver"):
         await service.request_json(
-            method="POST",
-            upstream_path="/api/v1/ml/weights",
-            current_user=_user(),
-            tenant_id="tenant-a",
-            payload={"a": 1},
-            audit_action="resolver.proxy",
+            ResolverProxyJsonRequest(
+                method="POST",
+                upstream_path="/api/v1/ml/weights",
+                current_user=_user(),
+                tenant_id="tenant-a",
+                payload={"a": 1},
+                audit_action="resolver.proxy",
+            ),
         )
     assert audits[-1]["action"] == "resolver.proxy.error"
 
@@ -184,10 +190,12 @@ async def test_resolver_proxy_upstream_error_passthrough(monkeypatch):
 
     with pytest.raises(HTTPException) as exc:
         await service.request_json(
-            method="GET",
-            upstream_path="/api/v1/ml/weights",
-            current_user=_user(),
-            tenant_id="tenant-a",
+            ResolverProxyJsonRequest(
+                method="GET",
+                upstream_path="/api/v1/ml/weights",
+                current_user=_user(),
+                tenant_id="tenant-a",
+            ),
         )
     assert exc.value.status_code == 502
     assert "Resolver upstream error" in str(exc.value.detail)
@@ -238,16 +246,20 @@ async def test_resolver_proxy_does_not_cache_job_reads(monkeypatch):
     service._client = DummyClient()
 
     first = await service.request_json(
-        method="GET",
-        upstream_path="/api/v1/jobs/job-1/result",
-        current_user=_user(),
-        tenant_id="tenant-a",
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path="/api/v1/jobs/job-1/result",
+            current_user=_user(),
+            tenant_id="tenant-a",
+        ),
     )
     second = await service.request_json(
-        method="GET",
-        upstream_path="/api/v1/jobs/job-1/result",
-        current_user=_user(),
-        tenant_id="tenant-a",
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path="/api/v1/jobs/job-1/result",
+            current_user=_user(),
+            tenant_id="tenant-a",
+        ),
     )
 
     assert first == second
@@ -280,10 +292,12 @@ async def test_resolver_proxy_cache_hit_and_invalid_json(monkeypatch):
     )
     await service._read_cache.set(cache_key, {"cached": True}, 10)
     assert await service.request_json(
-        method="GET",
-        upstream_path="/api/v1/ml/weights",
-        current_user=_user(),
-        tenant_id="tenant-a",
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path="/api/v1/ml/weights",
+            current_user=_user(),
+            tenant_id="tenant-a",
+        ),
     ) == {"cached": True}
 
     class DummyResponse:
@@ -303,10 +317,12 @@ async def test_resolver_proxy_cache_hit_and_invalid_json(monkeypatch):
     service._client = DummyClient()
     with pytest.raises(HTTPException, match="invalid JSON"):
         await service.request_json(
-            method="GET",
-            upstream_path="/api/v1/ml/weights/fresh",
-            current_user=_user(),
-            tenant_id="tenant-a",
+            ResolverProxyJsonRequest(
+                method="GET",
+                upstream_path="/api/v1/ml/weights/fresh",
+                current_user=_user(),
+                tenant_id="tenant-a",
+            ),
         )
 
 
@@ -348,19 +364,23 @@ async def test_resolver_proxy_collapses_inflight_reads(monkeypatch):
 
     first = asyncio.create_task(
         service.request_json(
-            method="GET",
-            upstream_path="/api/v1/ml/weights/shared",
-            current_user=_user(),
-            tenant_id="tenant-a",
+            ResolverProxyJsonRequest(
+                method="GET",
+                upstream_path="/api/v1/ml/weights/shared",
+                current_user=_user(),
+                tenant_id="tenant-a",
+            ),
         )
     )
     await started.wait()
     second = asyncio.create_task(
         service.request_json(
-            method="GET",
-            upstream_path="/api/v1/ml/weights/shared",
-            current_user=_user(),
-            tenant_id="tenant-a",
+            ResolverProxyJsonRequest(
+                method="GET",
+                upstream_path="/api/v1/ml/weights/shared",
+                current_user=_user(),
+                tenant_id="tenant-a",
+            ),
         )
     )
     release.set()
@@ -395,10 +415,12 @@ async def test_resolver_proxy_uses_existing_inflight_future_and_locked_cache(mon
     service._read_inflight[cache_key] = inflight
 
     assert await service.request_json(
-        method="GET",
-        upstream_path="/api/v1/ml/weights/shared",
-        current_user=_user(),
-        tenant_id="tenant-a",
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path="/api/v1/ml/weights/shared",
+            current_user=_user(),
+            tenant_id="tenant-a",
+        ),
     ) == {"from": "future"}
 
     service = ResolverProxyService()
@@ -412,8 +434,10 @@ async def test_resolver_proxy_uses_existing_inflight_future_and_locked_cache(mon
 
     monkeypatch.setattr(service._read_cache, "get", fake_get)
     assert await service.request_json(
-        method="GET",
-        upstream_path="/api/v1/ml/weights/shared",
-        current_user=_user(),
-        tenant_id="tenant-a",
+        ResolverProxyJsonRequest(
+            method="GET",
+            upstream_path="/api/v1/ml/weights/shared",
+            current_user=_user(),
+            tenant_id="tenant-a",
+        ),
     ) == {"from": "late-cache"}

@@ -17,7 +17,7 @@ ensure_test_env()
 
 from models.grafana.grafana_dashboard_models import Dashboard, DashboardUpdate
 from models.grafana.grafana_datasource_models import Datasource, DatasourceUpdate
-from services.grafana.grafana_service import GrafanaAPIError, GrafanaService
+from services.grafana.grafana_service import GrafanaAPIError, GrafanaSafeRequestOpts, GrafanaService
 
 
 class _Response:
@@ -81,7 +81,7 @@ async def test_safe_and_mutating_request_error_and_default_paths():
 
     service._request = req_status_error
     with pytest.raises(GrafanaAPIError) as exc:
-        await service._mutating_request("POST", "/api/dashboards/db", json={"x": 1})
+        await service._mutating_request("POST", "/api/dashboards/db", opts=GrafanaSafeRequestOpts(json={"x": 1}))
     assert exc.value.status == 409
 
 

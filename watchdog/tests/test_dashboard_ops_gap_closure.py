@@ -22,6 +22,7 @@ ensure_test_env()
 from db_models import Base, GrafanaDashboard, Tenant, User
 from models.grafana.grafana_dashboard_models import Dashboard, DashboardCreate, DashboardUpdate
 from services.grafana import dashboard_ops
+from services.grafana.grafana_bundles import DashboardCreateOptions, DashboardUpdateOptions, GrafanaUserScope
 from services.grafana.grafana_service import GrafanaAPIError
 
 
@@ -85,7 +86,7 @@ async def test_create_dashboard_retries_uid_on_conflict_and_then_succeeds(monkey
                 },
             }
 
-        async def search_dashboards(self, **_kwargs):
+        async def search_dashboards(self, filters=None, **_kwargs):
             return []
 
         async def get_folders(self):
@@ -105,9 +106,8 @@ async def test_create_dashboard_retries_uid_on_conflict_and_then_succeeds(monkey
         service,
         db,
         _dashboard_create(),
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
+        GrafanaUserScope("u1", "t1", []),
+        DashboardCreateOptions(),
     )
     assert out is not None
     assert len(calls) == 2
@@ -125,7 +125,7 @@ async def test_create_dashboard_maps_grafana_error_after_failed_retry(monkeypatc
         async def create_dashboard(self, _payload):
             raise GrafanaAPIError(412, {"message": "conflict"})
 
-        async def search_dashboards(self, **_kwargs):
+        async def search_dashboards(self, filters=None, **_kwargs):
             return []
 
         async def get_folders(self):
@@ -148,9 +148,8 @@ async def test_create_dashboard_maps_grafana_error_after_failed_retry(monkeypatc
             service,
             db,
             _dashboard_create(uid="dash-existing"),
-            user_id="u1",
-            tenant_id="t1",
-            group_ids=[],
+            GrafanaUserScope("u1", "t1", []),
+            DashboardCreateOptions(),
         )
     assert created["mapped"] is True
 
@@ -192,10 +191,9 @@ async def test_update_dashboard_maps_upstream_errors(monkeypatch):
         await dashboard_ops.update_dashboard(
             service,
             db,
-            uid="d1",
-            dashboard_update=DashboardUpdate(dashboard=Dashboard(title="x", tags=[]), overwrite=True),
-            user_id="u1",
-            tenant_id="t1",
-            group_ids=[],
+            "d1",
+            DashboardUpdate(dashboard=Dashboard(title="x", tags=[]), overwrite=True),
+            GrafanaUserScope("u1", "t1", []),
+            DashboardUpdateOptions(),
         )
     assert mapped["value"] is True

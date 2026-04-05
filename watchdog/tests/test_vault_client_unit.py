@@ -76,21 +76,27 @@ def _patch_hvac(monkeypatch, *, client):
 def test_vault_provider_init_validation(monkeypatch):
     monkeypatch.setattr(vault_client, "hvac", None)
     with pytest.raises(vault_client.VaultClientError, match="hvac library"):
-        vault_client.VaultSecretProvider(address="https://vault", token="tok")
+        vault_client.VaultSecretProvider(
+            vault_client.VaultSecretProviderSettings(address="https://vault", token="tok"),
+        )
 
     client = FakeHVACClient()
     _patch_hvac(monkeypatch, client=client)
 
     with pytest.raises(vault_client.VaultClientError, match="VAULT_ADDR"):
-        vault_client.VaultSecretProvider(address="", token="tok")
+        vault_client.VaultSecretProvider(vault_client.VaultSecretProviderSettings(address="", token="tok"))
     with pytest.raises(vault_client.VaultClientError, match="Unsupported kv_version"):
-        vault_client.VaultSecretProvider(address="https://vault", token="tok", kv_version=3)
+        vault_client.VaultSecretProvider(
+            vault_client.VaultSecretProviderSettings(address="https://vault", token="tok", kv_version=3),
+        )
     with pytest.raises(vault_client.VaultClientError, match="Vault auth not configured"):
-        vault_client.VaultSecretProvider(address="https://vault")
+        vault_client.VaultSecretProvider(vault_client.VaultSecretProviderSettings(address="https://vault"))
 
     client.auth_ok = False
     with pytest.raises(vault_client.VaultClientError, match="authentication failed"):
-        vault_client.VaultSecretProvider(address="https://vault", token="tok")
+        vault_client.VaultSecretProvider(
+            vault_client.VaultSecretProviderSettings(address="https://vault", token="tok"),
+        )
 
 
 def test_vault_provider_approle_and_refresh_validation(monkeypatch):
@@ -98,9 +104,11 @@ def test_vault_provider_approle_and_refresh_validation(monkeypatch):
     _patch_hvac(monkeypatch, client=client)
 
     provider = vault_client.VaultSecretProvider(
-        address="https://vault",
-        role_id="role",
-        secret_id_fn=lambda: "secret",
+        vault_client.VaultSecretProviderSettings(
+            address="https://vault",
+            role_id="role",
+            secret_id_fn=lambda: "secret",
+        ),
     )
     assert client.login_calls == [("role", "secret")]
     assert client.token == "approle-token"
@@ -115,7 +123,9 @@ def test_vault_provider_approle_and_refresh_validation(monkeypatch):
 
     fresh_client = FakeHVACClient(auth_ok=True)
     _patch_hvac(monkeypatch, client=fresh_client)
-    provider2 = vault_client.VaultSecretProvider(address="https://vault", token="tok")
+    provider2 = vault_client.VaultSecretProvider(
+        vault_client.VaultSecretProviderSettings(address="https://vault", token="tok"),
+    )
     provider2._client.auth_ok = False
     with pytest.raises(vault_client.VaultClientError, match="expired"):
         provider2._ensure_authenticated()
@@ -134,7 +144,9 @@ def test_vault_provider_get_cache_and_payload_shapes(monkeypatch):
     )
     _patch_hvac(monkeypatch, client=client)
 
-    provider = vault_client.VaultSecretProvider(address="https://vault", token="tok", cache_ttl=100)
+    provider = vault_client.VaultSecretProvider(
+        vault_client.VaultSecretProviderSettings(address="https://vault", token="tok", cache_ttl=100),
+    )
     assert provider.get("alpha") == "secret-alpha"
     client.read_map[("v2", "alpha")] = {"data": {"data": {"value": "changed"}}}
     assert provider.get("alpha") == "secret-alpha"
@@ -142,7 +154,9 @@ def test_vault_provider_get_cache_and_payload_shapes(monkeypatch):
     assert provider.get("gamma") == "one"
     assert provider.get("empty") is None
 
-    provider_v1 = vault_client.VaultSecretProvider(address="https://vault", token="tok", kv_version=1)
+    provider_v1 = vault_client.VaultSecretProvider(
+        vault_client.VaultSecretProviderSettings(address="https://vault", token="tok", kv_version=1),
+    )
     assert provider_v1.get("legacy") == "legacy-secret"
     assert provider_v1.get_many(["legacy", "missing"]) == {"legacy": "legacy-secret", "missing": None}
 
@@ -157,7 +171,9 @@ def test_vault_provider_errors_not_found_and_cache_cleanup(monkeypatch):
         }
     )
     _patch_hvac(monkeypatch, client=client)
-    provider = vault_client.VaultSecretProvider(address="https://vault", token="tok", cache_ttl=0)
+    provider = vault_client.VaultSecretProvider(
+        vault_client.VaultSecretProviderSettings(address="https://vault", token="tok", cache_ttl=0),
+    )
 
     assert provider.get("missing") is None
     with pytest.raises(vault_client.VaultClientError, match="forbidden"):

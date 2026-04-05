@@ -12,6 +12,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import uuid
 from urllib.parse import parse_qsl, urlencode
@@ -49,6 +50,18 @@ SENSITIVE_AUDIT_KEYS_EXACT = {
 }
 SENSITIVE_AUDIT_KEY_SUFFIXES = ("_token", "_secret", "_password", "_passcode", "_jwt")
 DOCS_UI_PATHS = {"/docs", "/redoc"}
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceViewAuditFields:
+    tenant_id: str
+    user_id: str
+    path: str
+    method: str
+    status_code: int
+    raw_query: str
+    ip_address: str
+    user_agent: str | None
 
 
 def _skip_resource_view_audit(path: str) -> bool:
@@ -114,32 +127,22 @@ def _content_security_policy_for_path(path: str) -> str:
     return "; ".join(directives) + ";"
 
 
-def _write_resource_view_audit(
-    *,
-    tenant_id: str,
-    user_id: str,
-    path: str,
-    method: str,
-    status_code: int,
-    raw_query: str,
-    ip_address: str,
-    user_agent: str | None,
-) -> None:
+def _write_resource_view_audit(fields: ResourceViewAuditFields) -> None:
     with get_db_session() as db:
         db.add(
             AuditLog(
-                tenant_id=tenant_id,
-                user_id=user_id,
+                tenant_id=fields.tenant_id,
+                user_id=fields.user_id,
                 action="resource.view",
                 resource_type="http",
-                resource_id=path,
+                resource_id=fields.path,
                 details={
-                    "method": method,
-                    "status_code": status_code,
-                    "query": _sanitize_query_string(raw_query),
+                    "method": fields.method,
+                    "status_code": fields.status_code,
+                    "query": _sanitize_query_string(fields.raw_query),
                 },
-                ip_address=ip_address,
-                user_agent=user_agent,
+                ip_address=fields.ip_address,
+                user_agent=fields.user_agent,
             )
         )
 
@@ -166,14 +169,16 @@ async def security_headers_middleware(
                 if token_data:
                     await run_in_threadpool(
                         _write_resource_view_audit,
-                        tenant_id=token_data.tenant_id,
-                        user_id=token_data.user_id,
-                        path=path,
-                        method=request.method,
-                        status_code=response.status_code,
-                        raw_query=request.url.query,
-                        ip_address=request_ip,
-                        user_agent=user_agent,
+                        ResourceViewAuditFields(
+                            tenant_id=token_data.tenant_id,
+                            user_id=token_data.user_id,
+                            path=path,
+                            method=request.method,
+                            status_code=response.status_code,
+                            raw_query=request.url.query,
+                            ip_address=request_ip,
+                            user_agent=user_agent,
+                        ),
                     )
     except (ValueError, RuntimeError):
         logger.debug("Skipping middleware audit write for request %s", request.url.path, exc_info=True)

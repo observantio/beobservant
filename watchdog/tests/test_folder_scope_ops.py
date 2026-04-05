@@ -20,6 +20,15 @@ os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 from db_models import Base, GrafanaDashboard, GrafanaFolder, Tenant, User
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
 from services.grafana import dashboard_ops, folder_ops
+from services.grafana.grafana_bundles import (
+    DashboardSearchParams,
+    FolderAccessCriteria,
+    FolderCreateOptions,
+    FolderListParams,
+    FolderUpdateOptions,
+    GrafanaUserScope,
+    GroupVisibilityValidation,
+)
 
 
 class _GrafanaServiceStub:
@@ -38,7 +47,7 @@ class _GrafanaServiceStub:
     async def update_folder(self, uid, title):
         return self._updated_folder
 
-    async def search_dashboards(self, **kwargs):
+    async def search_dashboards(self, filters=None, **_kwargs):
         return self._dashboards
 
 
@@ -46,7 +55,7 @@ class _ProxyStub:
     def __init__(self, grafana_service):
         self.grafana_service = grafana_service
 
-    def validate_group_visibility(self, db, *, user_id=None, tenant_id, group_ids, shared_group_ids, is_admin):
+    def validate_group_visibility(self, db, validation: GroupVisibilityValidation):
         return []
 
 
@@ -89,13 +98,13 @@ async def test_create_folder_persists_visibility_scope(db_session):
     result = await folder_ops.create_folder(
         service,
         db_session,
-        title="Private Folder",
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        visibility="private",
-        shared_group_ids=[],
-        is_admin=False,
+        "Private Folder",
+        GrafanaUserScope("u1", "t1", []),
+        FolderCreateOptions(
+            visibility="private",
+            shared_group_ids=[],
+            is_admin=False,
+        ),
     )
 
     assert result is not None
@@ -114,14 +123,14 @@ async def test_create_folder_persists_allow_dashboard_writes_flag(db_session):
     result = await folder_ops.create_folder(
         service,
         db_session,
-        title="Collaborative Folder",
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        visibility="tenant",
-        shared_group_ids=[],
-        allow_dashboard_writes=True,
-        is_admin=False,
+        "Collaborative Folder",
+        GrafanaUserScope("u1", "t1", []),
+        FolderCreateOptions(
+            visibility="tenant",
+            shared_group_ids=[],
+            allow_dashboard_writes=True,
+            is_admin=False,
+        ),
     )
 
     assert result is not None
@@ -149,10 +158,8 @@ async def test_get_folders_hides_private_folder_from_non_owner(db_session):
     folders = await folder_ops.get_folders(
         service,
         db_session,
-        user_id="u2",
-        tenant_id="t1",
-        group_ids=[],
-        is_admin=False,
+        GrafanaUserScope("u2", "t1", []),
+        FolderListParams(is_admin=False),
     )
 
     assert folders == []
@@ -177,10 +184,8 @@ async def test_get_folders_hides_private_folder_from_admin_when_not_owner(db_ses
     folders = await folder_ops.get_folders(
         service,
         db_session,
-        user_id="u2",
-        tenant_id="t1",
-        group_ids=[],
-        is_admin=True,
+        GrafanaUserScope("u2", "t1", []),
+        FolderListParams(is_admin=True),
     )
 
     assert folders == []
@@ -229,9 +234,8 @@ async def test_dashboard_search_respects_folder_scope(db_session):
     results = await dashboard_ops.search_dashboards(
         service,
         db_session,
-        user_id="u2",
-        tenant_id="t1",
-        group_ids=[],
+        GrafanaUserScope("u2", "t1", []),
+        DashboardSearchParams(),
     )
 
     assert results == []
@@ -257,15 +261,15 @@ async def test_update_folder_visibility_and_scope(db_session):
     result = await folder_ops.update_folder(
         service,
         db_session,
-        uid="f-tenant",
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        title="Team Folder",
-        visibility="private",
-        shared_group_ids=[],
-        allow_dashboard_writes=True,
-        is_admin=False,
+        "f-tenant",
+        GrafanaUserScope("u1", "t1", []),
+        FolderUpdateOptions(
+            title="Team Folder",
+            visibility="private",
+            shared_group_ids=[],
+            allow_dashboard_writes=True,
+            is_admin=False,
+        ),
     )
 
     assert result is not None
@@ -274,6 +278,9 @@ async def test_update_folder_visibility_and_scope(db_session):
     assert db_row.allow_dashboard_writes is True
 
     visible_to_other = folder_ops.is_folder_accessible(
-        db_session, "f-tenant", "u2", "t1", [], require_write=False, is_admin=False
+        db_session,
+        "f-tenant",
+        GrafanaUserScope("u2", "t1", []),
+        FolderAccessCriteria(require_write=False, is_admin=False),
     )
     assert visible_to_other is False

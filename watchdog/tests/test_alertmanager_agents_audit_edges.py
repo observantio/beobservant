@@ -30,6 +30,7 @@ from models.observability.agent_models import AgentHeartbeat
 from routers.access.auth_router import audit as audit_router
 from routers.observability import agents_router
 from routers.observability import alertmanager_router
+from tests._proxy_stubs import unpack_notifier_forward
 
 
 def _request(
@@ -88,7 +89,8 @@ async def test_alertmanager_public_rules_and_proxy_branches(monkeypatch):
     forwarded = []
     monkeypatch.setattr(alertmanager_router, "enforce_public_endpoint_security", lambda *_args, **_kwargs: None)
 
-    async def fake_forward(**kwargs):
+    async def fake_forward(fwd, **_kwargs):
+        kwargs = unpack_notifier_forward(fwd)
         forwarded.append(kwargs)
         return {"ok": True, "path": kwargs["upstream_path"]}
 
@@ -360,13 +362,22 @@ async def test_audit_router_listing_and_export(monkeypatch):
     monkeypatch.setattr(audit_router, "get_request_audit_context", lambda: ("127.0.0.1", "pytest"))
     monkeypatch.setattr(audit_router, "get_db_session", lambda: FakeCtx(FakeDB([row], existing=None)))
 
-    items = await audit_router.list_audit_logs(limit=10, offset=0, current_user=current_user)
+    items = await audit_router.list_audit_logs(
+        audit_router.ListAuditLogsTimeParams(None, None),
+        audit_router.ListAuditLogsFilterParams(None, None, None, None),
+        audit_router.ListAuditLogsPageParams(None, 10, 0),
+        current_user=current_user,
+    )
     assert items[0]["resource_id"] == "sanitized:resource-1"
     assert items[0]["details"] == {"sanitized": {"secret": "hidden"}}
 
     export_db = FakeDB([row], existing=None)
     monkeypatch.setattr(audit_router, "get_db_session", lambda: FakeCtx(export_db))
-    response = await audit_router.export_audit_logs_csv(current_user=current_user)
+    response = await audit_router.export_audit_logs_csv(
+        audit_router.ExportAuditLogsTimeParams(None, None),
+        audit_router.ExportAuditLogsFilterParams(None, None, None, None),
+        current_user=current_user,
+    )
     chunks = []
     async for chunk in response.body_iterator:
         chunks.append(chunk.encode("utf-8") if isinstance(chunk, str) else chunk)

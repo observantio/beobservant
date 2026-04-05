@@ -25,6 +25,7 @@ from database import get_db_session
 from db_models import GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, Permission, User
 from models.access.group_models import GroupCreate, GroupUpdate, Group as GroupSchema
 from models.access.auth_models import Role
+from services.auth.actor_caps import AuthActorCaps
 from services.auth.delegation import (
     is_admin_actor as _is_admin_actor,
     normalize_permissions as _normalize_permissions,
@@ -34,6 +35,7 @@ from services.auth.delegation import (
     role_rank as _shared_role_rank,
     role_to_text as _role_to_text,
 )
+from services.database_auth.audit import AuditLogRecord
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -120,26 +122,24 @@ def _get_actor_context(
     service: DatabaseAuthService,
     *,
     db: Session,
-    actor_user_id: str,
     tenant_id: str,
-    actor_role: Optional[str],
-    actor_permissions: Optional[List[str]],
-    actor_is_superuser: bool,
+    actor: AuthActorCaps,
 ) -> Tuple[User, str, bool, Set[str]]:
-    actor = db.query(User).filter_by(id=actor_user_id, tenant_id=tenant_id).first()
-    if not actor:
+    uid = str(actor.user_id or "").strip()
+    row = db.query(User).filter_by(id=uid, tenant_id=tenant_id).first()
+    if not row:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Actor not found")
 
-    role_text = _role_to_text(actor_role or getattr(actor, "role", None))
-    is_superuser = bool(actor_is_superuser or getattr(actor, "is_superuser", False))
+    role_text = _role_to_text(actor.role or getattr(row, "role", None))
+    is_superuser = bool(actor.is_superuser or getattr(row, "is_superuser", False))
     perm_set = _resolve_actor_permissions(
         service,
         db=db,
-        actor_user_id=actor_user_id,
+        actor_user_id=uid,
         tenant_id=tenant_id,
-        actor_permissions=actor_permissions,
+        actor_permissions=actor.permissions,
     )
-    return actor, role_text, is_superuser, perm_set
+    return row, role_text, is_superuser, perm_set
 
 
 def _enforce_permission_delegation(
@@ -198,7 +198,17 @@ def create_group(
                 group.members.append(creator)
 
         if creator_id:
-            service.log_audit(db, tenant_id, creator_id, "create_group", "groups", group.id, {"name": group.name})
+            service.log_audit(
+                db,
+                AuditLogRecord(
+                    tenant_id=tenant_id,
+                    user_id=creator_id,
+                    action="create_group",
+                    resource_type="groups",
+                    resource_id=group.id,
+                    details={"name": group.name},
+                ),
+            )
 
         db.commit()
 
@@ -211,11 +221,15 @@ def create_group(
 def list_groups(
     service: DatabaseAuthService,
     tenant_id: str,
-    actor_user_id: Optional[str] = None,
-    actor_role: Optional[str] = None,
-    actor_is_superuser: bool = False,
+    *,
+    actor: Optional[AuthActorCaps] = None,
     q: Optional[str] = None,
 ) -> List[GroupSchema]:
+    actor = actor or AuthActorCaps()
+    actor_user_id = actor.user_id
+    actor_role = actor.role
+    actor_is_superuser = actor.is_superuser
+
     with get_db_session() as db:
         query = (
             db.query(Group)
@@ -244,10 +258,13 @@ def get_group(
     service: DatabaseAuthService,
     group_id: str,
     tenant_id: str,
-    actor_user_id: Optional[str] = None,
-    actor_role: Optional[str] = None,
-    actor_is_superuser: bool = False,
+    actor: Optional[AuthActorCaps] = None,
 ) -> Optional[GroupSchema]:
+    actor = actor or AuthActorCaps()
+    actor_user_id = actor.user_id
+    actor_role = actor.role
+    actor_is_superuser = actor.is_superuser
+
     with get_db_session() as db:
         group = _get_group(db, group_id=group_id, tenant_id=tenant_id, load_members=True)
         if group and not _can_access_group(
@@ -264,10 +281,13 @@ def delete_group(
     service: DatabaseAuthService,
     group_id: str,
     tenant_id: str,
-    deleter_id: Optional[str] = None,
-    actor_role: Optional[str] = None,
-    actor_is_superuser: bool = False,
+    actor: Optional[AuthActorCaps] = None,
 ) -> bool:
+    actor = actor or AuthActorCaps()
+    deleter_id = actor.user_id
+    actor_role = actor.role
+    actor_is_superuser = actor.is_superuser
+
     with get_db_session() as db:
         group = _get_group(db, group_id=group_id, tenant_id=tenant_id, load_members=True)
         if not group:
@@ -281,7 +301,17 @@ def delete_group(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to manage this group")
 
         if deleter_id:
-            service.log_audit(db, tenant_id, deleter_id, "delete_group", "groups", group_id, {"name": group.name})
+            service.log_audit(
+                db,
+                AuditLogRecord(
+                    tenant_id=tenant_id,
+                    user_id=deleter_id,
+                    action="delete_group",
+                    resource_type="groups",
+                    resource_id=group_id,
+                    details={"name": group.name},
+                ),
+            )
 
         db.delete(group)
         db.commit()
@@ -293,10 +323,13 @@ def update_group(
     group_id: str,
     group_update: GroupUpdate,
     tenant_id: str,
-    updater_id: Optional[str] = None,
-    actor_role: Optional[str] = None,
-    actor_is_superuser: bool = False,
+    actor: Optional[AuthActorCaps] = None,
 ) -> Optional[GroupSchema]:
+    actor = actor or AuthActorCaps()
+    updater_id = actor.user_id
+    actor_role = actor.role
+    actor_is_superuser = actor.is_superuser
+
     with get_db_session() as db:
         group = _get_group(db, group_id=group_id, tenant_id=tenant_id, load_members=True)
         if not group:
@@ -341,7 +374,17 @@ def update_group(
         group.updated_at = _utcnow()
 
         if updater_id:
-            service.log_audit(db, tenant_id, updater_id, "update_group", "groups", group_id, update_data)
+            service.log_audit(
+                db,
+                AuditLogRecord(
+                    tenant_id=tenant_id,
+                    user_id=updater_id,
+                    action="update_group",
+                    resource_type="groups",
+                    resource_id=group_id,
+                    details=update_data,
+                ),
+            )
 
         db.commit()
 
@@ -354,12 +397,13 @@ def update_group_permissions(
     group_id: str,
     permission_names: List[str],
     tenant_id: str,
-    actor_user_id: Optional[str] = None,
-    actor_role: Optional[str] = None,
-    actor_permissions: Optional[List[str]] = None,
-    actor_is_superuser: bool = False,
+    actor: Optional[AuthActorCaps] = None,
 ) -> bool:
-    actor_user_id = _require_actor(actor_user_id, purpose="group permission updates")
+    caps = actor or AuthActorCaps()
+    actor_user_id = _require_actor(caps.user_id, purpose="group permission updates")
+    actor_role = caps.role
+    actor_permissions = caps.permissions
+    actor_is_superuser = caps.is_superuser
 
     with get_db_session() as db:
         group = _get_group(db, group_id=group_id, tenant_id=tenant_id, load_members=True)
@@ -377,11 +421,13 @@ def update_group_permissions(
         _, role_text, is_superuser, perm_set = _get_actor_context(
             service,
             db=db,
-            actor_user_id=actor_user_id,
             tenant_id=tenant_id,
-            actor_role=actor_role,
-            actor_permissions=actor_permissions,
-            actor_is_superuser=actor_is_superuser,
+            actor=AuthActorCaps(
+                user_id=actor_user_id,
+                role=actor_role,
+                permissions=actor_permissions,
+                is_superuser=actor_is_superuser,
+            ),
         )
 
         if (
@@ -441,12 +487,14 @@ def update_group_permissions(
 
         service.log_audit(
             db,
-            tenant_id,
-            actor_user_id,
-            "update_group_permissions",
-            "groups",
-            group_id,
-            {"permissions": sorted({p.name for p in group.permissions})},
+            AuditLogRecord(
+                tenant_id=tenant_id,
+                user_id=actor_user_id,
+                action="update_group_permissions",
+                resource_type="groups",
+                resource_id=group_id,
+                details={"permissions": sorted({p.name for p in group.permissions})},
+            ),
         )
 
         db.commit()
@@ -458,12 +506,13 @@ def update_group_members(
     group_id: str,
     user_ids: List[str],
     tenant_id: str,
-    actor_user_id: Optional[str] = None,
-    actor_role: Optional[str] = None,
-    actor_permissions: Optional[List[str]] = None,
-    actor_is_superuser: bool = False,
+    actor: Optional[AuthActorCaps] = None,
 ) -> bool:
-    actor_user_id = _require_actor(actor_user_id, purpose="group membership updates")
+    caps = actor or AuthActorCaps()
+    actor_user_id = _require_actor(caps.user_id, purpose="group membership updates")
+    actor_role = caps.role
+    actor_permissions = caps.permissions
+    actor_is_superuser = caps.is_superuser
 
     with get_db_session() as db:
         group = _get_group(db, group_id=group_id, tenant_id=tenant_id, load_members=True)
@@ -473,11 +522,13 @@ def update_group_members(
         _, role_text, is_superuser, perm_set = _get_actor_context(
             service,
             db=db,
-            actor_user_id=actor_user_id,
             tenant_id=tenant_id,
-            actor_role=actor_role,
-            actor_permissions=actor_permissions,
-            actor_is_superuser=actor_is_superuser,
+            actor=AuthActorCaps(
+                user_id=actor_user_id,
+                role=actor_role,
+                permissions=actor_permissions,
+                is_superuser=actor_is_superuser,
+            ),
         )
 
         if (
@@ -544,12 +595,14 @@ def update_group_members(
 
         service.log_audit(
             db,
-            tenant_id,
-            actor_user_id,
-            "update_group_members",
-            "groups",
-            group_id,
-            {"user_ids": requested_ids},
+            AuditLogRecord(
+                tenant_id=tenant_id,
+                user_id=actor_user_id,
+                action="update_group_members",
+                resource_type="groups",
+                resource_id=group_id,
+                details={"user_ids": requested_ids},
+            ),
         )
 
         db.commit()

@@ -18,12 +18,14 @@ from fastapi.responses import JSONResponse
 
 from models.access.auth_models import Permission, Role
 from routers.observability import alertmanager_router
+from tests._proxy_stubs import unpack_notifier_forward
 
 from .helpers import WorkflowState, patch_auth_service
 
 
 def _build_alertmanager_forwarder(state: dict[str, Any], forward_calls: list[dict[str, Any]]):
-    async def fake_forward(**kwargs: Any) -> JSONResponse:
+    async def fake_forward(fwd: Any, **_kwargs: Any) -> JSONResponse:
+        kwargs = unpack_notifier_forward(fwd)
         forward_calls.append(
             {
                 "method": kwargs["request"].method,

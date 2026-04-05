@@ -23,6 +23,12 @@ ensure_test_env()
 from db_models import Base, GrafanaDashboard, GrafanaFolder, Group, Tenant, User
 from models.grafana.grafana_dashboard_models import Dashboard, DashboardCreate, DashboardUpdate, DashboardSearchResult
 from services.grafana import dashboard_ops
+from services.grafana.grafana_bundles import (
+    DashboardCreateOptions,
+    DashboardSearchParams,
+    DashboardUpdateOptions,
+    GrafanaUserScope,
+)
 
 
 def _session():
@@ -89,7 +95,7 @@ async def test_create_dashboard_none_no_uid_and_folder_resolution_error(monkeypa
                 return {"status": "ok", "dashboard": {"title": "CPU"}}
             return {"uid": "d1", "id": 1, "dashboard": {"uid": "d1", "title": "CPU", "tags": []}}
 
-        async def search_dashboards(self, **_kwargs):
+        async def search_dashboards(self, filters=None, **_kwargs):
             return []
 
         async def get_folders(self):
@@ -110,10 +116,25 @@ async def test_create_dashboard_none_no_uid_and_folder_resolution_error(monkeypa
 
     monkeypatch.setattr(dashboard_ops, "_has_accessible_title_conflict", no_conflict)
 
-    assert await dashboard_ops.create_dashboard(service, db, _create_payload(), "u1", "t1", []) is None
+    assert (
+        await dashboard_ops.create_dashboard(
+            service,
+            db,
+            _create_payload(),
+            GrafanaUserScope("u1", "t1", []),
+            DashboardCreateOptions(),
+        )
+        is None
+    )
 
     gs.mode = "nouid"
-    out = await dashboard_ops.create_dashboard(service, db, _create_payload(uid=None), "u1", "t1", [])
+    out = await dashboard_ops.create_dashboard(
+        service,
+        db,
+        _create_payload(uid=None),
+        GrafanaUserScope("u1", "t1", []),
+        DashboardCreateOptions(),
+    )
     assert out == {"status": "ok", "dashboard": {"title": "CPU"}}
 
     async def _resolve_none(*_args, **_kwargs):
@@ -121,7 +142,13 @@ async def test_create_dashboard_none_no_uid_and_folder_resolution_error(monkeypa
 
     monkeypatch.setattr(dashboard_ops, "_resolve_folder_uid_by_id", _resolve_none)
     gs.mode = "ok"
-    out2 = await dashboard_ops.create_dashboard(service, db, _create_payload(folder_id=7), "u1", "t1", [])
+    out2 = await dashboard_ops.create_dashboard(
+        service,
+        db,
+        _create_payload(folder_id=7),
+        GrafanaUserScope("u1", "t1", []),
+        DashboardCreateOptions(),
+    )
     assert out2 and out2.get("uid") == "d1"
 
 
@@ -190,9 +217,8 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
                 folderId=11,
                 overwrite=True,
             ),
-            owner.id,
-            "t1",
-            ["g1"],
+            GrafanaUserScope(owner.id, "t1", ["g1"]),
+            DashboardUpdateOptions(),
         )
 
     # normal update with visibility change to group and then tenant clear branch
@@ -208,11 +234,8 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
             folderId=11,
             overwrite=True,
         ),
-        owner.id,
-        "t1",
-        ["g1"],
-        visibility="group",
-        shared_group_ids=["g1"],
+        GrafanaUserScope(owner.id, "t1", ["g1"]),
+        DashboardUpdateOptions(visibility="group", shared_group_ids=["g1"]),
     )
     assert out and out.get("visibility") == "group"
 
@@ -227,10 +250,8 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
             folderId=0,
             overwrite=True,
         ),
-        owner.id,
-        "t1",
-        ["g1"],
-        visibility="tenant",
+        GrafanaUserScope(owner.id, "t1", ["g1"]),
+        DashboardUpdateOptions(visibility="tenant"),
     )
     assert out2 and out2.get("visibility") == "tenant"
 
@@ -250,9 +271,8 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
                 ),
                 overwrite=True,
             ),
-            owner.id,
-            "t1",
-            ["g1"],
+            GrafanaUserScope(owner.id, "t1", ["g1"]),
+            DashboardUpdateOptions(),
         )
 
     async def update_none(_uid, _payload):
@@ -270,9 +290,8 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
                 ),
                 overwrite=True,
             ),
-            owner.id,
-            "t1",
-            ["g1"],
+            GrafanaUserScope(owner.id, "t1", ["g1"]),
+            DashboardUpdateOptions(),
         )
         is None
     )
@@ -296,7 +315,7 @@ async def test_search_get_delete_additional_branches(monkeypatch):
     db.commit()
 
     class _GS:
-        async def search_dashboards(self, **_kwargs):
+        async def search_dashboards(self, filters=None, **_kwargs):
             class _Dash:
                 uid = "d1"
                 folder_uid = None
@@ -332,15 +351,25 @@ async def test_search_get_delete_additional_branches(monkeypatch):
     monkeypatch.setattr(dashboard_ops, "is_folder_accessible", lambda *args, **kwargs: True)
     monkeypatch.setattr(dashboard_ops, "get_accessible_dashboard_uids", lambda *args, **kwargs: (["d1"], False))
     monkeypatch.setattr(dashboard_ops, "_to_search_result", lambda *args, **kwargs: SimpleNamespace(uid="d1"))
-    listed = await dashboard_ops.search_dashboards(service, db, owner.id, "t1", ["g1"], team_id="g1")
+    listed = await dashboard_ops.search_dashboards(
+        service,
+        db,
+        GrafanaUserScope(owner.id, "t1", ["g1"]),
+        DashboardSearchParams(team_id="g1"),
+    )
     assert len(listed) == 1
     # team_id mismatch filtered
-    listed2 = await dashboard_ops.search_dashboards(service, db, owner.id, "t1", ["g1"], team_id="g2")
+    listed2 = await dashboard_ops.search_dashboards(
+        service,
+        db,
+        GrafanaUserScope(owner.id, "t1", ["g1"]),
+        DashboardSearchParams(team_id="g2"),
+    )
     assert listed2 == []
 
     # get_dashboard non-general folder unresolved -> None
     monkeypatch.setattr(dashboard_ops, "is_folder_accessible", lambda *args, **kwargs: False)
-    assert await dashboard_ops.get_dashboard(service, db, "d1", other.id, "t1", ["g1"]) is None
+    assert await dashboard_ops.get_dashboard(service, db, "d1", GrafanaUserScope(other.id, "t1", ["g1"])) is None
 
     # delete_dashboard false path when upstream delete returns false
-    assert await dashboard_ops.delete_dashboard(service, db, "d1", owner.id, "t1", ["g1"]) is False
+    assert await dashboard_ops.delete_dashboard(service, db, "d1", GrafanaUserScope(owner.id, "t1", ["g1"])) is False
