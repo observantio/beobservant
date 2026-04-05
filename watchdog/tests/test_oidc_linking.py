@@ -21,7 +21,7 @@ from models.access.auth_models import Role
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_oidc_links_existing_local_account(monkeypatch):
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -37,21 +37,21 @@ def test_oidc_links_existing_local_account(monkeypatch):
     monkeypatch.setattr(config, "OIDC_AUTO_PROVISION_USERS", True)
 
     claims = {"email": "link@example.com", "sub": "oidc-subject"}
-    linked = svc._sync_user_from_oidc_claims(claims)
+    linked = svc.sync_user_from_oidc_claims(claims)
     assert linked is not None
     assert linked.id == user.id
     assert linked.auth_provider == "oidc"
     assert linked.role == Role.VIEWER.value
 
     # subsequent login should also work and keep provider
-    linked2 = svc._sync_user_from_oidc_claims(claims)
+    linked2 = svc.sync_user_from_oidc_claims(claims)
     assert linked2 and linked2.id == user.id
 
 
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_oidc_refuses_if_auto_provision_disabled(monkeypatch):
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -67,14 +67,14 @@ def test_oidc_refuses_if_auto_provision_disabled(monkeypatch):
     monkeypatch.setattr(config, "OIDC_AUTO_PROVISION_USERS", False)
 
     claims = {"email": "noauto@example.com", "sub": "oidc-sub2"}
-    result = svc._sync_user_from_oidc_claims(claims)
+    result = svc.sync_user_from_oidc_claims(claims)
     assert result is None
 
 
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_local_user_needs_password_change_with_oidc_enabled(monkeypatch):
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -94,7 +94,7 @@ def test_local_user_needs_password_change_with_oidc_enabled(monkeypatch):
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_password_login_triggers_expiry_even_if_provider_set(monkeypatch):
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -124,7 +124,7 @@ def test_password_login_triggers_expiry_even_if_provider_set(monkeypatch):
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_oidc_auto_provisions_with_viewer_role(monkeypatch):
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -133,7 +133,7 @@ def test_oidc_auto_provisions_with_viewer_role(monkeypatch):
     monkeypatch.setattr(config, "AUTH_PROVIDER", "oidc")
     monkeypatch.setattr(config, "OIDC_AUTO_PROVISION_USERS", True)
     claims = {"email": "newuser@example.com", "sub": "oidc-new"}
-    new = svc._sync_user_from_oidc_claims(claims)
+    new = svc.sync_user_from_oidc_claims(claims)
     assert new is not None
     assert new.role == Role.VIEWER.value
     assert new.auth_provider == "oidc"

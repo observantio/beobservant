@@ -387,9 +387,9 @@ async def create_dashboard(
             try:
                 result = await service.grafana_service.create_dashboard(retry_payload)
             except GrafanaAPIError as retry_exc:
-                service._raise_http_from_grafana_error(retry_exc)
+                service.raise_http_from_grafana_error(retry_exc)
         else:
-            service._raise_http_from_grafana_error(exc)
+            service.raise_http_from_grafana_error(exc)
 
     if not result:
         return None
@@ -549,7 +549,7 @@ async def update_dashboard(
     try:
         result = await service.grafana_service.update_dashboard(uid, dashboard_update)
     except (GrafanaAPIError, httpx.HTTPError) as exc:
-        service._raise_http_from_grafana_error(exc)
+        service.raise_http_from_grafana_error(exc)
         return None
 
     if not result:
@@ -571,7 +571,7 @@ async def update_dashboard(
     if visibility:
         db_dashboard.visibility = visibility
         if visibility == "group" and shared_group_ids is not None:
-            groups = service._validate_group_visibility(
+            groups = service.validate_group_visibility(
                 db,
                 user_id=user_id,
                 tenant_id=tenant_id,

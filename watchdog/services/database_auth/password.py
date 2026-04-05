@@ -151,7 +151,7 @@ def reset_user_password_temp(
         target.password_changed_at = now
         target.session_invalid_before = now
 
-        service._log_audit(
+        service.log_audit(
             db,
             tenant_id,
             actor_user_id,

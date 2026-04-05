@@ -129,9 +129,9 @@ def test_database_auth_auth_helpers_and_login_flows(monkeypatch):
     assert auth_mod._OidcTokens.from_mapping({}).is_empty() is True
 
     service = SimpleNamespace(
-        _MFA_REQUIRED_RESPONSE="mfa_required",
-        _needs_mfa_setup=lambda user: False,
-        _mfa_setup_challenge=lambda user: {"setup": True},
+        MFA_REQUIRED_RESPONSE="mfa_required",
+        needs_mfa_setup=lambda user: False,
+        mfa_setup_challenge=lambda user: {"setup": True},
         verify_totp_code=lambda user, code: code == "123456",
         oidc_service=SimpleNamespace(
             verify_id_token=lambda token, nonce=None: {"sub": "1"} if token else None,
@@ -148,7 +148,7 @@ def test_database_auth_auth_helpers_and_login_flows(monkeypatch):
         is_password_auth_enabled=lambda: True,
         authenticate_user=lambda username, password: SimpleNamespace(mfa_enabled=False, is_active=True),
         create_access_token=lambda user: Token(access_token="jwt", expires_in=60),
-        _sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=True),
+        sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=True),
     )
     monkeypatch.setattr(
         auth_mod, "sync_active_user_from_claims", lambda service, claims: SimpleNamespace(is_active=True)
@@ -156,9 +156,9 @@ def test_database_auth_auth_helpers_and_login_flows(monkeypatch):
 
     user = SimpleNamespace(mfa_enabled=False)
     assert auth_mod._mfa_gate(service, user, None) is True
-    service._needs_mfa_setup = lambda user: True
+    service.needs_mfa_setup = lambda user: True
     assert auth_mod._mfa_gate(service, user, None) == {"setup": True}
-    service._needs_mfa_setup = lambda user: False
+    service.needs_mfa_setup = lambda user: False
     user = SimpleNamespace(mfa_enabled=True)
     assert auth_mod._mfa_gate(service, user, None) == {"mfa_required": True}
     assert auth_mod._mfa_gate(service, user, "bad") is None
@@ -193,7 +193,7 @@ def test_database_auth_auth_helpers_and_login_flows(monkeypatch):
 
 
 def test_password_and_permissions_modules(monkeypatch):
-    service = SimpleNamespace(_password_op_semaphore=None, _log_audit=lambda *args, **kwargs: None)
+    service = SimpleNamespace(_password_op_semaphore=None, log_audit=lambda *args, **kwargs: None)
     monkeypatch.setattr(pwd_mod.config, "BCRYPT_ROUNDS", "bad", raising=False)
     assert pwd_mod._bcrypt_rounds() == 12
     monkeypatch.setattr(pwd_mod.config, "BCRYPT_ROUNDS", 20, raising=False)

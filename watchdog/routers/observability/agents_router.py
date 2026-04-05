@@ -12,21 +12,20 @@ http://www.apache.org/licenses/LICENSE-2.0
 import asyncio
 
 import httpx
-from fastapi import APIRouter, Request, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 
-from models.observability.agent_models import AgentHeartbeat
-from services.agent_service import AgentService
-from services.agent.helpers import KeyActivity
-from models.access.auth_models import Permission, TokenData
 from config import config
-
 from middleware.dependencies import (
     auth_service,
     require_permission_with_scope,
     enforce_public_endpoint_security,
     enforce_header_token,
 )
+from models.access.auth_models import Permission, TokenData
+from models.observability.agent_models import AgentHeartbeat
+from services.agent.helpers import KeyActivity
+from services.agent_service import AgentService
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 

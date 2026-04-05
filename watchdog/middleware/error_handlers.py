@@ -135,7 +135,7 @@ def validation_exception_handler(
     request: Request,
     exc: Exception,
 ) -> JSONResponse:
-    logger.warning(f"Request validation error for {request.url}: {exc}")
+    logger.warning("Request validation error for %s: %s", request.url, exc)
     detail = exc.errors() if hasattr(exc, "errors") else [{"msg": str(exc)}]
     return build_api_error_response(
         request=request,
@@ -149,7 +149,7 @@ def general_exception_handler(
     request: Request,
     exc: Exception,
 ) -> JSONResponse:
-    logger.exception(f"Unhandled exception for {request.url}: {exc}")
+    logger.exception("Unhandled exception for %s: %s", request.url, exc)
     return build_api_error_response(
         request=request,
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

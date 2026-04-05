@@ -36,9 +36,9 @@ from routers.observability.grafana_router.param_helpers import (
     normalize_optional_param,
     show_hidden_enabled,
 )
+from custom_types.json import JSONDict
 
 from .shared import dashboard_payload, dashboard_uid, hidden_toggle_context, proxy, router, rtp, scope_context
-from custom_types.json import JSONDict
 
 
 @router.get("/dashboards/meta/filters")

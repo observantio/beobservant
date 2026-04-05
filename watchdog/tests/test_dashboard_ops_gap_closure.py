@@ -94,8 +94,8 @@ async def test_create_dashboard_retries_uid_on_conflict_and_then_succeeds(monkey
     service = SimpleNamespace(
         grafana_service=_GrafanaService(),
         logger=SimpleNamespace(debug=lambda *args, **kwargs: None),
-        _validate_group_visibility=lambda *args, **kwargs: [],
-        _raise_http_from_grafana_error=lambda exc: (_ for _ in ()).throw(
+        validate_group_visibility=lambda *args, **kwargs: [],
+        raise_http_from_grafana_error=lambda exc: (_ for _ in ()).throw(
             HTTPException(status_code=500, detail=str(exc))
         ),
     )
@@ -138,8 +138,8 @@ async def test_create_dashboard_maps_grafana_error_after_failed_retry(monkeypatc
     service = SimpleNamespace(
         grafana_service=_GrafanaService(),
         logger=SimpleNamespace(debug=lambda *args, **kwargs: None),
-        _validate_group_visibility=lambda *args, **kwargs: [],
-        _raise_http_from_grafana_error=map_error,
+        validate_group_visibility=lambda *args, **kwargs: [],
+        raise_http_from_grafana_error=map_error,
     )
     monkeypatch.setattr(dashboard_ops, "_has_accessible_title_conflict", _no_conflict)
 
@@ -183,8 +183,8 @@ async def test_update_dashboard_maps_upstream_errors(monkeypatch):
 
     service = SimpleNamespace(
         grafana_service=_GrafanaService(),
-        _raise_http_from_grafana_error=map_error,
-        _validate_group_visibility=lambda *args, **kwargs: [],
+        raise_http_from_grafana_error=map_error,
+        validate_group_visibility=lambda *args, **kwargs: [],
     )
     monkeypatch.setattr(dashboard_ops, "_has_accessible_title_conflict", _no_conflict)
 

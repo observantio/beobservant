@@ -82,7 +82,7 @@ async def test_forward_removes_scope_header_when_user(monkeypatch):
 
     monkeypatch.setattr(svc, "write_audit", lambda **_: None)
     monkeypatch.setattr(svc, "_resolve_actor_api_key_id", lambda u: None)
-    monkeypatch.setattr(svc, "_sign_context_token", lambda **_: "tok")
+    monkeypatch.setattr(svc, "sign_context_token", lambda **_: "tok")
     monkeypatch.setattr(config, "get_secret", lambda key: "service-token")
     svc._client.request = fake_request
 
@@ -157,7 +157,7 @@ def test_resolve_actor_api_key_id_handles_errors(monkeypatch):
     assert svc._resolve_actor_api_key_id(user) is None
 
 
-def test_sign_context_token_uses_live_group_ids_and_falls_back(monkeypatch):
+def testsign_context_token_uses_live_group_ids_and_falls_back(monkeypatch):
     svc = NotifierProxyService()
     user = _user()
     encoded = {}
@@ -167,7 +167,7 @@ def test_sign_context_token_uses_live_group_ids_and_falls_back(monkeypatch):
         return "jwt"
 
     monkeypatch.setattr(config, "get_secret", lambda key: "signing-key")
-    auth_service_obj = svc._sign_context_token.__globals__["auth_service"]
+    auth_service_obj = svc.sign_context_token.__globals__["auth_service"]
     monkeypatch.setattr(
         auth_service_obj,
         "get_user_by_id_in_tenant",
@@ -175,13 +175,13 @@ def test_sign_context_token_uses_live_group_ids_and_falls_back(monkeypatch):
     )
     monkeypatch.setattr(svc, "_encode_jwt", fake_encode)
 
-    token = svc._sign_context_token(current_user=user, api_key_id="key-1")
+    token = svc.sign_context_token(current_user=user, api_key_id="key-1")
     assert token == "jwt"
     assert encoded["claims"]["group_ids"] == ["g2", "g3"]
     assert encoded["claims"]["api_key_id"] == "key-1"
 
 
-def test_sign_context_token_handles_missing_key_and_sql_errors(monkeypatch):
+def testsign_context_token_handles_missing_key_and_sql_errors(monkeypatch):
     svc = NotifierProxyService()
     user = _user()
 
@@ -191,7 +191,7 @@ def test_sign_context_token_handles_missing_key_and_sql_errors(monkeypatch):
 
     monkeypatch.setattr(config, "get_secret", lambda key: None)
     with pytest.raises(HTTPException, match="Missing Notifier signing key"):
-        svc._sign_context_token(current_user=user, api_key_id=None)
+        svc.sign_context_token(current_user=user, api_key_id=None)
 
     monkeypatch.setattr(config, "get_secret", lambda key: "signing-key")
 
@@ -201,11 +201,11 @@ def test_sign_context_token_handles_missing_key_and_sql_errors(monkeypatch):
         raise SQLAlchemyError("db down")
 
     captured = {}
-    auth_service_obj = svc._sign_context_token.__globals__["auth_service"]
+    auth_service_obj = svc.sign_context_token.__globals__["auth_service"]
     monkeypatch.setattr(auth_service_obj, "get_user_by_id_in_tenant", db_boom)
     monkeypatch.setattr(svc, "_encode_jwt", fake_encode)
 
-    assert svc._sign_context_token(current_user=user, api_key_id=None) == "jwt"
+    assert svc.sign_context_token(current_user=user, api_key_id=None) == "jwt"
     assert captured["claims"]["group_ids"] == ["g1"]
 
 
@@ -247,7 +247,7 @@ async def test_forward_requires_api_key_and_records_timeout(monkeypatch):
         )
 
     monkeypatch.setattr(svc, "_resolve_actor_api_key_id", lambda user: "key-1")
-    monkeypatch.setattr(svc, "_sign_context_token", lambda **_: "ctx")
+    monkeypatch.setattr(svc, "sign_context_token", lambda **_: "ctx")
 
     async def raise_timeout(**_kwargs):
         raise _DummyTimeout("slow")
@@ -272,7 +272,7 @@ async def test_forward_records_http_errors_and_passes_webhook_header(monkeypatch
     monkeypatch.setattr(svc, "write_audit", lambda **kwargs: audits.append(kwargs))
     monkeypatch.setattr(config, "get_secret", lambda key: "service-token")
     monkeypatch.setattr(svc, "_resolve_actor_api_key_id", lambda user: "key-1")
-    monkeypatch.setattr(svc, "_sign_context_token", lambda **_: "ctx")
+    monkeypatch.setattr(svc, "sign_context_token", lambda **_: "ctx")
 
     async def raise_http_error(*, method, url, params, content, headers):
         captured["headers"] = dict(headers)

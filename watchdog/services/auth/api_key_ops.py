@@ -9,6 +9,8 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
+from __future__ import annotations
+
 import re
 import uuid
 from datetime import datetime, timezone
@@ -117,8 +119,8 @@ def _assert_unique_api_key_name(
         raise ValueError("API key name already exists")
 
 
-def list_api_keys(service: "DatabaseAuthService", user_id: str, show_hidden: bool = False) -> List[ApiKey]:
-    service._lazy_init()
+def list_api_keys(service: DatabaseAuthService, user_id: str, show_hidden: bool = False) -> List[ApiKey]:
+    service.ensure_initialized()
     with get_db_session() as db:
         viewer = db.query(User).filter_by(id=user_id).first()
         if not viewer:
@@ -204,8 +206,8 @@ def list_api_keys(service: "DatabaseAuthService", user_id: str, show_hidden: boo
         return output
 
 
-def set_api_key_hidden(service: "DatabaseAuthService", user_id: str, key_id: str, hidden: bool) -> bool:
-    service._lazy_init()
+def set_api_key_hidden(service: DatabaseAuthService, user_id: str, key_id: str, hidden: bool) -> bool:
+    service.ensure_initialized()
     with get_db_session() as db:
         viewer = _require_user(db, user_id)
         api_key = _require_api_key_in_tenant(db, key_id, viewer.tenant_id)
@@ -253,7 +255,7 @@ def set_api_key_hidden(service: "DatabaseAuthService", user_id: str, key_id: str
         elif existing:
             db.delete(existing)
 
-        service._log_audit(
+        service.log_audit(
             db,
             viewer.tenant_id,
             user_id,
@@ -266,8 +268,8 @@ def set_api_key_hidden(service: "DatabaseAuthService", user_id: str, key_id: str
         return True
 
 
-def create_api_key(service: "DatabaseAuthService", user_id: str, tenant_id: str, key_create: ApiKeyCreate) -> ApiKey:
-    service._lazy_init()
+def create_api_key(service: DatabaseAuthService, user_id: str, tenant_id: str, key_create: ApiKeyCreate) -> ApiKey:
+    service.ensure_initialized()
     with get_db_session() as db:
         user = _require_user_in_tenant(db, user_id, tenant_id)
         current_keys_count = (
@@ -297,14 +299,14 @@ def create_api_key(service: "DatabaseAuthService", user_id: str, tenant_id: str,
         now = _utcnow()
         _disable_other_enabled_keys(db, user_id=user_id, tenant_id=tenant_id, now=now)
 
-        raw_otlp_token = service._generate_otlp_token()
+        raw_otlp_token = service.generate_otlp_token()
         api_key = UserApiKey(
             tenant_id=tenant_id,
             user_id=user_id,
             name=normalized_name,
             key=key_value,
             otlp_token=None,
-            otlp_token_hash=service._hash_otlp_token(raw_otlp_token),
+            otlp_token_hash=service.hash_otlp_token(raw_otlp_token),
             is_default=False,
             is_enabled=True,
         )
@@ -319,7 +321,7 @@ def create_api_key(service: "DatabaseAuthService", user_id: str, tenant_id: str,
         user.org_id = api_key.key
         user.updated_at = now
 
-        service._log_audit(
+        service.log_audit(
             db,
             tenant_id,
             user_id,
@@ -340,8 +342,8 @@ def create_api_key(service: "DatabaseAuthService", user_id: str, tenant_id: str,
         )
 
 
-def update_api_key(service: "DatabaseAuthService", user_id: str, key_id: str, key_update: ApiKeyUpdate) -> ApiKey:
-    service._lazy_init()
+def update_api_key(service: DatabaseAuthService, user_id: str, key_id: str, key_update: ApiKeyUpdate) -> ApiKey:
+    service.ensure_initialized()
     with get_db_session() as db:
         viewer = _require_user(db, user_id)
         api_key = _require_api_key_in_tenant(db, key_id, viewer.tenant_id)
@@ -374,7 +376,7 @@ def update_api_key(service: "DatabaseAuthService", user_id: str, key_id: str, ke
             _set_org_id(viewer, getattr(api_key, "key", None), now)
             db.flush()
 
-            service._log_audit(
+            service.log_audit(
                 db,
                 viewer.tenant_id,
                 user_id,
@@ -471,7 +473,7 @@ def update_api_key(service: "DatabaseAuthService", user_id: str, key_id: str, ke
 
         api_key.updated_at = now
 
-        service._log_audit(
+        service.log_audit(
             db,
             api_key.tenant_id,
             user_id,
@@ -486,8 +488,8 @@ def update_api_key(service: "DatabaseAuthService", user_id: str, key_id: str, ke
         return api_key_to_schema(api_key, is_shared=False, can_use=True, viewer_enabled=bool(api_key.is_enabled))
 
 
-def regenerate_api_key_otlp_token(service: "DatabaseAuthService", user_id: str, key_id: str) -> ApiKey:
-    service._lazy_init()
+def regenerate_api_key_otlp_token(service: DatabaseAuthService, user_id: str, key_id: str) -> ApiKey:
+    service.ensure_initialized()
     with get_db_session() as db:
         viewer = _require_user(db, user_id)
         api_key = _require_api_key_in_tenant(db, key_id, viewer.tenant_id)
@@ -501,12 +503,12 @@ def regenerate_api_key_otlp_token(service: "DatabaseAuthService", user_id: str, 
             )
 
         now = _utcnow()
-        raw_otlp_token = service._generate_otlp_token()
-        api_key.otlp_token_hash = service._hash_otlp_token(raw_otlp_token)
+        raw_otlp_token = service.generate_otlp_token()
+        api_key.otlp_token_hash = service.hash_otlp_token(raw_otlp_token)
         api_key.otlp_token = None
         api_key.updated_at = now
 
-        service._log_audit(
+        service.log_audit(
             db,
             api_key.tenant_id,
             user_id,
@@ -527,8 +529,8 @@ def regenerate_api_key_otlp_token(service: "DatabaseAuthService", user_id: str, 
         )
 
 
-def delete_api_key(service: "DatabaseAuthService", user_id: str, key_id: str) -> bool:
-    service._lazy_init()
+def delete_api_key(service: DatabaseAuthService, user_id: str, key_id: str) -> bool:
+    service.ensure_initialized()
     with get_db_session() as db:
         viewer = db.query(User).filter_by(id=user_id).first()
         if not viewer:
@@ -576,7 +578,7 @@ def delete_api_key(service: "DatabaseAuthService", user_id: str, key_id: str) ->
                 if str(getattr(viewer, "org_id", "") or "") == deleted_scope_key:
                     _set_org_id(viewer, getattr(default_key, "key", None), now)
 
-        service._log_audit(
+        service.log_audit(
             db,
             tenant_id,
             user_id,
@@ -590,9 +592,9 @@ def delete_api_key(service: "DatabaseAuthService", user_id: str, key_id: str) ->
 
 
 def list_api_key_shares(
-    service: "DatabaseAuthService", owner_user_id: str, tenant_id: str, key_id: str
+    service: DatabaseAuthService, owner_user_id: str, tenant_id: str, key_id: str
 ) -> List[ApiKeyShareUser]:
-    service._lazy_init()
+    service.ensure_initialized()
     with get_db_session() as db:
         api_key = db.query(UserApiKey).filter_by(id=key_id, user_id=owner_user_id, tenant_id=tenant_id).first()
         if not api_key:
@@ -602,14 +604,14 @@ def list_api_key_shares(
 
 
 def replace_api_key_shares(
-    service: "DatabaseAuthService",
+    service: DatabaseAuthService,
     owner_user_id: str,
     tenant_id: str,
     key_id: str,
     user_ids: List[str],
     group_ids: Optional[List[str]] = None,
 ) -> List[ApiKeyShareUser]:
-    service._lazy_init()
+    service.ensure_initialized()
     with get_db_session() as db:
         api_key = db.query(UserApiKey).filter_by(id=key_id, user_id=owner_user_id, tenant_id=tenant_id).first()
         if not api_key:
@@ -691,7 +693,7 @@ def replace_api_key_shares(
                 )
             )
 
-        service._log_audit(
+        service.log_audit(
             db,
             tenant_id,
             owner_user_id,
@@ -705,9 +707,9 @@ def replace_api_key_shares(
 
 
 def delete_api_key_share(
-    service: "DatabaseAuthService", owner_user_id: str, tenant_id: str, key_id: str, shared_user_id: str
+    service: DatabaseAuthService, owner_user_id: str, tenant_id: str, key_id: str, shared_user_id: str
 ) -> bool:
-    service._lazy_init()
+    service.ensure_initialized()
     with get_db_session() as db:
         api_key = db.query(UserApiKey).filter_by(id=key_id, user_id=owner_user_id, tenant_id=tenant_id).first()
         if not api_key:
@@ -726,7 +728,7 @@ def delete_api_key_share(
             return False
 
         db.delete(share)
-        service._log_audit(
+        service.log_audit(
             db,
             tenant_id,
             owner_user_id,
@@ -739,8 +741,8 @@ def delete_api_key_share(
         return True
 
 
-def backfill_otlp_tokens(service: "DatabaseAuthService") -> None:
-    service._lazy_init()
+def backfill_otlp_tokens(service: DatabaseAuthService) -> None:
+    service.ensure_initialized()
     with get_db_session() as db:
         total = 0
         while True:
@@ -757,8 +759,8 @@ def backfill_otlp_tokens(service: "DatabaseAuthService") -> None:
             now = _utcnow()
             try:
                 for key in batch:
-                    source_token = getattr(key, "otlp_token", None) or service._generate_otlp_token()
-                    key.otlp_token_hash = service._hash_otlp_token(source_token)
+                    source_token = getattr(key, "otlp_token", None) or service.generate_otlp_token()
+                    key.otlp_token_hash = service.hash_otlp_token(source_token)
                     key.otlp_token = None
                     key.updated_at = now
 

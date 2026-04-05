@@ -6,16 +6,18 @@ Copyright (c) 2026 Stefan Kumarasinghe
 Licensed under the Apache License, Version 2.0 (the "License");
 """
 
-from typing import Optional, Set, List, Callable, Awaitable
+import json
+from json import JSONDecodeError
+from typing import Awaitable, Callable, List, Optional, Set
+
 import httpx
 from fastapi import HTTPException, Request, status
-from models.access.auth_models import TokenData, Permission
+
 from config import config
 from custom_types.json import JSONDict
+from middleware.dependencies import enforce_header_token, enforce_public_endpoint_security
+from models.access.auth_models import Permission, TokenData
 from services.notifier_proxy_service import notifier_proxy_service
-from json import JSONDecodeError
-import json
-from middleware.dependencies import enforce_public_endpoint_security, enforce_header_token
 
 SILENCE_META_KEY = "watchdog_meta"
 
@@ -211,7 +213,7 @@ async def find_silence_for_mutation(*, request: Request, current_user: TokenData
             detail="Notifier service token not configured",
         )
 
-    context_token = notifier_proxy_service._sign_context_token(current_user=current_user, api_key_id=None)
+    context_token = notifier_proxy_service.sign_context_token(current_user=current_user, api_key_id=None)
     headers = {
         "X-Service-Token": service_token,
         "X-Correlation-ID": request.headers.get("X-Request-ID", ""),
@@ -220,7 +222,7 @@ async def find_silence_for_mutation(*, request: Request, current_user: TokenData
     }
     target = f"{notifier_proxy_service.base_url}/internal/v1/api/alertmanager/silences"
     try:
-        resp = await notifier_proxy_service._client.request("GET", target, headers=headers)
+        resp = await notifier_proxy_service.http_client.request("GET", target, headers=headers)
     except httpx.TimeoutException as exc:
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Notifier request timed out") from exc
     except httpx.HTTPError as exc:

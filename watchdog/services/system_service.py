@@ -47,7 +47,7 @@ class SystemService:
         try:
             self.process.cpu_percent(interval=None)
         except psutil.Error as e:
-            logger.warning(f"Unable to prime CPU percent: {e}")
+            logger.warning("Unable to prime CPU percent: %s", e)
 
     def get_cpu_metrics(self) -> JSONDict:
         return cpu_metrics(self.process)

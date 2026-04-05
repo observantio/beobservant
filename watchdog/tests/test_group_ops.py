@@ -23,7 +23,7 @@ from db_models import AuditLog, GrafanaDashboard, GrafanaDatasource, GrafanaFold
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_update_group_permissions_logs_actor_user_id():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
     with get_db_session() as db:
         tenant = db.query(Tenant).first()
         tenant_id = tenant.id
@@ -55,7 +55,7 @@ def test_update_group_permissions_logs_actor_user_id():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_non_admin_cannot_grant_manage_permissions_to_group():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).first()
@@ -80,7 +80,7 @@ def test_non_admin_cannot_grant_manage_permissions_to_group():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_update_group_members_prunes_removed_member_grafana_group_shares():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).first()

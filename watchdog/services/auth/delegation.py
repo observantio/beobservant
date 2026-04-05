@@ -97,4 +97,4 @@ def resolve_actor_permissions(
     )
     if not actor:
         return set()
-    return set(service._collect_permissions(actor))
+    return set(service.collect_permissions(actor))

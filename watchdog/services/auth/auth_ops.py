@@ -15,8 +15,9 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Optional, TYPE_CHECKING
 
-import jwt
 import secrets
+
+import jwt
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from sqlalchemy import func
@@ -120,7 +121,7 @@ def create_access_token(service: DatabaseAuthService, user: User) -> Token:
         if not db_user:
             raise ValueError("User not found")
 
-        permissions = service._collect_permissions(db_user)
+        permissions = service.collect_permissions(db_user)
         group_ids = [g.id for g in (db_user.groups or [])]
 
         to_encode = {
@@ -203,7 +204,7 @@ def decode_token(service: DatabaseAuthService, token: str) -> Optional[TokenData
 
 
 def authenticate_user(service: DatabaseAuthService, username: str, password: str) -> Optional[User]:
-    service._lazy_init()
+    service.ensure_initialized()
     username_norm = _normalize_username(username)
     now = _utcnow()
 
@@ -309,7 +310,7 @@ def validate_otlp_token(service: DatabaseAuthService, token: str, *, suppress_er
             raise ValueError("Invalid token") from exc
         return None
 
-    token_hash = service._hash_otlp_token(token_str)
+    token_hash = service.hash_otlp_token(token_str)
 
     try:
         with get_db_session() as db:

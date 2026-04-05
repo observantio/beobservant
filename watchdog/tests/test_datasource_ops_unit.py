@@ -107,16 +107,16 @@ class GrafanaServiceStub:
 
 
 def _service(stub):
-    def _validate_group_visibility(db, *, shared_group_ids, **kwargs):
+    def validate_group_visibility(db, *, shared_group_ids, **kwargs):
         return db.query(Group).filter(Group.id.in_(shared_group_ids or [])).all()
 
-    def _raise_http_from_grafana_error(exc):
+    def raise_http_from_grafana_error(exc):
         raise HTTPException(status_code=exc.status, detail=str(exc.body))
 
     return SimpleNamespace(
         grafana_service=stub,
-        _validate_group_visibility=_validate_group_visibility,
-        _raise_http_from_grafana_error=_raise_http_from_grafana_error,
+        validate_group_visibility=validate_group_visibility,
+        raise_http_from_grafana_error=raise_http_from_grafana_error,
     )
 
 

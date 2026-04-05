@@ -95,6 +95,7 @@ async def alertmanager_proxy(
 
     method = request.method.upper()
     payload: Optional[JSONDict] = None
+    request_body: Optional[bytes] = None
 
     if path.strip("/").startswith("silences") and method in {"POST", "PUT"}:
         try:
@@ -102,7 +103,7 @@ async def alertmanager_proxy(
         except JSONDecodeError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON body") from exc
         payload = validate_and_normalize_silence_payload(payload_raw, current_user)
-        request._body = json.dumps(payload).encode("utf-8")
+        request_body = json.dumps(payload).encode("utf-8")
 
     if path.strip("/").startswith("silences") and method in {"PUT", "DELETE"}:
         silence_id = extract_silence_id(path, payload)
@@ -121,4 +122,5 @@ async def alertmanager_proxy(
         current_user=current_user,
         require_api_key=is_mutating(request.method),
         audit_action="alertmanager.proxy",
+        request_body=request_body,
     )

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 
 class _GroupVisibilityService(Protocol):
-    def _validate_group_visibility(
+    def validate_group_visibility(
         self,
         db: Session,
         *,
@@ -41,7 +41,7 @@ def resolve_visibility_groups(
 ) -> List[Group]:
     if visibility != "group":
         return []
-    return service._validate_group_visibility(
+    return service.validate_group_visibility(
         db,
         user_id=user_id,
         tenant_id=tenant_id,

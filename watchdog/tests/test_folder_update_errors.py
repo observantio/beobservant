@@ -34,10 +34,11 @@ class _ProxyStub:
     def __init__(self):
         self.grafana_service = _GrafanaServiceStub()
 
-    def _validate_group_visibility(self, db, *, user_id=None, tenant_id, group_ids, shared_group_ids, is_admin):
+    def validate_group_visibility(self, db, *, user_id=None, tenant_id, group_ids, shared_group_ids, is_admin):
         return []
 
-    def _raise_http_from_grafana_error(self, exc):
+    @staticmethod
+    def raise_http_from_grafana_error(exc):
         if isinstance(exc, GrafanaAPIError):
             detail = (
                 (

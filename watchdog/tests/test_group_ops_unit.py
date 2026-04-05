@@ -33,9 +33,9 @@ def _session():
 
 def _service() -> SimpleNamespace:
     return SimpleNamespace(
-        _to_group_schema=lambda group: group,
-        _log_audit=lambda *args, **kwargs: None,
-        _collect_permissions=lambda actor: [],
+        to_group_schema=lambda group: group,
+        log_audit=lambda *args, **kwargs: None,
+        collect_permissions=lambda actor: [],
     )
 
 

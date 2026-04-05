@@ -124,7 +124,7 @@ def test_update_group_permissions_denies_non_admin_for_group_with_admin_member(m
         yield db
 
     monkeypatch.setattr(group_ops, "get_db_session", fake_session)
-    service = SimpleNamespace(_log_audit=lambda *args, **kwargs: None)
+    service = SimpleNamespace(log_audit=lambda *args, **kwargs: None)
 
     with pytest.raises(HTTPException, match="Only administrators can modify permissions for groups containing admins"):
         group_ops.update_group_permissions(

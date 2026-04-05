@@ -147,8 +147,8 @@ def ensure_default_api_key(service: DatabaseAuthService, db: Session, user: User
             existing.updated_at = now
 
         if existing.name == "Default" and is_system_user:
-            desired_raw = service._resolve_default_otlp_token()
-            desired_hash = service._hash_otlp_token(desired_raw)
+            desired_raw = service.resolve_default_otlp_token()
+            desired_hash = service.hash_otlp_token(desired_raw)
             if not getattr(existing, "otlp_token_hash", None) or (
                 config.DEFAULT_OTLP_TOKEN and existing.otlp_token_hash != desired_hash
             ):
@@ -158,20 +158,20 @@ def ensure_default_api_key(service: DatabaseAuthService, db: Session, user: User
             return
 
         if not getattr(existing, "otlp_token_hash", None):
-            source = existing.otlp_token or service._generate_otlp_token()
-            existing.otlp_token_hash = service._hash_otlp_token(source)
+            source = existing.otlp_token or service.generate_otlp_token()
+            existing.otlp_token_hash = service.hash_otlp_token(source)
             existing.otlp_token = None
             existing.updated_at = now
         return
 
-    raw_token = service._resolve_default_otlp_token() if is_system_user else service._generate_otlp_token()
+    raw_token = service.resolve_default_otlp_token() if is_system_user else service.generate_otlp_token()
     new_key = UserApiKey(
         tenant_id=user.tenant_id,
         user_id=user.id,
         name="Default",
         key=user.org_id or config.DEFAULT_ORG_ID,
         otlp_token=None,
-        otlp_token_hash=service._hash_otlp_token(raw_token),
+        otlp_token_hash=service.hash_otlp_token(raw_token),
         is_default=True,
         is_enabled=True,
     )

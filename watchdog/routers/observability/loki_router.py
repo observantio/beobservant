@@ -12,21 +12,22 @@ http://www.apache.org/licenses/LICENSE-2.0
 import asyncio
 from typing import Awaitable, Optional, TypeVar
 
-from fastapi import APIRouter, Query, Body, Depends, Request, HTTPException, status, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
+
+from config import config
 from custom_types.json import JSONDict
+from middleware.dependencies import resolve_tenant_id, require_permission_with_scope
+from models.access.auth_models import Permission, TokenData
 from models.observability.loki_models import (
-    LogQuery,
-    LogResponse,
-    LogLabelsResponse,
-    LogLabelValuesResponse,
     LogDirection,
     LogFilterRequest,
+    LogLabelsResponse,
+    LogLabelValuesResponse,
+    LogQuery,
+    LogResponse,
     LogSearchRequest,
 )
 from services.loki_service import LokiService
-from config import config
-from models.access.auth_models import Permission, TokenData
-from middleware.dependencies import resolve_tenant_id, require_permission_with_scope
 
 START_TIME_DESC = "Start time in nanoseconds"
 END_TIME_DESC = "End time in nanoseconds"

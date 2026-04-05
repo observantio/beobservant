@@ -432,7 +432,7 @@ def test_proxy_db_helpers_cover_loader_and_update_paths(monkeypatch):
             return QueryStub(next(self.values))
 
     class AuthStub:
-        def _collect_permissions(self, orm_user):
+        def collect_permissions(self, orm_user):
             return [Permission.READ_DASHBOARDS.value]
 
     def session_factory(values):

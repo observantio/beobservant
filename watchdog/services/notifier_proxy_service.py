@@ -21,8 +21,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from config import config
 from middleware.dependencies import auth_service
-from models.access.auth_models import TokenData
 from middleware.resilience import with_retry, with_timeout
+from models.access.auth_models import TokenData
 from services.proxy.base_proxy import BaseProxyService
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,10 @@ class NotifierProxyService(BaseProxyService):
             ca_cert_path=config.NOTIFIER_CA_CERT_PATH,
         )
 
+    @property
+    def http_client(self) -> httpx.AsyncClient:
+        return self._client
+
     def _resolve_actor_api_key_id(self, current_user: TokenData) -> Optional[str]:
         try:
             keys = auth_service.list_api_keys(current_user.user_id)
@@ -50,7 +54,7 @@ class NotifierProxyService(BaseProxyService):
         default = next((k for k in enabled if getattr(k, "is_default", False)), enabled[0])
         return str(getattr(default, "id", "") or "") or None
 
-    def _sign_context_token(
+    def sign_context_token(
         self,
         *,
         current_user: TokenData,
@@ -108,6 +112,7 @@ class NotifierProxyService(BaseProxyService):
         require_api_key: bool,
         audit_action: str,
         correlation_id: Optional[str] = None,
+        request_body: Optional[bytes] = None,
     ) -> Response:
         service_token = config.get_secret("NOTIFIER_SERVICE_TOKEN")
         if not service_token:
@@ -125,10 +130,10 @@ class NotifierProxyService(BaseProxyService):
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="No active API key available for this operation",
                 )
-            context_token = self._sign_context_token(current_user=current_user, api_key_id=api_key_id)
+            context_token = self.sign_context_token(current_user=current_user, api_key_id=api_key_id)
 
         target = f"{self.base_url}{upstream_path}"
-        body = await request.body()
+        body = request_body if request_body is not None else await request.body()
         start = time.time()
         corr = correlation_id or request.headers.get("X-Request-ID") or str(uuid.uuid4())
 

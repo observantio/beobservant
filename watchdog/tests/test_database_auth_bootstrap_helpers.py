@@ -125,9 +125,9 @@ def test_bootstrap_indexes_and_api_key_helpers(monkeypatch):
     assert "UPDATE user_api_keys" in db.executed[0][0]
 
     service = SimpleNamespace(
-        _resolve_default_otlp_token=lambda: "default-raw",
-        _hash_otlp_token=lambda raw: f"hash:{raw}",
-        _generate_otlp_token=lambda: "generated-raw",
+        resolve_default_otlp_token=lambda: "default-raw",
+        hash_otlp_token=lambda raw: f"hash:{raw}",
+        generate_otlp_token=lambda: "generated-raw",
     )
     monkeypatch.setattr(boot_mod.config, "DEFAULT_ADMIN_USERNAME", "admin", raising=False)
     monkeypatch.setattr(boot_mod.config, "DEFAULT_OTLP_TOKEN", "configured", raising=False)

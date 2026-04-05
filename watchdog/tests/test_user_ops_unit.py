@@ -49,14 +49,14 @@ def _service(external=False):
         return sorted(direct | group_perms)
 
     return SimpleNamespace(
-        _lazy_init=lambda: None,
-        _to_user_schema=_to_user_schema,
+        ensure_initialized=lambda: None,
+        to_user_schema=_to_user_schema,
         hash_password=lambda value: f"hashed:{value}",
         is_external_auth_enabled=lambda: external,
         provision_external_user=lambda **kwargs: "ext-subject",
-        _ensure_default_api_key=lambda db, user: ensured.append(user.id),
-        _log_audit=lambda *args, **kwargs: audits.append((args, kwargs)),
-        _collect_permissions=_collect_permissions,
+        ensure_default_api_key=lambda db, user: ensured.append(user.id),
+        log_audit=lambda *args, **kwargs: audits.append((args, kwargs)),
+        collect_permissions=_collect_permissions,
         ensured=ensured,
         audits=audits,
     )

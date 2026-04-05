@@ -147,14 +147,16 @@ class ProxyStub:
         self.visibility_calls = []
         self.raised_errors = []
 
-    def _validate_group_visibility(self, db, *, shared_group_ids, **kwargs):
+        def raise_http_from_grafana_error(exc: Exception) -> None:
+            self.raised_errors.append(exc)
+            status = getattr(exc, "status", 502)
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+        self.raise_http_from_grafana_error = raise_http_from_grafana_error
+
+    def validate_group_visibility(self, db, *, shared_group_ids, **kwargs):
         self.visibility_calls.append(list(shared_group_ids or []))
         return db.query(Group).filter(Group.id.in_(shared_group_ids or [])).all()
-
-    def _raise_http_from_grafana_error(self, exc):
-        self.raised_errors.append(exc)
-        status = getattr(exc, "status", 502)
-        raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
 def test_folder_helpers_cover_access_and_payload_branches():

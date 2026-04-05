@@ -67,10 +67,10 @@ def test_update_user_group_ids_prunes_grafana_group_shares(monkeypatch):
     monkeypatch.setattr(user_ops, "get_db_session", _fake_session)
 
     svc = types.SimpleNamespace(
-        _lazy_init=lambda: None,
-        _to_user_schema=lambda orm_user: orm_user,
-        _ensure_default_api_key=lambda *args, **kwargs: None,
-        _log_audit=lambda *args, **kwargs: None,
+        ensure_initialized=lambda: None,
+        to_user_schema=lambda orm_user: orm_user,
+        ensure_default_api_key=lambda *args, **kwargs: None,
+        log_audit=lambda *args, **kwargs: None,
     )
 
     user_ops.update_user(

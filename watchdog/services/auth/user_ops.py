@@ -9,6 +9,8 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timezone
 import secrets
 from typing import List, Optional, Set, TYPE_CHECKING
@@ -135,12 +137,12 @@ def _role_default_permissions(role_value: str) -> Set[str]:
 
 
 def get_user_by_id(
-    service: "DatabaseAuthService", user_id: str, tenant_id: Optional[str] = None, db: Optional[Session] = None
+    service: DatabaseAuthService, user_id: str, tenant_id: Optional[str] = None, db: Optional[Session] = None
 ) -> Optional[UserSchema]:
     if not user_id:
         return None
 
-    service._lazy_init()
+    service.ensure_initialized()
 
     def _query(session: Session) -> Optional[UserSchema]:
         q = (
@@ -156,7 +158,7 @@ def get_user_by_id(
             q = q.filter(User.tenant_id == tenant_id)
 
         user = q.first()
-        return service._to_user_schema(user) if user else None
+        return service.to_user_schema(user) if user else None
 
     if db is not None:
         return _query(db)
@@ -165,18 +167,18 @@ def get_user_by_id(
         return _query(s)
 
 
-def get_user_by_username(service: "DatabaseAuthService", username: str) -> Optional[UserSchema]:
-    service._lazy_init()
+def get_user_by_username(service: DatabaseAuthService, username: str) -> Optional[UserSchema]:
+    service.ensure_initialized()
     username = (username or "").strip().lower()
     with get_db_session() as db:
         user = db.query(User).options(joinedload(User.api_keys)).filter(func.lower(User.username) == username).first()
         if not user:
             return None
-        return UserSchema.model_validate(service._to_user_schema(user))
+        return UserSchema.model_validate(service.to_user_schema(user))
 
 
 def create_user(
-    service: "DatabaseAuthService",
+    service: DatabaseAuthService,
     user_create: UserCreate,
     tenant_id: str,
     creator_id: Optional[str] = None,
@@ -184,7 +186,7 @@ def create_user(
     actor_permissions: Optional[List[str]] = None,
     actor_is_superuser: bool = False,
 ) -> UserSchema:
-    service._lazy_init()
+    service.ensure_initialized()
     with get_db_session() as db:
         requested_role = _role_to_text(getattr(user_create, "role", None) or Role.USER.value)
         actor_role_text = _role_to_text(actor_role)
@@ -306,10 +308,10 @@ def create_user(
 
         db.add(user)
         db.flush()
-        service._ensure_default_api_key(db, user)
+        service.ensure_default_api_key(db, user)
 
         if creator_id:
-            service._log_audit(
+            service.log_audit(
                 db,
                 tenant_id,
                 creator_id,
@@ -320,18 +322,18 @@ def create_user(
             )
 
         db.commit()
-        return UserSchema.model_validate(service._to_user_schema(user))
+        return UserSchema.model_validate(service.to_user_schema(user))
 
 
 def list_users(
-    service: "DatabaseAuthService",
+    service: DatabaseAuthService,
     tenant_id: str,
     *,
     limit: Optional[int] = None,
     offset: int = 0,
     q: Optional[str] = None,
 ) -> List[UserSchema]:
-    service._lazy_init()
+    service.ensure_initialized()
     try:
         requested_limit = int(limit) if limit is not None else int(getattr(config, "DEFAULT_QUERY_LIMIT", 100))
         max_limit = int(getattr(config, "MAX_QUERY_LIMIT", 5000))
@@ -355,17 +357,17 @@ def list_users(
                 )
             )
         users = query.limit(limit).offset(offset).all()
-        return [service._to_user_schema(u) for u in users]
+        return [service.to_user_schema(u) for u in users]
 
 
 def update_user(
-    service: "DatabaseAuthService",
+    service: DatabaseAuthService,
     user_id: str,
     user_update: UserUpdate,
     tenant_id: str,
     updater_id: Optional[str] = None,
 ) -> Optional[UserSchema]:
-    service._lazy_init()
+    service.ensure_initialized()
     with get_db_session() as db:
         user = _get_user(db, user_id=user_id, tenant_id=tenant_id, with_groups=True, with_api_keys=True)
         if not user:
@@ -475,14 +477,14 @@ def update_user(
         user.updated_at = _now_utc()
 
         if "org_id" in update_data:
-            service._ensure_default_api_key(db, user)
+            service.ensure_default_api_key(db, user)
 
         audit_data = dict(update_data)
         if requested_group_ids is not None:
             audit_data["group_ids"] = [str(group.id) for group in (user.groups or [])]
 
         if updater_id:
-            service._log_audit(db, tenant_id, updater_id, "update_user", "users", user_id, audit_data)
+            service.log_audit(db, tenant_id, updater_id, "update_user", "users", user_id, audit_data)
 
         db.commit()
         for removed_group_id in removed_group_ids:
@@ -492,7 +494,7 @@ def update_user(
                 removed_user_ids=[user_id],
                 removed_usernames=removed_usernames,
             )
-        return UserSchema.model_validate(service._to_user_schema(user))
+        return UserSchema.model_validate(service.to_user_schema(user))
 
 
 def set_grafana_user_id(user_id: str, grafana_user_id: int, tenant_id: str) -> bool:
@@ -505,8 +507,8 @@ def set_grafana_user_id(user_id: str, grafana_user_id: int, tenant_id: str) -> b
         return True
 
 
-def delete_user(service: "DatabaseAuthService", user_id: str, tenant_id: str, deleter_id: Optional[str] = None) -> bool:
-    service._lazy_init()
+def delete_user(service: DatabaseAuthService, user_id: str, tenant_id: str, deleter_id: Optional[str] = None) -> bool:
+    service.ensure_initialized()
     if deleter_id and user_id == deleter_id:
         raise ValueError("Users cannot delete their own account")
 
@@ -533,7 +535,7 @@ def delete_user(service: "DatabaseAuthService", user_id: str, tenant_id: str, de
                     detail="Only administrators can delete users",
                 )
 
-            service._log_audit(
+            service.log_audit(
                 db,
                 tenant_id,
                 deleter_id,
@@ -549,7 +551,7 @@ def delete_user(service: "DatabaseAuthService", user_id: str, tenant_id: str, de
 
 
 def update_user_permissions(
-    service: "DatabaseAuthService",
+    service: DatabaseAuthService,
     user_id: str,
     permission_names: List[str],
     tenant_id: str,
@@ -558,7 +560,7 @@ def update_user_permissions(
     actor_permissions: Optional[List[str]] = None,
     actor_is_superuser: bool = False,
 ) -> bool:
-    service._lazy_init()
+    service.ensure_initialized()
     with get_db_session() as db:
         if not actor_user_id:
             raise HTTPException(
@@ -634,7 +636,7 @@ def update_user_permissions(
         permissions = db.query(Permission).filter(Permission.name.in_(known_names)).all()
         user.permissions = permissions
 
-        service._log_audit(
+        service.log_audit(
             db,
             tenant_id,
             actor_user_id,

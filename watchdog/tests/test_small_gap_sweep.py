@@ -98,11 +98,13 @@ class _FolderProxyStub:
         self.grafana_service = grafana_service
         self.errors = []
 
-    def _validate_group_visibility(self, db, *, shared_group_ids, **kwargs):
-        return []
+        def raise_http_from_grafana_error(exc: Exception) -> None:
+            self.errors.append(exc)
 
-    def _raise_http_from_grafana_error(self, exc):
-        self.errors.append(exc)
+        self.raise_http_from_grafana_error = raise_http_from_grafana_error
+
+    def validate_group_visibility(self, db, *, shared_group_ids, **kwargs):
+        return []
 
 
 class _ResponseStub:
@@ -198,7 +200,7 @@ def test_folder_ops_remaining_success_and_nonraising_error_paths():
     folder = asyncio.run(folder_ops.get_folder(service, db, "f1", "u1", "t1", []))
     assert folder is not None
     assert folder.uid == "f1"
-    assert service._validate_group_visibility(db, shared_group_ids=[]) == []
+    assert service.validate_group_visibility(db, shared_group_ids=[]) == []
 
     grafana.create_error = GrafanaAPIError(400, {"message": "bad"})
     assert asyncio.run(folder_ops.create_folder(service, db, "New", "u1", "t1", [])) is None

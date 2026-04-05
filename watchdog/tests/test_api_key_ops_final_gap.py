@@ -33,10 +33,10 @@ def _session():
 
 def _service():
     return SimpleNamespace(
-        _lazy_init=lambda: None,
-        _generate_otlp_token=lambda: "raw",
-        _hash_otlp_token=lambda token: f"hash:{token}",
-        _log_audit=lambda *args, **kwargs: None,
+        ensure_initialized=lambda: None,
+        generate_otlp_token=lambda: "raw",
+        hash_otlp_token=lambda token: f"hash:{token}",
+        log_audit=lambda *args, **kwargs: None,
         logger=SimpleNamespace(info=lambda *args, **kwargs: None),
     )
 

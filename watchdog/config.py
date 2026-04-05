@@ -317,16 +317,16 @@ def _populate_config(cfg: "Config") -> None:
     cfg.VAULT_FAIL_ON_MISSING = _to_bool(os.getenv("VAULT_FAIL_ON_MISSING"), default=cfg.IS_PRODUCTION)
 
     try:
-        cfg._load_vault_secrets()
+        cfg.load_vault_secrets()
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         if cfg.VAULT_ENABLED and (cfg.IS_PRODUCTION or cfg.VAULT_FAIL_ON_MISSING):
             raise
         logger.warning("Vault not available or misconfigured; continuing with environment variables: %s", exc)
 
-    if not hasattr(cfg, "_secret_provider") or cfg._secret_provider is None:
+    if not hasattr(cfg, "secret_provider") or cfg.secret_provider is None:
         from services.secrets.provider import EnvSecretProvider
 
-        cfg._secret_provider = EnvSecretProvider()
+        cfg.secret_provider = EnvSecretProvider()
 
     cfg.DEFAULT_RULE_GROUP = os.getenv("DEFAULT_RULE_GROUP", "default")
     cfg.DEFAULT_SLACK_CHANNEL = os.getenv("DEFAULT_SLACK_CHANNEL", "default")
@@ -339,7 +339,7 @@ def _populate_config(cfg: "Config") -> None:
         if channel_type.strip()
     ]
 
-    cfg._apply_security_defaults()
+    cfg.apply_security_defaults()
     cfg.validate()
 
 
@@ -348,7 +348,7 @@ class Config:
     ALLOWED_CONTEXT_ALGORITHMS = {"HS256", "HS384", "HS512"}
     EXAMPLE_DATABASE_URL = "postgresql://watchdog:changeme123@localhost:5432/watchdog"
 
-    _secret_provider: Any | None
+    secret_provider: Any | None
     APP_ENV: str
     IS_PRODUCTION: bool
     HOST: str
@@ -509,10 +509,10 @@ class Config:
     ENABLED_NOTIFICATION_CHANNEL_TYPES: list[str]
 
     def __init__(self) -> None:
-        self._secret_provider = None
+        self.secret_provider = None
         _populate_config(self)
 
-    def _load_vault_secrets(self) -> None:
+    def load_vault_secrets(self) -> None:
         if not self.VAULT_ENABLED:
             return
 
@@ -542,7 +542,7 @@ class Config:
             cacert=self.VAULT_CACERT,
         )
 
-        self._secret_provider = provider
+        self.secret_provider = provider
 
         secret_keys = [
             "DATABASE_URL",
@@ -580,7 +580,7 @@ class Config:
         val = getattr(self, key, None)
         if val:
             return val if isinstance(val, str) else str(val)
-        provider = self._secret_provider
+        provider = self.secret_provider
         if provider is None:
             return None
         try:
@@ -589,7 +589,7 @@ class Config:
         except (OSError, RuntimeError, TypeError, ValueError):
             return None
 
-    def _apply_security_defaults(self) -> None:
+    def apply_security_defaults(self) -> None:
         default_admin_password = getattr(self, "DEFAULT_ADMIN_PASSWORD", "")
         if _is_placeholder(default_admin_password, placeholders=["admin123", "admin", "password", "changeme"]):
             if not self.IS_PRODUCTION and self.DEFAULT_ADMIN_BOOTSTRAP_ENABLED:

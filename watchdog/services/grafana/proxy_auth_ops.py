@@ -404,7 +404,7 @@ def _db_load_context(
             raise HTTPException(status_code=403, detail="User access denied")
 
         org_id = str(getattr(orm_user, "org_id", token_data.org_id) or token_data.org_id)
-        permissions = [str(permission) for permission in auth_service._collect_permissions(orm_user)]
+        permissions = [str(permission) for permission in auth_service.collect_permissions(orm_user)]
         group_ids = [str(group.id) for group in (orm_user.groups or []) if str(getattr(group, "id", "")).strip()]
 
         if not (dashboard_uid or datasource_uid or datasource_id is not None or folder_uid):

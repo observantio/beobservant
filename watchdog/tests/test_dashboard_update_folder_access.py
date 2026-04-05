@@ -49,10 +49,11 @@ class _ProxyStub:
     def __init__(self):
         self.grafana_service = _GrafanaServiceStub()
 
-    def _validate_group_visibility(self, *args, **kwargs):
+    def validate_group_visibility(self, *args, **kwargs):
         return []
 
-    def _raise_http_from_grafana_error(self, exc):
+    @staticmethod
+    def raise_http_from_grafana_error(exc):
         raise exc
 
 

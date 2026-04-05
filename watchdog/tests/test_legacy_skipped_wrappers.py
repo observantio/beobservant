@@ -103,7 +103,7 @@ class FakeAuthService:
         self._counter = 0
         self._mfa_checks = {}
 
-    def _lazy_init(self):
+    def ensure_initialized(self) -> None:
         return None
 
     def _next_id(self, prefix):
@@ -192,7 +192,7 @@ class FakeAuthService:
             return True
         return {"mfa_setup_required": True}
 
-    def _sync_user_from_oidc_claims(self, claims):
+    def sync_user_from_oidc_claims(self, claims):
         from config import config
 
         if claims.get("sub") == "oidc-sub2" or claims.get("email") == "noauto@example.com":
