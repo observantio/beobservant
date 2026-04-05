@@ -219,7 +219,7 @@ async def test_find_silence_for_mutation_paths(monkeypatch):
         await helpers_mod.find_silence_for_mutation(request=request, current_user=user, silence_id="s1")
 
     monkeypatch.setattr(helpers_mod.config, "get_secret", lambda key: "service-token")
-    monkeypatch.setattr(helpers_mod.notifier_proxy_service, "_sign_context_token", lambda **_: "ctx")
+    monkeypatch.setattr(helpers_mod.notifier_proxy_service, "sign_context_token", lambda **_: "ctx")
     monkeypatch.setattr(helpers_mod.notifier_proxy_service, "base_url", "https://notifier")
 
     async def raise_timeout(*_args, **_kwargs):

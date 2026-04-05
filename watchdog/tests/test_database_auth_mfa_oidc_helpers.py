@@ -112,7 +112,7 @@ def test_delegation_helpers_and_oidc_pure_helpers(monkeypatch):
 
     actor = SimpleNamespace(groups=[], permissions=[])
     db = _DB(user=actor)
-    service = SimpleNamespace(_collect_permissions=lambda user: ["read:users"])
+    service = SimpleNamespace(collect_permissions=lambda user: ["read:users"])
     assert delegation_mod.resolve_actor_permissions(
         service, db=db, actor_user_id=None, tenant_id="tenant", actor_permissions=["explicit"]
     ) == {"explicit"}
@@ -151,35 +151,35 @@ def test_mfa_helpers_and_flows(monkeypatch):
     key = Fernet.generate_key()
     monkeypatch.setattr("config.config.DATA_ENCRYPTION_KEY", None)
     monkeypatch.setattr("config.config.REQUIRE_TOTP_ENCRYPTION_KEY", False)
-    assert mfa_mod._get_fernet(SimpleNamespace()) is None
+    assert mfa_mod.get_mfa_fernet(SimpleNamespace()) is None
 
     monkeypatch.setattr("config.config.REQUIRE_TOTP_ENCRYPTION_KEY", True)
     with pytest.raises(ValueError):
-        mfa_mod._get_fernet(SimpleNamespace())
+        mfa_mod.get_mfa_fernet(SimpleNamespace())
 
     monkeypatch.setattr("config.config.REQUIRE_TOTP_ENCRYPTION_KEY", False)
     monkeypatch.setattr("config.config.DATA_ENCRYPTION_KEY", b"bad")
     with pytest.raises(ValueError):
-        mfa_mod._get_fernet(SimpleNamespace())
+        mfa_mod.get_mfa_fernet(SimpleNamespace())
 
     monkeypatch.setattr("config.config.DATA_ENCRYPTION_KEY", key)
-    encrypted = mfa_mod._encrypt_mfa_secret(SimpleNamespace(), "secret")
-    assert mfa_mod._decrypt_mfa_secret(SimpleNamespace(), encrypted) == "secret"
+    encrypted = mfa_mod.encrypt_mfa_secret(SimpleNamespace(), "secret")
+    assert mfa_mod.decrypt_mfa_secret(SimpleNamespace(), encrypted) == "secret"
     with pytest.raises(ValueError):
-        mfa_mod._decrypt_mfa_secret(SimpleNamespace(), "bad-token")
+        mfa_mod.decrypt_mfa_secret(SimpleNamespace(), "bad-token")
 
     monkeypatch.setattr(mfa_mod.secrets, "token_urlsafe", lambda _n: "recovery")
-    codes = mfa_mod._generate_recovery_codes(SimpleNamespace(), count=2)
+    codes = mfa_mod.generate_recovery_codes(SimpleNamespace(), count=2)
     assert codes == ["recovery", "recovery"]
-    hashes = mfa_mod._hash_recovery_codes(SimpleNamespace(), ["one"])
-    assert mfa_mod._consume_recovery_code(SimpleNamespace(), SimpleNamespace(mfa_recovery_hashes=hashes), "one") is True
+    hashes = mfa_mod.hash_recovery_codes(SimpleNamespace(), ["one"])
+    assert mfa_mod.consume_recovery_code(SimpleNamespace(), SimpleNamespace(mfa_recovery_hashes=hashes), "one") is True
     user = SimpleNamespace(mfa_recovery_hashes=["bad"])
-    assert mfa_mod._consume_recovery_code(SimpleNamespace(), user, "one") is False
+    assert mfa_mod.consume_recovery_code(SimpleNamespace(), user, "one") is False
 
     service = SimpleNamespace(
-        _log_audit=lambda *args, **kwargs: None,
+        log_audit=lambda *args, **kwargs: None,
         verify_password=lambda password, hashed: password == "pw",
-        _MFA_SETUP_RESPONSE="mfa_setup_required",
+        MFA_SETUP_RESPONSE="mfa_setup_required",
     )
     user = SimpleNamespace(
         id="u1",
@@ -193,7 +193,7 @@ def test_mfa_helpers_and_flows(monkeypatch):
     )
     db = _DB(user=user)
     monkeypatch.setattr(mfa_mod, "get_db_session", lambda: _ctx(db))
-    monkeypatch.setattr(mfa_mod, "_encrypt_mfa_secret", lambda service, secret: f"enc:{secret}")
+    monkeypatch.setattr(mfa_mod, "encrypt_mfa_secret", lambda service, secret: f"enc:{secret}")
     monkeypatch.setattr(mfa_mod.pyotp, "random_base32", lambda: "BASE32")
 
     class _TOTP:
@@ -211,9 +211,9 @@ def test_mfa_helpers_and_flows(monkeypatch):
     assert enrolled["secret"] == "BASE32"
     assert user.totp_secret == "enc:BASE32"
 
-    monkeypatch.setattr(mfa_mod, "_decrypt_mfa_secret", lambda service, token: "BASE32")
-    monkeypatch.setattr(mfa_mod, "_generate_recovery_codes", lambda service: ["r1", "r2"])
-    monkeypatch.setattr(mfa_mod, "_hash_recovery_codes", lambda service, codes: [f"h:{code}" for code in codes])
+    monkeypatch.setattr(mfa_mod, "decrypt_mfa_secret", lambda service, token: "BASE32")
+    monkeypatch.setattr(mfa_mod, "generate_recovery_codes", lambda service: ["r1", "r2"])
+    monkeypatch.setattr(mfa_mod, "hash_recovery_codes", lambda service, codes: [f"h:{code}" for code in codes])
     assert mfa_mod.verify_enable_totp(service, "u1", "123456") == ["r1", "r2"]
     with pytest.raises(ValueError):
         mfa_mod.verify_enable_totp(service, "u1", "bad")
@@ -221,11 +221,11 @@ def test_mfa_helpers_and_flows(monkeypatch):
     user.id = "u2"
     db = _DB(user=user)
     monkeypatch.setattr(mfa_mod, "get_db_session", lambda: _ctx(db))
-    monkeypatch.setattr(mfa_mod, "_consume_recovery_code", lambda service, db_user, code: code == "recovery")
+    monkeypatch.setattr(mfa_mod, "consume_recovery_code", lambda service, db_user, code: code == "recovery")
     assert mfa_mod.verify_totp_code(service, user, "recovery") is True
-    monkeypatch.setattr(mfa_mod, "_consume_recovery_code", lambda service, db_user, code: False)
+    monkeypatch.setattr(mfa_mod, "consume_recovery_code", lambda service, db_user, code: False)
     assert mfa_mod.verify_totp_code(service, user, "123456") is True
-    monkeypatch.setattr(mfa_mod, "_decrypt_mfa_secret", lambda service, token: (_ for _ in ()).throw(ValueError("bad")))
+    monkeypatch.setattr(mfa_mod, "decrypt_mfa_secret", lambda service, token: (_ for _ in ()).throw(ValueError("bad")))
     assert mfa_mod.verify_totp_code(service, user, "123456") is False
 
     user.hashed_password = "hashed"
@@ -266,10 +266,10 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     monkeypatch.setattr(oidc_mod.config, "REQUIRE_MFA_FOR_NEW_USERS", True, raising=False)
 
     service = SimpleNamespace(
-        _lazy_init=lambda: None,
+        ensure_initialized=lambda: None,
         logger=SimpleNamespace(warning=lambda *args, **kwargs: None),
         hash_password=lambda password: f"hashed:{password}",
-        _ensure_default_api_key=lambda db, user: setattr(user, "api_key_created", True),
+        ensure_default_api_key=lambda db, user: setattr(user, "api_key_created", True),
     )
 
     existing = SimpleNamespace(

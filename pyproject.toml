@@ -181,16 +181,12 @@ disable = [
   "too-many-positional-arguments",
   "too-many-locals",
   "too-many-branches",
-  "protected-access",
-  "logging-fstring-interpolation",
-  "unnecessary-dunder-call",
+  "unused-argument",
   "not-callable",
   "import-error",
   "no-name-in-module",
   "no-member",
   "import-outside-toplevel",
-  "wrong-import-order",
-  "ungrouped-imports",
 ]
 
 [tool.pylint.format]

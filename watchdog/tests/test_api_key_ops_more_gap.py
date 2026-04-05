@@ -33,10 +33,10 @@ def _session():
 
 def _service():
     return SimpleNamespace(
-        _lazy_init=lambda: None,
-        _generate_otlp_token=lambda: "raw-token",
-        _hash_otlp_token=lambda token: f"hash:{token}",
-        _log_audit=lambda *args, **kwargs: None,
+        ensure_initialized=lambda: None,
+        generate_otlp_token=lambda: "raw-token",
+        hash_otlp_token=lambda token: f"hash:{token}",
+        log_audit=lambda *args, **kwargs: None,
         logger=SimpleNamespace(info=lambda *args, **kwargs: None),
     )
 
@@ -206,6 +206,6 @@ def test_backfill_otlp_tokens_rollback_on_failure(monkeypatch):
 
     monkeypatch.setattr(api_key_ops, "get_db_session", fake_session)
     service = _service()
-    service._hash_otlp_token = lambda _token: (_ for _ in ()).throw(RuntimeError("boom"))
+    service.hash_otlp_token = lambda _token: (_ for _ in ()).throw(RuntimeError("boom"))
     with pytest.raises(RuntimeError, match="boom"):
         api_key_ops.backfill_otlp_tokens(service)

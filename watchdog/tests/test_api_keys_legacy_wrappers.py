@@ -69,7 +69,7 @@ class FakeApiKeyService:
         self._shares = {}
         self._valid_tokens = {}
 
-    def _lazy_init(self):
+    def ensure_initialized(self) -> None:
         return None
 
     def create_user(self, user_create, tenant_id):

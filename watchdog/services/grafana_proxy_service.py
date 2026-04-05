@@ -23,10 +23,9 @@ from models.grafana.grafana_datasource_models import Datasource, DatasourceCreat
 from models.grafana.grafana_folder_models import Folder
 from custom_types.json import JSONDict
 from services.grafana import proxy_auth_ops as _proxy_auth_ops
+from services.grafana.dashboard_helpers import DashboardSearchContext, build_dashboard_search_context
 from services.grafana.grafana_service import GrafanaService
 from services.grafana.dashboard_ops import (
-    DashboardSearchContext,
-    build_dashboard_search_context,
     create_dashboard,
     delete_dashboard,
     get_dashboard,
@@ -123,7 +122,7 @@ class GrafanaProxyService:
         return self._normalize_group_ids([gid for (gid,) in live_rows])
 
     @staticmethod
-    def _raise_http_from_grafana_error(exc: Exception) -> None:
+    def raise_http_from_grafana_error(exc: Exception) -> None:
         status = getattr(exc, "status", None)
         body = getattr(exc, "body", None)
         if status is None and body is None:
@@ -137,7 +136,7 @@ class GrafanaProxyService:
         normalized_status = int(status) if isinstance(status, int) else 500
         raise HTTPException(status_code=normalized_status if 400 <= normalized_status < 600 else 500, detail=message)
 
-    def _validate_group_visibility(
+    def validate_group_visibility(
         self,
         db: Session,
         *,

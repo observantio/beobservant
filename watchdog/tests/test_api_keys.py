@@ -26,7 +26,7 @@ from db_models import Tenant, User
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_list_api_keys_hides_otlp_token_for_shared_user():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -56,7 +56,7 @@ def test_list_api_keys_hides_otlp_token_for_shared_user():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_otlp_token_is_one_time_reveal_for_owner():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -77,7 +77,7 @@ def test_otlp_token_is_one_time_reveal_for_owner():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_delete_api_key_by_non_owner_returns_403():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -101,7 +101,7 @@ def test_delete_api_key_by_non_owner_returns_403():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_delete_api_key_by_owner_succeeds():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -119,7 +119,7 @@ def test_delete_api_key_by_owner_succeeds():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_enabling_owned_key_updates_user_org_and_keeps_single_active_view():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -159,7 +159,7 @@ def test_enabling_owned_key_updates_user_org_and_keeps_single_active_view():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_default_api_key_cannot_be_shared():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -182,7 +182,7 @@ def test_default_api_key_cannot_be_shared():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_default_api_key_otlp_token_cannot_be_regenerated():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -208,7 +208,7 @@ def test_default_api_key_otlp_token_cannot_be_regenerated():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_shared_key_cannot_be_set_as_default():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -234,7 +234,7 @@ def test_shared_key_cannot_be_set_as_default():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_api_key_value_cannot_collide_across_tenants():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant_a = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -266,7 +266,7 @@ def test_api_key_value_cannot_collide_across_tenants():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_api_key_name_must_be_unique_case_insensitive_per_owner():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -287,7 +287,7 @@ def test_api_key_name_must_be_unique_case_insensitive_per_owner():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_regenerate_otlp_token_returns_one_time_reveal():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -312,7 +312,7 @@ def test_regenerate_otlp_token_returns_one_time_reveal():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_inactive_key_otlp_tokens_remain_valid_for_ingest():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -339,7 +339,7 @@ def test_inactive_key_otlp_tokens_remain_valid_for_ingest():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_switching_between_owned_enabled_keys_preserves_unique_enabled_constraint():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -369,7 +369,7 @@ def test_switching_between_owned_enabled_keys_preserves_unique_enabled_constrain
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_disabling_owned_non_default_key_falls_back_to_default_key():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()

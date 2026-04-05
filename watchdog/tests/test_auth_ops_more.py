@@ -102,11 +102,11 @@ def _pem_pair(key_type: str) -> tuple[str, str]:
 
 def _service(**kwargs):
     payload = {
-        "_collect_permissions": lambda user: ["read:users", "read:users"],
-        "_lazy_init": lambda: None,
+        "collect_permissions": lambda user: ["read:users", "read:users"],
+        "ensure_initialized": lambda: None,
         "verify_password": lambda raw, hashed: raw == hashed,
         "hash_password": lambda password: f"hashed:{password}",
-        "_hash_otlp_token": lambda token: f"hash:{token}",
+        "hash_otlp_token": lambda token: f"hash:{token}",
         "logger": SimpleNamespace(debug=lambda *args, **kwargs: None, warning=lambda *args, **kwargs: None),
     }
     payload.update(kwargs)

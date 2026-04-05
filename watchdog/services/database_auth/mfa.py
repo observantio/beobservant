@@ -67,7 +67,7 @@ def _is_recent_totp_reuse(user_id: str, code: str) -> bool:
         return True
 
 
-def _get_fernet(_service: DatabaseAuthService) -> Optional[Fernet]:
+def get_mfa_fernet(_service: DatabaseAuthService) -> Optional[Fernet]:
     from config import config as cfg
 
     if not cfg.DATA_ENCRYPTION_KEY:
@@ -80,15 +80,15 @@ def _get_fernet(_service: DatabaseAuthService) -> Optional[Fernet]:
         raise ValueError("Invalid DATA_ENCRYPTION_KEY format") from exc
 
 
-def _encrypt_mfa_secret(service: DatabaseAuthService, secret: str) -> str:
-    f = _get_fernet(service)
+def encrypt_mfa_secret(service: DatabaseAuthService, secret: str) -> str:
+    f = get_mfa_fernet(service)
     if not f:
         raise ValueError("DATA_ENCRYPTION_KEY is not configured")
     return f.encrypt(secret.encode()).decode()
 
 
-def _decrypt_mfa_secret(service: DatabaseAuthService, token: str) -> str:
-    f = _get_fernet(service)
+def decrypt_mfa_secret(service: DatabaseAuthService, token: str) -> str:
+    f = get_mfa_fernet(service)
     if not f:
         raise ValueError("DATA_ENCRYPTION_KEY is not configured")
     try:
@@ -97,15 +97,15 @@ def _decrypt_mfa_secret(service: DatabaseAuthService, token: str) -> str:
         raise ValueError("Cannot decrypt TOTP secret") from exc
 
 
-def _generate_recovery_codes(_service: DatabaseAuthService, count: int = 10) -> List[str]:
+def generate_recovery_codes(_service: DatabaseAuthService, count: int = 10) -> List[str]:
     return [secrets.token_urlsafe(10) for _ in range(count)]
 
 
-def _hash_recovery_codes(_service: DatabaseAuthService, codes: List[str]) -> List[str]:
+def hash_recovery_codes(_service: DatabaseAuthService, codes: List[str]) -> List[str]:
     return [bcrypt.hashpw(code.encode("utf-8"), bcrypt.gensalt()).decode("utf-8") for code in codes]
 
 
-def _consume_recovery_code(_service: DatabaseAuthService, db_user: User, code: str) -> bool:
+def consume_recovery_code(_service: DatabaseAuthService, db_user: User, code: str) -> bool:
     hashes: List[str] = list(getattr(db_user, "mfa_recovery_hashes", None) or [])
     for i, h in enumerate(hashes):
         try:
@@ -121,13 +121,13 @@ def _consume_recovery_code(_service: DatabaseAuthService, db_user: User, code: s
 def _verify_totp_code_in_db_user(service: DatabaseAuthService, db_user: User, code: str) -> bool:
     if not db_user or not db_user.totp_secret:
         return False
-    if _consume_recovery_code(service, db_user, code):
+    if consume_recovery_code(service, db_user, code):
         return True
     user_id = str(getattr(db_user, "id", "") or "")
     if user_id and _is_recent_totp_reuse(user_id, code):
         return False
     try:
-        secret = _decrypt_mfa_secret(service, db_user.totp_secret)
+        secret = decrypt_mfa_secret(service, db_user.totp_secret)
     except ValueError:
         return False
     ok = bool(pyotp.TOTP(secret).verify(code, valid_window=1))
@@ -137,14 +137,14 @@ def _verify_totp_code_in_db_user(service: DatabaseAuthService, db_user: User, co
 
 
 def enroll_totp(service: DatabaseAuthService, user_id: str) -> Dict[str, str]:
-    if not _get_fernet(service):
+    if not get_mfa_fernet(service):
         raise ValueError("DATA_ENCRYPTION_KEY must be configured to use TOTP")
     with get_db_session() as db:
         user = db.query(User).filter_by(id=user_id).first()
         if not user:
             raise ValueError("User not found")
         secret = pyotp.random_base32()
-        user.totp_secret = _encrypt_mfa_secret(service, secret)
+        user.totp_secret = encrypt_mfa_secret(service, secret)
         db.flush()
         uri = pyotp.TOTP(secret).provisioning_uri(
             name=user.email or user.username,
@@ -158,13 +158,13 @@ def verify_enable_totp(service: DatabaseAuthService, user_id: str, code: str) ->
         user = db.query(User).filter_by(id=user_id).first()
         if not user or not user.totp_secret:
             raise ValueError("TOTP not enrolled for user")
-        if not pyotp.TOTP(_decrypt_mfa_secret(service, user.totp_secret)).verify(code, valid_window=1):
+        if not pyotp.TOTP(decrypt_mfa_secret(service, user.totp_secret)).verify(code, valid_window=1):
             raise ValueError("Invalid TOTP code")
         user.mfa_enabled = True
         user.must_setup_mfa = False
-        codes = _generate_recovery_codes(service)
-        user.mfa_recovery_hashes = _hash_recovery_codes(service, codes)
-        service._log_audit(db, user.tenant_id, user.id, "mfa.enabled", "users", user.id, {})
+        codes = generate_recovery_codes(service)
+        user.mfa_recovery_hashes = hash_recovery_codes(service, codes)
+        service.log_audit(db, user.tenant_id, user.id, "mfa.enabled", "users", user.id, {})
         return codes
 
 
@@ -193,7 +193,7 @@ def disable_totp(
         user.mfa_enabled = False
         user.totp_secret = None
         user.mfa_recovery_hashes = None
-        service._log_audit(db, user.tenant_id, user.id, "mfa.disabled", "users", user.id, {})
+        service.log_audit(db, user.tenant_id, user.id, "mfa.disabled", "users", user.id, {})
         return True
 
 
@@ -205,7 +205,7 @@ def reset_totp(service: DatabaseAuthService, user_id: str, admin_id: str) -> boo
         user.mfa_enabled = False
         user.totp_secret = None
         user.mfa_recovery_hashes = None
-        service._log_audit(db, user.tenant_id, admin_id, "mfa.reset", "users", user.id, {"admin_id": admin_id})
+        service.log_audit(db, user.tenant_id, admin_id, "mfa.reset", "users", user.id, {"admin_id": admin_id})
         return True
 
 
@@ -214,7 +214,7 @@ def mfa_setup_challenge(service: DatabaseAuthService, user: User) -> JSONDict:
     if not setup_token:
         raise ValueError("Unable to create MFA setup token")
     return {
-        service._MFA_SETUP_RESPONSE: True,
+        service.MFA_SETUP_RESPONSE: True,
         "setup_token": setup_token.access_token,
     }
 

@@ -42,10 +42,10 @@ def _service() -> SimpleNamespace:
         return f"otlp-token-{token_counter['value']}"
 
     return SimpleNamespace(
-        _lazy_init=lambda: None,
-        _generate_otlp_token=_generate_otlp_token,
-        _hash_otlp_token=lambda token: f"hash:{token}",
-        _log_audit=lambda *args, **kwargs: None,
+        ensure_initialized=lambda: None,
+        generate_otlp_token=_generate_otlp_token,
+        hash_otlp_token=lambda token: f"hash:{token}",
+        log_audit=lambda *args, **kwargs: None,
         logger=SimpleNamespace(info=lambda *args, **kwargs: None),
     )
 

@@ -556,10 +556,10 @@ async def create_datasource(
                     datasource_create.model_copy(update={"name": internal_name})
                 )
             except GrafanaAPIError as retry_exc:
-                service._raise_http_from_grafana_error(retry_exc)
+                service.raise_http_from_grafana_error(retry_exc)
                 return None
         else:
-            service._raise_http_from_grafana_error(exc)
+            service.raise_http_from_grafana_error(exc)
             return None
 
     if not result:
@@ -665,10 +665,10 @@ async def update_datasource(
                     uid, datasource_update.model_copy(update={"name": internal_name})
                 )
             except GrafanaAPIError as retry_exc:
-                service._raise_http_from_grafana_error(retry_exc)
+                service.raise_http_from_grafana_error(retry_exc)
                 return None
         else:
-            service._raise_http_from_grafana_error(exc)
+            service.raise_http_from_grafana_error(exc)
             return None
 
     if not result:
@@ -680,7 +680,7 @@ async def update_datasource(
     if visibility:
         db_ds.visibility = visibility
         if visibility == "group" and shared_group_ids is not None:
-            groups = service._validate_group_visibility(
+            groups = service.validate_group_visibility(
                 db,
                 user_id=user_id,
                 tenant_id=tenant_id,

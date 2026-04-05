@@ -34,7 +34,7 @@ def to_user_schema(service: DatabaseAuthService, user: User) -> UserSchema:
     api_keys: list[ApiKey] = []
     for key in raw_api_keys:
         try:
-            api_keys.append(service._to_api_key_schema(key))
+            api_keys.append(service.to_api_key_schema(key))
         except (TypeError, ValueError):
             continue
 

@@ -140,13 +140,13 @@ def test_config_vault_optional_warning_and_secret_loading_paths(monkeypatch):
         assert module.config.GATEWAY_INTERNAL_SERVICE_TOKEN == "vault-token"
         assert module.config.get_secret("MAX_QUERY_LIMIT") == str(module.config.MAX_QUERY_LIMIT)
         module.config.MISSING_VALUE = None
-        original_secret_provider = module.config._secret_provider
-        module.config._secret_provider = types.SimpleNamespace(
+        original_secret_provider = module.config.secret_provider
+        module.config.secret_provider = types.SimpleNamespace(
             get=lambda key: (_ for _ in ()).throw(RuntimeError("boom"))
         )
         assert module.config.get_secret("MISSING_VALUE") is None
-        module.config._secret_provider = original_secret_provider
-        module.config._secret_provider = None
+        module.config.secret_provider = original_secret_provider
+        module.config.secret_provider = None
         assert module.config.get_secret("MISSING_VALUE") is None
 
 
@@ -191,7 +191,7 @@ def test_apply_security_defaults_unsupported_auto_key_algorithm():
     cfg.JWT_PUBLIC_KEY = ""
     cfg.JWT_AUTO_GENERATE_KEYS = True
     with pytest.raises(ValueError, match="Unsupported JWT_ALGORITHM for auto key generation"):
-        module.Config._apply_security_defaults(cfg)
+        cfg.apply_security_defaults()
 
 
 def test_config_accepts_strong_production_secrets_and_legacy_jwt_secret(monkeypatch):

@@ -35,12 +35,12 @@ class _OidcTokens:
 def _mfa_gate(
     service: DatabaseAuthService, user: User, mfa_code: Optional[str]
 ) -> Optional[Union[bool, JSONDict, Token]]:
-    if service._needs_mfa_setup(user):
-        return service._mfa_setup_challenge(user)
+    if service.needs_mfa_setup(user):
+        return service.mfa_setup_challenge(user)
 
     if getattr(user, "mfa_enabled", False):
         if not mfa_code:
-            return {service._MFA_REQUIRED_RESPONSE: True}
+            return {service.MFA_REQUIRED_RESPONSE: True}
         if not service.verify_totp_code(user, mfa_code):
             return None
 
@@ -170,7 +170,7 @@ def exchange_oidc_authorization_code(
                 service.logger.warning("OIDC claims resolution failed")
             return None
 
-        user = service._sync_user_from_oidc_claims(claims)
+        user = service.sync_user_from_oidc_claims(claims)
         if not user or not getattr(user, "is_active", False):
             return None
 

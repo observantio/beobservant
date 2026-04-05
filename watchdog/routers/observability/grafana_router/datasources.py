@@ -25,9 +25,9 @@ from models.grafana.grafana_datasource_models import Datasource, DatasourceCreat
 from models.observability.grafana_request_models import GrafanaDatasourceQueryRequest, GrafanaHiddenToggleRequest
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.route_payloads import validate_visibility
+from custom_types.json import JSONDict
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
-from custom_types.json import JSONDict
 
 
 @router.post("/ds/query")
@@ -48,7 +48,7 @@ async def datasource_query(
     try:
         return await proxy.query_datasource(payload.model_dump(exclude_none=True))
     except GrafanaAPIError as exc:
-        proxy._raise_http_from_grafana_error(exc)
+        proxy.raise_http_from_grafana_error(exc)
         raise HTTPException(status_code=500, detail="Unexpected Grafana proxy error") from exc
 
 

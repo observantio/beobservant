@@ -23,7 +23,7 @@ from db_models import Tenant, User
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_non_admin_cannot_escalate_user_role():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -44,7 +44,7 @@ def test_non_admin_cannot_escalate_user_role():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_non_admin_cannot_create_admin_user():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -75,7 +75,7 @@ def test_non_admin_cannot_create_admin_user():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_admin_can_only_toggle_is_active_for_another_admin():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()

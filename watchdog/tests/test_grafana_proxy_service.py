@@ -38,7 +38,7 @@ def test_raise_http_from_grafana_error_prefers_message_key():
     svc = GrafanaProxyService()
     gae = GrafanaAPIError(404, {"message": "not found"})
     with pytest.raises(HTTPException) as exc:
-        svc._raise_http_from_grafana_error(gae)
+        svc.raise_http_from_grafana_error(gae)
     assert exc.value.status_code == 404
     assert exc.value.detail == "not found"
 
@@ -47,13 +47,13 @@ def test_raise_http_from_grafana_error_uses_error_or_detail_keys():
     svc = GrafanaProxyService()
     gae = GrafanaAPIError(400, {"error": "bad"})
     with pytest.raises(HTTPException) as exc:
-        svc._raise_http_from_grafana_error(gae)
+        svc.raise_http_from_grafana_error(gae)
     assert exc.value.status_code == 400
     assert exc.value.detail == "bad"
 
     gae2 = GrafanaAPIError(422, {"detail": "invalid"})
     with pytest.raises(HTTPException) as exc2:
-        svc._raise_http_from_grafana_error(gae2)
+        svc.raise_http_from_grafana_error(gae2)
     assert exc2.value.status_code == 422
     assert exc2.value.detail == "invalid"
 
@@ -62,7 +62,7 @@ def test_raise_http_from_grafana_error_with_string_body_and_non_error_status():
     svc = GrafanaProxyService()
     gae = GrafanaAPIError(300, "weird")
     with pytest.raises(HTTPException) as exc:
-        svc._raise_http_from_grafana_error(gae)
+        svc.raise_http_from_grafana_error(gae)
     assert exc.value.status_code == 500
     assert exc.value.detail == "weird"
 
@@ -71,7 +71,7 @@ def test_validate_group_visibility_no_groups_raises():
     db = make_session()
     svc = GrafanaProxyService()
     with pytest.raises(HTTPException) as exc:
-        svc._validate_group_visibility(db, tenant_id="t1", group_ids=["g1"], shared_group_ids=None, is_admin=False)
+        svc.validate_group_visibility(db, tenant_id="t1", group_ids=["g1"], shared_group_ids=None, is_admin=False)
     assert exc.value.status_code == 400
     assert "No groups provided" in str(exc.value.detail)
 
@@ -85,7 +85,7 @@ def test_validate_group_visibility_missing_ids_raises():
 
     svc = GrafanaProxyService()
     with pytest.raises(HTTPException) as exc:
-        svc._validate_group_visibility(
+        svc.validate_group_visibility(
             db, tenant_id="t1", group_ids=["g1"], shared_group_ids=["g1", "g2"], is_admin=True
         )
     assert exc.value.status_code == 400
@@ -101,7 +101,7 @@ def test_validate_group_visibility_non_admin_not_member_raises():
 
     svc = GrafanaProxyService()
     with pytest.raises(HTTPException) as exc:
-        svc._validate_group_visibility(
+        svc.validate_group_visibility(
             db, tenant_id="t1", group_ids=["g1"], shared_group_ids=["g1", "g2"], is_admin=False
         )
     assert exc.value.status_code == 403
@@ -116,12 +116,12 @@ def test_validate_group_visibility_success_for_admin_and_member():
     db.commit()
 
     svc = GrafanaProxyService()
-    groups = svc._validate_group_visibility(
+    groups = svc.validate_group_visibility(
         db, tenant_id="t1", group_ids=[], shared_group_ids=["g1", "g2"], is_admin=True
     )
     assert {g.id for g in groups} == {"g1", "g2"}
 
-    groups2 = svc._validate_group_visibility(
+    groups2 = svc.validate_group_visibility(
         db, tenant_id="t1", group_ids=["g1", "g2"], shared_group_ids=["g1", "g2"], is_admin=False
     )
     assert {g.id for g in groups2} == {"g1", "g2"}
@@ -145,7 +145,7 @@ def test_validate_group_visibility_uses_live_db_membership_when_user_id_provided
     db.commit()
 
     svc = GrafanaProxyService()
-    groups = svc._validate_group_visibility(
+    groups = svc.validate_group_visibility(
         db,
         user_id="u1",
         tenant_id="t1",
@@ -174,7 +174,7 @@ def test_validate_group_visibility_denies_when_live_membership_removed_even_with
 
     svc = GrafanaProxyService()
     with pytest.raises(HTTPException) as exc:
-        svc._validate_group_visibility(
+        svc.validate_group_visibility(
             db,
             user_id="u1",
             tenant_id="t1",

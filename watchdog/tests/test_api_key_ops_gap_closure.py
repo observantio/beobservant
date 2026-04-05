@@ -31,8 +31,8 @@ def _session():
 
 def _service() -> SimpleNamespace:
     return SimpleNamespace(
-        _lazy_init=lambda: None,
-        _log_audit=lambda *args, **kwargs: None,
+        ensure_initialized=lambda: None,
+        log_audit=lambda *args, **kwargs: None,
     )
 
 

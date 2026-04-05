@@ -26,7 +26,7 @@ import database
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_enroll_and_verify_mfa_flow():
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
@@ -49,7 +49,7 @@ def test_enroll_and_verify_mfa_flow():
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_skip_local_mfa_for_external(monkeypatch):
     svc = DatabaseAuthService()
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     with get_db_session() as db:
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()

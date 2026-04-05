@@ -60,10 +60,11 @@ class _ProxyStub:
         self.grafana_service = _GrafanaServiceStub()
         self.logger = SimpleNamespace(debug=lambda *args, **kwargs: None)
 
-    def _validate_group_visibility(self, db, *, user_id=None, tenant_id, group_ids, shared_group_ids, is_admin):
+    def validate_group_visibility(self, db, *, user_id=None, tenant_id, group_ids, shared_group_ids, is_admin):
         return []
 
-    def _raise_http_from_grafana_error(self, exc):
+    @staticmethod
+    def raise_http_from_grafana_error(exc):
         raise exc
 
 

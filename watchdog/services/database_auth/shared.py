@@ -27,7 +27,7 @@ def sync_active_user_from_claims(
     if not claims:
         return None
 
-    user = service._sync_user_from_oidc_claims(claims)
+    user = service.sync_user_from_oidc_claims(claims)
     if not user or not getattr(user, "is_active", False):
         return None
     return user

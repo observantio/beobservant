@@ -62,7 +62,7 @@ def decode_token(service: DatabaseAuthService, token: str) -> Optional[TokenData
     token_data.iat = issued_at if isinstance(issued_at, int) else None
 
     known_permissions = _known_permission_names(service)
-    oidc_permissions = set(service._extract_permissions_from_oidc_claims(claims) or [])
+    oidc_permissions = set(service.extract_permissions_from_oidc_claims(claims) or [])
     merged = set(token_data.permissions or []) | (oidc_permissions & known_permissions)
     token_data.permissions = sorted(merged)
 

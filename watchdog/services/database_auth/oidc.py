@@ -154,7 +154,7 @@ def _resolve_existing_user(
 
 
 def sync_user_from_oidc_claims(service: DatabaseAuthService, claims: JSONDict) -> Optional[User]:
-    service._lazy_init()
+    service.ensure_initialized()
 
     email = _normalize_email(claims)
     subject = _normalize_subject(claims)
@@ -291,7 +291,7 @@ def provision_oidc_user(
             with nested:
                 db.add(user)
                 db.flush()
-                service._ensure_default_api_key(db, user)
+                service.ensure_default_api_key(db, user)
                 return user
         except IntegrityError:
             continue

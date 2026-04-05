@@ -35,7 +35,7 @@ def test_lazy_init_sets_initialized(monkeypatch):
     svc._initialized = False
     monkeypatch.setattr(svc, "_ensure_default_setup", lambda: None)
 
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     assert isinstance(svc._initialized, bool)
 
@@ -47,7 +47,7 @@ def test_lazy_init_swallows_bootstrap_errors(monkeypatch):
         raise SQLAlchemyError("boom")
 
     monkeypatch.setattr(svc, "_ensure_default_setup", blow_up)
-    svc._lazy_init()
+    svc.ensure_initialized()
 
     assert svc._initialized is False
 
@@ -75,9 +75,9 @@ def test_otlp_helpers(monkeypatch):
     svc = das.DatabaseAuthService()
     monkeypatch.setattr(config, "DEFAULT_OTLP_TOKEN", "configured-token")
 
-    assert svc._resolve_default_otlp_token() == "configured-token"
-    assert svc._hash_otlp_token("abc") == svc._hash_otlp_token("abc")
-    generated = svc._generate_otlp_token()
+    assert svc.resolve_default_otlp_token() == "configured-token"
+    assert svc.hash_otlp_token("abc") == svc.hash_otlp_token("abc")
+    generated = svc.generate_otlp_token()
     assert generated.startswith("bo_")
 
 
@@ -117,7 +117,7 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
     ("module_name", "attr_name", "method_name", "args", "kwargs", "result"),
     [
         ("db_bootstrap", "ensure_permissions", "_ensure_permissions", ("db",), {}, None),
-        ("db_bootstrap", "ensure_default_api_key", "_ensure_default_api_key", ("db", "user"), {}, None),
+        ("db_bootstrap", "ensure_default_api_key", "ensure_default_api_key", ("db", "user"), {}, None),
         ("db_password", "hash_password", "hash_password", ("secret",), {}, "hashed"),
         ("db_password", "verify_password", "verify_password", ("plain", "hashed"), {}, True),
         (
@@ -128,12 +128,12 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             {},
             {1: "x", "target": "y"},
         ),
-        ("db_mfa", "_get_fernet", "_get_fernet", (), {}, "fernet"),
-        ("db_mfa", "_encrypt_mfa_secret", "_encrypt_mfa_secret", ("secret",), {}, "cipher"),
-        ("db_mfa", "_decrypt_mfa_secret", "_decrypt_mfa_secret", ("token",), {}, "plain"),
-        ("db_mfa", "_generate_recovery_codes", "_generate_recovery_codes", (), {"count": 3}, ["a", "b", "c"]),
-        ("db_mfa", "_hash_recovery_codes", "_hash_recovery_codes", (["a"],), {}, ["hashed"]),
-        ("db_mfa", "_consume_recovery_code", "_consume_recovery_code", ("db_user", "code"), {}, True),
+        ("db_mfa", "get_mfa_fernet", "get_mfa_fernet", (), {}, "fernet"),
+        ("db_mfa", "encrypt_mfa_secret", "encrypt_mfa_secret", ("secret",), {}, "cipher"),
+        ("db_mfa", "decrypt_mfa_secret", "decrypt_mfa_secret", ("token",), {}, "plain"),
+        ("db_mfa", "generate_recovery_codes", "generate_recovery_codes", (), {"count": 3}, ["a", "b", "c"]),
+        ("db_mfa", "hash_recovery_codes", "hash_recovery_codes", (["a"],), {}, ["hashed"]),
+        ("db_mfa", "consume_recovery_code", "consume_recovery_code", ("db_user", "code"), {}, True),
         ("db_mfa", "enroll_totp", "enroll_totp", ("user-1",), {}, {"secret": "s", "otpauth_url": "u"}),
         ("db_mfa", "verify_enable_totp", "verify_enable_totp", ("user-1", "123456"), {}, ["recovery"]),
         ("db_mfa", "verify_totp_code", "verify_totp_code", ("user", "123456"), {}, True),
@@ -146,8 +146,8 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             True,
         ),
         ("db_mfa", "reset_totp", "reset_totp", ("user-1", "admin"), {}, True),
-        ("db_mfa", "mfa_setup_challenge", "_mfa_setup_challenge", ("user",), {}, {"challenge": True}),
-        ("db_mfa", "needs_mfa_setup", "_needs_mfa_setup", ("user",), {}, False),
+        ("db_mfa", "mfa_setup_challenge", "mfa_setup_challenge", ("user",), {}, {"challenge": True}),
+        ("db_mfa", "needs_mfa_setup", "needs_mfa_setup", ("user",), {}, False),
         ("das", "create_access_token_op", "create_access_token", ("user",), {}, "token"),
         ("db_token", "build_token_data_for_user", "_build_token_data_for_user", ("user",), {}, "token-data"),
         ("db_token", "decode_token", "decode_token", ("jwt",), {}, "decoded"),
@@ -184,12 +184,12 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
         (
             "db_oidc",
             "extract_permissions_from_oidc_claims",
-            "_extract_permissions_from_oidc_claims",
+            "extract_permissions_from_oidc_claims",
             ({"groups": []},),
             {},
             ["read:users"],
         ),
-        ("db_oidc", "sync_user_from_oidc_claims", "_sync_user_from_oidc_claims", ({"sub": "1"},), {}, "user"),
+        ("db_oidc", "sync_user_from_oidc_claims", "sync_user_from_oidc_claims", ({"sub": "1"},), {}, "user"),
         (
             "db_oidc",
             "provision_oidc_user",
@@ -208,12 +208,12 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
         ),
         ("db_permissions", "get_user_permissions", "get_user_permissions", ("user",), {}, ["a"]),
         ("db_permissions", "get_user_direct_permissions", "get_user_direct_permissions", ("user",), {}, ["b"]),
-        ("db_permissions", "collect_permissions", "_collect_permissions", ("user",), {}, ["c"]),
+        ("db_permissions", "collect_permissions", "collect_permissions", ("user",), {}, ["c"]),
         ("db_permissions", "list_all_permissions", "list_all_permissions", (), {}, [{"name": "read:users"}]),
-        ("db_schema", "to_user_schema", "_to_user_schema", ("user",), {}, "user-schema"),
+        ("db_schema", "to_user_schema", "to_user_schema", ("user",), {}, "user-schema"),
         ("db_schema", "build_user_response", "build_user_response", ("user", ["perm"]), {}, "user-response"),
-        ("db_schema", "to_api_key_schema", "_to_api_key_schema", ("api-key",), {}, "api-key-schema"),
-        ("db_schema", "to_group_schema", "_to_group_schema", ("group",), {}, "group-schema"),
+        ("db_schema", "to_api_key_schema", "to_api_key_schema", ("api-key",), {}, "api-key-schema"),
+        ("db_schema", "to_group_schema", "to_group_schema", ("group",), {}, "group-schema"),
         ("das", "get_user_by_id_op", "get_user_by_id", ("user-1",), {"tenant_id": "tenant", "db": "db"}, "user"),
         ("das", "get_user_by_id_op", "get_user_by_id_in_tenant", ("user-1", "tenant"), {}, "user"),
         ("das", "get_user_by_username_op", "get_user_by_username", ("name",), {}, "user"),
@@ -346,7 +346,7 @@ def test_log_audit_delegates(monkeypatch):
 
     monkeypatch.setattr(das.db_audit, "log_audit", fake)
 
-    svc._log_audit(
+    svc.log_audit(
         "db",
         "tenant",
         "user",

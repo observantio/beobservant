@@ -22,15 +22,15 @@ from services.database_auth import auth as mod
 
 def _base_service():
     return SimpleNamespace(
-        _MFA_REQUIRED_RESPONSE="mfa_required",
-        _needs_mfa_setup=lambda _user: False,
-        _mfa_setup_challenge=lambda _user: {"setup": True},
+        MFA_REQUIRED_RESPONSE="mfa_required",
+        needs_mfa_setup=lambda _user: False,
+        mfa_setup_challenge=lambda _user: {"setup": True},
         verify_totp_code=lambda _user, _code: True,
         logger=SimpleNamespace(error=lambda *args, **kwargs: None, warning=lambda *args, **kwargs: None),
         is_external_auth_enabled=lambda: True,
         is_password_auth_enabled=lambda: True,
         create_access_token=lambda user: {"not": "token"},
-        _sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=True) if claims else None,
+        sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=True) if claims else None,
         oidc_service=SimpleNamespace(),
     )
 

@@ -196,7 +196,7 @@ async def create_folder(
     try:
         created = await service.grafana_service.create_folder(title)
     except (GrafanaAPIError, httpx.HTTPError) as exc:
-        service._raise_http_from_grafana_error(exc)
+        service.raise_http_from_grafana_error(exc)
         return None
     if not created:
         return None
@@ -265,7 +265,7 @@ async def update_folder(
                 status_code=409,
                 detail="Folder changed by another request; reload folders and retry.",
             ) from exc
-        service._raise_http_from_grafana_error(exc)
+        service.raise_http_from_grafana_error(exc)
         return None
     if not updated:
         return None
@@ -276,7 +276,7 @@ async def update_folder(
     if visibility:
         db_folder.visibility = visibility
         if visibility == "group":
-            groups = service._validate_group_visibility(
+            groups = service.validate_group_visibility(
                 db,
                 user_id=user_id,
                 tenant_id=tenant_id,
@@ -321,7 +321,7 @@ async def delete_folder(
     try:
         ok = await service.grafana_service.delete_folder(uid)
     except (GrafanaAPIError, httpx.HTTPError) as exc:
-        service._raise_http_from_grafana_error(exc)
+        service.raise_http_from_grafana_error(exc)
         return False
     if not ok:
         return False

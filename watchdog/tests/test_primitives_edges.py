@@ -411,7 +411,7 @@ def test_main_startup_initializes_database_and_auth(monkeypatch):
     import middleware.dependencies as dependencies_module
 
     fake_auth_service = types.SimpleNamespace(
-        _lazy_init=lambda: calls.append("lazy_init"),
+        ensure_initialized=lambda: calls.append("ensure_initialized"),
         backfill_otlp_tokens=lambda: calls.append("backfill_otlp_tokens"),
     )
     monkeypatch.setattr(dependencies_module, "auth_service", fake_auth_service)
@@ -421,7 +421,7 @@ def test_main_startup_initializes_database_and_auth(monkeypatch):
     assert calls == [
         ("init_database", "postgresql://safeuser:safePass_123@db:5432/watchdog"),
         "init_db",
-        "lazy_init",
+        "ensure_initialized",
         "backfill_otlp_tokens",
     ]
 

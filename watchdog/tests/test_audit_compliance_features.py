@@ -72,7 +72,7 @@ class AuditComplianceFeatureTests(unittest.TestCase):
         with (
             patch.object(database, "init_database", lambda *args, **kwargs: None),
             patch.object(database, "init_db", lambda *args, **kwargs: None),
-            patch.object(das_mod.DatabaseAuthService, "_lazy_init", lambda self: None),
+            patch.object(das_mod.DatabaseAuthService, "ensure_initialized", lambda self: None),
             patch.object(das_mod.DatabaseAuthService, "_ensure_default_setup", lambda self: None),
             patch.object(das_mod.DatabaseAuthService, "backfill_otlp_tokens", lambda self: None),
             patch.object(

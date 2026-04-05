@@ -198,14 +198,14 @@ def create_group(
                 group.members.append(creator)
 
         if creator_id:
-            service._log_audit(db, tenant_id, creator_id, "create_group", "groups", group.id, {"name": group.name})
+            service.log_audit(db, tenant_id, creator_id, "create_group", "groups", group.id, {"name": group.name})
 
         db.commit()
 
         refreshed_group = _get_group(db, group_id=group.id, tenant_id=tenant_id)
         if refreshed_group is None:
             raise ValueError("Group was not found after creation")
-        return GroupSchema.model_validate(service._to_group_schema(refreshed_group))
+        return GroupSchema.model_validate(service.to_group_schema(refreshed_group))
 
 
 def list_groups(
@@ -237,7 +237,7 @@ def list_groups(
                 return []
             query = query.filter(Group.members.any(User.id == actor_id))
         groups = query.all()
-        return [service._to_group_schema(g) for g in groups]
+        return [service.to_group_schema(g) for g in groups]
 
 
 def get_group(
@@ -257,7 +257,7 @@ def get_group(
             actor_is_superuser=actor_is_superuser,
         ):
             return None
-        return GroupSchema.model_validate(service._to_group_schema(group)) if group else None
+        return GroupSchema.model_validate(service.to_group_schema(group)) if group else None
 
 
 def delete_group(
@@ -281,7 +281,7 @@ def delete_group(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to manage this group")
 
         if deleter_id:
-            service._log_audit(db, tenant_id, deleter_id, "delete_group", "groups", group_id, {"name": group.name})
+            service.log_audit(db, tenant_id, deleter_id, "delete_group", "groups", group_id, {"name": group.name})
 
         db.delete(group)
         db.commit()
@@ -341,12 +341,12 @@ def update_group(
         group.updated_at = _utcnow()
 
         if updater_id:
-            service._log_audit(db, tenant_id, updater_id, "update_group", "groups", group_id, update_data)
+            service.log_audit(db, tenant_id, updater_id, "update_group", "groups", group_id, update_data)
 
         db.commit()
 
         group = _get_group(db, group_id=group_id, tenant_id=tenant_id)
-        return service._to_group_schema(group) if group else None
+        return service.to_group_schema(group) if group else None
 
 
 def update_group_permissions(
@@ -439,7 +439,7 @@ def update_group_permissions(
         else:
             group.permissions = []
 
-        service._log_audit(
+        service.log_audit(
             db,
             tenant_id,
             actor_user_id,
@@ -542,7 +542,7 @@ def update_group_members(
                 removed_user_ids=removed_member_ids,
             )
 
-        service._log_audit(
+        service.log_audit(
             db,
             tenant_id,
             actor_user_id,

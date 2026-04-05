@@ -31,9 +31,9 @@ from models.observability.grafana_request_models import (
 )
 from services.grafana.route_payloads import validate_visibility
 from routers.observability.grafana_router.param_helpers import show_hidden_enabled
+from custom_types.json import JSONDict
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
-from custom_types.json import JSONDict
 
 
 @router.get("/folders", response_model=List[Folder])

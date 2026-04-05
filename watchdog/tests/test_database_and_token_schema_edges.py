@@ -210,7 +210,7 @@ def test_init_database_returns_when_initialized_inside_lock(monkeypatch):
 def test_schema_converters_and_shared_helper_paths():
     now = datetime.now(timezone.utc)
     service = SimpleNamespace(
-        _to_api_key_schema=lambda key: {
+        to_api_key_schema=lambda key: {
             "id": "k1",
             "name": key.name,
             "key": "abc",
@@ -298,11 +298,11 @@ def test_schema_converters_and_shared_helper_paths():
     assert schema_mod._coerce_permission(PermissionEnum.READ_GROUPS.value) is PermissionEnum.READ_GROUPS
 
     sync_service = SimpleNamespace(
-        _sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=True, username="oidc")
+        sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=True, username="oidc")
     )
     assert shared_mod.sync_active_user_from_claims(sync_service, None) is None
     assert shared_mod.sync_active_user_from_claims(sync_service, {"sub": "1"}).username == "oidc"
-    sync_service = SimpleNamespace(_sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=False))
+    sync_service = SimpleNamespace(sync_user_from_oidc_claims=lambda claims: SimpleNamespace(is_active=False))
     assert shared_mod.sync_active_user_from_claims(sync_service, {"sub": "1"}) is None
 
 
@@ -322,7 +322,7 @@ def test_token_helpers_and_decode_paths(monkeypatch):
         oidc_service=SimpleNamespace(
             verify_access_token=lambda token: {"iat": 123, "scp": [PermissionEnum.READ_USERS.value, "unknown"]}
         ),
-        _extract_permissions_from_oidc_claims=lambda claims: [PermissionEnum.READ_USERS.value, "unknown"],
+            extract_permissions_from_oidc_claims=lambda claims: [PermissionEnum.READ_USERS.value, "unknown"],
         list_all_permissions=lambda: [
             {"name": PermissionEnum.READ_USERS.value},
             {"name": PermissionEnum.READ_GROUPS.value},

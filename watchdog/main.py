@@ -82,7 +82,7 @@ if not config.SKIP_STARTUP_DB_INIT:
 
     from middleware.dependencies import auth_service
 
-    auth_service._lazy_init()
+    auth_service.ensure_initialized()
     auth_service.backfill_otlp_tokens()
     logger.info("✓ Auth service initialized")
 
@@ -254,6 +254,6 @@ async def ready() -> JSONResponse:
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info(f"Starting {constants.APP_NAME} v{constants.APP_VERSION}")
+    logger.info("Starting %s v%s", constants.APP_NAME, constants.APP_VERSION)
 
     uvicorn.run(app, host=config.HOST, port=config.PORT, loop="uvloop", log_level=config.LOG_LEVEL)

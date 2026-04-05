@@ -10,8 +10,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-import httpx
 from typing import Any
+
+import httpx
 
 from config import config
 from database import get_db_session

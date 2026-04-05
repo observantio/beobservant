@@ -99,8 +99,8 @@ async def test_create_dashboard_none_no_uid_and_folder_resolution_error(monkeypa
     service = SimpleNamespace(
         grafana_service=gs,
         logger=SimpleNamespace(debug=lambda *args, **kwargs: None),
-        _validate_group_visibility=lambda *args, **kwargs: [],
-        _raise_http_from_grafana_error=lambda exc: (_ for _ in ()).throw(
+        validate_group_visibility=lambda *args, **kwargs: [],
+        raise_http_from_grafana_error=lambda exc: (_ for _ in ()).throw(
             HTTPException(status_code=500, detail=str(exc))
         ),
     )
@@ -167,8 +167,8 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
 
     service = SimpleNamespace(
         grafana_service=_GS(),
-        _raise_http_from_grafana_error=_map,
-        _validate_group_visibility=lambda *args, **kwargs: [g1],
+        raise_http_from_grafana_error=_map,
+        validate_group_visibility=lambda *args, **kwargs: [g1],
     )
 
     async def no_conflict(*_args, **_kwargs):
