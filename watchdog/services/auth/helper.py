@@ -13,12 +13,13 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from typing import List, Optional, Set, TypeAlias
 import logging
 
-from db_models import AuditLog, User
 from sqlalchemy import String, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.query import RowReturningQuery
 
 from fastapi import Depends, HTTPException, Request, Response, status
+
+from db_models import AuditLog, User
 
 from config import config
 from models.access.auth_models import TokenData, Permission, Role, ROLE_PERMISSIONS

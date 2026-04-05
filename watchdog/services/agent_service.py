@@ -8,10 +8,9 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from custom_types.json import JSONDict
-
 import httpx
 
+from custom_types.json import JSONDict
 from models.observability.agent_models import AgentHeartbeat, AgentInfo
 
 from services.agent.helpers import (
