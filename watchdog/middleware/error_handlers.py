@@ -9,6 +9,7 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
+from dataclasses import dataclass
 from functools import wraps
 from typing import Awaitable, Callable, TypeVar
 import logging
@@ -20,6 +21,17 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 RouteResult = TypeVar("RouteResult")
+
+
+@dataclass(frozen=True, slots=True)
+class RouteErrorHandlerOptions:
+    bad_request_exceptions: tuple[type[Exception], ...] = (ValueError,)
+    bad_request_detail: str | None = None
+    bad_gateway_exceptions: tuple[type[Exception], ...] = (httpx.HTTPError,)
+    bad_gateway_detail: str = "Upstream request failed"
+    gateway_timeout_exceptions: tuple[type[Exception], ...] = (asyncio.TimeoutError,)
+    gateway_timeout_detail: str = "Upstream request timed out"
+    internal_detail: str | None = "Internal server error"
 
 
 def _json_safe(value: object) -> object:
@@ -75,15 +87,9 @@ def _request_id_from_route_args(args: tuple[object, ...], kwargs: dict[str, obje
 
 
 def handle_route_errors(
-    *,
-    bad_request_exceptions: tuple[type[Exception], ...] = (ValueError,),
-    bad_request_detail: str | None = None,
-    bad_gateway_exceptions: tuple[type[Exception], ...] = (httpx.HTTPError,),
-    bad_gateway_detail: str = "Upstream request failed",
-    gateway_timeout_exceptions: tuple[type[Exception], ...] = (asyncio.TimeoutError,),
-    gateway_timeout_detail: str = "Upstream request timed out",
-    internal_detail: str | None = "Internal server error",
+    options: RouteErrorHandlerOptions | None = None,
 ) -> Callable[[Callable[..., Awaitable[RouteResult]]], Callable[..., Awaitable[RouteResult]]]:
+    o = options if options is not None else RouteErrorHandlerOptions()
 
     def decorator(func: Callable[..., Awaitable[RouteResult]]) -> Callable[..., Awaitable[RouteResult]]:
         @wraps(func)
@@ -92,36 +98,33 @@ def handle_route_errors(
                 return await func(*args, **kwargs)
             except HTTPException:
                 raise
-            except gateway_timeout_exceptions as exc:
-                request_id = _request_id_from_route_args(args, kwargs)
-                raise HTTPException(
-                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                    detail=gateway_timeout_detail,
-                    headers={"X-Request-ID": request_id} if request_id else None,
-                ) from exc
-            except bad_request_exceptions as exc:
-                detail = bad_request_detail or str(exc) or "Invalid request"
-                request_id = _request_id_from_route_args(args, kwargs)
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=detail,
-                    headers={"X-Request-ID": request_id} if request_id else None,
-                ) from exc
-            except bad_gateway_exceptions as exc:
-                logger.warning("Upstream request failed in %s: %s", func.__name__, exc)
-                request_id = _request_id_from_route_args(args, kwargs)
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=bad_gateway_detail,
-                    headers={"X-Request-ID": request_id} if request_id else None,
-                ) from exc
             except Exception as exc:
+                request_id = _request_id_from_route_args(args, kwargs)
+                if isinstance(exc, o.gateway_timeout_exceptions):
+                    raise HTTPException(
+                        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                        detail=o.gateway_timeout_detail,
+                        headers={"X-Request-ID": request_id} if request_id else None,
+                    ) from exc
+                if isinstance(exc, o.bad_request_exceptions):
+                    detail = o.bad_request_detail or str(exc) or "Invalid request"
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=detail,
+                        headers={"X-Request-ID": request_id} if request_id else None,
+                    ) from exc
+                if isinstance(exc, o.bad_gateway_exceptions):
+                    logger.warning("Upstream request failed in %s: %s", func.__name__, exc)
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail=o.bad_gateway_detail,
+                        headers={"X-Request-ID": request_id} if request_id else None,
+                    ) from exc
                 logger.exception("Unhandled exception in route %s: %s", func.__name__, exc)
-                if internal_detail:
-                    request_id = _request_id_from_route_args(args, kwargs)
+                if o.internal_detail:
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=internal_detail,
+                        detail=o.internal_detail,
                         headers={"X-Request-ID": request_id} if request_id else None,
                     ) from exc
                 raise

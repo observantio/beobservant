@@ -9,6 +9,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 import importlib
 import itertools
 import os
+from dataclasses import asdict
 import runpy
 import sys
 import types
@@ -18,7 +19,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-import config as gw_config
+import settings
 import main as gateway_main
 from routers import gateway_router
 from services import gateway_service as gateway_service_module
@@ -51,15 +52,15 @@ def _request(
 
 
 def test_config_helpers_and_env_provider(tmp_path):
-    assert gw_config._to_bool(None, default=True) is True
-    assert gw_config._to_bool("yes") is True
-    assert gw_config._to_bool("off") is False
-    assert gw_config._is_weak_secret("") is True
-    assert gw_config._is_weak_secret("replace_with_token") is True
-    assert gw_config._is_weak_secret("strong-token-123") is False
+    assert settings._to_bool(None, default=True) is True
+    assert settings._to_bool("yes") is True
+    assert settings._to_bool("off") is False
+    assert settings._is_weak_secret("") is True
+    assert settings._is_weak_secret("replace_with_token") is True
+    assert settings._is_weak_secret("strong-token-123") is False
     secret_file = tmp_path / "secret.txt"
     secret_file.write_text("value-from-file\n", encoding="utf-8")
-    assert gw_config._read_secret_id_file(str(secret_file)) == "value-from-file"
+    assert settings._read_secret_id_file(str(secret_file)) == "value-from-file"
     os.environ["TEST_SECRET"] = "abc"
     assert EnvSecretProvider().get("TEST_SECRET") == "abc"
     assert EnvSecretProvider().get_many(["TEST_SECRET", "MISSING"]) == {
@@ -70,7 +71,7 @@ def test_config_helpers_and_env_provider(tmp_path):
 
 def test_build_secret_provider_defaults_to_env(monkeypatch):
     monkeypatch.delenv("VAULT_ADDR", raising=False)
-    provider = gw_config.build_secret_provider()
+    provider = settings.build_secret_provider()
     assert isinstance(provider, EnvSecretProvider)
 
 
@@ -80,15 +81,15 @@ def test_build_secret_provider_uses_secret_id_file(monkeypatch, tmp_path):
     captured = {}
 
     class FakeProvider:
-        def __init__(self, **kwargs):
-            captured.update(kwargs)
+        def __init__(self, settings, **_kwargs):
+            captured.update(asdict(settings))
 
     monkeypatch.setenv("VAULT_ADDR", "https://vault")
     monkeypatch.setenv("VAULT_ROLE_ID", "role-1")
     monkeypatch.setenv("VAULT_SECRET_ID_FILE", str(secret_file))
     monkeypatch.delenv("VAULT_SECRET_ID", raising=False)
-    monkeypatch.setattr(gw_config, "VaultSecretProvider", FakeProvider)
-    provider = gw_config.build_secret_provider()
+    monkeypatch.setattr(settings, "VaultSecretProvider", FakeProvider)
+    provider = settings.build_secret_provider()
     assert isinstance(provider, FakeProvider)
     assert captured["address"] == "https://vault"
     assert captured["role_id"] == "role-1"
@@ -99,15 +100,15 @@ def test_build_secret_provider_uses_secret_id_env(monkeypatch):
     captured = {}
 
     class FakeProvider:
-        def __init__(self, **kwargs):
-            captured.update(kwargs)
+        def __init__(self, settings, **_kwargs):
+            captured.update(asdict(settings))
 
     monkeypatch.setenv("VAULT_ADDR", "https://vault")
     monkeypatch.setenv("VAULT_ROLE_ID", "role-1")
     monkeypatch.setenv("VAULT_SECRET_ID", "secret-1")
     monkeypatch.delenv("VAULT_SECRET_ID_FILE", raising=False)
-    monkeypatch.setattr(gw_config, "VaultSecretProvider", FakeProvider)
-    provider = gw_config.build_secret_provider()
+    monkeypatch.setattr(settings, "VaultSecretProvider", FakeProvider)
+    provider = settings.build_secret_provider()
     assert isinstance(provider, FakeProvider)
     assert captured["secret_id_fn"]() == "secret-1"
 
@@ -116,15 +117,15 @@ def test_build_secret_provider_without_role_id(monkeypatch):
     captured = {}
 
     class FakeProvider:
-        def __init__(self, **kwargs):
-            captured.update(kwargs)
+        def __init__(self, settings, **_kwargs):
+            captured.update(asdict(settings))
 
     monkeypatch.setenv("VAULT_ADDR", "https://vault")
     monkeypatch.delenv("VAULT_ROLE_ID", raising=False)
     monkeypatch.delenv("VAULT_SECRET_ID", raising=False)
     monkeypatch.delenv("VAULT_SECRET_ID_FILE", raising=False)
-    monkeypatch.setattr(gw_config, "VaultSecretProvider", FakeProvider)
-    provider = gw_config.build_secret_provider()
+    monkeypatch.setattr(settings, "VaultSecretProvider", FakeProvider)
+    provider = settings.build_secret_provider()
     assert isinstance(provider, FakeProvider)
     assert captured["role_id"] is None
     assert captured["secret_id_fn"] is None
@@ -135,25 +136,25 @@ def test_build_secret_provider_rejects_missing_secret_id(monkeypatch):
     monkeypatch.setenv("VAULT_ROLE_ID", "role-1")
     monkeypatch.delenv("VAULT_SECRET_ID", raising=False)
     monkeypatch.delenv("VAULT_SECRET_ID_FILE", raising=False)
-    with pytest.raises(gw_config.VaultClientError):
-        gw_config.build_secret_provider()
+    with pytest.raises(settings.VaultClientError):
+        settings.build_secret_provider()
 
 
 def test_parse_networks_and_http_verify(monkeypatch):
     assert [str(net) for net in gateway_service_module._parse_networks("127.0.0.1,2001:db8::1")]
-    monkeypatch.setattr(gateway_service_module.gw_config, "AUTH_API_URL", "http://auth")
+    monkeypatch.setattr(gateway_service_module.settings, "AUTH_API_URL", "http://auth")
     assert gateway_service_module._http_verify_setting() is False
-    monkeypatch.setattr(gateway_service_module.gw_config, "AUTH_API_URL", "https://auth")
-    monkeypatch.setattr(gateway_service_module.gw_config, "SSL_CA_CERTS", "/tmp/ca.pem")
+    monkeypatch.setattr(gateway_service_module.settings, "AUTH_API_URL", "https://auth")
+    monkeypatch.setattr(gateway_service_module.settings, "SSL_CA_CERTS", "/tmp/ca.pem")
     assert gateway_service_module._http_verify_setting() == "/tmp/ca.pem"
-    monkeypatch.setattr(gateway_service_module.gw_config, "SSL_CA_CERTS", "")
-    monkeypatch.setattr(gateway_service_module.gw_config, "SSL_VERIFY", False)
+    monkeypatch.setattr(gateway_service_module.settings, "SSL_CA_CERTS", "")
+    monkeypatch.setattr(gateway_service_module.settings, "SSL_VERIFY", False)
     assert gateway_service_module._http_verify_setting() is False
 
 
 def test_trusted_proxy_helpers(monkeypatch):
-    monkeypatch.setattr(gateway_service_module.gw_config, "TRUST_PROXY_HEADERS", True)
-    monkeypatch.setattr(gateway_service_module.gw_config, "TRUSTED_PROXY_CIDRS", ["127.0.0.0/8"])
+    monkeypatch.setattr(gateway_service_module.settings, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(gateway_service_module.settings, "TRUSTED_PROXY_CIDRS", ["127.0.0.0/8"])
     proxied = _request(
         headers=[(b"x-forwarded-for", b"198.51.100.10, 127.0.0.1")],
     )
@@ -165,12 +166,12 @@ def test_trusted_proxy_helpers(monkeypatch):
     assert GatewayAuthService._client_ip(proxied_real_ip) == "198.51.100.11"
     untrusted = _request(client_host="not-an-ip")
     assert GatewayAuthService._trusted_proxy_peer(untrusted) is False
-    monkeypatch.setattr(gateway_service_module.gw_config, "TRUST_PROXY_HEADERS", False)
+    monkeypatch.setattr(gateway_service_module.settings, "TRUST_PROXY_HEADERS", False)
     assert GatewayAuthService._client_ip(_request(client_host="198.51.100.12")) == "198.51.100.12"
 
 
 def test_extract_otlp_token_and_headers(monkeypatch):
-    monkeypatch.setattr(gateway_service_module.gw_config, "INTERNAL_SERVICE_TOKEN", "internal-token")
+    monkeypatch.setattr(gateway_service_module.settings, "INTERNAL_SERVICE_TOKEN", "internal-token")
     assert GatewayAuthService.extract_otlp_token("  abc  ") == "abc"
     assert GatewayAuthService.extract_otlp_token(None) == ""
     assert GatewayAuthService._auth_request_headers() == {"X-Internal-Token": "internal-token"}
@@ -349,7 +350,7 @@ async def test_gateway_main_health_and_main_entrypoint(monkeypatch):
     monkeypatch.setenv("GATEWAY_HOST", "0.0.0.0")
     monkeypatch.setenv("GATEWAY_PORT", "4321")
     monkeypatch.setenv("LOG_LEVEL", "INFO")
-    config_module = importlib.import_module("config")
+    config_module = importlib.import_module("settings")
     importlib.reload(config_module)
     runpy.run_module("main", run_name="__main__")
     assert captured["host"] == "0.0.0.0"
@@ -369,7 +370,7 @@ async def test_gateway_main_entrypoint_without_tls_files(monkeypatch):
     monkeypatch.setenv("GATEWAY_HOST", "127.0.0.1")
     monkeypatch.setenv("GATEWAY_PORT", "4318")
     monkeypatch.setenv("LOG_LEVEL", "INFO")
-    config_module = importlib.import_module("config")
+    config_module = importlib.import_module("settings")
     importlib.reload(config_module)
     runpy.run_module("main", run_name="__main__")
     assert captured["ssl_certfile"] is None
@@ -377,8 +378,8 @@ async def test_gateway_main_entrypoint_without_tls_files(monkeypatch):
 
 
 def test_gateway_service_remaining_branches(monkeypatch):
-    monkeypatch.setattr(gateway_service_module.gw_config, "TRUST_PROXY_HEADERS", True)
-    monkeypatch.setattr(gateway_service_module.gw_config, "TRUSTED_PROXY_CIDRS", [])
+    monkeypatch.setattr(gateway_service_module.settings, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(gateway_service_module.settings, "TRUSTED_PROXY_CIDRS", [])
     proxied = _request(headers=[(b"x-forwarded-for", b"  "), (b"x-real-ip", b"198.51.100.20")])
     assert GatewayAuthService._trusted_proxy_peer(proxied) is True
     assert GatewayAuthService._client_ip(proxied) == "198.51.100.20"
@@ -409,9 +410,9 @@ def test_parse_networks_with_explicit_cidr_and_proxy_cidr_iteration(monkeypatch)
     networks = gateway_service_module._parse_networks("127.0.0.0/24")
     assert [str(net) for net in networks] == ["127.0.0.0/24"]
 
-    monkeypatch.setattr(gateway_service_module.gw_config, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(gateway_service_module.settings, "TRUST_PROXY_HEADERS", True)
     monkeypatch.setattr(
-        gateway_service_module.gw_config,
+        gateway_service_module.settings,
         "TRUSTED_PROXY_CIDRS",
         ["10.0.0.0/8", "127.0.0.0/8"],
     )
@@ -422,7 +423,7 @@ def test_rate_limit_remaining_branches(monkeypatch):
     import services.rate_limit as rate_limit_module
     import services.rate_limits.hybrid_token_rate_limiter as hybrid_module
 
-    monkeypatch.setattr(rate_limit_module.gw_config, "GATEWAY_RATE_LIMIT_STRICT", True)
+    monkeypatch.setattr(rate_limit_module.settings, "GATEWAY_RATE_LIMIT_STRICT", True)
 
     class WorkingRedisLimiter:
         def __init__(self, *args, **_kwargs):
@@ -477,7 +478,9 @@ def test_vault_provider_remaining_branches(monkeypatch):
             return self.authenticated
 
     monkeypatch.setattr(vault_module, "hvac", types.SimpleNamespace(Client=FakeClient))
-    provider = vault_module.VaultSecretProvider(address="https://vault", token="token", cache_ttl=100)
+    provider = vault_module.VaultSecretProvider(
+        vault_module.VaultSecretProviderSettings(address="https://vault", token="token", cache_ttl=100),
+    )
     provider._cache["bad"] = "invalid"
     assert provider._from_cache("bad") is vault_module.SENTINEL
     provider._cache["expired"] = (0.0, "x")
@@ -486,7 +489,9 @@ def test_vault_provider_remaining_branches(monkeypatch):
     provider._cache["obj"] = (999.0, object())
     assert provider.get("obj") is None
 
-    provider = vault_module.VaultSecretProvider(address="https://vault", token="token", cache_ttl=100)
+    provider = vault_module.VaultSecretProvider(
+        vault_module.VaultSecretProviderSettings(address="https://vault", token="token", cache_ttl=100),
+    )
     provider._approle_credentials = (None, None)
     with pytest.raises(vault_module.VaultClientError):
         provider._approle_login()
@@ -504,10 +509,10 @@ def test_reloadable_config_remaining_validation(monkeypatch):
         ctx.setenv("GATEWAY_INTERNAL_SERVICE_TOKEN", "strong_internal_token_123")
         ctx.setenv("GATEWAY_STATUS_OTLP_TOKEN", "startup_probe_token_123")
         ctx.setenv("GATEWAY_STARTUP_CHECK_MODE", "invalid")
-        sys.modules["config"] = importlib.import_module("config")
-        del sys.modules["config"]
+        sys.modules["settings"] = importlib.import_module("settings")
+        del sys.modules["settings"]
         with pytest.raises(ValueError):
-            importlib.import_module("config")
+            importlib.import_module("settings")
 
 
 def test_make_default_rate_limiter_and_sanitize(monkeypatch):
@@ -516,10 +521,10 @@ def test_make_default_rate_limiter_and_sanitize(monkeypatch):
     assert rate_limit_module._sanitize_redis_url("redis://user:pass@host:6379/0") == "redis://host:6379/0"
     assert rate_limit_module._sanitize_redis_url(object()) == "<redis-url>"
 
-    monkeypatch.setattr(rate_limit_module.gw_config, "GATEWAY_RATE_LIMIT_STRICT", False)
+    monkeypatch.setattr(rate_limit_module.settings, "GATEWAY_RATE_LIMIT_STRICT", False)
     limiter = make_default_rate_limiter(2, backend="memory", redis_url="redis://unused")
     assert isinstance(limiter, TokenRateLimiter)
-    monkeypatch.setattr(rate_limit_module.gw_config, "GATEWAY_RATE_LIMIT_STRICT", False)
+    monkeypatch.setattr(rate_limit_module.settings, "GATEWAY_RATE_LIMIT_STRICT", False)
 
     class FailingRedisLimiter:
         def __init__(self, *args, **kwargs):
@@ -655,7 +660,7 @@ def test_vault_provider_paths(monkeypatch):
     original_hvac = vault_module.hvac
     monkeypatch.setattr(vault_module, "hvac", None)
     with pytest.raises(vault_module.VaultClientError):
-        vault_module.VaultSecretProvider(address="https://vault", token="token")
+        vault_module.VaultSecretProvider(vault_module.VaultSecretProviderSettings(address="https://vault", token="token"))
     monkeypatch.setattr(vault_module, "hvac", original_hvac)
 
     class FakeKVv2:
@@ -707,50 +712,73 @@ def test_vault_provider_paths(monkeypatch):
     monkeypatch.setattr(vault_module, "hvac", fake_hvac)
 
     with pytest.raises(vault_module.VaultClientError):
-        vault_module.VaultSecretProvider(address="", token="token")
+        vault_module.VaultSecretProvider(vault_module.VaultSecretProviderSettings(address="", token="token"))
     with pytest.raises(vault_module.VaultClientError):
-        vault_module.VaultSecretProvider(address="https://vault", token="token", kv_version=3)
+        vault_module.VaultSecretProvider(
+            vault_module.VaultSecretProviderSettings(address="https://vault", token="token", kv_version=3),
+        )
 
-    provider = vault_module.VaultSecretProvider(address="https://vault", token="token", cache_ttl=100)
+    provider = vault_module.VaultSecretProvider(
+        vault_module.VaultSecretProviderSettings(address="https://vault", token="token", cache_ttl=100),
+    )
     assert provider.get("a") == "secret-value"
     assert provider.get_many(["a"]) == {"a": "secret-value"}
 
     FakeClient.kv_response = {"data": {"data": {"a": 7}}}
-    provider = vault_module.VaultSecretProvider(address="https://vault", token="token", cache_ttl=100)
+    provider = vault_module.VaultSecretProvider(
+        vault_module.VaultSecretProviderSettings(address="https://vault", token="token", cache_ttl=100),
+    )
     assert provider.get("a") == "7"
 
     FakeClient.kv_response = {"data": {"data": {"only": "x"}}}
-    provider = vault_module.VaultSecretProvider(address="https://vault", token="token", cache_ttl=100)
+    provider = vault_module.VaultSecretProvider(
+        vault_module.VaultSecretProviderSettings(address="https://vault", token="token", cache_ttl=100),
+    )
     assert provider.get("another") == "x"
 
     FakeClient.kv_response = {"data": {"data": {"a": {}, "b": {}}}}
-    provider = vault_module.VaultSecretProvider(address="https://vault", token="token", cache_ttl=100)
+    provider = vault_module.VaultSecretProvider(
+        vault_module.VaultSecretProviderSettings(address="https://vault", token="token", cache_ttl=100),
+    )
     assert provider.get("a") is None
 
     FakeClient.kv_error = vault_module.InvalidPath()
-    provider = vault_module.VaultSecretProvider(address="https://vault", token="token", cache_ttl=100)
+    provider = vault_module.VaultSecretProvider(
+        vault_module.VaultSecretProviderSettings(address="https://vault", token="token", cache_ttl=100),
+    )
     assert provider.get("missing") is None
 
     FakeClient.kv_error = vault_module.Forbidden()
-    provider = vault_module.VaultSecretProvider(address="https://vault", token="token", cache_ttl=100)
+    provider = vault_module.VaultSecretProvider(
+        vault_module.VaultSecretProviderSettings(address="https://vault", token="token", cache_ttl=100),
+    )
     with pytest.raises(vault_module.VaultClientError):
         provider.get("blocked")
 
     FakeClient.kv_error = None
     FakeClient.kv_response = {"data": {"plain": "v1-value"}}
-    provider = vault_module.VaultSecretProvider(address="https://vault", token="token", kv_version=1, cache_ttl=100)
+    provider = vault_module.VaultSecretProvider(
+        vault_module.VaultSecretProviderSettings(
+            address="https://vault",
+            token="token",
+            kv_version=1,
+            cache_ttl=100,
+        ),
+    )
     assert provider.get("plain") == "v1-value"
 
     FakeClient.authenticated = False
     with pytest.raises(vault_module.VaultClientError):
-        vault_module.VaultSecretProvider(address="https://vault", token="token")
+        vault_module.VaultSecretProvider(vault_module.VaultSecretProviderSettings(address="https://vault", token="token"))
 
     FakeClient.authenticated = True
     provider = vault_module.VaultSecretProvider(
-        address="https://vault",
-        role_id="role",
-        secret_id_fn=lambda: "secret-id",
-        cache_ttl=100,
+        vault_module.VaultSecretProviderSettings(
+            address="https://vault",
+            role_id="role",
+            secret_id_fn=lambda: "secret-id",
+            cache_ttl=100,
+        ),
     )
     provider._client.authenticated = False
     provider._approle_credentials = ("role", lambda: "secret-id")
@@ -783,6 +811,6 @@ def test_reloadable_config_validation_errors(monkeypatch):
         with monkeypatch.context() as ctx:
             for key, value in env.items():
                 ctx.setenv(key, value)
-            if "config" in sys.modules:
-                del sys.modules["config"]  # pragma: no cover
-            importlib.import_module("config")
+            if "settings" in sys.modules:
+                del sys.modules["settings"]  # pragma: no cover
+            importlib.import_module("settings")

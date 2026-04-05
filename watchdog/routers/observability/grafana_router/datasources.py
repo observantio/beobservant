@@ -10,24 +10,50 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import List, Optional
 
-from fastapi import Body, Depends, HTTPException, Query, Path
+from fastapi import Body, Depends, HTTPException, Path, Query
 from pydantic import StrictBool
 from sqlalchemy.orm import Session
 
 from config import config
+from custom_types.json import JSONDict
 from database import get_db
 from middleware.dependencies import require_any_permission_with_scope, require_permission_with_scope
 from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, TokenData
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from models.observability.grafana_request_models import GrafanaDatasourceQueryRequest, GrafanaHiddenToggleRequest
+from services.grafana.grafana_bundles import (
+    DatasourceCreateOptions,
+    DatasourceListParams,
+    DatasourceQueryEnforcement,
+    DatasourceUpdateOptions,
+    GrafanaUserScope,
+)
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.route_payloads import validate_visibility
-from custom_types.json import JSONDict
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
+
+
+def _datasource_list_params_dep(
+    uid: str | None = Query(None, min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
+    query: str | None = Query(None),
+    team_id: str | None = Query(None),
+    show_hidden: StrictBool = Query(False),
+    limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
+    offset: int = Query(0, ge=0),
+) -> DatasourceListParams:
+    return DatasourceListParams(
+        uid=uid,
+        query=query,
+        team_id=team_id,
+        show_hidden=show_hidden,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("/ds/query")
@@ -40,10 +66,12 @@ async def datasource_query(
     user_id, tenant_id, group_ids, _ = scope_context(current_user)
     await proxy.enforce_datasource_query_access(
         db=db,
-        payload=payload.model_dump(exclude_none=True),
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+        enforcement=DatasourceQueryEnforcement(
+            path="/api/ds/query",
+            method="POST",
+            body=payload.model_dump(exclude_none=True),
+        ),
     )
     try:
         return await proxy.query_datasource(payload.model_dump(exclude_none=True))
@@ -71,9 +99,7 @@ async def get_datasource_by_name(
     datasource = await proxy.get_datasource_by_name(
         db=db,
         name=name,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
     )
     if not datasource:
         raise HTTPException(status_code=404, detail=f"Datasource {name} not found or access denied")
@@ -82,29 +108,17 @@ async def get_datasource_by_name(
 
 @router.get("/datasources", response_model=List[Datasource])
 async def get_datasources(
-    uid: Optional[str] = Query(None, min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
-    query: Optional[str] = Query(None),
-    team_id: Optional[str] = Query(None),
-    show_hidden: StrictBool = Query(False),
-    limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
-    offset: int = Query(0, ge=0),
+    list_params: DatasourceListParams = Depends(_datasource_list_params_dep),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),
 ) -> List[Datasource]:
     user_id, tenant_id, group_ids, _ = scope_context(current_user)
-    datasource_context = await rtp(proxy.build_datasource_list_context, db, tenant_id=tenant_id, uid=uid)
+    datasource_context = await rtp(proxy.build_datasource_list_context, db, tenant_id=tenant_id, uid=list_params.uid)
+    params = replace(list_params, datasource_context=datasource_context)
     return await proxy.get_datasources(
         db=db,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
-        uid=uid,
-        query=query,
-        team_id=team_id,
-        show_hidden=show_hidden,
-        limit=limit,
-        offset=offset,
-        datasource_context=datasource_context,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+        params=params,
     )
 
 
@@ -119,9 +133,7 @@ async def get_datasource_by_uid(
     datasource = await proxy.get_datasource(
         db=db,
         uid=uid,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
     )
     if not datasource:
         raise HTTPException(status_code=404, detail=f"Datasource {uid} not found or access denied")
@@ -142,12 +154,12 @@ async def create_datasource(
     result = await proxy.create_datasource(
         db=db,
         datasource_create=datasource,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
-        visibility=visibility,
-        shared_group_ids=shared_group_ids or [],
-        is_admin=is_admin,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+        options=DatasourceCreateOptions(
+            visibility=visibility,
+            shared_group_ids=shared_group_ids or [],
+            is_admin=is_admin,
+        ),
     )
     if not result:
         raise HTTPException(status_code=500, detail="Failed to create datasource")
@@ -170,12 +182,12 @@ async def update_datasource(
         db=db,
         uid=uid,
         datasource_update=datasource,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
-        visibility=visibility,
-        shared_group_ids=shared_group_ids,
-        is_admin=is_admin,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+        options=DatasourceUpdateOptions(
+            visibility=visibility,
+            shared_group_ids=shared_group_ids,
+            is_admin=is_admin,
+        ),
     )
     if not result:
         raise HTTPException(status_code=404, detail=f"Datasource {uid} not found, access denied, or update failed")
@@ -193,9 +205,7 @@ async def delete_datasource(
     ok = await proxy.delete_datasource(
         db=db,
         uid=uid,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
     )
     if not ok:
         raise HTTPException(status_code=404, detail=f"Datasource {uid} not found or access denied")

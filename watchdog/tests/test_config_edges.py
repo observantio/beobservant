@@ -22,6 +22,7 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
+from services.secrets.vault_client import VaultSecretProviderSettings
 
 CONFIG_MODULE = "config"
 
@@ -108,7 +109,11 @@ def test_config_vault_optional_warning_and_secret_loading_paths(monkeypatch):
         ctx.setitem(
             sys.modules,
             "services.secrets.vault_client",
-            types.SimpleNamespace(VaultSecretProvider=FailingVaultProvider, VaultClientError=RuntimeError),
+            types.SimpleNamespace(
+                VaultSecretProvider=FailingVaultProvider,
+                VaultClientError=RuntimeError,
+                VaultSecretProviderSettings=VaultSecretProviderSettings,
+            ),
         )
         module = _reload_config_module()
         assert module.config.VAULT_ENABLED is True
@@ -133,7 +138,11 @@ def test_config_vault_optional_warning_and_secret_loading_paths(monkeypatch):
         ctx.setitem(
             sys.modules,
             "services.secrets.vault_client",
-            types.SimpleNamespace(VaultSecretProvider=FakeVaultProvider, VaultClientError=RuntimeError),
+            types.SimpleNamespace(
+                VaultSecretProvider=FakeVaultProvider,
+                VaultClientError=RuntimeError,
+                VaultSecretProviderSettings=VaultSecretProviderSettings,
+            ),
         )
         module = _reload_config_module()
         assert module.config.DATABASE_URL == "postgresql://vaultuser:vaultpass@db:5432/watchdog"
@@ -154,10 +163,9 @@ def test_config_vault_secret_id_callback_path(monkeypatch):
     class FakeVaultProvider:
         last_secret_id: str | None = None
 
-        def __init__(self, *args, **kwargs):
-            secret_id_fn = kwargs.get("secret_id_fn")
-            if secret_id_fn is not None:
-                FakeVaultProvider.last_secret_id = secret_id_fn()
+        def __init__(self, settings, **_kwargs):
+            if settings.secret_id_fn is not None:
+                FakeVaultProvider.last_secret_id = settings.secret_id_fn()
             self.values = {}
 
         def get(self, key):
@@ -172,7 +180,11 @@ def test_config_vault_secret_id_callback_path(monkeypatch):
         ctx.setitem(
             sys.modules,
             "services.secrets.vault_client",
-            types.SimpleNamespace(VaultSecretProvider=FakeVaultProvider, VaultClientError=RuntimeError),
+            types.SimpleNamespace(
+                VaultSecretProvider=FakeVaultProvider,
+                VaultClientError=RuntimeError,
+                VaultSecretProviderSettings=VaultSecretProviderSettings,
+            ),
         )
         _reload_config_module()
         assert FakeVaultProvider.last_secret_id == "secret-id-123"

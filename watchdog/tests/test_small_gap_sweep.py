@@ -18,6 +18,14 @@ from services.auth import helper as auth_helper
 from services.common import cookies as cookie_helpers
 from services.database_auth import audit as db_audit
 from services.grafana import folder_ops
+from services.grafana.grafana_bundles import (
+    FolderCreateOptions,
+    FolderDeleteOptions,
+    FolderGetParams,
+    FolderUpdateOptions,
+    GrafanaUserScope,
+    GroupVisibilityValidation,
+)
 from services.grafana.grafana_service import GrafanaAPIError
 from services.loki.http_client import LokiHttpClient
 
@@ -103,7 +111,7 @@ class _FolderProxyStub:
 
         self.raise_http_from_grafana_error = raise_http_from_grafana_error
 
-    def validate_group_visibility(self, db, *, shared_group_ids, **kwargs):
+    def validate_group_visibility(self, db, validation: GroupVisibilityValidation):
         return []
 
 
@@ -140,7 +148,17 @@ def test_auth_helper_database_audit_cookie_and_loki_small_gaps(monkeypatch):
     assert audit_db.query_obj.filters
 
     monkeypatch.setattr(db_audit, "get_request_audit_context", lambda: ("10.0.0.1", "agent/1.0"))
-    db_audit.log_audit(audit_db, "tenant-a", "u1", "login", "auth", "user:u1", {"ok": True})
+    db_audit.log_audit(
+        audit_db,
+        db_audit.AuditLogRecord(
+            tenant_id="tenant-a",
+            user_id="u1",
+            action="login",
+            resource_type="auth",
+            resource_id="user:u1",
+            details={"ok": True},
+        ),
+    )
     entry = audit_db.added[-1]
     assert isinstance(entry, AuditLog)
     assert entry.ip_address == "10.0.0.1"
@@ -197,28 +215,71 @@ def test_folder_ops_remaining_success_and_nonraising_error_paths():
     grafana = _FolderGrafanaStub()
     service = _FolderProxyStub(grafana)
 
-    folder = asyncio.run(folder_ops.get_folder(service, db, "f1", "u1", "t1", []))
+    folder = asyncio.run(
+        folder_ops.get_folder(
+            service,
+            db,
+            "f1",
+            GrafanaUserScope("u1", "t1", []),
+            FolderGetParams(),
+        )
+    )
     assert folder is not None
     assert folder.uid == "f1"
-    assert service.validate_group_visibility(db, shared_group_ids=[]) == []
+    assert (
+        service.validate_group_visibility(
+            db,
+            GroupVisibilityValidation(
+                user_id="u1",
+                tenant_id="t1",
+                group_ids=[],
+                shared_group_ids=["g1"],
+                is_admin=False,
+            ),
+        )
+        == []
+    )
 
     grafana.create_error = GrafanaAPIError(400, {"message": "bad"})
-    assert asyncio.run(folder_ops.create_folder(service, db, "New", "u1", "t1", [])) is None
+    u1_scope = GrafanaUserScope("u1", "t1", [])
+    assert (
+        asyncio.run(
+            folder_ops.create_folder(service, db, "New", u1_scope, FolderCreateOptions())
+        )
+        is None
+    )
 
     grafana.create_error = None
     grafana.update_error = GrafanaAPIError(500, {"message": "bad"})
-    assert asyncio.run(folder_ops.update_folder(service, db, "f1", "u1", "t1", [])) is None
+    assert (
+        asyncio.run(folder_ops.update_folder(service, db, "f1", u1_scope, FolderUpdateOptions()))
+        is None
+    )
 
     grafana.update_error = None
     grafana.delete_error = httpx.ConnectError("down")
-    assert asyncio.run(folder_ops.delete_folder(service, db, "f1", "u1", "t1", [])) is False
+    assert (
+        asyncio.run(
+            folder_ops.delete_folder(service, db, "f1", u1_scope, FolderDeleteOptions(is_admin=False))
+        )
+        is False
+    )
 
     grafana.delete_error = None
     grafana.folder = SimpleNamespace(id=12, uid="f-created", title="Created")
-    created = asyncio.run(folder_ops.create_folder(service, db, "Created", "u1", "t1", []))
+    created = asyncio.run(
+        folder_ops.create_folder(service, db, "Created", u1_scope, FolderCreateOptions())
+    )
     assert created is not None
     grafana.folder = SimpleNamespace(id=11, uid="f1", title="Folder 1")
-    updated = asyncio.run(folder_ops.update_folder(service, db, "f1", "u1", "t1", []))
+    updated = asyncio.run(
+        folder_ops.update_folder(service, db, "f1", u1_scope, FolderUpdateOptions())
+    )
     assert updated is not None
-    assert asyncio.run(folder_ops.delete_folder(service, db, "f1", "u1", "t1", [])) is True
+    assert (
+        asyncio.run(
+            folder_ops.delete_folder(service, db, "f1", u1_scope, FolderDeleteOptions(is_admin=False))
+        )
+        is True
+    )
     assert len(service.errors) == 3

@@ -20,19 +20,25 @@ from db_models import Base, GrafanaDashboard, GrafanaFolder, Tenant, User
 from models.grafana.grafana_dashboard_models import Dashboard, DashboardUpdate
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
 from services.grafana import dashboard_ops
+from services.grafana.grafana_bundles import (
+    AccessibleTitleConflictParams,
+    DashboardSearchParams,
+    DashboardUpdateOptions,
+    GrafanaUserScope,
+)
 
 
 class _GrafanaServiceStub:
     def __init__(self, *, get_dashboard_result=None, search_results=None):
         self._get_dashboard_result = get_dashboard_result
         self._search_results = list(search_results or [])
-        self.last_search_kwargs = None
+        self.last_search_filters = None
 
     async def get_dashboard(self, uid: str):
         return self._get_dashboard_result
 
-    async def search_dashboards(self, **kwargs):
-        self.last_search_kwargs = kwargs
+    async def search_dashboards(self, filters=None, **_kwargs):
+        self.last_search_filters = filters
         return self._search_results
 
     async def update_dashboard(self, uid: str, payload):
@@ -91,10 +97,8 @@ async def test_get_dashboard_prunes_deleted_grafana_dashboard_record():
     result = await dashboard_ops.get_dashboard(
         service,
         db,
-        uid="dash-uid-1",
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
+        "dash-uid-1",
+        GrafanaUserScope("u1", "t1", []),
     )
 
     assert result is None
@@ -111,10 +115,12 @@ async def test_accessible_title_conflict_ignores_stale_db_rows():
     has_conflict = await dashboard_ops._has_accessible_title_conflict(
         service,
         db,
-        tenant_id="t1",
-        user_id="u1",
-        group_ids=[],
-        title="CPU Overview",
+        AccessibleTitleConflictParams(
+            tenant_id="t1",
+            user_id="u1",
+            group_ids=[],
+            title="CPU Overview",
+        ),
     )
 
     assert has_conflict is False
@@ -134,10 +140,12 @@ async def test_accessible_title_conflict_detects_live_dashboard():
     has_conflict = await dashboard_ops._has_accessible_title_conflict(
         service,
         db,
-        tenant_id="t1",
-        user_id="u1",
-        group_ids=[],
-        title="CPU Overview",
+        AccessibleTitleConflictParams(
+            tenant_id="t1",
+            user_id="u1",
+            group_ids=[],
+            title="CPU Overview",
+        ),
     )
 
     assert has_conflict is True
@@ -157,10 +165,12 @@ async def test_accessible_title_conflict_ignores_stale_db_title_when_live_title_
     has_conflict = await dashboard_ops._has_accessible_title_conflict(
         service,
         db,
-        tenant_id="t1",
-        user_id="u1",
-        group_ids=[],
-        title="CPU Overview",
+        AccessibleTitleConflictParams(
+            tenant_id="t1",
+            user_id="u1",
+            group_ids=[],
+            title="CPU Overview",
+        ),
     )
 
     assert has_conflict is False
@@ -215,9 +225,8 @@ async def test_search_dashboards_deduplicates_same_uid_results():
     dashboards = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
+        GrafanaUserScope("u1", "t1", []),
+        DashboardSearchParams(),
     )
 
     assert len(dashboards) == 1
@@ -264,9 +273,8 @@ async def test_search_dashboards_uses_db_folder_scope_when_folder_uid_missing_in
     dashboards = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u2",
-        tenant_id="t1",
-        group_ids=[],
+        GrafanaUserScope("u2", "t1", []),
+        DashboardSearchParams(),
     )
 
     assert dashboards == []
@@ -300,9 +308,8 @@ async def test_search_dashboards_skips_non_general_folder_when_folder_scope_unkn
     dashboards = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u2",
-        tenant_id="t1",
-        group_ids=[],
+        GrafanaUserScope("u2", "t1", []),
+        DashboardSearchParams(),
     )
 
     assert dashboards == []
@@ -358,14 +365,12 @@ async def test_search_dashboards_honors_folder_ids_filter():
     dashboards = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        folder_ids=[7],
+        GrafanaUserScope("u1", "t1", []),
+        DashboardSearchParams(folder_ids=[7]),
     )
 
     assert [d.uid for d in dashboards] == ["dash-uid-1"]
-    assert gs.last_search_kwargs.get("folder_ids") == [7]
+    assert gs.last_search_filters.folder_ids == [7]
 
 
 @pytest.mark.asyncio
@@ -394,14 +399,12 @@ async def test_search_dashboards_general_folder_filter_includes_dashboards_witho
     dashboards = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        folder_ids=[0],
+        GrafanaUserScope("u1", "t1", []),
+        DashboardSearchParams(folder_ids=[0]),
     )
 
     assert [d.uid for d in dashboards] == ["dash-uid-1"]
-    assert gs.last_search_kwargs.get("folder_ids") == [0]
+    assert gs.last_search_filters.folder_ids == [0]
 
 
 @pytest.mark.asyncio
@@ -442,10 +445,8 @@ async def test_search_dashboards_excludes_foldered_when_requested_for_proxy_root
     dashboards = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        exclude_foldered_dashboards=True,
+        GrafanaUserScope("u1", "t1", []),
+        DashboardSearchParams(exclude_foldered_dashboards=True),
     )
 
     assert dashboards == []
@@ -488,14 +489,12 @@ async def test_search_dashboards_honors_folder_uids_filter():
     dashboards = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        folder_uids=["folder-uid-7"],
+        GrafanaUserScope("u1", "t1", []),
+        DashboardSearchParams(folder_uids=["folder-uid-7"]),
     )
 
     assert [d.uid for d in dashboards] == ["dash-uid-1"]
-    assert gs.last_search_kwargs.get("folder_uids") == ["folder-uid-7"]
+    assert gs.last_search_filters.folder_uids == ["folder-uid-7"]
 
 
 @pytest.mark.asyncio
@@ -536,14 +535,12 @@ async def test_search_dashboards_honors_dashboard_uid_filters():
     dashboards = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        dashboard_uids=["dash-uid-1"],
+        GrafanaUserScope("u1", "t1", []),
+        DashboardSearchParams(dashboard_uids=["dash-uid-1"]),
     )
 
     assert [d.uid for d in dashboards] == ["dash-uid-1"]
-    assert gs.last_search_kwargs.get("dashboard_uids") == ["dash-uid-1"]
+    assert gs.last_search_filters.dashboard_uids == ["dash-uid-1"]
 
 
 @pytest.mark.asyncio
@@ -584,10 +581,8 @@ async def test_filtered_search_does_not_purge_non_matching_dashboards():
     _ = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        folder_uids=["folder-uid-7"],
+        GrafanaUserScope("u1", "t1", []),
+        DashboardSearchParams(folder_uids=["folder-uid-7"]),
     )
 
     still_present = db.query(GrafanaDashboard).filter_by(grafana_uid="dash-uid-2").first()
@@ -618,10 +613,8 @@ async def test_general_dashboards_with_negative_folder_id_are_not_excluded():
     dashboards = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        exclude_foldered_dashboards=True,
+        GrafanaUserScope("u1", "t1", []),
+        DashboardSearchParams(exclude_foldered_dashboards=True),
     )
 
     assert [d.uid for d in dashboards] == ["dash-uid-1"]
@@ -655,10 +648,8 @@ async def test_search_dashboards_clears_stale_folder_uid_when_dashboard_moves_to
     dashboards = await dashboard_ops.search_dashboards(
         service,
         db,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
-        exclude_foldered_dashboards=True,
+        GrafanaUserScope("u1", "t1", []),
+        DashboardSearchParams(exclude_foldered_dashboards=True),
     )
 
     assert [d.uid for d in dashboards] == ["dash-uid-1"]
@@ -684,11 +675,10 @@ async def test_update_dashboard_clears_folder_uid_when_moved_to_general():
     updated = await dashboard_ops.update_dashboard(
         service,
         db,
-        uid="dash-uid-1",
-        dashboard_update=update_payload,
-        user_id="u1",
-        tenant_id="t1",
-        group_ids=[],
+        "dash-uid-1",
+        update_payload,
+        GrafanaUserScope("u1", "t1", []),
+        DashboardUpdateOptions(),
     )
 
     assert updated is not None

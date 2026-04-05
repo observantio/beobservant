@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional, TYPE_CHECKING
 
@@ -27,6 +28,15 @@ from custom_types.json import JSONDict
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
+
+
+@dataclass(frozen=True, slots=True)
+class OidcProvisionProfile:
+    email: str
+    preferred_username: str
+    full_name: Optional[str]
+    subject: str
+    default_tenant: Optional[Tenant] = None
 
 
 def _claim_str(claims: JSONDict, key: str) -> str:
@@ -181,25 +191,14 @@ def sync_user_from_oidc_claims(service: DatabaseAuthService, claims: JSONDict) -
         if user is None:
             if not config.OIDC_AUTO_PROVISION_USERS:
                 return None
-            if default_tenant is None:
-                user = provision_oidc_user(
-                    service,
-                    db,
-                    email,
-                    preferred_username,
-                    full_name,
-                    subject,
-                )
-            else:
-                user = provision_oidc_user(
-                    service,
-                    db,
-                    email,
-                    preferred_username,
-                    full_name,
-                    subject,
-                    default_tenant=default_tenant,
-                )
+            profile = OidcProvisionProfile(
+                email=email,
+                preferred_username=preferred_username,
+                full_name=full_name,
+                subject=subject,
+                default_tenant=default_tenant,
+            )
+            user = provision_oidc_user(service, db, profile)
         else:
             if not user.is_active:
                 service.logger.warning("OIDC login attempted for inactive user %s", user.id)
@@ -256,15 +255,11 @@ def _pick_unique_username(db: Session, base: str) -> str:
 def provision_oidc_user(
     service: DatabaseAuthService,
     db: Session,
-    email: str,
-    preferred_username: str,
-    full_name: Optional[str],
-    subject: str,
-    default_tenant: Optional[Tenant] = None,
+    profile: OidcProvisionProfile,
 ) -> User:
-    tenant = default_tenant or _ensure_default_tenant(db)
+    tenant = profile.default_tenant or _ensure_default_tenant(db)
 
-    base = _base_username(preferred_username, email)
+    base = _base_username(profile.preferred_username, profile.email)
     must_setup_mfa = _claim_truthy(getattr(config, "REQUIRE_MFA_FOR_NEW_USERS", False))
 
     for _ in range(3):
@@ -272,8 +267,8 @@ def provision_oidc_user(
         user = User(
             tenant_id=tenant.id,
             username=username,
-            email=email,
-            full_name=full_name,
+            email=profile.email,
+            full_name=profile.full_name,
             org_id=config.DEFAULT_ORG_ID,
             role=Role.PROVISIONING,
             is_active=True,
@@ -284,7 +279,7 @@ def provision_oidc_user(
             password_changed_at=datetime.now(timezone.utc),
             must_setup_mfa=must_setup_mfa,
             auth_provider=config.AUTH_PROVIDER,
-            external_subject=subject or None,
+            external_subject=profile.subject or None,
         )
         nested = db.begin_nested() if hasattr(db, "begin_nested") else nullcontext()
         try:

@@ -23,6 +23,7 @@ ensure_test_env()
 from db_models import Base, Group, Permission, Tenant, User
 from models.access.group_models import GroupCreate, GroupUpdate
 from services.auth import group_ops
+from services.auth.actor_caps import AuthActorCaps
 
 
 def _session():
@@ -139,40 +140,97 @@ def test_create_list_get_update_and_delete_group(monkeypatch):
         service, GroupCreate(name="Platform", description="Platform owners"), "t1", creator_id=admin.id
     )
 
-    assert len(group_ops.list_groups(service, "t1", actor_user_id=admin.id, actor_role="admin")) == 2
-    assert len(group_ops.list_groups(service, "t1", actor_user_id=admin.id, actor_role="admin", q="ops")) == 1
-    assert len(group_ops.list_groups(service, "t1", actor_user_id=admin.id, actor_role="admin", q="platform")) == 1
-    assert group_ops.list_groups(service, "t1", actor_user_id=None, actor_role="user") == []
-    assert group_ops.get_group(service, created_group.id, "t1", actor_user_id=other.id, actor_role="user") is None
+    assert len(group_ops.list_groups(service, "t1", actor=AuthActorCaps(user_id=admin.id, role="admin"))) == 2
     assert (
-        group_ops.get_group(service, created_group.id, "t1", actor_user_id=admin.id, actor_role="admin").id
+        len(group_ops.list_groups(service, "t1", actor=AuthActorCaps(user_id=admin.id, role="admin"), q="ops")) == 1
+    )
+    assert (
+        len(
+            group_ops.list_groups(service, "t1", actor=AuthActorCaps(user_id=admin.id, role="admin"), q="platform"),
+        )
+        == 1
+    )
+    assert group_ops.list_groups(service, "t1", actor=AuthActorCaps(user_id=None, role="user")) == []
+    assert (
+        group_ops.get_group(
+            service,
+            created_group.id,
+            "t1",
+            actor=AuthActorCaps(user_id=other.id, role="user"),
+        )
+        is None
+    )
+    assert (
+        group_ops.get_group(
+            service,
+            created_group.id,
+            "t1",
+            actor=AuthActorCaps(user_id=admin.id, role="admin"),
+        ).id
         == created_group.id
     )
 
-    assert group_ops.update_group(service, "missing", GroupUpdate(name="x"), "t1", updater_id=admin.id) is None
+    assert (
+        group_ops.update_group(
+            service,
+            "missing",
+            GroupUpdate(name="x"),
+            "t1",
+            actor=AuthActorCaps(user_id=admin.id),
+        )
+        is None
+    )
     with pytest.raises(HTTPException, match="Not allowed"):
         group_ops.update_group(
-            service, created_group.id, GroupUpdate(description="x"), "t1", updater_id=other.id, actor_role="user"
+            service,
+            created_group.id,
+            GroupUpdate(description="x"),
+            "t1",
+            actor=AuthActorCaps(user_id=other.id, role="user"),
         )
     with pytest.raises(ValueError, match="cannot be empty"):
         group_ops.update_group(
-            service, created_group.id, GroupUpdate(name=" "), "t1", updater_id=admin.id, actor_role="admin"
+            service,
+            created_group.id,
+            GroupUpdate(name=" "),
+            "t1",
+            actor=AuthActorCaps(user_id=admin.id, role="admin"),
         )
     updated = group_ops.update_group(
         service,
         created_group.id,
         GroupUpdate(name="Ops2", is_active=False),
         "t1",
-        updater_id=admin.id,
-        actor_role="admin",
+        actor=AuthActorCaps(user_id=admin.id, role="admin"),
     )
     assert updated.name == "Ops2"
     assert updated.is_active is False
 
-    assert group_ops.delete_group(service, "missing", "t1", deleter_id=admin.id, actor_role="admin") is False
+    assert (
+        group_ops.delete_group(
+            service,
+            "missing",
+            "t1",
+            actor=AuthActorCaps(user_id=admin.id, role="admin"),
+        )
+        is False
+    )
     with pytest.raises(HTTPException, match="Not allowed"):
-        group_ops.delete_group(service, created_group.id, "t1", deleter_id=other.id, actor_role="user")
-    assert group_ops.delete_group(service, created_group.id, "t1", deleter_id=admin.id, actor_role="admin") is True
+        group_ops.delete_group(
+            service,
+            created_group.id,
+            "t1",
+            actor=AuthActorCaps(user_id=other.id, role="user"),
+        )
+    assert (
+        group_ops.delete_group(
+            service,
+            created_group.id,
+            "t1",
+            actor=AuthActorCaps(user_id=admin.id, role="admin"),
+        )
+        is True
+    )
 
 
 def test_group_permission_and_member_updates(monkeypatch):
@@ -196,16 +254,24 @@ def test_group_permission_and_member_updates(monkeypatch):
     service = _service()
 
     with pytest.raises(HTTPException, match="Actor context is required"):
-        group_ops.update_group_permissions(service, group.id, [], "t1", actor_user_id=None)
+        group_ops.update_group_permissions(service, group.id, [], "t1", actor=None)
 
     with pytest.raises(HTTPException, match="Missing permission"):
         group_ops.update_group_permissions(
-            service, group.id, [perm.name], "t1", actor_user_id=member.id, actor_role="user", actor_permissions=[]
+            service,
+            group.id,
+            [perm.name],
+            "t1",
+            actor=AuthActorCaps(user_id=member.id, role="user", permissions=[]),
         )
 
     with pytest.raises(HTTPException, match="higher than your own"):
         group_ops.update_group_permissions(
-            service, group.id, ["unknown:perm"], "t1", actor_user_id=admin.id, actor_role="admin"
+            service,
+            group.id,
+            ["unknown:perm"],
+            "t1",
+            actor=AuthActorCaps(user_id=admin.id, role="admin"),
         )
 
     assert (
@@ -214,9 +280,7 @@ def test_group_permission_and_member_updates(monkeypatch):
             group.id,
             [perm.name],
             "t1",
-            actor_user_id=admin.id,
-            actor_role="admin",
-            actor_permissions=[perm.name],
+            actor=AuthActorCaps(user_id=admin.id, role="admin", permissions=[perm.name]),
         )
         is True
     )
@@ -224,11 +288,21 @@ def test_group_permission_and_member_updates(monkeypatch):
 
     with pytest.raises(HTTPException, match="Missing permission"):
         group_ops.update_group_members(
-            service, group.id, [member.id], "t1", actor_user_id=member.id, actor_role="user", actor_permissions=[]
+            service,
+            group.id,
+            [member.id],
+            "t1",
+            actor=AuthActorCaps(user_id=member.id, role="user", permissions=[]),
         )
 
     with pytest.raises(ValueError, match="Users not found"):
-        group_ops.update_group_members(service, group.id, ["missing"], "t1", actor_user_id=admin.id, actor_role="admin")
+        group_ops.update_group_members(
+            service,
+            group.id,
+            ["missing"],
+            "t1",
+            actor=AuthActorCaps(user_id=admin.id, role="admin"),
+        )
 
     with pytest.raises(HTTPException, match="admin users"):
         group_ops.update_group_members(
@@ -236,19 +310,34 @@ def test_group_permission_and_member_updates(monkeypatch):
             group.id,
             [admin.id],
             "t1",
-            actor_user_id=member.id,
-            actor_role="user",
-            actor_permissions=["update:group_members"],
+            actor=AuthActorCaps(
+                user_id=member.id,
+                role="user",
+                permissions=["update:group_members"],
+            ),
         )
 
     assert (
-        group_ops.update_group_members(service, group.id, [member.id], "t1", actor_user_id=admin.id, actor_role="admin")
+        group_ops.update_group_members(
+            service,
+            group.id,
+            [member.id],
+            "t1",
+            actor=AuthActorCaps(user_id=admin.id, role="admin"),
+        )
         is True
     )
     assert {user.id for user in db.query(Group).filter_by(id=group.id).first().members} == {member.id}
 
     assert (
-        group_ops.update_group_members(service, group.id, [], "t1", actor_user_id=admin.id, actor_role="admin") is True
+        group_ops.update_group_members(
+            service,
+            group.id,
+            [],
+            "t1",
+            actor=AuthActorCaps(user_id=admin.id, role="admin"),
+        )
+        is True
     )
     persisted_group = db.query(Group).filter_by(id=group.id).first()
     assert persisted_group is not None

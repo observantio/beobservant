@@ -559,11 +559,13 @@ async def test_proxy_authorization_helper_branches(monkeypatch):
         await proxy_auth_ops._authorize_dashboard_access(
             _ProxyStub(_GrafanaDashServiceStub()),
             _token_data(),
-            dashboard_uid=None,
-            dashboard_obj=None,
-            folder_obj=folder_obj,
-            original_path="/grafana/api/search",
-            original_method="GET",
+            proxy_auth_ops.DashboardProxyAuthContext(
+                dashboard_uid=None,
+                dashboard_obj=None,
+                folder_obj=folder_obj,
+                original_path="/grafana/api/search",
+                original_method="GET",
+            ),
         )
         is folder_obj
     )
@@ -586,11 +588,13 @@ async def test_proxy_authorization_helper_branches(monkeypatch):
         await proxy_auth_ops._authorize_dashboard_access(
             _ProxyStub(_GrafanaDashServiceStub()),
             _token_data(),
-            dashboard_uid="dash-5",
-            dashboard_obj=dashboard_obj,
-            folder_obj=folder_obj,
-            original_path="/grafana/api/dashboards/uid/dash-5",
-            original_method="GET",
+            proxy_auth_ops.DashboardProxyAuthContext(
+                dashboard_uid="dash-5",
+                dashboard_obj=dashboard_obj,
+                folder_obj=folder_obj,
+                original_path="/grafana/api/dashboards/uid/dash-5",
+                original_method="GET",
+            ),
         )
         is folder_obj
     )
@@ -599,11 +603,13 @@ async def test_proxy_authorization_helper_branches(monkeypatch):
         await proxy_auth_ops._authorize_dashboard_access(
             _ProxyStub(_GrafanaDashServiceStub()),
             _token_data(),
-            dashboard_uid="dash-5",
-            dashboard_obj=None,
-            folder_obj=folder_obj,
-            original_path="/grafana/api/dashboards/uid/dash-5",
-            original_method="GET",
+            proxy_auth_ops.DashboardProxyAuthContext(
+                dashboard_uid="dash-5",
+                dashboard_obj=None,
+                folder_obj=folder_obj,
+                original_path="/grafana/api/dashboards/uid/dash-5",
+                original_method="GET",
+            ),
         )
 
     hidden_folder = SimpleNamespace(
@@ -624,11 +630,13 @@ async def test_proxy_authorization_helper_branches(monkeypatch):
         await proxy_auth_ops._authorize_dashboard_access(
             _ProxyStub(_GrafanaDashServiceStub()),
             _token_data(),
-            dashboard_uid="dash-5",
-            dashboard_obj=dashboard_obj,
-            folder_obj=folder_obj,
-            original_path="/grafana/api/dashboards/uid/dash-5",
-            original_method="GET",
+            proxy_auth_ops.DashboardProxyAuthContext(
+                dashboard_uid="dash-5",
+                dashboard_obj=dashboard_obj,
+                folder_obj=folder_obj,
+                original_path="/grafana/api/dashboards/uid/dash-5",
+                original_method="GET",
+            ),
         )
 
 
@@ -654,12 +662,14 @@ async def test_proxy_datasource_and_request_error_branches(monkeypatch):
     await proxy_auth_ops._authorize_datasource_access(
         _ProxyStub(_GrafanaServiceStub()),
         _token_data(),
-        datasource_uid="ds-1",
-        datasource_id=None,
-        datasource_by_uid=ds_obj,
-        datasource_by_id=None,
-        original_path="/grafana/api/datasources/uid/ds-1",
-        original_method="PUT",
+        proxy_auth_ops.DatasourceProxyAuthContext(
+            datasource_uid="ds-1",
+            datasource_id=None,
+            datasource_by_uid=ds_obj,
+            datasource_by_id=None,
+            original_path="/grafana/api/datasources/uid/ds-1",
+            original_method="PUT",
+        ),
     )
     assert writable_calls == ["ds-1"]
 
@@ -667,12 +677,14 @@ async def test_proxy_datasource_and_request_error_branches(monkeypatch):
         await proxy_auth_ops._authorize_datasource_access(
             _ProxyStub(_GrafanaServiceStub()),
             _token_data(),
-            datasource_uid="ds-1",
-            datasource_id=None,
-            datasource_by_uid=None,
-            datasource_by_id=None,
-            original_path="/grafana/api/datasources/uid/ds-1",
-            original_method="GET",
+            proxy_auth_ops.DatasourceProxyAuthContext(
+                datasource_uid="ds-1",
+                datasource_id=None,
+                datasource_by_uid=None,
+                datasource_by_id=None,
+                original_path="/grafana/api/datasources/uid/ds-1",
+                original_method="GET",
+            ),
         )
 
     async def lookup_safe(*args, **kwargs):
@@ -683,12 +695,14 @@ async def test_proxy_datasource_and_request_error_branches(monkeypatch):
         await proxy_auth_ops._authorize_datasource_access(
             _ProxyStub(_GrafanaServiceStub()),
             _token_data(),
-            datasource_uid="ds-1",
-            datasource_id=None,
-            datasource_by_uid=None,
-            datasource_by_id=None,
-            original_path="/grafana/api/datasources/uid/ds-1",
-            original_method="PUT",
+            proxy_auth_ops.DatasourceProxyAuthContext(
+                datasource_uid="ds-1",
+                datasource_id=None,
+                datasource_by_uid=None,
+                datasource_by_id=None,
+                original_path="/grafana/api/datasources/uid/ds-1",
+                original_method="PUT",
+            ),
         )
 
     proxy_auth_ops._authorize_folder_access(_token_data(), folder_uid=None, folder_obj=None)

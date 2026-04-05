@@ -20,6 +20,7 @@ ensure_test_env()
 
 from config import config
 from services import database_auth_service as das
+from services.auth.actor_caps import AuthActorCaps
 
 
 def _patch_sync(monkeypatch, obj, name, result, calls):
@@ -223,10 +224,12 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "create_user",
             ("payload", "tenant"),
             {
-                "creator_id": "creator",
-                "actor_role": "admin",
-                "actor_permissions": ["perm"],
-                "actor_is_superuser": True,
+                "actor": AuthActorCaps(
+                    user_id="creator",
+                    role="admin",
+                    permissions=["perm"],
+                    is_superuser=True,
+                ),
             },
             "created-user",
         ),
@@ -240,10 +243,12 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "update_user_permissions",
             ("user-1", ["perm"], "tenant"),
             {
-                "actor_user_id": "actor",
-                "actor_role": "admin",
-                "actor_permissions": ["perm"],
-                "actor_is_superuser": True,
+                "actor": AuthActorCaps(
+                    user_id="actor",
+                    role="admin",
+                    permissions=["perm"],
+                    is_superuser=True,
+                ),
             },
             True,
         ),
@@ -263,7 +268,7 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "list_groups_op",
             "list_groups",
             ("tenant",),
-            {"actor_user_id": "actor", "actor_role": "admin", "actor_is_superuser": True},
+            {"actor": AuthActorCaps(user_id="actor", role="admin", is_superuser=True)},
             ["group"],
         ),
         (
@@ -271,23 +276,23 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "get_group_op",
             "get_group",
             ("group-1", "tenant"),
-            {"actor_user_id": "actor", "actor_role": "admin", "actor_is_superuser": True},
+            {"actor": AuthActorCaps(user_id="actor", role="admin", is_superuser=True)},
             "group",
         ),
         (
             "das",
             "delete_group_op",
             "delete_group",
-            ("group-1", "tenant", "deleter"),
-            {"actor_role": "admin", "actor_is_superuser": True},
+            ("group-1", "tenant"),
+            {"actor": AuthActorCaps(user_id="deleter", role="admin", is_superuser=True)},
             True,
         ),
         (
             "das",
             "update_group_op",
             "update_group",
-            ("group-1", "update", "tenant", "updater"),
-            {"actor_role": "admin", "actor_is_superuser": True},
+            ("group-1", "update", "tenant"),
+            {"actor": AuthActorCaps(user_id="updater", role="admin", is_superuser=True)},
             "group",
         ),
         (
@@ -296,10 +301,12 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "update_group_permissions",
             ("group-1", ["perm"], "tenant"),
             {
-                "actor_user_id": "actor",
-                "actor_role": "admin",
-                "actor_permissions": ["perm"],
-                "actor_is_superuser": True,
+                "actor": AuthActorCaps(
+                    user_id="actor",
+                    role="admin",
+                    permissions=["perm"],
+                    is_superuser=True,
+                ),
             },
             True,
         ),
@@ -309,10 +316,12 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "update_group_members",
             ("group-1", ["u1"], "tenant"),
             {
-                "actor_user_id": "actor",
-                "actor_role": "admin",
-                "actor_permissions": ["perm"],
-                "actor_is_superuser": True,
+                "actor": AuthActorCaps(
+                    user_id="actor",
+                    role="admin",
+                    permissions=["perm"],
+                    is_superuser=True,
+                ),
             },
             True,
         ),
@@ -346,17 +355,17 @@ def test_log_audit_delegates(monkeypatch):
 
     monkeypatch.setattr(das.db_audit, "log_audit", fake)
 
-    svc.log_audit(
-        "db",
-        "tenant",
-        "user",
-        "action",
-        "resource",
-        "id-1",
-        {"ok": True},
+    record = das.db_audit.AuditLogRecord(
+        tenant_id="tenant",
+        user_id="user",
+        action="action",
+        resource_type="resource",
+        resource_id="id-1",
+        details={"ok": True},
         ip_address="127.0.0.1",
         user_agent="pytest",
     )
+    svc.log_audit("db", record)
 
-    assert called["args"][:6] == ("db", "tenant", "user", "action", "resource", "id-1")
-    assert called["kwargs"] == {"ip_address": "127.0.0.1", "user_agent": "pytest"}
+    assert called["args"] == ("db", record)
+    assert called["kwargs"] == {}

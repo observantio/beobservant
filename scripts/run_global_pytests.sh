@@ -9,11 +9,35 @@ COVERAGE_DIR="${REPORT_DIR}/coverage"
 JUNIT_DIR="${REPORT_DIR}/junit"
 COVERAGE_THRESHOLD="${COVERAGE_THRESHOLD:-100}"
 
-SERVICES=(
-  gatekeeper
-  notifier
-  watchdog
-)
+ALL_SERVICES=(resolver gatekeeper notifier watchdog)
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [SERVICE]
+
+Run pytest with coverage and JUnit output per service.
+
+  SERVICE   Optional. One of: ${ALL_SERVICES[*]}
+            If omitted, all services are run and coverage is combined.
+
+Environment:
+  COVERAGE_THRESHOLD   Fail under threshold (default: 100)
+
+Examples:
+  $(basename "$0")
+  $(basename "$0") watchdog
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -gt 1 ]]; then
+  usage >&2
+  exit 2
+fi
 
 if [[ ! -x "${VENV_PYTEST}" ]]; then
   echo "error: ${VENV_PYTEST} not found or not executable. Create the virtualenv first." >&2
@@ -34,6 +58,24 @@ if [[ "${help_output}" != *"--cov"* ]]; then
   echo "error: pytest-cov is not installed in ${ROOT_DIR}/.venv" >&2
   echo "install it with: ${ROOT_DIR}/.venv/bin/pip install pytest-cov" >&2
   exit 1
+fi
+
+services_to_run=("${ALL_SERVICES[@]}")
+if [[ $# -eq 1 ]]; then
+  want="$1"
+  ok=0
+  for s in "${ALL_SERVICES[@]}"; do
+    if [[ "$s" == "$want" ]]; then
+      ok=1
+      break
+    fi
+  done
+  if [[ "$ok" -ne 1 ]]; then
+    echo "error: unknown service '${want}'. Expected one of: ${ALL_SERVICES[*]}" >&2
+    usage >&2
+    exit 2
+  fi
+  services_to_run=("$want")
 fi
 
 mkdir -p "${COVERAGE_DIR}" "${JUNIT_DIR}"
@@ -66,7 +108,7 @@ run_suite() {
   )
 }
 
-for service in "${SERVICES[@]}"; do
+for service in "${services_to_run[@]}"; do
   run_suite "${service}"
 done
 
@@ -75,14 +117,29 @@ echo "==> Combining coverage reports"
 
 (
   cd "${ROOT_DIR}"
-  COVERAGE_FILE="${COVERAGE_DIR}/.coverage" "${VENV_COVERAGE}" combine "${COVERAGE_DIR}"/.coverage.*
+  combine_paths=()
+  for service in "${services_to_run[@]}"; do
+    f="${COVERAGE_DIR}/.coverage.${service}"
+    if [[ -f "${f}" ]]; then
+      combine_paths+=("${f}")
+    fi
+  done
+  if [[ ${#combine_paths[@]} -eq 0 ]]; then
+    echo "error: no per-service coverage data for: ${services_to_run[*]}" >&2
+    exit 1
+  fi
+  COVERAGE_FILE="${COVERAGE_DIR}/.coverage" "${VENV_COVERAGE}" combine "${combine_paths[@]}"
   COVERAGE_FILE="${COVERAGE_DIR}/.coverage" "${VENV_COVERAGE}" report -m
   COVERAGE_FILE="${COVERAGE_DIR}/.coverage" "${VENV_COVERAGE}" xml -o "${COVERAGE_DIR}/coverage.xml"
   COVERAGE_FILE="${COVERAGE_DIR}/.coverage" "${VENV_COVERAGE}" html -d "${COVERAGE_DIR}/html"
 )
 
 echo
-echo "All service pytest suites completed."
+if [[ ${#services_to_run[@]} -eq 4 ]]; then
+  echo "All service pytest suites completed."
+else
+  echo "pytest suites completed for: ${services_to_run[*]}"
+fi
 echo "JUnit reports:    ${JUNIT_DIR}"
 echo "Coverage reports: ${COVERAGE_DIR}"
 echo "Combined HTML:    ${COVERAGE_DIR}/html/index.html"

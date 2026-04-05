@@ -25,6 +25,13 @@ ensure_test_env()
 from db_models import ApiKeyShare, Base, GrafanaDatasource, Group, Tenant, User, UserApiKey
 from models.grafana.grafana_datasource_models import DatasourceCreate, DatasourceUpdate
 from services.grafana import datasource_ops
+from services.grafana.grafana_bundles import (
+    DatasourceCreateOptions,
+    DatasourceListParams,
+    DatasourceQueryEnforcement,
+    DatasourceUpdateOptions,
+    GrafanaUserScope,
+)
 from services.grafana.grafana_service import GrafanaAPIError
 
 
@@ -107,8 +114,8 @@ class GrafanaServiceStub:
 
 
 def _service(stub):
-    def validate_group_visibility(db, *, shared_group_ids, **kwargs):
-        return db.query(Group).filter(Group.id.in_(shared_group_ids or [])).all()
+    def validate_group_visibility(db, validation):
+        return db.query(Group).filter(Group.id.in_(validation.shared_group_ids or [])).all()
 
     def raise_http_from_grafana_error(exc):
         raise HTTPException(status_code=exc.status, detail=str(exc.body))
@@ -334,11 +341,16 @@ def test_get_datasources_filters_hidden_for_current_user():
     }
     service = _service(stub)
 
-    visible = asyncio.run(datasource_ops.get_datasources(service, db, viewer.id, "t1", [group.id]))
+    viewer_scope = GrafanaUserScope(viewer.id, "t1", [group.id])
+    visible = asyncio.run(
+        datasource_ops.get_datasources(service, db, viewer_scope, DatasourceListParams())
+    )
     assert {item.uid for item in visible} == {"uid-tenant"}
 
     with_hidden = asyncio.run(
-        datasource_ops.get_datasources(service, db, viewer.id, "t1", [group.id], show_hidden=True)
+        datasource_ops.get_datasources(
+            service, db, viewer_scope, DatasourceListParams(show_hidden=True)
+        )
     )
     assert {item.uid for item in with_hidden} == {"uid-group", "uid-tenant"}
 
@@ -392,26 +404,34 @@ def test_enforce_query_access_and_read_paths():
     stub.by_name = {"Grouped": stub.items["uid-group"]}
     service = _service(stub)
 
+    viewer_scope = GrafanaUserScope(viewer.id, "t1", [group.id])
+    outsider_scope = GrafanaUserScope(outsider.id, "t1", [])
     asyncio.run(
         datasource_ops.enforce_datasource_query_access(
-            service, db, viewer.id, "t1", [group.id], "/api/ds/query", "GET", {}
+            service,
+            db,
+            viewer_scope,
+            DatasourceQueryEnforcement(path="/api/ds/query", method="GET", body={}),
         )
     )
     asyncio.run(
         datasource_ops.enforce_datasource_query_access(
             service,
             db,
-            viewer.id,
-            "t1",
-            [group.id],
-            "/api/ds/query",
-            "POST",
-            {"queries": [{"datasourceUid": "uid-group"}]},
+            viewer_scope,
+            DatasourceQueryEnforcement(
+                path="/api/ds/query",
+                method="POST",
+                body={"queries": [{"datasourceUid": "uid-group"}]},
+            ),
         )
     )
     asyncio.run(
         datasource_ops.enforce_datasource_query_access(
-            service, db, viewer.id, "t1", [group.id], "/api/datasources/proxy/14", "POST", {}
+            service,
+            db,
+            viewer_scope,
+            DatasourceQueryEnforcement(path="/api/datasources/proxy/14", method="POST", body={}),
         )
     )
 
@@ -420,28 +440,48 @@ def test_enforce_query_access_and_read_paths():
             datasource_ops.enforce_datasource_query_access(
                 service,
                 db,
-                outsider.id,
-                "t1",
-                [],
-                "/api/ds/query",
-                "POST",
-                {"queries": [{"datasourceUid": "uid-group"}]},
+                outsider_scope,
+                DatasourceQueryEnforcement(
+                    path="/api/ds/query",
+                    method="POST",
+                    body={"queries": [{"datasourceUid": "uid-group"}]},
+                ),
             )
         )
 
-    visible = asyncio.run(datasource_ops.get_datasources(service, db, viewer.id, "t1", [group.id]))
+    visible = asyncio.run(
+        datasource_ops.get_datasources(service, db, viewer_scope, DatasourceListParams())
+    )
     assert {item.uid for item in visible} == {"uid-group", "uid-tenant", "uid-system"}
-    hidden_filtered = asyncio.run(datasource_ops.get_datasources(service, db, outsider.id, "t1", [group.id]))
+    hidden_filtered = asyncio.run(
+        datasource_ops.get_datasources(service, db, outsider_scope, DatasourceListParams())
+    )
     assert all(item.uid != "uid-group" for item in hidden_filtered)
     grouped_only = asyncio.run(
-        datasource_ops.get_datasources(service, db, viewer.id, "t1", [group.id], team_id=group.id)
+        datasource_ops.get_datasources(
+            service,
+            db,
+            viewer_scope,
+            DatasourceListParams(team_id=str(group.id)),
+        )
     )
     assert [item.uid for item in grouped_only] == ["uid-group"]
-    single = asyncio.run(datasource_ops.get_datasources(service, db, viewer.id, "t1", [group.id], uid="uid-group"))
+    single = asyncio.run(
+        datasource_ops.get_datasources(
+            service, db, viewer_scope, DatasourceListParams(uid="uid-group")
+        )
+    )
     assert single[0].uid == "uid-group"
-    assert asyncio.run(datasource_ops.get_datasource(service, db, "uid-private", viewer.id, "t1", [group.id])) is None
     assert (
-        asyncio.run(datasource_ops.get_datasource_by_name(service, db, "Grouped", viewer.id, "t1", [group.id])).uid
+        asyncio.run(
+            datasource_ops.get_datasource(service, db, "uid-private", viewer_scope)
+        )
+        is None
+    )
+    assert (
+        asyncio.run(
+            datasource_ops.get_datasource_by_name(service, db, "Grouped", viewer_scope)
+        ).uid
         == "uid-group"
     )
     assert asyncio.run(datasource_ops.query_datasource(service, {"a": 1})) == {"ok": True}
@@ -478,15 +518,15 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
     service = _service(stub)
     monkeypatch.setattr(datasource_ops.uuid, "uuid4", lambda: SimpleNamespace(hex="abcdef123456"))
 
+    viewer_scope = GrafanaUserScope(viewer.id, "t1", [group.id])
     with pytest.raises(HTTPException, match="already exists"):
         asyncio.run(
             datasource_ops.create_datasource(
                 service,
                 db,
                 DatasourceCreate(name="Grouped", type="graphite", url="http://new"),
-                viewer.id,
-                "t1",
-                [group.id],
+                viewer_scope,
+                DatasourceCreateOptions(),
             )
         )
 
@@ -496,11 +536,8 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
             service,
             db,
             DatasourceCreate(name="Metrics", type="prometheus", url="http://new", orgId="scope-shared"),
-            viewer.id,
-            "t1",
-            [group.id],
-            visibility="group",
-            shared_group_ids=[group.id],
+            viewer_scope,
+            DatasourceCreateOptions(visibility="group", shared_group_ids=[group.id]),
         )
     )
     assert created.name == "Metrics"
@@ -529,7 +566,12 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
         stub.items["uid-created"].isDefault = True
         asyncio.run(
             datasource_ops.update_datasource(
-                service, db, "uid-created", DatasourceUpdate(name="Nope"), viewer.id, "t1", [group.id]
+                service,
+                db,
+                "uid-created",
+                DatasourceUpdate(name="Nope"),
+                viewer_scope,
+                DatasourceUpdateOptions(),
             )
         )
     stub.items["uid-created"].isDefault = False
@@ -541,10 +583,8 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
             db,
             "uid-created",
             DatasourceUpdate(name="Renamed", orgId="scope-shared"),
-            viewer.id,
-            "t1",
-            [group.id],
-            visibility="tenant",
+            viewer_scope,
+            DatasourceUpdateOptions(visibility="tenant"),
         )
     )
     assert updated.name == "Renamed"
@@ -553,11 +593,11 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
     assert db.query(GrafanaDatasource).filter_by(grafana_uid="uid-created").first().visibility == "tenant"
     assert stub.update_calls[-1][1].json_data.get("watchdogScopeKey") == "scope-shared"
 
-    assert asyncio.run(datasource_ops.delete_datasource(service, db, "missing", viewer.id, "t1", [group.id])) is False
+    assert asyncio.run(datasource_ops.delete_datasource(service, db, "missing", viewer_scope)) is False
     stub.items["uid-created"].readOnly = True
     with pytest.raises(HTTPException, match="cannot be deleted"):
-        asyncio.run(datasource_ops.delete_datasource(service, db, "uid-created", viewer.id, "t1", [group.id]))
+        asyncio.run(datasource_ops.delete_datasource(service, db, "uid-created", viewer_scope))
     stub.items["uid-created"].readOnly = False
     assert (
-        asyncio.run(datasource_ops.delete_datasource(service, db, "uid-created", viewer.id, "t1", [group.id])) is True
+        asyncio.run(datasource_ops.delete_datasource(service, db, "uid-created", viewer_scope)) is True
     )

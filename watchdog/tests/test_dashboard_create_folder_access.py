@@ -21,13 +21,14 @@ os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 from db_models import Base, GrafanaFolder, Group, Tenant, User
 from models.grafana.grafana_dashboard_models import Dashboard, DashboardCreate
 from services.grafana import dashboard_ops
+from services.grafana.grafana_bundles import DashboardCreateOptions, GrafanaUserScope, GroupVisibilityValidation
 
 
 class _GrafanaServiceStub:
     def __init__(self):
         self._next_uid = 1
 
-    async def search_dashboards(self, **kwargs):
+    async def search_dashboards(self, filters=None, **_kwargs):
         return []
 
     async def get_folders(self):
@@ -60,7 +61,7 @@ class _ProxyStub:
         self.grafana_service = _GrafanaServiceStub()
         self.logger = SimpleNamespace(debug=lambda *args, **kwargs: None)
 
-    def validate_group_visibility(self, db, *, user_id=None, tenant_id, group_ids, shared_group_ids, is_admin):
+    def validate_group_visibility(self, db, validation: GroupVisibilityValidation):
         return []
 
     @staticmethod
@@ -128,12 +129,12 @@ async def test_create_dashboard_allows_non_owner_in_tenant_folder():
         service,
         db,
         _payload(11),
-        user_id="u2",
-        tenant_id="t1",
-        group_ids=[],
-        visibility="private",
-        shared_group_ids=[],
-        is_admin=False,
+        GrafanaUserScope("u2", "t1", []),
+        DashboardCreateOptions(
+            visibility="private",
+            shared_group_ids=[],
+            is_admin=False,
+        ),
     )
     assert result is not None
     assert result.get("created_by") == "u2"
@@ -181,12 +182,12 @@ async def test_create_dashboard_allows_non_owner_in_shared_group_folder():
         service,
         db,
         _payload(12),
-        user_id="u2",
-        tenant_id="t1",
-        group_ids=["g1"],
-        visibility="private",
-        shared_group_ids=[],
-        is_admin=False,
+        GrafanaUserScope("u2", "t1", ["g1"]),
+        DashboardCreateOptions(
+            visibility="private",
+            shared_group_ids=[],
+            is_admin=False,
+        ),
     )
     assert result is not None
     assert result.get("created_by") == "u2"
@@ -231,12 +232,12 @@ async def test_create_dashboard_still_denies_non_owner_in_private_folder():
             service,
             db,
             _payload(13),
-            user_id="u2",
-            tenant_id="t1",
-            group_ids=[],
-            visibility="private",
-            shared_group_ids=[],
-            is_admin=False,
+            GrafanaUserScope("u2", "t1", []),
+            DashboardCreateOptions(
+                visibility="private",
+                shared_group_ids=[],
+                is_admin=False,
+            ),
         )
     assert exc.value.status_code == 403
     assert "folder access denied" in str(exc.value.detail).lower()
@@ -282,12 +283,12 @@ async def test_create_dashboard_denies_non_owner_in_tenant_folder_when_owner_onl
             service,
             db,
             _payload(11),
-            user_id="u2",
-            tenant_id="t1",
-            group_ids=[],
-            visibility="private",
-            shared_group_ids=[],
-            is_admin=False,
+            GrafanaUserScope("u2", "t1", []),
+            DashboardCreateOptions(
+                visibility="private",
+                shared_group_ids=[],
+                is_admin=False,
+            ),
         )
     assert exc.value.status_code == 403
     assert "owner-only" in str(exc.value.detail).lower()
@@ -332,13 +333,13 @@ async def test_create_dashboard_allows_delegated_folder_create_without_create_pe
         service,
         db,
         _payload(11),
-        user_id="u2",
-        tenant_id="t1",
-        group_ids=[],
-        visibility="private",
-        shared_group_ids=[],
-        is_admin=False,
-        actor_permissions=["read:dashboards"],
+        GrafanaUserScope("u2", "t1", []),
+        DashboardCreateOptions(
+            visibility="private",
+            shared_group_ids=[],
+            is_admin=False,
+            actor_permissions=["read:dashboards"],
+        ),
     )
     assert result is not None
     assert result.get("created_by") == "u2"
@@ -384,12 +385,12 @@ async def test_create_dashboard_denies_without_create_permission_when_not_delega
             service,
             db,
             _payload(11),
-            user_id="u2",
-            tenant_id="t1",
-            group_ids=[],
-            visibility="private",
-            shared_group_ids=[],
-            is_admin=False,
-            actor_permissions=["read:dashboards"],
+            GrafanaUserScope("u2", "t1", []),
+            DashboardCreateOptions(
+                visibility="private",
+                shared_group_ids=[],
+                is_admin=False,
+                actor_permissions=["read:dashboards"],
+            ),
         )
     assert exc.value.status_code == 403

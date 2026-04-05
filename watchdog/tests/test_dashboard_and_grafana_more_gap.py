@@ -22,6 +22,7 @@ ensure_test_env()
 from db_models import Base, GrafanaDashboard, Tenant, User
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
 from services.grafana import dashboard_ops
+from services.grafana.grafana_bundles import DashboardSearchParams, GrafanaUserScope
 from services.grafana.grafana_service import GrafanaService
 
 
@@ -72,7 +73,7 @@ async def test_dashboard_ops_get_delete_toggle_and_uid_search_paths():
                 }
             return None
 
-        async def search_dashboards(self, **_kwargs):
+        async def search_dashboards(self, filters=None, **_kwargs):
             return [
                 DashboardSearchResult(
                     id=101,
@@ -93,15 +94,17 @@ async def test_dashboard_ops_get_delete_toggle_and_uid_search_paths():
             return uid == "d1"
 
     service = SimpleNamespace(grafana_service=_Svc())
-    payload = await dashboard_ops.get_dashboard(service, db, "d1", "u1", "t1", [])
+    payload = await dashboard_ops.get_dashboard(service, db, "d1", GrafanaUserScope("u1", "t1", []))
     assert payload is not None and payload.get("is_owned") is True
-    assert await dashboard_ops.get_dashboard(service, db, "missing", "u1", "t1", []) is None
+    assert await dashboard_ops.get_dashboard(service, db, "missing", GrafanaUserScope("u1", "t1", [])) is None
 
-    listed = await dashboard_ops.search_dashboards(service, db, "u1", "t1", [], uid="d1")
+    listed = await dashboard_ops.search_dashboards(
+        service, db, GrafanaUserScope("u1", "t1", []), DashboardSearchParams(uid="d1")
+    )
     assert len(listed) == 1 and listed[0].uid == "d1"
 
-    assert await dashboard_ops.delete_dashboard(service, db, "missing", "u1", "t1", []) is False
-    assert await dashboard_ops.delete_dashboard(service, db, "d1", "u1", "t1", []) is True
+    assert await dashboard_ops.delete_dashboard(service, db, "missing", GrafanaUserScope("u1", "t1", [])) is False
+    assert await dashboard_ops.delete_dashboard(service, db, "d1", GrafanaUserScope("u1", "t1", [])) is True
     assert dashboard_ops.toggle_dashboard_hidden(db, "missing", "u1", "t1", True) is False
 
 

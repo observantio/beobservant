@@ -308,7 +308,7 @@ def test_workflow_public_and_internal_boundary_matrix(
     )
     monkeypatch.setattr(alertmanager_router, "enforce_public_endpoint_security", lambda *args, **kwargs: None)
 
-    async def _public_rules_forward(**_kwargs: Any) -> JSONResponse:
+    async def _public_rules_forward(_fwd: object, **_kwargs: Any) -> JSONResponse:
         return JSONResponse({"groups": []})
 
     monkeypatch.setattr(alertmanager_router.notifier_proxy_service, "forward", _public_rules_forward)

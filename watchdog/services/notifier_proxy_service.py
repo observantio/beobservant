@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Optional
 
 import httpx
@@ -26,6 +27,17 @@ from models.access.auth_models import TokenData
 from services.proxy.base_proxy import BaseProxyService
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class NotifierForwardRequest:
+    request: Request
+    upstream_path: str
+    current_user: Optional[TokenData]
+    require_api_key: bool
+    audit_action: str
+    correlation_id: Optional[str] = None
+    request_body: Optional[bytes] = None
 
 
 class NotifierProxyService(BaseProxyService):
@@ -103,17 +115,15 @@ class NotifierProxyService(BaseProxyService):
 
     @with_retry()
     @with_timeout()
-    async def forward(
-        self,
-        *,
-        request: Request,
-        upstream_path: str,
-        current_user: Optional[TokenData],
-        require_api_key: bool,
-        audit_action: str,
-        correlation_id: Optional[str] = None,
-        request_body: Optional[bytes] = None,
-    ) -> Response:
+    async def forward(self, fwd: NotifierForwardRequest) -> Response:
+        request = fwd.request
+        upstream_path = fwd.upstream_path
+        current_user = fwd.current_user
+        require_api_key = fwd.require_api_key
+        audit_action = fwd.audit_action
+        correlation_id = fwd.correlation_id
+        request_body = fwd.request_body
+
         service_token = config.get_secret("NOTIFIER_SERVICE_TOKEN")
         if not service_token:
             raise HTTPException(

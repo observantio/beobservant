@@ -15,38 +15,106 @@ from typing import List, Optional, Protocol
 from sqlalchemy.orm import Session
 
 from db_models import Group
+from services.grafana.grafana_bundles import (
+    GrafanaUserScope,
+    GroupVisibilityShareChange,
+    GroupVisibilityValidation,
+    VisibilityGroupResolveContext,
+)
 
 
 class _GroupVisibilityService(Protocol):
-    def validate_group_visibility(
-        self,
-        db: Session,
-        *,
-        user_id: str,
-        tenant_id: str,
-        group_ids: List[str],
-        shared_group_ids: Optional[List[str]],
-        is_admin: bool,
-    ) -> List[Group]: ...
+    def validate_group_visibility(self, db: Session, validation: GroupVisibilityValidation) -> List[Group]: ...
+
+
+def resolve_visibility_groups_for_scope(
+    service: _GroupVisibilityService,
+    db: Session,
+    scope: GrafanaUserScope,
+    *,
+    visibility: str,
+    shared_group_ids: Optional[List[str]],
+    is_admin: bool,
+) -> List[Group]:
+    return resolve_visibility_groups(
+        service,
+        db,
+        visibility_group_resolve_context(
+            scope,
+            visibility=visibility,
+            shared_group_ids=shared_group_ids,
+            is_admin=is_admin,
+        ),
+    )
 
 
 def resolve_visibility_groups(
     service: _GroupVisibilityService,
     db: Session,
-    user_id: str,
-    tenant_id: str,
-    visibility: str,
-    group_ids: List[str],
-    shared_group_ids: Optional[List[str]],
-    is_admin: bool,
+    ctx: VisibilityGroupResolveContext,
 ) -> List[Group]:
-    if visibility != "group":
+    if ctx.visibility != "group":
         return []
     return service.validate_group_visibility(
         db,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
+        GroupVisibilityValidation(
+            user_id=ctx.user_id,
+            tenant_id=ctx.tenant_id,
+            group_ids=ctx.group_ids,
+            shared_group_ids=ctx.shared_group_ids,
+            is_admin=ctx.is_admin,
+        ),
+    )
+
+
+def resolve_group_share_on_visibility_change(
+    service: _GroupVisibilityService,
+    db: Session,
+    spec: GroupVisibilityShareChange,
+) -> List[Group]:
+    if spec.visibility != "group" or spec.shared_group_ids is None:
+        return []
+    return service.validate_group_visibility(
+        db,
+        GroupVisibilityValidation(
+            user_id=spec.user_id,
+            tenant_id=spec.tenant_id,
+            group_ids=spec.group_ids,
+            shared_group_ids=spec.shared_group_ids,
+            is_admin=spec.is_admin,
+        ),
+    )
+
+
+def visibility_group_resolve_context(
+    scope: GrafanaUserScope,
+    *,
+    visibility: str,
+    shared_group_ids: Optional[List[str]],
+    is_admin: bool,
+) -> VisibilityGroupResolveContext:
+    return VisibilityGroupResolveContext(
+        user_id=scope.user_id,
+        tenant_id=scope.tenant_id,
+        visibility=visibility,
+        group_ids=scope.group_ids,
         shared_group_ids=shared_group_ids,
+        is_admin=is_admin,
+    )
+
+
+def group_share_change_for_scope(
+    scope: GrafanaUserScope,
+    *,
+    visibility: str,
+    shared_group_ids: Optional[List[str]],
+    is_admin: bool,
+) -> GroupVisibilityShareChange:
+    return GroupVisibilityShareChange(
+        visibility=visibility,
+        shared_group_ids=shared_group_ids,
+        user_id=scope.user_id,
+        tenant_id=scope.tenant_id,
+        group_ids=scope.group_ids,
         is_admin=is_admin,
     )

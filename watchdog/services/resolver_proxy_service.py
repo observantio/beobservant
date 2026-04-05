@@ -14,6 +14,7 @@ import asyncio
 import json
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Dict, Optional, TypeAlias
 import httpx
 from fastapi import HTTPException, status
@@ -26,6 +27,19 @@ from middleware.resilience import with_retry, with_timeout
 
 QueryParamValue: TypeAlias = str | int | float | bool
 QueryParams: TypeAlias = dict[str, QueryParamValue]
+
+
+@dataclass
+class ResolverProxyJsonRequest:
+    method: str
+    upstream_path: str
+    current_user: TokenData
+    tenant_id: str
+    payload: Optional[JSONDict] = None
+    params: Optional[QueryParams] = None
+    audit_action: str = "resolver.proxy"
+    correlation_id: Optional[str] = None
+    cache_ttl_seconds: Optional[int] = None
 
 
 class ResolverProxyService(BaseProxyService):
@@ -112,19 +126,17 @@ class ResolverProxyService(BaseProxyService):
 
     @with_retry()
     @with_timeout()
-    async def request_json(
-        self,
-        *,
-        method: str,
-        upstream_path: str,
-        current_user: TokenData,
-        tenant_id: str,
-        payload: Optional[JSONDict] = None,
-        params: Optional[QueryParams] = None,
-        audit_action: str = "resolver.proxy",
-        correlation_id: Optional[str] = None,
-        cache_ttl_seconds: Optional[int] = None,
-    ) -> JSONValue:
+    async def request_json(self, req: ResolverProxyJsonRequest) -> JSONValue:
+        method = req.method
+        upstream_path = req.upstream_path
+        current_user = req.current_user
+        tenant_id = req.tenant_id
+        payload = req.payload
+        params = req.params
+        audit_action = req.audit_action
+        correlation_id = req.correlation_id
+        cache_ttl_seconds = req.cache_ttl_seconds
+
         service_token = config.get_secret("RESOLVER_SERVICE_TOKEN")
         if not service_token:
             raise HTTPException(

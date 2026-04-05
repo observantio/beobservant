@@ -15,8 +15,22 @@ from __future__ import annotations
 from importlib import import_module
 import threading
 import time
+from dataclasses import dataclass
 from types import ModuleType
 from typing import Callable, Optional, Sequence
+
+
+@dataclass
+class VaultSecretProviderSettings:
+    address: str
+    token: Optional[str] = None
+    role_id: Optional[str] = None
+    secret_id_fn: Optional[Callable[[], str]] = None
+    prefix: str = "secret"
+    kv_version: int = 2
+    timeout: float = 2.0
+    cacert: Optional[str] = None
+    cache_ttl: float = 30.0
 
 
 class _VaultForbiddenFallback(Exception):
@@ -69,20 +83,20 @@ _S = object()
 
 
 class VaultSecretProvider:
-    def __init__(
-        self,
-        address: str,
-        token: Optional[str] = None,
-        role_id: Optional[str] = None,
-        secret_id_fn: Optional[Callable[[], str]] = None,
-        prefix: str = "secret",
-        kv_version: int = 2,
-        timeout: float = 2.0,
-        cacert: Optional[str] = None,
-        cache_ttl: float = 30.0,
-    ) -> None:
+    def __init__(self, settings: VaultSecretProviderSettings) -> None:
         if hvac is None:
             raise VaultClientError("hvac library is required for VaultSecretProvider")
+
+        address = settings.address
+        token = settings.token
+        role_id = settings.role_id
+        secret_id_fn = settings.secret_id_fn
+        prefix = settings.prefix
+        kv_version = settings.kv_version
+        timeout = settings.timeout
+        cacert = settings.cacert
+        cache_ttl = settings.cache_ttl
+
         if not address:
             raise VaultClientError("VAULT_ADDR is required")
         if kv_version not in (1, 2):

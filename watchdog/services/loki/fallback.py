@@ -10,6 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 import asyncio
 import re
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Protocol
 
 import httpx
@@ -90,29 +91,32 @@ class _LokiHttpClientLike(Protocol):
     ) -> Optional[JSONDict]: ...
 
 
-async def run_fallback_queries(
-    endpoint: str,
-    base_params: QueryParams,
-    headers: Dict[str, str],
-    query_str: str,
-    client: httpx.AsyncClient,
-    http_client: _LokiHttpClientLike,
-    max_fallbacks: int = 4,
-    concurrency: int = 4,
-) -> Optional[JSONDict]:
-    candidates = build_service_fallback_queries(query_str)[: max(0, max_fallbacks)]
+@dataclass(frozen=True, slots=True)
+class LokiFallbackQueryRun:
+    endpoint: str
+    base_params: QueryParams
+    headers: Dict[str, str]
+    query_str: str
+    client: httpx.AsyncClient
+    http_client: _LokiHttpClientLike
+    max_fallbacks: int = 4
+    concurrency: int = 4
+
+
+async def run_fallback_queries(run: LokiFallbackQueryRun) -> Optional[JSONDict]:
+    candidates = build_service_fallback_queries(run.query_str)[: max(0, run.max_fallbacks)]
     if not candidates:
         return None
 
-    semaphore = asyncio.Semaphore(max(1, concurrency))
+    semaphore = asyncio.Semaphore(max(1, run.concurrency))
 
     async def _query(candidate: str) -> Optional[JSONDict]:
         async with semaphore:
-            payload = await http_client.safe_get_json(
-                client,
-                endpoint,
-                params={**base_params, "query": candidate},
-                headers=headers,
+            payload = await run.http_client.safe_get_json(
+                run.client,
+                run.endpoint,
+                params={**run.base_params, "query": candidate},
+                headers=run.headers,
                 quiet=True,
             )
             return payload if isinstance(payload, dict) or payload is None else None

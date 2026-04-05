@@ -16,7 +16,7 @@ ensure_test_env()
 
 from models.grafana.grafana_dashboard_models import Dashboard, DashboardCreate, DashboardUpdate
 from models.grafana.grafana_datasource_models import DatasourceCreate, DatasourceUpdate
-from services.grafana.grafana_service import GrafanaService
+from services.grafana.grafana_service import GrafanaDashboardSearchRequest, GrafanaService
 
 
 class _Resp:
@@ -34,7 +34,7 @@ class _Resp:
 async def test_grafana_service_wrapper_methods_and_return_shapes(monkeypatch):
     service = GrafanaService(grafana_url="http://grafana.local", username="u", password="p", api_key="k")
 
-    async def safe(method, path, default=None, **kwargs):
+    async def safe(method, path, default=None, *, opts=None):
         if method == "DELETE":
             return default
         if path == "/api/search":
@@ -92,7 +92,7 @@ async def test_grafana_service_wrapper_methods_and_return_shapes(monkeypatch):
             return {"id": 5, "uid": "f1", "title": "Ops", "version": 2}
         return default
 
-    async def mutating(method, path, **kwargs):
+    async def mutating(method, path, *, opts=None):
         if path == "/api/dashboards/db":
             return {"id": 1, "uid": "d1", "dashboard": {"uid": "d1", "title": "CPU", "tags": []}}
         if path == "/api/datasources":
@@ -138,7 +138,7 @@ async def test_grafana_service_wrapper_methods_and_return_shapes(monkeypatch):
     monkeypatch.setattr(service, "_request", request)
     monkeypatch.setattr(service, "get_dashboard", get_dash)
 
-    results = await service.search_dashboards(query="cpu", starred=True)
+    results = await service.search_dashboards(GrafanaDashboardSearchRequest(query="cpu", starred=True))
     assert len(results) == 1 and results[0].uid == "d1"
 
     assert await service.get_dashboard("d1") is not None

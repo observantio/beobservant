@@ -32,6 +32,7 @@ from models.access.user_models import (
     UserResponse,
     UserUpdate,
 )
+from services.auth.actor_caps import AuthActorCaps
 from services.auth.helper import (
     invalidate_grafana_proxy_auth_cache,
     is_admin_check,
@@ -131,10 +132,12 @@ async def create_user(
         auth_service.create_user,
         user_create,
         current_user.tenant_id,
-        current_user.user_id,
-        current_user.role,
-        list(perms_check(current_user)),
-        bool(getattr(current_user, "is_superuser", False)),
+        AuthActorCaps(
+            user_id=current_user.user_id,
+            role=current_user.role,
+            permissions=list(perms_check(current_user)),
+            is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        ),
     )
     await notification_service.send_user_welcome_email(
         recipient_email=user.email,
@@ -266,10 +269,12 @@ async def update_user_permissions(
         user_id,
         permission_names,
         current_user.tenant_id,
-        current_user.user_id,
-        current_user.role,
-        list(perms_check(current_user)),
-        bool(getattr(current_user, "is_superuser", False)),
+        AuthActorCaps(
+            user_id=current_user.user_id,
+            role=current_user.role,
+            permissions=list(perms_check(current_user)),
+            is_superuser=bool(getattr(current_user, "is_superuser", False)),
+        ),
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, USER_NOT_FOUND)
     invalidate_grafana_proxy_auth_cache()

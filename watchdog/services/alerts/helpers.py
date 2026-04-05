@@ -17,64 +17,82 @@ from config import config
 from custom_types.json import JSONDict
 from middleware.dependencies import enforce_header_token, enforce_public_endpoint_security
 from models.access.auth_models import Permission, TokenData
-from services.notifier_proxy_service import notifier_proxy_service
+from services.notifier_proxy_service import NotifierForwardRequest, notifier_proxy_service
 
 SILENCE_META_KEY = "watchdog_meta"
 
 
-def required_permissions(path: str, method: str) -> Optional[Set[str]]:
-    p = f"/{path.strip('/')}" if path else "/"
-    m = method.upper()
-
+def _perms_alerts(p: str, m: str) -> Optional[Set[str]]:
     if p in {"/alerts", "/alerts/groups", "/status", "/receivers"} and m == "GET":
         return {Permission.READ_ALERTS.value}
     if p == "/alerts" and m == "POST":
         return {Permission.CREATE_ALERTS.value, Permission.WRITE_ALERTS.value}
     if p == "/alerts" and m == "DELETE":
         return {Permission.DELETE_ALERTS.value}
+    return None
 
+
+def _perms_incidents(p: str, m: str) -> Optional[Set[str]]:
     if p.startswith("/incidents"):
         return {Permission.READ_INCIDENTS.value} if m == "GET" else {Permission.UPDATE_INCIDENTS.value}
+    return None
 
-    if p.startswith("/silences"):
-        if m == "GET":
-            return {Permission.READ_SILENCES.value}
-        if m == "POST":
-            return {Permission.CREATE_SILENCES.value, Permission.WRITE_ALERTS.value}
-        if m == "PUT":
-            return {Permission.UPDATE_SILENCES.value, Permission.WRITE_ALERTS.value}
-        if m == "DELETE":
-            return {Permission.DELETE_SILENCES.value}
 
+def _perms_silences(p: str, m: str) -> Optional[Set[str]]:
+    if not p.startswith("/silences"):
+        return None
+    if m == "GET":
+        return {Permission.READ_SILENCES.value}
+    if m == "POST":
+        return {Permission.CREATE_SILENCES.value, Permission.WRITE_ALERTS.value}
+    if m == "PUT":
+        return {Permission.UPDATE_SILENCES.value, Permission.WRITE_ALERTS.value}
+    if m == "DELETE":
+        return {Permission.DELETE_SILENCES.value}
+    return None
+
+
+def _perms_rules(p: str, m: str) -> Optional[Set[str]]:
     if p.startswith("/rules/import") and m == "POST":
         return {Permission.CREATE_RULES.value, Permission.WRITE_ALERTS.value}
-    if p.startswith("/rules"):
-        if m == "GET":
-            return {Permission.READ_RULES.value}
-        if m == "POST":
-            return {Permission.CREATE_RULES.value, Permission.WRITE_ALERTS.value, Permission.TEST_RULES.value}
-        if m == "PUT":
-            return {Permission.UPDATE_RULES.value, Permission.WRITE_ALERTS.value}
-        if m == "DELETE":
-            return {Permission.DELETE_RULES.value}
+    if not p.startswith("/rules"):
+        return None
+    if m == "GET":
+        return {Permission.READ_RULES.value}
+    if m == "POST":
+        return {Permission.CREATE_RULES.value, Permission.WRITE_ALERTS.value, Permission.TEST_RULES.value}
+    if m == "PUT":
+        return {Permission.UPDATE_RULES.value, Permission.WRITE_ALERTS.value}
+    if m == "DELETE":
+        return {Permission.DELETE_RULES.value}
+    return None
 
-    if p.startswith("/channels"):
-        if m == "GET":
-            return {Permission.READ_CHANNELS.value}
-        if m == "POST":
-            return {Permission.CREATE_CHANNELS.value, Permission.WRITE_CHANNELS.value, Permission.TEST_CHANNELS.value}
-        if m == "PUT":
-            return {Permission.UPDATE_CHANNELS.value, Permission.WRITE_CHANNELS.value}
-        if m == "DELETE":
-            return {Permission.DELETE_CHANNELS.value}
 
-    if p.startswith("/jira") or p.startswith("/integrations"):
-        if p == "/jira/config":
-            return {Permission.MANAGE_TENANTS.value}
-        if m == "GET":
-            return {Permission.READ_INCIDENTS.value, Permission.UPDATE_INCIDENTS.value, Permission.READ_CHANNELS.value}
-        return {Permission.UPDATE_INCIDENTS.value}
+def _perms_channels(p: str, m: str) -> Optional[Set[str]]:
+    if not p.startswith("/channels"):
+        return None
+    if m == "GET":
+        return {Permission.READ_CHANNELS.value}
+    if m == "POST":
+        return {Permission.CREATE_CHANNELS.value, Permission.WRITE_CHANNELS.value, Permission.TEST_CHANNELS.value}
+    if m == "PUT":
+        return {Permission.UPDATE_CHANNELS.value, Permission.WRITE_CHANNELS.value}
+    if m == "DELETE":
+        return {Permission.DELETE_CHANNELS.value}
+    return None
 
+
+def _perms_jira_integrations(p: str, m: str) -> Optional[Set[str]]:
+    if not (p.startswith("/jira") or p.startswith("/integrations")):
+        return None
+    if p == "/jira/config":
+        return {Permission.MANAGE_TENANTS.value}
+    if m == "GET":
+        return {Permission.READ_INCIDENTS.value, Permission.UPDATE_INCIDENTS.value, Permission.READ_CHANNELS.value}
+    return {Permission.UPDATE_INCIDENTS.value}
+
+
+def _perms_metrics(p: str, _m: str) -> Optional[Set[str]]:
     if p in {"/metrics/names", "/metrics/query", "/metrics/labels"} or p.startswith("/metrics/label-values/"):
         return {
             Permission.READ_METRICS.value,
@@ -82,10 +100,29 @@ def required_permissions(path: str, method: str) -> Optional[Set[str]]:
             Permission.UPDATE_RULES.value,
             Permission.WRITE_ALERTS.value,
         }
+    return None
 
-    if p == "/public/rules":
-        return set()
 
+def _perms_public(_p: str, _m: str) -> Optional[Set[str]]:
+    return set() if _p == "/public/rules" else None
+
+
+def required_permissions(path: str, method: str) -> Optional[Set[str]]:
+    p = f"/{path.strip('/')}" if path else "/"
+    m = method.upper()
+    for fn in (
+        _perms_alerts,
+        _perms_incidents,
+        _perms_silences,
+        _perms_rules,
+        _perms_channels,
+        _perms_jira_integrations,
+        _perms_metrics,
+        _perms_public,
+    ):
+        hit = fn(p, m)
+        if hit is not None:
+            return hit
     return None
 
 
@@ -264,11 +301,13 @@ def webhook_route(upstream_suffix: str, audit_action: str, scope: str) -> Callab
             unauthorized_detail="Invalid webhook token",
         )
         return await notifier_proxy_service.forward(
-            request=request,
-            upstream_path=f"/internal/v1/alertmanager/alerts/{upstream_suffix}",
-            current_user=None,
-            require_api_key=False,
-            audit_action=audit_action,
+            NotifierForwardRequest(
+                request=request,
+                upstream_path=f"/internal/v1/alertmanager/alerts/{upstream_suffix}",
+                current_user=None,
+                require_api_key=False,
+                audit_action=audit_action,
+            ),
         )
 
     return handler

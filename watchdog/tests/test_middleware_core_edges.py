@@ -25,6 +25,7 @@ ensure_test_env()
 from middleware import audit as audit_middleware
 from middleware.concurrency_limit import ConcurrencyLimitMiddleware
 from middleware.error_handlers import (
+    RouteErrorHandlerOptions,
     build_api_error_response,
     general_exception_handler,
     handle_route_errors,
@@ -50,19 +51,19 @@ def _request(path: str = "/", headers: list[tuple[bytes, bytes]] | None = None, 
 
 @pytest.mark.asyncio
 async def test_error_handlers_and_json_safe_paths():
-    @handle_route_errors(bad_request_detail="bad")
+    @handle_route_errors(RouteErrorHandlerOptions(bad_request_detail="bad"))
     async def bad_request() -> str:
         raise ValueError("ignored")
 
-    @handle_route_errors(bad_gateway_detail="upstream")
+    @handle_route_errors(RouteErrorHandlerOptions(bad_gateway_detail="upstream"))
     async def bad_gateway() -> str:
         raise httpx.ReadError("boom")
 
-    @handle_route_errors(internal_detail=None)
+    @handle_route_errors(RouteErrorHandlerOptions(internal_detail=None))
     async def raw_internal() -> str:
         raise RuntimeError("raw")
 
-    @handle_route_errors(gateway_timeout_detail="timed out")
+    @handle_route_errors(RouteErrorHandlerOptions(gateway_timeout_detail="timed out"))
     async def gateway_timeout(request: Request) -> str:
         _ = request
         raise asyncio.TimeoutError()
@@ -147,7 +148,7 @@ async def test_audit_helpers_and_security_headers(monkeypatch):
     monkeypatch.setattr(
         audit_middleware,
         "_write_resource_view_audit",
-        lambda **kwargs: writes.append(("write", kwargs)),
+        lambda fields: writes.append(("write", fields)),
     )
 
     async def call_next(_request: Request) -> Response:
@@ -203,7 +204,7 @@ async def test_security_headers_skip_audit_when_request_has_no_token(monkeypatch
     monkeypatch.setattr(
         audit_middleware,
         "_write_resource_view_audit",
-        lambda **kwargs: writes.append(("write", kwargs)),
+        lambda fields: writes.append(("write", fields)),
     )
 
     async def call_next(_request: Request) -> Response:
@@ -232,7 +233,7 @@ async def test_security_headers_skip_audit_when_decoded_token_is_empty(monkeypat
     monkeypatch.setattr(
         audit_middleware,
         "_write_resource_view_audit",
-        lambda **kwargs: writes.append(("write", kwargs)),
+        lambda fields: writes.append(("write", fields)),
     )
 
     async def call_next(_request: Request) -> Response:

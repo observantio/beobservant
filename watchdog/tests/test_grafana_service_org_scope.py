@@ -24,7 +24,8 @@ async def test_create_datasource_forwards_org_id_as_orgId(monkeypatch):
     captured = {}
 
     async def _fake_mutating_request(method, path, **kwargs):
-        captured["json"] = kwargs["json"]
+        opts = kwargs.get("opts")
+        captured["json"] = (getattr(opts, "json", None) or {}) if opts is not None else kwargs.get("json") or {}
         return {
             "datasource": {
                 "id": 1,
@@ -64,7 +65,8 @@ async def test_update_datasource_forwards_org_id_as_orgId(monkeypatch):
         )
 
     async def _fake_mutating_request(method, path, **kwargs):
-        captured["json"] = kwargs["json"]
+        opts = kwargs.get("opts")
+        captured["json"] = (getattr(opts, "json", None) or {}) if opts is not None else kwargs.get("json")
         return {
             "datasource": {
                 "id": 1,

@@ -14,6 +14,7 @@ from starlette.requests import Request
 
 from models.access.auth_models import Role, TokenData
 from routers.observability import resolver_router
+from tests._proxy_stubs import unpack_resolver_json_request
 
 
 def _request() -> Request:
@@ -44,7 +45,8 @@ def _user() -> TokenData:
 async def test_proxy_post_overrides_payload_tenant(monkeypatch):
     captured = {}
 
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(req, **_kwargs):
+        kwargs = unpack_resolver_json_request(req)
         captured.update(kwargs)
         return {"ok": True}
 
@@ -63,7 +65,8 @@ async def test_proxy_post_overrides_payload_tenant(monkeypatch):
 async def test_job_result_requires_completed_status(monkeypatch):
     captured = {}
 
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(req, **_kwargs):
+        kwargs = unpack_resolver_json_request(req)
         captured.update(kwargs)
         return {
             "job_id": "job-1",
@@ -90,7 +93,8 @@ async def test_job_result_requires_completed_status(monkeypatch):
 async def test_get_report_by_id_proxies(monkeypatch):
     captured = {}
 
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(req, **_kwargs):
+        kwargs = unpack_resolver_json_request(req)
         captured.update(kwargs)
         return {
             "job_id": "job-1",
@@ -111,7 +115,8 @@ async def test_get_report_by_id_proxies(monkeypatch):
 async def test_delete_report_by_id_proxies(monkeypatch):
     captured = {}
 
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(req, **_kwargs):
+        kwargs = unpack_resolver_json_request(req)
         captured.update(kwargs)
         return {"report_id": "rep-1", "status": "deleted", "deleted": True}
 
@@ -123,7 +128,7 @@ async def test_delete_report_by_id_proxies(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_analyze_job_result_tolerates_unknown_running_status(monkeypatch):
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(_req, **_kwargs):
         return {
             "job_id": "job-2",
             "report_id": "rep-2",
@@ -144,7 +149,7 @@ async def test_get_analyze_job_result_tolerates_unknown_running_status(monkeypat
 
 @pytest.mark.asyncio
 async def test_get_analyze_job_result_maps_succeeded_status_to_completed(monkeypatch):
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(_req, **_kwargs):
         return {
             "job_id": "job-2b",
             "report_id": "rep-2b",
@@ -168,7 +173,8 @@ async def test_get_analyze_job_result_maps_succeeded_status_to_completed(monkeyp
 async def test_get_analyze_job_result_maps_conflict_to_job_summary(monkeypatch):
     calls = []
 
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(req, **_kwargs):
+        kwargs = unpack_resolver_json_request(req)
         calls.append(kwargs["upstream_path"])
         if kwargs["upstream_path"] == "/api/v1/jobs/job-3/result":
             raise resolver_router.HTTPException(status_code=409, detail="result not ready")
@@ -197,7 +203,7 @@ async def test_get_analyze_job_result_maps_conflict_to_job_summary(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_analyze_job_result_reraises_non_conflict(monkeypatch):
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(_req, **_kwargs):
         raise resolver_router.HTTPException(status_code=502, detail="upstream down")
 
     monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
@@ -215,7 +221,8 @@ async def test_get_analyze_job_result_reraises_non_conflict(monkeypatch):
 async def test_ml_weights_feedback_proxies(monkeypatch):
     captured = {}
 
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(req, **_kwargs):
+        kwargs = unpack_resolver_json_request(req)
         captured.update(kwargs)
         return {"updated_weights": {"metrics": 0.5}, "update_count": 1}
 
@@ -237,7 +244,8 @@ async def test_ml_weights_feedback_proxies(monkeypatch):
 async def test_ml_weights_reset_proxies(monkeypatch):
     captured = {}
 
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(req, **_kwargs):
+        kwargs = unpack_resolver_json_request(req)
         captured.update(kwargs)
         return {"weights": {"metrics": 0.3, "logs": 0.35, "traces": 0.35}, "update_count": 0}
 

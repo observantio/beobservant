@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-CONFIG_MODULE = "config"
+CONFIG_MODULE = "settings"
 
 
 def _reload_config():

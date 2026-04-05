@@ -13,9 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import binascii
 import hashlib
-import json
 import logging
 import secrets
 import threading
@@ -25,11 +23,17 @@ from urllib.parse import urlencode
 
 import httpx
 import jwt
-from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from jwt.algorithms import ECAlgorithm, RSAAlgorithm
 
 from config import config
 from custom_types.json import JSONDict
+from services.auth.oidc_jwt_support import (
+    VerificationKey,
+    decode_jwt_header,
+    issuer_candidates,
+    jwk_to_verification_key,
+    json_dict,
+    looks_like_jwt,
+)
 from services.common.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -37,59 +41,10 @@ logger = logging.getLogger(__name__)
 ALLOWED_ALGORITHMS: Set[str] = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}
 ALLOWED_CODE_CHALLENGE_METHODS: Set[str] = {"S256", "plain"}
 RunResult = TypeVar("RunResult")
-VerificationKey = rsa.RSAPublicKey | ec.EllipticCurvePublicKey
 
-
-def _json_dict(value: object) -> JSONDict:
-    return value if isinstance(value, dict) else {}
-
-
-def _jwk_to_verification_key(jwk_key: JSONDict, alg: str) -> VerificationKey:
-    jwk_json = json.dumps(jwk_key)
-    if alg.startswith("RS"):
-        rsa_key = RSAAlgorithm.from_jwk(jwk_json)
-        if isinstance(rsa_key, rsa.RSAPublicKey):
-            return rsa_key
-        raise ValueError("Invalid RSA JWK key")
-    if alg.startswith("ES"):
-        ec_key = ECAlgorithm.from_jwk(jwk_json)
-        if isinstance(ec_key, ec.EllipticCurvePublicKey):
-            return ec_key
-        raise ValueError("Invalid EC JWK key")
-    raise ValueError(f"Unsupported OIDC token algorithm: {alg}")
-
-
-def _looks_like_jwt(token: str) -> bool:
-    if not token:
-        return False
-    parts = token.split(".")
-    return len(parts) == 3 and all(parts)
-
-
-def _decode_jwt_header(token: str) -> Optional[JSONDict]:
-    if not _looks_like_jwt(token):
-        return None
-    header_b64 = token.split(".", 1)[0]
-    pad = "=" * ((4 - len(header_b64) % 4) % 4)
-    try:
-        raw = base64.urlsafe_b64decode(header_b64 + pad)
-        header_text = raw.decode("utf-8")
-        header = json.loads(header_text)
-    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError):
-        return None
-    return header if isinstance(header, dict) else None
-
-
-def _issuer_candidates(issuer: Optional[str]) -> tuple[Optional[str], ...]:
-    normalized = str(issuer or "").strip().rstrip("/")
-    if not normalized:
-        return (None,)
-
-    candidates: list[Optional[str]] = [normalized]
-    # Google documents both forms of the issuer in ID token validation guidance.
-    if normalized in {"https://accounts.google.com", "accounts.google.com"}:
-        candidates = ["https://accounts.google.com", "accounts.google.com"]
-    return tuple(dict.fromkeys(candidates))
+_json_dict = json_dict
+_jwk_to_verification_key = jwk_to_verification_key
+_looks_like_jwt = looks_like_jwt
 
 
 class OIDCService:
@@ -261,10 +216,93 @@ class OIDCService:
         if cached is not None:
             return cached
 
-        vk = _jwk_to_verification_key(jwk_key, alg)
+        vk = jwk_to_verification_key(jwk_key, alg)
         with self._cache_lock:
             self._verification_key_cache[cache_key] = vk
         return vk
+
+    def _read_oidc_jwt_header(self, token: str) -> Optional[JSONDict]:
+        try:
+            raw_header = jwt.get_unverified_header(token)
+            if isinstance(raw_header, dict):
+                return cast(JSONDict, raw_header)
+        except jwt.PyJWTError:
+            pass
+        return decode_jwt_header(token)
+
+    def _reject_oidc_header_alg(self, header_alg: str) -> bool:
+        if not header_alg or header_alg.lower() == "none":
+            logger.warning("OIDC token rejected: missing/none alg")
+            return True
+        if header_alg not in ALLOWED_ALGORITHMS:
+            logger.warning("OIDC token rejected: alg not allowed: %s", header_alg)
+            return True
+        configured_alg = str(getattr(config, "OIDC_TOKEN_ALGORITHM", "") or "").strip()
+        if configured_alg:
+            if configured_alg not in ALLOWED_ALGORITHMS:
+                raise ValueError(f"Unsupported OIDC token algorithm in config: {configured_alg}")
+            if configured_alg != header_alg:
+                logger.warning(
+                    "OIDC token rejected: alg mismatch (header=%s, config=%s)",
+                    header_alg,
+                    configured_alg,
+                )
+                return True
+        return False
+
+    def _decode_oidc_claims(
+        self,
+        token: str,
+        verification_key: VerificationKey,
+        header_alg: str,
+        issuer: str,
+        audience: Optional[str],
+    ) -> Optional[dict[str, object]]:
+        claims = None
+        issuer_error: Optional[jwt.InvalidIssuerError] = None
+        for issuer_candidate in issuer_candidates(issuer):
+            try:
+                claims = jwt.decode(
+                    token,
+                    verification_key,
+                    algorithms=[header_alg],
+                    options={"verify_aud": bool(audience), "require": ["exp", "iat"]},
+                    issuer=issuer_candidate,
+                    audience=audience,
+                    leeway=max(
+                        0,
+                        int(getattr(config, "OIDC_CLOCK_SKEW_LEEWAY_SECONDS", 60) or 60),
+                    ),
+                )
+                break
+            except jwt.InvalidIssuerError as exc:
+                issuer_error = exc
+                continue
+
+        if claims is not None:
+            return cast(dict[str, object], claims)
+        if issuer_error is not None:
+            raise issuer_error
+        return None
+
+    def _reject_oidc_nonce(
+        self,
+        claims: dict[str, object],
+        *,
+        nonce: Optional[str],
+        require_nonce: bool,
+    ) -> bool:
+        token_nonce = str(claims.get("nonce") or "")
+        if require_nonce and not nonce:
+            logger.warning("OIDC token rejected: nonce required but missing")
+            return True
+        if nonce is not None and token_nonce and token_nonce != str(nonce):
+            logger.warning("OIDC token rejected: nonce mismatch")
+            return True
+        if nonce is not None and not token_nonce:
+            logger.warning("OIDC token rejected: nonce missing in token")
+            return True
+        return False
 
     def _verify_jwt(
         self,
@@ -273,40 +311,16 @@ class OIDCService:
         nonce: Optional[str] = None,
         require_nonce: bool = False,
     ) -> Optional[JSONDict]:
-        if not token or not _looks_like_jwt(token):
+        if not token or not looks_like_jwt(token):
             return None
 
         try:
-            unverified_header = None
-            try:
-                raw_header = jwt.get_unverified_header(token)
-                if isinstance(raw_header, dict):
-                    unverified_header = cast(JSONDict, raw_header)
-            except jwt.PyJWTError:
-                unverified_header = None
-            if not unverified_header:
-                unverified_header = _decode_jwt_header(token)
+            unverified_header = self._read_oidc_jwt_header(token)
             if not unverified_header:
                 return None
             header_alg = str(unverified_header.get("alg") or "").strip()
-            if not header_alg or header_alg.lower() == "none":
-                logger.warning("OIDC token rejected: missing/none alg")
+            if self._reject_oidc_header_alg(header_alg):
                 return None
-            if header_alg not in ALLOWED_ALGORITHMS:
-                logger.warning("OIDC token rejected: alg not allowed: %s", header_alg)
-                return None
-
-            configured_alg = str(getattr(config, "OIDC_TOKEN_ALGORITHM", "") or "").strip()
-            if configured_alg:
-                if configured_alg not in ALLOWED_ALGORITHMS:
-                    raise ValueError(f"Unsupported OIDC token algorithm in config: {configured_alg}")
-                if configured_alg != header_alg:
-                    logger.warning(
-                        "OIDC token rejected: alg mismatch (header=%s, config=%s)",
-                        header_alg,
-                        configured_alg,
-                    )
-                    return None
 
             kid = str(unverified_header.get("kid") or "").strip() or None
             x5t = str(unverified_header.get("x5t") or "").strip() or None
@@ -331,40 +345,10 @@ class OIDCService:
             audience = config.OIDC_AUDIENCE or config.OIDC_CLIENT_ID
 
             verification_key = self._verification_key_for(jwk_key, header_alg, kid)
-            claims = None
-            issuer_error: Optional[jwt.InvalidIssuerError] = None
-            for issuer_candidate in _issuer_candidates(issuer):
-                try:
-                    claims = jwt.decode(
-                        token,
-                        verification_key,
-                        algorithms=[header_alg],
-                        options={"verify_aud": bool(audience), "require": ["exp", "iat"]},
-                        issuer=issuer_candidate,
-                        audience=audience or None,
-                        leeway=max(
-                            0,
-                            int(getattr(config, "OIDC_CLOCK_SKEW_LEEWAY_SECONDS", 60) or 60),
-                        ),
-                    )
-                    break
-                except jwt.InvalidIssuerError as exc:
-                    issuer_error = exc
-                    continue
-
+            claims = self._decode_oidc_claims(token, verification_key, header_alg, issuer, audience)
             if claims is None:
-                if issuer_error is not None:
-                    raise issuer_error
                 return None
-            token_nonce = str(claims.get("nonce") or "")
-            if require_nonce and not nonce:
-                logger.warning("OIDC token rejected: nonce required but missing")
-                return None
-            if nonce is not None and token_nonce and token_nonce != str(nonce):
-                logger.warning("OIDC token rejected: nonce mismatch")
-                return None
-            if nonce is not None and not token_nonce:
-                logger.warning("OIDC token rejected: nonce missing in token")
+            if self._reject_oidc_nonce(claims, nonce=nonce, require_nonce=require_nonce):
                 return None
 
             return cast(JSONDict, claims)

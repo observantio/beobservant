@@ -29,6 +29,16 @@ ConfigGetter = Callable[[], Any]
 HttpxGetter = Callable[[], Any]
 
 
+@dataclass(frozen=True, slots=True)
+class NativeQuotaFetchParams:
+    service_name: str
+    base_url: str
+    path_template: str
+    tenant_id: str
+    limit_field: str
+    used_field: str
+
+
 @dataclass
 class QuotaProbe:
     source: str
@@ -361,16 +371,7 @@ class RuntimeQuotaProbe:
             )
         return list(dict.fromkeys(candidates))
 
-    async def fetch_native_quota(
-        self,
-        *,
-        service_name: str,
-        base_url: str,
-        path_template: str,
-        tenant_id: str,
-        limit_field: str,
-        used_field: str,
-    ) -> QuotaProbe:
+    async def fetch_native_quota(self, params: NativeQuotaFetchParams) -> QuotaProbe:
         cfg = self._get_config()
         httpx_module = self._get_httpx()
 
@@ -378,8 +379,8 @@ class RuntimeQuotaProbe:
             return QuotaProbe(source="none", limit=None, used=None, message=None)
 
         candidate_paths = self.candidate_native_paths(
-            service_name=service_name,
-            configured_path=path_template,
+            service_name=params.service_name,
+            configured_path=params.path_template,
         )
         if not candidate_paths:
             return QuotaProbe(source="none", limit=None, used=None, message=None)
@@ -389,35 +390,37 @@ class RuntimeQuotaProbe:
         collected_used: Optional[float] = None
 
         for candidate_path in candidate_paths:
-            target = f"{base_url.rstrip('/')}/" f"{format_with_tenant(candidate_path, tenant_id).lstrip('/')}"
+            target = (
+                f"{params.base_url.rstrip('/')}/" f"{format_with_tenant(candidate_path, params.tenant_id).lstrip('/')}"
+            )
             try:
                 async with httpx_module.AsyncClient(timeout=float(cfg.QUOTA_NATIVE_TIMEOUT_SECONDS)) as client:
                     response = await client.get(
                         target,
-                        headers={"X-Scope-OrgID": tenant_id},
+                        headers={"X-Scope-OrgID": params.tenant_id},
                     )
                     response.raise_for_status()
                     payload = response_payload(response)
 
-                if service_name == "loki":
-                    limit = self.loki_limit_from_payload(payload, limit_field, tenant_id)
-                    used = self.loki_used_from_payload(payload, used_field, tenant_id)
+                if params.service_name == "loki":
+                    limit = self.loki_limit_from_payload(payload, params.limit_field, params.tenant_id)
+                    used = self.loki_used_from_payload(payload, params.used_field, params.tenant_id)
                     if used is None:
                         try:
-                            used = await self.fetch_loki_used_streams(tenant_id=tenant_id)
+                            used = await self.fetch_loki_used_streams(tenant_id=params.tenant_id)
                         except self._error_types():
                             used = None
-                elif service_name == "tempo":
-                    limit = self.tempo_limit_from_payload(payload, limit_field, tenant_id)
-                    used = self.tempo_used_from_payload(payload, used_field, tenant_id)
+                elif params.service_name == "tempo":
+                    limit = self.tempo_limit_from_payload(payload, params.limit_field, params.tenant_id)
+                    used = self.tempo_used_from_payload(payload, params.used_field, params.tenant_id)
                     if used is None:
                         try:
-                            used = await self.fetch_tempo_used_traces(tenant_id=tenant_id)
+                            used = await self.fetch_tempo_used_traces(tenant_id=params.tenant_id)
                         except self._error_types():
                             used = None
                 else:
-                    limit = extract_path(payload, limit_field)
-                    used = extract_path(payload, used_field)
+                    limit = extract_path(payload, params.limit_field)
+                    used = extract_path(payload, params.used_field)
 
                 if collected_limit is None and limit is not None:
                     collected_limit = limit
@@ -446,7 +449,9 @@ class RuntimeQuotaProbe:
             source="native",
             limit=None,
             used=None,
-            message=(f"{service_name.capitalize()} runtime quota endpoint unavailable" if last_error else None),
+            message=(
+                f"{params.service_name.capitalize()} runtime quota endpoint unavailable" if last_error else None
+            ),
         )
 
     async def query_prometheus_value(

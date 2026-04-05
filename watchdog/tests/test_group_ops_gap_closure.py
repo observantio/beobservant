@@ -22,6 +22,7 @@ ensure_test_env()
 
 from db_models import Base, GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, Permission, Tenant, User
 from services.auth import group_ops
+from services.auth.actor_caps import AuthActorCaps
 
 
 def _session():
@@ -132,8 +133,10 @@ def test_update_group_permissions_denies_non_admin_for_group_with_admin_member(m
             group_id=group.id,
             permission_names=[read_perm.name],
             tenant_id="t1",
-            actor_user_id=member.id,
-            actor_role="user",
-            actor_permissions=["update:group_permissions", read_perm.name],
-            actor_is_superuser=False,
+            actor=AuthActorCaps(
+                user_id=member.id,
+                role="user",
+                permissions=["update:group_permissions", read_perm.name],
+                is_superuser=False,
+            ),
         )

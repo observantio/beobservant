@@ -20,6 +20,7 @@ except ImportError:
 
 ensure_test_env()
 
+from config import config
 from models.access.auth_models import Permission, Role, TokenData
 from models.grafana.grafana_datasource_models import DatasourceCreate, DatasourceUpdate
 from models.observability.grafana_request_models import (
@@ -30,6 +31,7 @@ from models.observability.grafana_request_models import (
     GrafanaUpdateFolderRequest,
 )
 from routers.observability.grafana_router import dashboards, datasources, folders
+from services.grafana.grafana_bundles import DatasourceListParams
 
 
 async def _rtp(func, *args, **kwargs):
@@ -74,13 +76,15 @@ async def test_dashboard_routes_cover_success_and_failure_paths(monkeypatch):
     )
 
     async def fake_search_dashboards(**kwargs):
-        return [{"uid": "dash-1", "query": kwargs["query"]}]
+        params = kwargs["params"]
+        return [{"uid": "dash-1", "query": params.query}]
 
     async def fake_get_dashboard(**kwargs):
         return {"uid": kwargs["uid"]} if kwargs["uid"] == "dash-1" else None
 
     async def fake_create_dashboard(**kwargs):
-        return {"uid": "created", "visibility": kwargs["visibility"]} if kwargs["visibility"] != "broken" else None
+        opts = kwargs["options"]
+        return {"uid": "created", "visibility": opts.visibility} if opts.visibility != "broken" else None
 
     async def fake_update_dashboard(**kwargs):
         return {"uid": kwargs["uid"], "updated": True} if kwargs["uid"] != "missing" else None
@@ -98,7 +102,13 @@ async def test_dashboard_routes_cover_success_and_failure_paths(monkeypatch):
     meta = await dashboards.get_dashboard_filter_metadata(current_user, db="db")
     assert meta == {"folder": ["f1"]}
 
-    searched = await dashboards.search_dashboards(query="latency", current_user=current_user, db="db")
+    searched = await dashboards.search_dashboards(
+        dashboards.SearchDashboardsTextParams(query="latency", tag=None, uid=None, team_id=None),
+        dashboards.SearchDashboardsFolderParams(None, None, None, None),
+        dashboards.SearchDashboardsPagingParams(None, "false", config.DEFAULT_QUERY_LIMIT, 0),
+        current_user=current_user,
+        db="db",
+    )
     assert searched[0]["query"] == "latency"
 
     assert await dashboards.get_dashboard("dash-1", current_user, db="db") == {"uid": "dash-1"}
@@ -171,13 +181,15 @@ async def test_datasource_routes_cover_success_and_failure_paths(monkeypatch):
         return {"name": kwargs["name"]} if kwargs["name"] == "main" else None
 
     async def fake_get_datasources(**kwargs):
-        return [{"uid": "ds-1", "show_hidden": kwargs["show_hidden"]}]
+        params = kwargs["params"]
+        return [{"uid": "ds-1", "show_hidden": params.show_hidden}]
 
     async def fake_get_datasource(**kwargs):
         return {"uid": kwargs["uid"]} if kwargs["uid"] == "ds-1" else None
 
     async def fake_create_datasource(**kwargs):
-        return {"uid": "created", "visibility": kwargs["visibility"]} if kwargs["visibility"] else None
+        vis = kwargs["options"].visibility
+        return {"uid": "created", "visibility": vis} if vis else None
 
     async def fake_update_datasource(**kwargs):
         return {"uid": kwargs["uid"], "updated": True} if kwargs["uid"] == "ds-1" else None
@@ -203,7 +215,9 @@ async def test_datasource_routes_cover_success_and_failure_paths(monkeypatch):
         await datasources.get_datasource_by_name("missing", current_user, db="db")
     assert exc.value.status_code == 404
 
-    listed = await datasources.get_datasources(show_hidden=True, current_user=current_user, db="db")
+    listed = await datasources.get_datasources(
+        list_params=DatasourceListParams(show_hidden=True), current_user=current_user, db="db"
+    )
     assert listed == [{"uid": "ds-1", "show_hidden": True}]
     assert await datasources.get_datasource_by_uid("ds-1", current_user, db="db") == {"uid": "ds-1"}
     with pytest.raises(HTTPException) as exc:
@@ -251,13 +265,15 @@ async def test_folder_routes_cover_success_and_failure_paths(monkeypatch):
     monkeypatch.setattr(folders, "validate_visibility", lambda _visibility: None)
 
     async def fake_get_folders(**kwargs):
-        return [{"uid": "folder-1", "show_hidden": kwargs["show_hidden"]}]
+        params = kwargs["params"]
+        return [{"uid": "folder-1", "show_hidden": params.show_hidden}]
 
     async def fake_get_folder(**kwargs):
         return {"uid": kwargs["uid"]} if kwargs["uid"] == "folder-1" else None
 
     async def fake_create_folder(**kwargs):
-        return {"uid": "created-folder", "visibility": kwargs["visibility"]} if kwargs["visibility"] else None
+        vis = kwargs["options"].visibility
+        return {"uid": "created-folder", "visibility": vis} if vis else None
 
     async def fake_delete_folder(**kwargs):
         return kwargs["uid"] == "folder-1"

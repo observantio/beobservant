@@ -10,6 +10,7 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
+from dataclasses import dataclass
 from typing import Optional
 import json
 
@@ -20,32 +21,34 @@ from db_models import AuditLog
 from services.audit_context import get_request_audit_context
 
 
-def log_audit(
-    db: Session,
-    tenant_id: str,
-    user_id: str,
-    action: str,
-    resource_type: str,
-    resource_id: str,
-    details: JSONDict,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-) -> None:
-    json.dumps(details)
+@dataclass(frozen=True, slots=True)
+class AuditLogRecord:
+    tenant_id: str
+    user_id: str
+    action: str
+    resource_type: str
+    resource_id: str
+    details: JSONDict
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+
+
+def log_audit(db: Session, record: AuditLogRecord) -> None:
+    json.dumps(record.details)
     ctx_ip: Optional[str] = None
     ctx_user_agent: Optional[str] = None
-    if ip_address is None or user_agent is None:
+    if record.ip_address is None or record.user_agent is None:
         ctx_ip, ctx_user_agent = get_request_audit_context()
 
     db.add(
         AuditLog(
-            tenant_id=tenant_id,
-            user_id=user_id,
-            action=action,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            details=details,
-            ip_address=ip_address if ip_address is not None else ctx_ip,
-            user_agent=user_agent if user_agent is not None else ctx_user_agent,
+            tenant_id=record.tenant_id,
+            user_id=record.user_id,
+            action=record.action,
+            resource_type=record.resource_type,
+            resource_id=record.resource_id,
+            details=record.details,
+            ip_address=record.ip_address if record.ip_address is not None else ctx_ip,
+            user_agent=record.user_agent if record.user_agent is not None else ctx_user_agent,
         )
     )

@@ -22,6 +22,7 @@ try:
 except ImportError:
     pass
 
+from services.secrets.vault_client import VaultSecretProviderSettings
 
 CONFIG_MODULE = "config"
 
@@ -201,7 +202,11 @@ class ConfigSecurityTests(unittest.TestCase):
             import types
             import sys
 
-            fake = types.SimpleNamespace(VaultSecretProvider=FakeVaultProvider, VaultClientError=Exception)
+            fake = types.SimpleNamespace(
+                VaultSecretProvider=FakeVaultProvider,
+                VaultClientError=Exception,
+                VaultSecretProviderSettings=VaultSecretProviderSettings,
+            )
             sys.modules["services.secrets.vault_client"] = fake
             module = None
             try:

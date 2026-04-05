@@ -138,9 +138,14 @@ def test_audit_list_and_export_workflow(client, monkeypatch: pytest.MonkeyPatch)
         del db, current_user, tenant_id, actor
         return FakeAuditQuery(audit_rows)
 
-    def fake_apply_audit_filters(query, start, end, user_id, action, resource_type, q=None):
+    def fake_apply_audit_filters(query, params):
         return query.filter_by_fields(
-            start=start, end=end, user_id=user_id, action=action, resource_type=resource_type, q=q
+            start=params.start,
+            end=params.end,
+            user_id=params.user_id,
+            action=params.action,
+            resource_type=params.resource_type,
+            q=params.q,
         )
 
     monkeypatch.setattr(audit_routes, "get_db_session", lambda: FakeCtx())

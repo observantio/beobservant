@@ -29,8 +29,16 @@ from models.observability.grafana_request_models import (
     GrafanaHiddenToggleRequest,
     GrafanaUpdateFolderRequest,
 )
-from services.grafana.route_payloads import validate_visibility
 from routers.observability.grafana_router.param_helpers import show_hidden_enabled
+from services.grafana.grafana_bundles import (
+    FolderCreateOptions,
+    FolderDeleteOptions,
+    FolderGetParams,
+    FolderListParams,
+    FolderUpdateOptions,
+    GrafanaUserScope,
+)
+from services.grafana.route_payloads import validate_visibility
 from custom_types.json import JSONDict
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
@@ -43,14 +51,9 @@ async def get_folders(
     db: Session = Depends(get_db),
 ) -> List[Folder]:
     user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
-    return await proxy.get_folders(
-        db=db,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
-        show_hidden=show_hidden_enabled(show_hidden),
-        is_admin=is_admin,
-    )
+    scope = GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids)
+    params = FolderListParams(show_hidden=show_hidden_enabled(show_hidden), is_admin=is_admin)
+    return await proxy.get_folders(db=db, scope=scope, params=params)
 
 
 @router.get("/folders/{uid}", response_model=Folder)
@@ -63,10 +66,8 @@ async def get_folder_by_uid(
     folder = await proxy.get_folder(
         db=db,
         uid=uid,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
-        is_admin=is_admin,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+        params=FolderGetParams(is_admin=is_admin),
     )
     if not folder:
         raise HTTPException(status_code=404, detail=f"Folder {uid} not found or access denied")
@@ -87,13 +88,13 @@ async def create_folder(
     result = await proxy.create_folder(
         db=db,
         title=payload.title,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
-        visibility=visibility,
-        shared_group_ids=shared_group_ids or [],
-        allow_dashboard_writes=payload.allow_dashboard_writes,
-        is_admin=is_admin,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+        options=FolderCreateOptions(
+            visibility=visibility,
+            shared_group_ids=shared_group_ids or [],
+            allow_dashboard_writes=payload.allow_dashboard_writes,
+            is_admin=is_admin,
+        ),
     )
     if not result:
         raise HTTPException(status_code=500, detail="Failed to create folder")
@@ -111,10 +112,8 @@ async def delete_folder(
     ok = await proxy.delete_folder(
         db=db,
         uid=uid,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
-        is_admin=is_admin,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+        options=FolderDeleteOptions(is_admin=is_admin),
     )
     if not ok:
         raise HTTPException(status_code=404, detail=f"Folder {uid} not found or delete failed")
@@ -136,14 +135,14 @@ async def update_folder(
     result = await proxy.update_folder(
         db=db,
         uid=uid,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        group_ids=group_ids,
-        title=payload.title,
-        visibility=visibility,
-        shared_group_ids=shared_group_ids,
-        allow_dashboard_writes=payload.allow_dashboard_writes,
-        is_admin=is_admin,
+        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+        options=FolderUpdateOptions(
+            title=payload.title,
+            visibility=visibility,
+            shared_group_ids=shared_group_ids,
+            allow_dashboard_writes=payload.allow_dashboard_writes,
+            is_admin=is_admin,
+        ),
     )
     if not result:
         raise HTTPException(status_code=404, detail=f"Folder {uid} not found or update failed")

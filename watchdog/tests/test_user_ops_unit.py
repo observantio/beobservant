@@ -24,6 +24,7 @@ from db_models import Base, Group, Permission, Tenant, User
 from models.access.auth_models import Role
 from models.access.user_models import UserCreate, UserUpdate
 from services.auth import user_ops
+from services.auth.actor_caps import AuthActorCaps
 
 
 def _session():
@@ -166,8 +167,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
             org_id="default-org",
         ),
         "t1",
-        creator_id=admin.id,
-        actor_role="admin",
+        AuthActorCaps(user_id=admin.id, role="admin"),
     )
     assert created.username == "newuser"
     assert service.ensured
@@ -183,7 +183,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
                 org_id="default-org",
             ),
             "t1",
-            creator_id="missing",
+            AuthActorCaps(user_id="missing"),
         )
 
     with pytest.raises(HTTPException, match="higher than your own"):
@@ -198,8 +198,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
                 org_id="default-org",
             ),
             "t1",
-            creator_id=user.id,
-            actor_role="user",
+            AuthActorCaps(user_id=user.id, role="user"),
         )
 
     with pytest.raises(HTTPException, match="initial group memberships"):
@@ -214,8 +213,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
                 org_id="default-org",
             ),
             "t1",
-            creator_id=user.id,
-            actor_role="user",
+            AuthActorCaps(user_id=user.id, role="user"),
         )
 
     with pytest.raises(HTTPException, match="tenant scope"):
@@ -229,8 +227,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
                 org_id="other-org",
             ),
             "t1",
-            creator_id=user.id,
-            actor_role="user",
+            AuthActorCaps(user_id=user.id, role="user"),
         )
 
     with pytest.raises(ValueError, match="Username already exists"):
@@ -244,8 +241,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
                 org_id="default-org",
             ),
             "t1",
-            creator_id=admin.id,
-            actor_role="admin",
+            AuthActorCaps(user_id=admin.id, role="admin"),
         )
     with pytest.raises(ValueError, match="Email already exists"):
         user_ops.create_user(
@@ -258,8 +254,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
                 org_id="default-org",
             ),
             "t1",
-            creator_id=admin.id,
-            actor_role="admin",
+            AuthActorCaps(user_id=admin.id, role="admin"),
         )
     with pytest.raises(ValueError, match="Password is required"):
         user_ops.create_user(
@@ -276,8 +271,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
                 must_setup_mfa=False,
             ),
             "t1",
-            creator_id=admin.id,
-            actor_role="admin",
+            AuthActorCaps(user_id=admin.id, role="admin"),
         )
 
     created_external = user_ops.create_user(
@@ -294,8 +288,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
             must_setup_mfa=False,
         ),
         "t1",
-        creator_id=admin.id,
-        actor_role="admin",
+        AuthActorCaps(user_id=admin.id, role="admin"),
     )
     assert created_external.auth_provider == "oidc"
     assert db.query(User).filter_by(username="externalnew").first().external_subject == "ext-subject"
@@ -317,8 +310,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
                 must_setup_mfa=False,
             ),
             "t1",
-            creator_id=admin.id,
-            actor_role="admin",
+            AuthActorCaps(user_id=admin.id, role="admin"),
         )
 
 
@@ -410,12 +402,12 @@ def test_update_user_permissions_paths(monkeypatch):
     service = _service()
 
     with pytest.raises(HTTPException, match="Actor context is required"):
-        user_ops.update_user_permissions(service, user.id, [], "t1", actor_user_id=None)
-    assert user_ops.update_user_permissions(service, "missing", [], "t1", actor_user_id=admin.id) is False
+        user_ops.update_user_permissions(service, user.id, [], "t1", actor=None)
+    assert user_ops.update_user_permissions(service, "missing", [], "t1", actor=AuthActorCaps(user_id=admin.id)) is False
     with pytest.raises(HTTPException, match="Actor not found"):
-        user_ops.update_user_permissions(service, user.id, [], "t1", actor_user_id="missing")
+        user_ops.update_user_permissions(service, user.id, [], "t1", actor=AuthActorCaps(user_id="missing"))
     with pytest.raises(HTTPException, match="cannot change their own permissions"):
-        user_ops.update_user_permissions(service, admin.id, [], "t1", actor_user_id=admin.id)
+        user_ops.update_user_permissions(service, admin.id, [], "t1", actor=AuthActorCaps(user_id=admin.id))
 
     with pytest.raises(HTTPException, match="Only administrators can modify admin permissions"):
         user_ops.update_user_permissions(
@@ -423,9 +415,7 @@ def test_update_user_permissions_paths(monkeypatch):
             admin.id,
             [perm.name],
             "t1",
-            actor_user_id=user.id,
-            actor_role="user",
-            actor_permissions=[perm.name],
+            actor=AuthActorCaps(user_id=user.id, role="user", permissions=[perm.name]),
         )
 
     admin.role = "user"
@@ -436,9 +426,7 @@ def test_update_user_permissions_paths(monkeypatch):
             user.id,
             [perm.name],
             "t1",
-            actor_user_id=viewer.id,
-            actor_role="viewer",
-            actor_permissions=[perm.name],
+            actor=AuthActorCaps(user_id=viewer.id, role="viewer", permissions=[perm.name]),
         )
     admin.role = "admin"
     db.commit()
@@ -449,9 +437,7 @@ def test_update_user_permissions_paths(monkeypatch):
             user.id,
             [admin_perm.name],
             "t1",
-            actor_user_id=admin.id,
-            actor_role="admin",
-            actor_permissions=[perm.name],
+            actor=AuthActorCaps(user_id=admin.id, role="admin", permissions=[perm.name]),
         )
 
     with pytest.raises(ValueError, match="Unknown permissions"):
@@ -460,10 +446,12 @@ def test_update_user_permissions_paths(monkeypatch):
             user.id,
             [perm.name, "unknown:perm"],
             "t1",
-            actor_user_id=admin.id,
-            actor_role="admin",
-            actor_permissions=[perm.name, admin_perm.name],
-            actor_is_superuser=True,
+            actor=AuthActorCaps(
+                user_id=admin.id,
+                role="admin",
+                permissions=[perm.name, admin_perm.name],
+                is_superuser=True,
+            ),
         )
 
     assert (
@@ -472,9 +460,7 @@ def test_update_user_permissions_paths(monkeypatch):
             user.id,
             [perm.name, admin_perm.name],
             "t1",
-            actor_user_id=admin.id,
-            actor_role="admin",
-            actor_permissions=[perm.name, admin_perm.name],
+            actor=AuthActorCaps(user_id=admin.id, role="admin", permissions=[perm.name, admin_perm.name]),
         )
         is True
     )

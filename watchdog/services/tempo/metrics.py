@@ -10,6 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import logging
+from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
 import httpx
@@ -27,32 +28,44 @@ def _empty_response() -> JSONDict:
     return {"status": "error", "data": {"result": []}}
 
 
+def _default_scope_headers(tenant_id: str) -> Dict[str, str]:
+    return {"X-Scope-OrgID": tenant_id}
+
+
+@dataclass
+class QueryMetricsRangeParams:
+    promql: str
+    start_us: Optional[int] = None
+    end_us: Optional[int] = None
+    step_s: int = 300
+    tenant_id: str = field(default_factory=lambda: config.DEFAULT_ORG_ID)
+    mimir_url: str = field(default_factory=lambda: config.MIMIR_URL)
+    get_headers: Optional[Callable[[str], Dict[str, str]]] = None
+    observe: Optional[Callable[[str, float], None]] = None
+    metrics_enabled: bool = True
+
+
 async def query_metrics_range(
     client: httpx.AsyncClient,
-    promql: str,
-    start_us: Optional[int],
-    end_us: Optional[int],
-    step_s: int = 300,
-    tenant_id: str = config.DEFAULT_ORG_ID,
-    mimir_url: str = config.MIMIR_URL,
-    get_headers: Callable[[str], Dict[str, str]] = lambda tid: {"X-Scope-OrgID": tid},
-    observe: Callable[[str, float], None] = lambda metric, value: None,
-    metrics_enabled: bool = True,
+    params: QueryMetricsRangeParams,
 ) -> Tuple[JSONDict, bool]:
-    if not metrics_enabled:
+    if not params.metrics_enabled:
         return _empty_response(), False
 
-    params: QueryParams = {"query": promql, "step": step_s}
-    if start_us:
-        params["start"] = int(start_us / 1_000_000)
-    if end_us:
-        params["end"] = int(end_us / 1_000_000)
+    headers_fn = params.get_headers or _default_scope_headers
+    observe = params.observe or (lambda _m, _v: None)
+
+    qparams: QueryParams = {"query": params.promql, "step": params.step_s}
+    if params.start_us:
+        qparams["start"] = int(params.start_us / 1_000_000)
+    if params.end_us:
+        qparams["end"] = int(params.end_us / 1_000_000)
 
     try:
         resp = await client.get(
-            f"{mimir_url.rstrip('/')}/api/v1/query_range",
-            params=params,
-            headers=get_headers(tenant_id),
+            f"{params.mimir_url.rstrip('/')}/api/v1/query_range",
+            params=qparams,
+            headers=headers_fn(params.tenant_id),
         )
         resp.raise_for_status()
         observe("tempo_metrics_queries_total", 1.0)

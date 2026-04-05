@@ -50,6 +50,7 @@ from services import audit_context as audit_context_service
 from services import system_service as system_service_module
 from services.system import helpers as system_helpers
 from services.tempo import metrics as tempo_metrics
+from services.tempo.metrics import QueryMetricsRangeParams
 from services.tempo import params as tempo_params
 from services.tempo import parsers as tempo_parsers
 from services.tempo import promql as tempo_promql
@@ -108,14 +109,16 @@ def test_json_helpers_and_audit_utility_edges(monkeypatch):
     monkeypatch.setattr(audit_middleware, "get_db_session", fake_get_db_session)
     monkeypatch.setattr(audit_middleware, "AuditLog", lambda **kwargs: kwargs)
     audit_middleware._write_resource_view_audit(
-        tenant_id="tenant-a",
-        user_id="user-a",
-        path="/api/tempo/query",
-        method="GET",
-        status_code=200,
-        raw_query="token=abc&plain=1",
-        ip_address="203.0.113.10",
-        user_agent="ua",
+        audit_middleware.ResourceViewAuditFields(
+            tenant_id="tenant-a",
+            user_id="user-a",
+            path="/api/tempo/query",
+            method="GET",
+            status_code=200,
+            raw_query="token=abc&plain=1",
+            ip_address="203.0.113.10",
+            user_agent="ua",
+        )
     )
     assert added == [
         {
@@ -852,16 +855,18 @@ async def test_tempo_utility_edges(monkeypatch):
             return Response()
 
     payload, enabled = await tempo_metrics.query_metrics_range(
-        client=ListPayloadClient(),
-        promql="sum(rate(x[5m]))",
-        start_us=0,
-        end_us=0,
-        step_s=60,
-        tenant_id="tenant-a",
-        mimir_url="http://mimir/",
-        get_headers=lambda tenant_id: {"X-Test": tenant_id},
-        observe=lambda metric, value: observed.append((metric, value)),
-        metrics_enabled=True,
+        ListPayloadClient(),
+        QueryMetricsRangeParams(
+            promql="sum(rate(x[5m]))",
+            start_us=0,
+            end_us=0,
+            step_s=60,
+            tenant_id="tenant-a",
+            mimir_url="http://mimir/",
+            get_headers=lambda tenant_id: {"X-Test": tenant_id},
+            observe=lambda metric, value: observed.append((metric, value)),
+            metrics_enabled=True,
+        ),
     )
     assert enabled is True
     assert payload == {"status": "error", "data": {"result": []}}
@@ -872,12 +877,14 @@ async def test_tempo_utility_edges(monkeypatch):
             raise httpx.ReadError("boom")
 
     payload, enabled = await tempo_metrics.query_metrics_range(
-        client=ErrorClient(),
-        promql="x",
-        start_us=1,
-        end_us=2,
-        observe=lambda metric, value: observed.append((metric, value)),
-        metrics_enabled=True,
+        ErrorClient(),
+        QueryMetricsRangeParams(
+            promql="x",
+            start_us=1,
+            end_us=2,
+            observe=lambda metric, value: observed.append((metric, value)),
+            metrics_enabled=True,
+        ),
     )
     assert enabled is False
     assert payload == {"status": "error", "data": {"result": []}}
@@ -979,11 +986,11 @@ async def test_tempo_utility_edges(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_error_handler_and_small_helper_edges(monkeypatch):
-    @error_handlers_module.handle_route_errors(internal_detail="hidden")
+    @error_handlers_module.handle_route_errors(error_handlers_module.RouteErrorHandlerOptions(internal_detail="hidden"))
     async def raises_http_exception():
         raise HTTPException(status_code=418, detail="teapot")
 
-    @error_handlers_module.handle_route_errors(internal_detail="hidden")
+    @error_handlers_module.handle_route_errors(error_handlers_module.RouteErrorHandlerOptions(internal_detail="hidden"))
     async def raises_internal_error():
         raise RuntimeError("boom")
 

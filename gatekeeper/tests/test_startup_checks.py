@@ -16,11 +16,11 @@ from models.exceptions import DatabaseUnavailable
 async def test_startup_warn_mode_uses_synthetic_probe_token(monkeypatch):
     captured: list[str] = []
 
-    monkeypatch.setattr(gateway_main.gw_config, "AUTH_API_URL", "https://watchdog:4319/api/internal/otlp/validate")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STATUS_OTLP_TOKEN", "")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_CHECK_MODE", "warn")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_RETRIES", 1)
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_BACKOFF", 0.01)
+    monkeypatch.setattr(gateway_main.settings, "AUTH_API_URL", "https://watchdog:4319/api/internal/otlp/validate")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STATUS_OTLP_TOKEN", "")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_CHECK_MODE", "warn")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_RETRIES", 1)
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_BACKOFF", 0.01)
     service_cls = type(gateway_main.service)
     monkeypatch.setattr(service_cls, "_fetch_org_from_api", lambda _self, token: captured.append(token))
 
@@ -32,11 +32,11 @@ async def test_startup_warn_mode_uses_synthetic_probe_token(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_startup_strict_mode_requires_status_token(monkeypatch):
-    monkeypatch.setattr(gateway_main.gw_config, "AUTH_API_URL", "https://watchdog:4319/api/internal/otlp/validate")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STATUS_OTLP_TOKEN", "")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_CHECK_MODE", "strict")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_RETRIES", 1)
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_BACKOFF", 0.01)
+    monkeypatch.setattr(gateway_main.settings, "AUTH_API_URL", "https://watchdog:4319/api/internal/otlp/validate")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STATUS_OTLP_TOKEN", "")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_CHECK_MODE", "strict")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_RETRIES", 1)
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_BACKOFF", 0.01)
 
     with pytest.raises(RuntimeError):
         async with gateway_main.lifespan(gateway_main.app):
@@ -47,11 +47,11 @@ async def test_startup_strict_mode_requires_status_token(monkeypatch):
 async def test_startup_warn_mode_continues_when_auth_api_unavailable(monkeypatch):
     attempts: list[str] = []
 
-    monkeypatch.setattr(gateway_main.gw_config, "AUTH_API_URL", "http://watchdog:4319/api/internal/otlp/validate")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STATUS_OTLP_TOKEN", "probe-token")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_CHECK_MODE", "warn")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_RETRIES", 2)
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_BACKOFF", 0.01)
+    monkeypatch.setattr(gateway_main.settings, "AUTH_API_URL", "http://watchdog:4319/api/internal/otlp/validate")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STATUS_OTLP_TOKEN", "probe-token")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_CHECK_MODE", "warn")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_RETRIES", 2)
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_BACKOFF", 0.01)
 
     def fail_probe(_self, token):
         attempts.append(token)
@@ -68,11 +68,11 @@ async def test_startup_warn_mode_continues_when_auth_api_unavailable(monkeypatch
 
 @pytest.mark.asyncio
 async def test_startup_strict_mode_raises_when_auth_api_unavailable(monkeypatch):
-    monkeypatch.setattr(gateway_main.gw_config, "AUTH_API_URL", "http://watchdog:4319/api/internal/otlp/validate")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STATUS_OTLP_TOKEN", "probe-token")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_CHECK_MODE", "strict")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_RETRIES", 1)
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_BACKOFF", 0.01)
+    monkeypatch.setattr(gateway_main.settings, "AUTH_API_URL", "http://watchdog:4319/api/internal/otlp/validate")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STATUS_OTLP_TOKEN", "probe-token")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_CHECK_MODE", "strict")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_RETRIES", 1)
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_BACKOFF", 0.01)
 
     service_cls = type(gateway_main.service)
     monkeypatch.setattr(
@@ -90,11 +90,11 @@ async def test_startup_strict_mode_raises_when_auth_api_unavailable(monkeypatch)
 async def test_startup_skips_probe_when_auth_api_url_is_empty(monkeypatch):
     calls: list[str] = []
 
-    monkeypatch.setattr(gateway_main.gw_config, "AUTH_API_URL", "")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STATUS_OTLP_TOKEN", "probe-token")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_CHECK_MODE", "strict")
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_RETRIES", 1)
-    monkeypatch.setattr(gateway_main.gw_config, "GATEWAY_STARTUP_BACKOFF", 0.01)
+    monkeypatch.setattr(gateway_main.settings, "AUTH_API_URL", "")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STATUS_OTLP_TOKEN", "probe-token")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_CHECK_MODE", "strict")
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_RETRIES", 1)
+    monkeypatch.setattr(gateway_main.settings, "GATEWAY_STARTUP_BACKOFF", 0.01)
 
     service_cls = type(gateway_main.service)
     monkeypatch.setattr(service_cls, "_fetch_org_from_api", lambda _self, token: calls.append(token))

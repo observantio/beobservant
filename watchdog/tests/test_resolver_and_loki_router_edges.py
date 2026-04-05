@@ -9,6 +9,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import asyncio
+from dataclasses import asdict
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -32,6 +33,7 @@ from models.observability.resolver_models import (
 from models.observability.loki_models import LogDirection, LogFilterRequest, LogSearchRequest
 from routers.observability import resolver_router, loki_router
 from pydantic import ValidationError
+from tests._proxy_stubs import unpack_resolver_json_request
 
 
 def _request(path: str = "/") -> Request:
@@ -96,11 +98,11 @@ async def test_loki_router_endpoints_and_timeout_wrapper(monkeypatch):
     async def fake_get_label_values(label, start, end, query, tenant_id=None):
         return {"status": "success", "data": [label, str(start), str(end), query or "", tenant_id]}
 
-    async def fake_search_logs_by_pattern(**kwargs):
-        return {"status": "success", "data": kwargs}
+    async def fake_search_logs_by_pattern(params):
+        return {"status": "success", "data": asdict(params)}
 
-    async def fake_filter_logs(**kwargs):
-        return {"status": "success", "data": kwargs}
+    async def fake_filter_logs(params):
+        return {"status": "success", "data": asdict(params)}
 
     async def fake_aggregate_logs(query, start, end, step, tenant_id=None):
         return {"query": query, "step": step, "tenant": tenant_id}
@@ -120,12 +122,8 @@ async def test_loki_router_endpoints_and_timeout_wrapper(monkeypatch):
     assert (
         await loki_router.query_logs(
             _request(),
-            query='{app="api"}',
-            limit=5,
-            start=1,
-            end=2,
-            direction=LogDirection.FORWARD,
-            step=15,
+            loki_router.QueryLogsCoreParams('{app="api"}', 5, LogDirection.FORWARD),
+            loki_router.QueryLogsRangeParams(1, 2, 15),
             current_user=current_user,
         )
     )["data"]["tenant"] == "tenant"
@@ -185,7 +183,8 @@ async def test_resolver_router_remaining_wrappers_and_helpers(monkeypatch):
         resolver_router, "inject_tenant", lambda payload, tenant_id: {**payload, "tenant_id": tenant_id}
     )
 
-    async def fake_request_json(**kwargs):
+    async def fake_request_json(req, **_kwargs):
+        kwargs = unpack_resolver_json_request(req)
         calls.append(kwargs)
         path = kwargs["upstream_path"]
         if path == "/api/v1/jobs/analyze":
@@ -281,7 +280,7 @@ async def test_resolver_router_remaining_wrappers_and_helpers(monkeypatch):
         "path"
     ] == "/api/v1/events/deployments"
 
-    async def fake_request_json_non_dict(**_kwargs):
+    async def fake_request_json_non_dict(_req, **_kwargs):
         return SimpleNamespace()
 
     monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json_non_dict)
@@ -304,7 +303,7 @@ async def test_events_deployments_preserves_list_response(monkeypatch):
     async def fake_resolve_tenant_id(_request, _user):
         return "tenant"
 
-    async def fake_request_json(**_kwargs):
+    async def fake_request_json(_req, **_kwargs):
         return [{"service": "api", "version": "1.2.3"}]
 
     monkeypatch.setattr(resolver_router, "resolve_tenant_id", fake_resolve_tenant_id)

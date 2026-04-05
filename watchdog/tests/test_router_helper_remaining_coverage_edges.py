@@ -20,7 +20,7 @@ from tests._env import ensure_test_env
 ensure_test_env()
 
 from config import _slug_token
-from middleware.error_handlers import handle_route_errors
+from middleware.error_handlers import RouteErrorHandlerOptions, handle_route_errors
 from middleware import error_handlers as error_handlers_module
 from routers.observability import agents_router
 from routers.platform import system_router
@@ -49,7 +49,7 @@ def test_slug_token_collapses_multiple_hyphens():
 
 @pytest.mark.asyncio
 async def test_handle_route_errors_reads_request_id_from_kwargs_request():
-    @handle_route_errors(gateway_timeout_detail="timed-out")
+    @handle_route_errors(RouteErrorHandlerOptions(gateway_timeout_detail="timed-out"))
     async def raises_timeout(*, request: Request):
         _ = request
         raise asyncio.TimeoutError()

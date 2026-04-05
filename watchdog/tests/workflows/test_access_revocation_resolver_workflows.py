@@ -18,6 +18,7 @@ from models.access.auth_models import Permission
 from routers import internal_router
 from routers.observability import resolver_router
 from routers.observability.grafana_router import dashboards, datasources, folders
+from tests._proxy_stubs import unpack_resolver_json_request
 
 from .helpers import WorkflowState, patch_auth_service
 
@@ -44,7 +45,8 @@ def _patch_grafana_datasource_proxy(monkeypatch: pytest.MonkeyPatch, state: Work
 
 
 def _patch_resolver_proxy(monkeypatch: pytest.MonkeyPatch, calls: list[dict[str, Any]]) -> None:
-    async def fake_request_json(**kwargs: Any) -> dict[str, Any]:
+    async def fake_request_json(req: Any, **_unused: Any) -> dict[str, Any]:
+        kwargs = unpack_resolver_json_request(req)
         calls.append(kwargs)
         path = kwargs["upstream_path"]
         if path == "/api/v1/jobs/analyze":

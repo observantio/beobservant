@@ -28,7 +28,8 @@ async def test_update_folder_retries_once_on_version_mismatch(monkeypatch):
         return Folder(id=10, uid=uid, title="Ops", version=3 if state["calls"] == 0 else 4)
 
     async def _fake_mutating_request(method, path, **kwargs):
-        payload = kwargs.get("json") or {}
+        opts = kwargs.get("opts")
+        payload = (getattr(opts, "json", None) or {}) if opts is not None else kwargs.get("json") or {}
         if state["calls"] == 0:
             state["calls"] += 1
             raise GrafanaAPIError(412, {"message": "the folder has been changed by someone else"})

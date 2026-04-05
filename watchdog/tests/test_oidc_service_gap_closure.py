@@ -16,6 +16,7 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
+from services.auth import oidc_jwt_support as jwt_support
 from services.auth import oidc_service as mod
 
 
@@ -42,21 +43,21 @@ def test_jwk_to_verification_key_branches(monkeypatch):
     pub_rsa = rsa.generate_private_key(public_exponent=65537, key_size=2048).public_key()
     pub_ec = ec.generate_private_key(ec.SECP256R1()).public_key()
 
-    monkeypatch.setattr(mod.RSAAlgorithm, "from_jwk", lambda _jwk: pub_rsa)
-    monkeypatch.setattr(mod.ECAlgorithm, "from_jwk", lambda _jwk: pub_ec)
-    assert isinstance(mod._jwk_to_verification_key({"kty": "RSA"}, "RS256"), rsa.RSAPublicKey)
-    assert isinstance(mod._jwk_to_verification_key({"kty": "EC"}, "ES256"), ec.EllipticCurvePublicKey)
+    monkeypatch.setattr(jwt_support.RSAAlgorithm, "from_jwk", lambda _jwk: pub_rsa)
+    monkeypatch.setattr(jwt_support.ECAlgorithm, "from_jwk", lambda _jwk: pub_ec)
+    assert isinstance(jwt_support.jwk_to_verification_key({"kty": "RSA"}, "RS256"), rsa.RSAPublicKey)
+    assert isinstance(jwt_support.jwk_to_verification_key({"kty": "EC"}, "ES256"), ec.EllipticCurvePublicKey)
 
-    monkeypatch.setattr(mod.RSAAlgorithm, "from_jwk", lambda _jwk: object())
+    monkeypatch.setattr(jwt_support.RSAAlgorithm, "from_jwk", lambda _jwk: object())
     with pytest.raises(ValueError, match="Invalid RSA"):
-        mod._jwk_to_verification_key({"kty": "RSA"}, "RS256")
+        jwt_support.jwk_to_verification_key({"kty": "RSA"}, "RS256")
 
-    monkeypatch.setattr(mod.ECAlgorithm, "from_jwk", lambda _jwk: object())
+    monkeypatch.setattr(jwt_support.ECAlgorithm, "from_jwk", lambda _jwk: object())
     with pytest.raises(ValueError, match="Invalid EC"):
-        mod._jwk_to_verification_key({"kty": "EC"}, "ES256")
+        jwt_support.jwk_to_verification_key({"kty": "EC"}, "ES256")
 
     with pytest.raises(ValueError, match="Unsupported OIDC token algorithm"):
-        mod._jwk_to_verification_key({"kty": "OKP"}, "HS256")
+        jwt_support.jwk_to_verification_key({"kty": "OKP"}, "HS256")
 
 
 def test_verify_jwt_rejection_and_nonce_paths(monkeypatch):

@@ -11,7 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import Dict, List, Optional, cast
 
 import httpx
 from fastapi import HTTPException
@@ -21,8 +21,8 @@ from config import config
 from custom_types.json import JSONDict
 from db_models import GrafanaDashboard, GrafanaFolder
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardSearchResult, DashboardUpdate
+from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.dashboard_helpers import (
-    DashboardSearchContext,
     _cap,
     _dashboard_has_datasource,
     _db_dashboard_by_uid,
@@ -36,40 +36,115 @@ from services.grafana.dashboard_helpers import (
     _shared_group_ids,
     _to_safe_int32,
     _to_search_result,
+    DashboardSearchContext,
     build_dashboard_search_context,
     check_dashboard_access,
     get_accessible_dashboard_uids,
 )
-from services.grafana.grafana_service import GrafanaAPIError
+from services.grafana.grafana_bundles import (
+    AccessibleTitleConflictParams,
+    DashboardCreateOptions,
+    DashboardSearchAppendContext,
+    DashboardSearchParams,
+    DashboardUpdateOptions,
+    FolderAccessCriteria,
+    GrafanaUserScope,
+)
+from services.grafana.grafana_service import GrafanaAPIError, GrafanaDashboardSearchRequest
 from services.grafana.folder_ops import check_folder_access, is_folder_accessible
 from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
-from services.grafana.visibility import resolve_visibility_groups
+from services.grafana.visibility import (
+    group_share_change_for_scope,
+    resolve_group_share_on_visibility_change,
+    resolve_visibility_groups_for_scope,
+)
 
-if TYPE_CHECKING:
-    from services.grafana_proxy_service import GrafanaProxyService
+def _append_dashboard_search_match(d: DashboardSearchResult, ctx: DashboardSearchAppendContext) -> None:
+    db_dash = ctx.db_dashboards.get(d.uid)
+    folder_id = getattr(d, "folder_id", None)
+    if folder_id is None:
+        folder_id = getattr(d, "folderId", None)
+    try:
+        folder_id_int = int(folder_id) if folder_id is not None else None
+    except (TypeError, ValueError):
+        folder_id_int = None
+    folder_uid = (
+        getattr(d, "folder_uid", None)
+        or getattr(d, "folderUid", None)
+        or (getattr(db_dash, "folder_uid", None) if db_dash else None)
+    )
+    if folder_id is None and not folder_uid:
+        folder_id_int = 0
+    if _is_general_folder_id(folder_id):
+        if db_dash and db_dash.folder_uid:
+            db_dash.folder_uid = None
+            ctx.folder_updates.append(db_dash)
+        folder_uid = None
+    if ctx.folder_uid_set and str(folder_uid or "") not in ctx.folder_uid_set:
+        return
+    if ctx.folder_id_set and folder_id_int not in ctx.folder_id_set:
+        return
+    if ctx.exclude_foldered_dashboards and (folder_uid or _is_non_general_folder_id(folder_id_int)):
+        return
+    if not folder_uid and folder_id:
+        folder_by_id = (
+            ctx.db.query(GrafanaFolder)
+            .filter(
+                GrafanaFolder.tenant_id == ctx.tenant_id,
+                GrafanaFolder.grafana_id == folder_id,
+            )
+            .first()
+        )
+        folder_uid = getattr(folder_by_id, "grafana_uid", None)
+
+    if not folder_uid and _is_non_general_folder_id(folder_id):
+        return
+    if db_dash and folder_uid and db_dash.folder_uid != folder_uid:
+        db_dash.folder_uid = str(folder_uid)
+        ctx.folder_updates.append(db_dash)
+    if folder_uid and not is_folder_accessible(
+        ctx.db,
+        folder_uid,
+        GrafanaUserScope(ctx.user_id, ctx.tenant_id, ctx.gids),
+        FolderAccessCriteria(require_write=False, is_admin=ctx.is_admin, include_hidden=False),
+    ):
+        return
+    if d.uid not in ctx.accessible and not (ctx.allow_system and d.uid not in ctx.all_registered_uids):
+        return
+    if db_dash and not ctx.show_hidden and _is_hidden_for(db_dash, ctx.user_id):
+        return
+    if ctx.team_id_s:
+        if not db_dash:
+            return
+        if ctx.team_id_s not in {str(g.id) for g in (db_dash.shared_groups or [])}:
+            return
+    ctx.out.append(_to_search_result(d, db_dash=db_dash, user_id=ctx.user_id))
 
 
 async def search_dashboards(
-    service: GrafanaProxyService,
+    service: GrafanaProxyClient,
     db: Session,
-    user_id: str,
-    tenant_id: str,
-    group_ids: List[str],
-    query: Optional[str] = None,
-    tag: Optional[str] = None,
-    starred: Optional[bool] = None,
-    folder_ids: Optional[List[int]] = None,
-    folder_uids: Optional[List[str]] = None,
-    dashboard_uids: Optional[List[str]] = None,
-    uid: Optional[str] = None,
-    team_id: Optional[str] = None,
-    show_hidden: bool = False,
-    limit: Optional[int] = None,
-    offset: int = 0,
-    search_context: Optional[DashboardSearchContext] = None,
-    is_admin: bool = False,
-    exclude_foldered_dashboards: bool = False,
+    scope: GrafanaUserScope,
+    params: DashboardSearchParams,
 ) -> List[DashboardSearchResult]:
+    user_id = scope.user_id
+    tenant_id = scope.tenant_id
+    group_ids = scope.group_ids
+    query = params.query
+    tag = params.tag
+    starred = params.starred
+    folder_ids = params.folder_ids
+    folder_uids = params.folder_uids
+    dashboard_uids = params.dashboard_uids
+    uid = params.uid
+    team_id = params.team_id
+    show_hidden = params.show_hidden
+    limit = params.limit
+    offset = params.offset
+    search_context = params.search_context
+    is_admin = params.is_admin
+    exclude_foldered_dashboards = params.exclude_foldered_dashboards
+
     capped_limit, capped_offset = _cap(limit, offset)
     gids = group_id_strs(group_ids)
     team_id_s = str(team_id) if team_id is not None else None
@@ -87,14 +162,14 @@ async def search_dashboards(
         if folder_uid and not is_folder_accessible(
             db,
             folder_uid,
-            user_id,
-            tenant_id,
-            gids,
-            require_write=False,
-            is_admin=is_admin,
+            GrafanaUserScope(user_id, tenant_id, gids),
+            FolderAccessCriteria(require_write=False, is_admin=is_admin, include_hidden=False),
         ):
             return []
-        effective_context = search_context or build_dashboard_search_context(db, tenant_id=tenant_id, uid=uid)
+        effective_context = cast(
+            DashboardSearchContext,
+            search_context or build_dashboard_search_context(db, tenant_id=tenant_id, uid=uid),
+        )
         db_dash = effective_context.get("uid_db_dashboard")
         if db_dash:
             if check_dashboard_access(db, uid, user_id, tenant_id, gids) is None:
@@ -119,12 +194,14 @@ async def search_dashboards(
         return [_to_search_result(grafana_like, db_dash=db_dash, user_id=user_id)]
 
     all_dashboards = await service.grafana_service.search_dashboards(
-        query=query,
-        tag=tag,
-        starred=starred,
-        folder_ids=list(folder_id_set) or None,
-        folder_uids=list(folder_uid_set) or None,
-        dashboard_uids=list(dashboard_uid_set) or None,
+        GrafanaDashboardSearchRequest(
+            query=query,
+            tag=tag,
+            starred=starred,
+            folder_ids=list(folder_id_set) or None,
+            folder_uids=list(folder_uid_set) or None,
+            dashboard_uids=list(dashboard_uid_set) or None,
+        )
     )
     deduped: Dict[str, DashboardSearchResult] = {}
     for d in all_dashboards:
@@ -159,75 +236,35 @@ async def search_dashboards(
     accessible_uids, allow_system = get_accessible_dashboard_uids(db, user_id, tenant_id, gids)
     accessible = set(accessible_uids)
 
-    effective_context = search_context or build_dashboard_search_context(db, tenant_id=tenant_id)
+    effective_context = cast(
+        DashboardSearchContext,
+        search_context or build_dashboard_search_context(db, tenant_id=tenant_id),
+    )
     all_registered_uids = effective_context.get("all_registered_uids") or set()
     db_dashboards = effective_context.get("db_dashboards") or {}
 
     out: List[DashboardSearchResult] = []
     folder_updates: List[GrafanaDashboard] = []
+    append_ctx = DashboardSearchAppendContext(
+        db=db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        gids=gids,
+        is_admin=is_admin,
+        folder_uid_set=folder_uid_set,
+        folder_id_set=folder_id_set,
+        exclude_foldered_dashboards=exclude_foldered_dashboards,
+        accessible=accessible,
+        allow_system=allow_system,
+        all_registered_uids=all_registered_uids,
+        db_dashboards=db_dashboards,
+        show_hidden=show_hidden,
+        team_id_s=team_id_s,
+        out=out,
+        folder_updates=folder_updates,
+    )
     for d in all_dashboards:
-        db_dash = db_dashboards.get(d.uid)
-        folder_id = getattr(d, "folder_id", None)
-        if folder_id is None:
-            folder_id = getattr(d, "folderId", None)
-        try:
-            folder_id_int = int(folder_id) if folder_id is not None else None
-        except (TypeError, ValueError):
-            folder_id_int = None
-        folder_uid = (
-            getattr(d, "folder_uid", None)
-            or getattr(d, "folderUid", None)
-            or (getattr(db_dash, "folder_uid", None) if db_dash else None)
-        )
-        if folder_id is None and not folder_uid:
-            folder_id_int = 0
-        if _is_general_folder_id(folder_id):
-            if db_dash and db_dash.folder_uid:
-                db_dash.folder_uid = None
-                folder_updates.append(db_dash)
-            folder_uid = None
-        if folder_uid_set and str(folder_uid or "") not in folder_uid_set:
-            continue
-        if folder_id_set and folder_id_int not in folder_id_set:
-            continue
-        if exclude_foldered_dashboards and (folder_uid or _is_non_general_folder_id(folder_id_int)):
-            continue
-        if not folder_uid and folder_id:
-            folder_by_id = (
-                db.query(GrafanaFolder)
-                .filter(
-                    GrafanaFolder.tenant_id == tenant_id,
-                    GrafanaFolder.grafana_id == folder_id,
-                )
-                .first()
-            )
-            folder_uid = getattr(folder_by_id, "grafana_uid", None)
-
-        if not folder_uid and _is_non_general_folder_id(folder_id):
-            continue
-        if db_dash and folder_uid and db_dash.folder_uid != folder_uid:
-            db_dash.folder_uid = str(folder_uid)
-            folder_updates.append(db_dash)
-        if folder_uid and not is_folder_accessible(
-            db,
-            folder_uid,
-            user_id,
-            tenant_id,
-            gids,
-            require_write=False,
-            is_admin=is_admin,
-        ):
-            continue
-        if d.uid not in accessible and not (allow_system and d.uid not in all_registered_uids):
-            continue
-        if db_dash and not show_hidden and _is_hidden_for(db_dash, user_id):
-            continue
-        if team_id_s:
-            if not db_dash:
-                continue
-            if team_id_s not in {str(g.id) for g in (db_dash.shared_groups or [])}:
-                continue
-        out.append(_to_search_result(d, db_dash=db_dash, user_id=user_id))
+        _append_dashboard_search_match(d, append_ctx)
 
     if folder_updates:
         commit_session(db)
@@ -236,15 +273,16 @@ async def search_dashboards(
 
 
 async def get_dashboard(
-    service: GrafanaProxyService,
+    service: GrafanaProxyClient,
     db: Session,
     uid: str,
-    user_id: str,
-    tenant_id: str,
-    group_ids: List[str],
+    scope: GrafanaUserScope,
+    *,
     is_admin: bool = False,
 ) -> Optional[JSONDict]:
-    gids = group_id_strs(group_ids)
+    user_id = scope.user_id
+    tenant_id = scope.tenant_id
+    gids = group_id_strs(scope.group_ids)
     db_dashboard = _db_dashboard_by_uid(db, tenant_id, uid)
     if not db_dashboard:
         return None
@@ -276,11 +314,8 @@ async def get_dashboard(
     if folder_uid and not is_folder_accessible(
         db,
         folder_uid,
-        user_id,
-        tenant_id,
-        gids,
-        require_write=False,
-        is_admin=is_admin,
+        GrafanaUserScope(user_id, tenant_id, gids),
+        FolderAccessCriteria(require_write=False, is_admin=is_admin, include_hidden=False),
     ):
         return None
     if check_dashboard_access(db, uid, user_id, tenant_id, gids) is None:
@@ -296,18 +331,43 @@ async def get_dashboard(
     return payload
 
 
+def _merge_grafana_update_into_db_dashboard(
+    db_dashboard: GrafanaDashboard,
+    result: JSONDict,
+    *,
+    requested_title: str,
+    target_folder_id: object,
+    target_folder_uid: Optional[str],
+) -> None:
+    dashboard_data = _json_dict(result.get("dashboard", {}))
+    title_value = dashboard_data.get("title", db_dashboard.title)
+    db_dashboard.title = requested_title or (title_value if isinstance(title_value, str) else db_dashboard.title)
+    tags_value = dashboard_data.get("tags", [])
+    db_dashboard.tags = tags_value if isinstance(tags_value, list) else []
+    resolved_folder_uid = result.get("folderUid") or dashboard_data.get("folderUid")
+    if not resolved_folder_uid:
+        if _is_general_folder_id(target_folder_id):
+            resolved_folder_uid = None
+        elif target_folder_uid:
+            resolved_folder_uid = target_folder_uid
+    db_dashboard.folder_uid = str(resolved_folder_uid) if resolved_folder_uid else None
+
+
 async def create_dashboard(
-    service: GrafanaProxyService,
+    service: GrafanaProxyClient,
     db: Session,
     dashboard_create: DashboardCreate,
-    user_id: str,
-    tenant_id: str,
-    group_ids: List[str],
-    visibility: str = "private",
-    shared_group_ids: Optional[List[str]] = None,
-    is_admin: bool = False,
-    actor_permissions: Optional[List[str]] = None,
+    scope: GrafanaUserScope,
+    options: DashboardCreateOptions,
 ) -> Optional[JSONDict]:
+    user_id = scope.user_id
+    tenant_id = scope.tenant_id
+    group_ids = scope.group_ids
+    visibility = options.visibility
+    shared_group_ids = options.shared_group_ids
+    is_admin = options.is_admin
+    actor_permissions = options.actor_permissions
+
     requested_title = str(getattr(getattr(dashboard_create, "dashboard", None), "title", "") or "").strip()
     gids = group_id_strs(group_ids)
     if actor_permissions is None:
@@ -318,10 +378,12 @@ async def create_dashboard(
     if requested_title and await _has_accessible_title_conflict(
         service,
         db,
-        tenant_id=tenant_id,
-        user_id=user_id,
-        group_ids=group_ids,
-        title=requested_title,
+        AccessibleTitleConflictParams(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            group_ids=group_ids,
+            title=requested_title,
+        ),
     ):
         raise HTTPException(status_code=409, detail="Dashboard title already exists in your visible scope")
 
@@ -332,11 +394,8 @@ async def create_dashboard(
         target_folder = check_folder_access(
             db,
             folder_uid,
-            user_id,
-            tenant_id,
-            gids,
-            require_write=False,
-            is_admin=is_admin,
+            GrafanaUserScope(user_id, tenant_id, gids),
+            FolderAccessCriteria(require_write=False, is_admin=is_admin, include_hidden=False),
         )
     if folder_uid and not target_folder:
         raise HTTPException(status_code=403, detail="Folder access denied")
@@ -371,8 +430,13 @@ async def create_dashboard(
             ),
         )
 
-    groups = resolve_visibility_groups(
-        service, db, user_id, tenant_id, visibility, group_ids, shared_group_ids, is_admin
+    groups = resolve_visibility_groups_for_scope(
+        service,
+        db,
+        scope,
+        visibility=visibility,
+        shared_group_ids=shared_group_ids,
+        is_admin=is_admin,
     )
 
     try:
@@ -441,18 +505,20 @@ async def create_dashboard(
 
 
 async def update_dashboard(
-    service: GrafanaProxyService,
+    service: GrafanaProxyClient,
     db: Session,
     uid: str,
     dashboard_update: DashboardUpdate,
-    user_id: str,
-    tenant_id: str,
-    group_ids: List[str],
-    visibility: Optional[str] = None,
-    shared_group_ids: Optional[List[str]] = None,
-    is_admin: bool = False,
-    actor_permissions: Optional[List[str]] = None,
+    scope: GrafanaUserScope,
+    options: DashboardUpdateOptions,
 ) -> Optional[JSONDict]:
+    user_id = scope.user_id
+    tenant_id = scope.tenant_id
+    group_ids = scope.group_ids
+    visibility = options.visibility
+    shared_group_ids = options.shared_group_ids
+    is_admin = options.is_admin
+    actor_permissions = options.actor_permissions
     gids = group_id_strs(group_ids)
     if actor_permissions is None:
         has_update_scope = True
@@ -470,11 +536,8 @@ async def update_dashboard(
         folder = check_folder_access(
             db,
             db_dashboard.folder_uid,
-            user_id,
-            tenant_id,
-            gids,
-            require_write=False,
-            is_admin=is_admin,
+            GrafanaUserScope(user_id, tenant_id, gids),
+            FolderAccessCriteria(require_write=False, is_admin=is_admin, include_hidden=False),
         )
         delegated_update_allowed = bool(folder and bool(getattr(folder, "allow_dashboard_writes", False)))
 
@@ -488,11 +551,13 @@ async def update_dashboard(
     if requested_title and await _has_accessible_title_conflict(
         service,
         db,
-        tenant_id=tenant_id,
-        user_id=user_id,
-        group_ids=gids,
-        title=requested_title,
-        exclude_uid=uid,
+        AccessibleTitleConflictParams(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            group_ids=gids,
+            title=requested_title,
+            exclude_uid=uid,
+        ),
     ):
         raise HTTPException(status_code=409, detail="Dashboard title already exists in your visible scope")
 
@@ -503,11 +568,8 @@ async def update_dashboard(
             target_folder = check_folder_access(
                 db,
                 target_folder_uid,
-                user_id,
-                tenant_id,
-                gids,
-                require_write=False,
-                is_admin=is_admin,
+                GrafanaUserScope(user_id, tenant_id, gids),
+                FolderAccessCriteria(require_write=False, is_admin=is_admin, include_hidden=False),
             )
             if not target_folder:
                 raise HTTPException(status_code=403, detail="Folder access denied")
@@ -555,29 +617,26 @@ async def update_dashboard(
     if not result:
         return None
 
-    dashboard_data = _json_dict(result.get("dashboard", {}))
-    title_value = dashboard_data.get("title", db_dashboard.title)
-    db_dashboard.title = requested_title or (title_value if isinstance(title_value, str) else db_dashboard.title)
-    tags_value = dashboard_data.get("tags", [])
-    db_dashboard.tags = tags_value if isinstance(tags_value, list) else []
-    resolved_folder_uid = result.get("folderUid") or dashboard_data.get("folderUid")
-    if not resolved_folder_uid:
-        if _is_general_folder_id(target_folder_id):
-            resolved_folder_uid = None
-        elif target_folder_uid:
-            resolved_folder_uid = target_folder_uid
-    db_dashboard.folder_uid = str(resolved_folder_uid) if resolved_folder_uid else None
+    _merge_grafana_update_into_db_dashboard(
+        db_dashboard,
+        result,
+        requested_title=requested_title,
+        target_folder_id=target_folder_id,
+        target_folder_uid=target_folder_uid,
+    )
 
     if visibility:
         db_dashboard.visibility = visibility
         if visibility == "group" and shared_group_ids is not None:
-            groups = service.validate_group_visibility(
+            groups = resolve_group_share_on_visibility_change(
+                service,
                 db,
-                user_id=user_id,
-                tenant_id=tenant_id,
-                group_ids=group_ids,
-                shared_group_ids=shared_group_ids,
-                is_admin=is_admin,
+                group_share_change_for_scope(
+                    scope,
+                    visibility=visibility,
+                    shared_group_ids=shared_group_ids,
+                    is_admin=is_admin,
+                ),
             )
             db_dashboard.shared_groups.clear()
             db_dashboard.shared_groups.extend(groups)
@@ -598,14 +657,14 @@ async def update_dashboard(
 
 
 async def delete_dashboard(
-    service: GrafanaProxyService,
+    service: GrafanaProxyClient,
     db: Session,
     uid: str,
-    user_id: str,
-    tenant_id: str,
-    group_ids: List[str],
+    scope: GrafanaUserScope,
 ) -> bool:
-    db_dashboard = check_dashboard_access(db, uid, user_id, tenant_id, group_ids, require_write=True)
+    db_dashboard = check_dashboard_access(
+        db, uid, scope.user_id, scope.tenant_id, scope.group_ids, require_write=True
+    )
     if not db_dashboard:
         return False
     ok = await service.grafana_service.delete_dashboard(uid)

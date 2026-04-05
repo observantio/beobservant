@@ -96,6 +96,7 @@ from services.auth.group_ops import (
     update_group_members as update_group_members_op,
     update_group_permissions as update_group_permissions_op,
 )
+from services.auth.actor_caps import AuthActorCaps
 from services.auth.oidc_service import OIDCService
 from services.auth.user_ops import (
     create_user as create_user_op,
@@ -292,7 +293,16 @@ class _DatabaseAuthIdentityMixin(DatabaseAuthServiceState):
         full_name: Optional[str],
         subject: str,
     ) -> User:
-        return db_oidc.provision_oidc_user(_as_db_auth(self), db, email, preferred_username, full_name, subject)
+        return db_oidc.provision_oidc_user(
+            _as_db_auth(self),
+            db,
+            db_oidc.OidcProvisionProfile(
+                email=email,
+                preferred_username=preferred_username,
+                full_name=full_name,
+                subject=subject,
+            ),
+        )
 
     def _update_oidc_user(self, db: Session, user: User, email: str, full_name: Optional[str], subject: str) -> None:
         db_oidc.update_oidc_user(db, user, email, full_name, subject)
@@ -326,8 +336,8 @@ class _DatabaseAuthIdentityMixin(DatabaseAuthServiceState):
         return db_schema.to_group_schema(group)
 
 
-class _DatabaseAuthResourceMixin(DatabaseAuthServiceState):
-    """Users, API keys, groups, and audit logging."""
+class _DatabaseAuthUserAndKeyMixin(DatabaseAuthServiceState):
+    """Users, API keys, and OTLP token helpers."""
 
     def get_user_by_id(
         self,
@@ -347,20 +357,9 @@ class _DatabaseAuthResourceMixin(DatabaseAuthServiceState):
         self,
         user_create: UserCreate,
         tenant_id: str,
-        creator_id: Optional[str] = None,
-        actor_role: Optional[str] = None,
-        actor_permissions: Optional[List[str]] = None,
-        actor_is_superuser: bool = False,
+        actor: Optional[AuthActorCaps] = None,
     ) -> UserSchema:
-        return create_user_op(
-            _as_db_auth(self),
-            user_create,
-            tenant_id,
-            creator_id,
-            actor_role=actor_role,
-            actor_permissions=actor_permissions,
-            actor_is_superuser=actor_is_superuser,
-        )
+        return create_user_op(_as_db_auth(self), user_create, tenant_id, actor)
 
     def list_users(
         self,
@@ -392,21 +391,9 @@ class _DatabaseAuthResourceMixin(DatabaseAuthServiceState):
         user_id: str,
         permission_names: List[str],
         tenant_id: str,
-        actor_user_id: Optional[str] = None,
-        actor_role: Optional[str] = None,
-        actor_permissions: Optional[List[str]] = None,
-        actor_is_superuser: bool = False,
+        actor: Optional[AuthActorCaps] = None,
     ) -> bool:
-        return update_user_permissions_op(
-            _as_db_auth(self),
-            user_id,
-            permission_names,
-            tenant_id,
-            actor_user_id=actor_user_id,
-            actor_role=actor_role,
-            actor_permissions=actor_permissions,
-            actor_is_superuser=actor_is_superuser,
-        )
+        return update_user_permissions_op(_as_db_auth(self), user_id, permission_names, tenant_id, actor)
 
     def update_password(self, user_id: str, password_update: UserPasswordUpdate, tenant_id: str) -> bool:
         return update_password_op(_as_db_auth(self), user_id, password_update, tenant_id)
@@ -458,150 +445,74 @@ class _DatabaseAuthResourceMixin(DatabaseAuthServiceState):
     def backfill_otlp_tokens(self) -> None:
         backfill_otlp_tokens_op(_as_db_auth(self))
 
+
+class _DatabaseAuthGroupMixin(DatabaseAuthServiceState):
+    """Groups and audit logging."""
+
     def create_group(self, group_create: GroupCreate, tenant_id: str, creator_id: Optional[str] = None) -> GroupSchema:
         return create_group_op(_as_db_auth(self), group_create, tenant_id, creator_id)
 
     def list_groups(
         self,
         tenant_id: str,
-        actor_user_id: Optional[str] = None,
-        actor_role: Optional[str] = None,
-        actor_is_superuser: bool = False,
+        *,
+        actor: Optional[AuthActorCaps] = None,
         q: Optional[str] = None,
     ) -> List[GroupSchema]:
-        return list_groups_op(
-            _as_db_auth(self),
-            tenant_id,
-            actor_user_id=actor_user_id,
-            actor_role=actor_role,
-            actor_is_superuser=actor_is_superuser,
-            q=q,
-        )
+        return list_groups_op(_as_db_auth(self), tenant_id, actor=actor, q=q)
 
     def get_group(
         self,
         group_id: str,
         tenant_id: str,
-        actor_user_id: Optional[str] = None,
-        actor_role: Optional[str] = None,
-        actor_is_superuser: bool = False,
+        actor: Optional[AuthActorCaps] = None,
     ) -> Optional[GroupSchema]:
-        return get_group_op(
-            _as_db_auth(self),
-            group_id,
-            tenant_id,
-            actor_user_id=actor_user_id,
-            actor_role=actor_role,
-            actor_is_superuser=actor_is_superuser,
-        )
+        return get_group_op(_as_db_auth(self), group_id, tenant_id, actor=actor)
 
     def delete_group(
         self,
         group_id: str,
         tenant_id: str,
-        deleter_id: Optional[str] = None,
-        actor_role: Optional[str] = None,
-        actor_is_superuser: bool = False,
+        actor: Optional[AuthActorCaps] = None,
     ) -> bool:
-        return delete_group_op(
-            _as_db_auth(self),
-            group_id,
-            tenant_id,
-            deleter_id,
-            actor_role=actor_role,
-            actor_is_superuser=actor_is_superuser,
-        )
+        return delete_group_op(_as_db_auth(self), group_id, tenant_id, actor=actor)
 
     def update_group(
         self,
         group_id: str,
         group_update: GroupUpdate,
         tenant_id: str,
-        updater_id: Optional[str] = None,
-        actor_role: Optional[str] = None,
-        actor_is_superuser: bool = False,
+        actor: Optional[AuthActorCaps] = None,
     ) -> Optional[GroupSchema]:
-        return update_group_op(
-            _as_db_auth(self),
-            group_id,
-            group_update,
-            tenant_id,
-            updater_id,
-            actor_role=actor_role,
-            actor_is_superuser=actor_is_superuser,
-        )
+        return update_group_op(_as_db_auth(self), group_id, group_update, tenant_id, actor=actor)
 
     def update_group_permissions(
         self,
         group_id: str,
         permission_names: List[str],
         tenant_id: str,
-        actor_user_id: Optional[str] = None,
-        actor_role: Optional[str] = None,
-        actor_permissions: Optional[List[str]] = None,
-        actor_is_superuser: bool = False,
+        actor: Optional[AuthActorCaps] = None,
     ) -> bool:
-        return update_group_permissions_op(
-            _as_db_auth(self),
-            group_id,
-            permission_names,
-            tenant_id,
-            actor_user_id=actor_user_id,
-            actor_role=actor_role,
-            actor_permissions=actor_permissions,
-            actor_is_superuser=actor_is_superuser,
-        )
+        return update_group_permissions_op(_as_db_auth(self), group_id, permission_names, tenant_id, actor=actor)
 
     def update_group_members(
         self,
         group_id: str,
         user_ids: List[str],
         tenant_id: str,
-        actor_user_id: Optional[str] = None,
-        actor_role: Optional[str] = None,
-        actor_permissions: Optional[List[str]] = None,
-        actor_is_superuser: bool = False,
+        actor: Optional[AuthActorCaps] = None,
     ) -> bool:
-        return update_group_members_op(
-            _as_db_auth(self),
-            group_id,
-            user_ids,
-            tenant_id,
-            actor_user_id=actor_user_id,
-            actor_role=actor_role,
-            actor_permissions=actor_permissions,
-            actor_is_superuser=actor_is_superuser,
-        )
+        return update_group_members_op(_as_db_auth(self), group_id, user_ids, tenant_id, actor=actor)
 
-    def log_audit(
-        self,
-        db: Session,
-        tenant_id: str,
-        user_id: str,
-        action: str,
-        resource_type: str,
-        resource_id: str,
-        details: JSONDict,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-    ) -> None:
-        db_audit.log_audit(
-            db,
-            tenant_id,
-            user_id,
-            action,
-            resource_type,
-            resource_id,
-            details,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
+    def log_audit(self, db: Session, record: db_audit.AuditLogRecord) -> None:
+        db_audit.log_audit(db, record)
 
 
 class DatabaseAuthService(
     _DatabaseAuthCredentialsMixin,
     _DatabaseAuthIdentityMixin,
-    _DatabaseAuthResourceMixin,
+    _DatabaseAuthUserAndKeyMixin,
+    _DatabaseAuthGroupMixin,
 ):
     MFA_SETUP_RESPONSE = "mfa_setup_required"
     MFA_REQUIRED_RESPONSE = "mfa_required"

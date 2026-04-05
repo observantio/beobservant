@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from custom_types.json import JSONDict
 from middleware.dependencies import auth_service, require_permission_with_scope
-from middleware.error_handlers import handle_route_errors
+from middleware.error_handlers import RouteErrorHandlerOptions, handle_route_errors
 from models.access.auth_models import Permission, TokenData
 from models.access.quota_models import QuotasResponse
 from services.quota_service import quota_service
@@ -34,7 +34,7 @@ ojo_release_cache_lock = asyncio.Lock()
 
 
 @router.get("/metrics", response_model=JSONDict)
-@handle_route_errors(internal_detail="Failed to retrieve system metrics")
+@handle_route_errors(RouteErrorHandlerOptions(internal_detail="Failed to retrieve system metrics"))
 async def get_system_metrics(
     _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
 ) -> JSONDict:
@@ -42,7 +42,7 @@ async def get_system_metrics(
 
 
 @router.get("/quotas", response_model=QuotasResponse)
-@handle_route_errors(internal_detail="Failed to retrieve system quotas")
+@handle_route_errors(RouteErrorHandlerOptions(internal_detail="Failed to retrieve system quotas"))
 async def get_system_quotas(
     org_id: Optional[str] = Query(default=None, alias="orgId"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system")),
@@ -69,7 +69,7 @@ async def get_system_quotas(
 
 
 @router.get("/ojo/releases", response_model=JSONDict)
-@handle_route_errors(internal_detail="Failed to retrieve Ojo release metadata")
+@handle_route_errors(RouteErrorHandlerOptions(internal_detail="Failed to retrieve Ojo release metadata"))
 async def get_ojo_releases(
     _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
 ) -> JSONDict:

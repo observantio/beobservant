@@ -14,6 +14,7 @@ from fastapi import HTTPException
 
 import database
 from database import get_db_session
+from services.auth.actor_caps import AuthActorCaps
 from services.database_auth_service import DatabaseAuthService
 from models.access.group_models import GroupCreate
 from models.access.user_models import UserCreate
@@ -37,8 +38,7 @@ def test_update_group_permissions_logs_actor_user_id():
         group.id,
         ["read:agents"],
         tenant_id,
-        actor_user_id=creator.id,
-        actor_role="user",
+        actor=AuthActorCaps(user_id=creator.id, role="user"),
     )
     assert ok is True
     with get_db_session() as db:
@@ -71,8 +71,7 @@ def test_non_admin_cannot_grant_manage_permissions_to_group():
             group.id,
             ["manage:users"],
             tenant_id,
-            actor_user_id=creator.id,
-            actor_role="user",
+            actor=AuthActorCaps(user_id=creator.id, role="user"),
         )
     assert exc.value.status_code == 403
 
@@ -104,8 +103,7 @@ def test_update_group_members_prunes_removed_member_grafana_group_shares():
         group.id,
         [owner.id, member.id],
         tenant_id,
-        actor_user_id=admin.id,
-        actor_role="admin",
+        actor=AuthActorCaps(user_id=admin.id, role="admin"),
     )
 
     with get_db_session() as db:
@@ -142,8 +140,7 @@ def test_update_group_members_prunes_removed_member_grafana_group_shares():
         group.id,
         [member.id],
         tenant_id,
-        actor_user_id=admin.id,
-        actor_role="admin",
+        actor=AuthActorCaps(user_id=admin.id, role="admin"),
     )
 
     with get_db_session() as db:

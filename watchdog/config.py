@@ -108,7 +108,7 @@ def _slug_token(value: Optional[str], default: str) -> str:
     return collapsed or default
 
 
-def _populate_config(cfg: "Config") -> None:
+def _populate_config_services_and_http(cfg: "Config") -> None:
     cfg.APP_ENV = _env_name()
     cfg.IS_PRODUCTION = _is_production_env()
 
@@ -198,6 +198,8 @@ def _populate_config(cfg: "Config") -> None:
     cfg.TTL_CACHE_REDIS_URL = os.getenv("TTL_CACHE_REDIS_URL", "").strip()
     cfg.TTL_CACHE_KEY_PREFIX = os.getenv("TTL_CACHE_KEY_PREFIX", "watchdog:ttl").strip()
 
+
+def _populate_config_network_auth_and_limits(cfg: "Config") -> None:
     cfg.TRUST_PROXY_HEADERS = _to_bool(os.getenv("TRUST_PROXY_HEADERS"), default=False)
     cfg.AUTH_PUBLIC_IP_ALLOWLIST = os.getenv("AUTH_PUBLIC_IP_ALLOWLIST")
     cfg.GATEWAY_IP_ALLOWLIST = os.getenv("GATEWAY_IP_ALLOWLIST")
@@ -233,6 +235,8 @@ def _populate_config(cfg: "Config") -> None:
     cfg.RESOLVER_ANALYZE_MAX_RETAINED_PER_USER = int(os.getenv("RESOLVER_ANALYZE_MAX_RETAINED_PER_USER", "50"))
     cfg.RESOLVER_ANALYZE_JOB_TTL_SECONDS = int(os.getenv("RESOLVER_ANALYZE_JOB_TTL_SECONDS", "900"))
 
+
+def _populate_config_jwt_oidc_and_admin_defaults(cfg: "Config") -> None:
     cfg.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "RS256").strip().upper()
     cfg.JWT_EXPIRATION_MINUTES = int(os.getenv("JWT_EXPIRATION_MINUTES", "1440"))
     cfg.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
@@ -308,6 +312,8 @@ def _populate_config(cfg: "Config") -> None:
     cfg.OTLP_GATEWAY_URL = os.getenv("OTLP_GATEWAY_URL", "http://otlp-gateway:4320")
     cfg.DEFAULT_OTLP_TOKEN = os.getenv("DEFAULT_OTLP_TOKEN")
 
+
+def _populate_config_vault_and_notification_defaults(cfg: "Config") -> None:
     cfg.VAULT_ENABLED = _to_bool(os.getenv("VAULT_ENABLED"), default=False)
     cfg.VAULT_ADDR = os.getenv("VAULT_ADDR")
     cfg.VAULT_TOKEN = os.getenv("VAULT_TOKEN")
@@ -342,6 +348,13 @@ def _populate_config(cfg: "Config") -> None:
 
     cfg.apply_security_defaults()
     cfg.validate()
+
+
+def _populate_config(cfg: "Config") -> None:
+    _populate_config_services_and_http(cfg)
+    _populate_config_network_auth_and_limits(cfg)
+    _populate_config_jwt_oidc_and_admin_defaults(cfg)
+    _populate_config_vault_and_notification_defaults(cfg)
 
 
 class Config:
@@ -532,14 +545,16 @@ class Config:
             secret_id_fn = _secret_id_fn
 
         provider: SecretProvider = vault_mod.VaultSecretProvider(
-            address=self.VAULT_ADDR,
-            token=self.VAULT_TOKEN,
-            role_id=self.VAULT_ROLE_ID,
-            secret_id_fn=secret_id_fn,
-            prefix=self.VAULT_SECRETS_PREFIX,
-            kv_version=self.VAULT_KV_VERSION,
-            timeout=self.VAULT_TIMEOUT,
-            cacert=self.VAULT_CACERT,
+            vault_mod.VaultSecretProviderSettings(
+                address=self.VAULT_ADDR,
+                token=self.VAULT_TOKEN,
+                role_id=self.VAULT_ROLE_ID,
+                secret_id_fn=secret_id_fn,
+                prefix=self.VAULT_SECRETS_PREFIX,
+                kv_version=self.VAULT_KV_VERSION,
+                timeout=self.VAULT_TIMEOUT,
+                cacert=self.VAULT_CACERT,
+            )
         )
 
         self.secret_provider = provider
