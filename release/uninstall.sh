@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# Observantio Release Installation Script
+# This script sets up the environment for running Observantio from a release bundle.
+# All Rights Reserved. (c) 2026 Stefan Kumarasinghe
+
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

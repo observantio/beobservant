@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# Observantio Release Installation Script
+# This script sets up the environment for running Observantio from a release bundle.
+# All Rights Reserved. (c) 2026 Stefan Kumarasinghe
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,7 +19,7 @@ fi
 cd "${ROOT_DIR}"
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "docker is required but not installed." >&2
+  echo "Docker is required but not installed. Please install Docker and try again. Go to the observantio folder and the extracted folder and rerun the install.sh script" >&2
   exit 1
 fi
 
@@ -23,7 +28,7 @@ if docker compose version >/dev/null 2>&1; then
 elif command -v docker-compose >/dev/null 2>&1; then
   COMPOSE_CMD=(docker-compose)
 else
-  echo "docker compose (plugin) or docker-compose is required." >&2
+  echo "Docker compose (plugin) or docker-compose is required. Please install Docker Compose and try again. Go to the observantio folder and the extracted folder and rerun the install.sh script" >&2
   exit 1
 fi
 
@@ -46,8 +51,7 @@ set_env_key() {
   local value="$2"
   local tmp_file
   tmp_file="$(mktemp)"
-  awk -F= -v k="$key" -v v="$value" '
-    BEGIN { replaced=0 }
+  awk -v k="$key" -v v="$value" 'BEGIN { FS="="; OFS="="; replaced=0 }
     $1 == k { print k "=" v; replaced=1; next }
     { print $0 }
     END { if (!replaced) print k "=" v }
@@ -57,31 +61,39 @@ set_env_key() {
 
 get_env_key() {
   local key="$1"
-  awk -F= -v k="$key" '$1 == k { print substr($0, index($0, "=") + 1); exit }' .env
+  awk -v k="$key" 'BEGIN { FS="=" }
+    $1 == k { print substr($0, index($0, "=") + 1); exit }
+  ' .env
 }
 
 random_hex() {
   local length="$1"
   local bytes=$(( (length + 1) / 2 ))
+  local result
   if command -v openssl >/dev/null 2>&1; then
-    openssl rand -hex "${bytes}" | cut -c1-"${length}"
+    result="$(openssl rand -hex "${bytes}")"
+  elif [[ -r /dev/urandom ]]; then
+    result="$(od -An -N"${bytes}" -tx1 /dev/urandom | tr -d ' \n')"
   else
-    od -An -N"${bytes}" -tx1 /dev/urandom | tr -d ' \n' | cut -c1-"${length}"
+    echo "random_hex: no entropy source available (openssl or /dev/urandom required)" >&2
+    exit 1
   fi
+  printf '%s' "${result:0:${length}}"
 }
 
 random_fernet_key() {
+  local raw
   if command -v python3 >/dev/null 2>&1; then
-    python3 - <<'PY'
-import base64
-import os
-print(base64.urlsafe_b64encode(os.urandom(32)).decode("ascii"))
-PY
+    raw="$(python3 -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
   elif command -v openssl >/dev/null 2>&1; then
-    openssl rand -base64 32 | tr -d '\n' | tr '+/' '-_'
+    raw="$(openssl rand -base64 32 | tr -d '\n' | tr '+/' '-_')"
+  elif [[ -r /dev/urandom ]]; then
+    raw="$(head -c 32 /dev/urandom | base64 | tr -d '\n' | tr '+/' '-_')"
   else
-    head -c 32 /dev/urandom | base64 | tr -d '\n' | tr '+/' '-_'
+    echo "random_fernet_key: no entropy source available" >&2
+    exit 1
   fi
+  printf '%s' "$raw"
 }
 
 is_insecure_value() {
@@ -104,6 +116,10 @@ set_secret_if_insecure() {
   local key="$1"
   local known_default="$2"
   local new_value="$3"
+  if [[ -z "${new_value}" ]]; then
+    echo "set_secret_if_insecure: generated empty value for ${key}" >&2
+    exit 1
+  fi
   local current
   current="$(get_env_key "${key}")"
   if is_insecure_value "${current}" "${known_default}"; then
@@ -120,11 +136,12 @@ if is_insecure_value "${old_postgres_password}" "Y7vK2mP9sQ4tN8wX3zR6cD1fH5jL0bG
   randomized_keys+=("POSTGRES_PASSWORD")
 fi
 
-if [[ "${new_postgres_password}" != "${old_postgres_password}" ]]; then
+if [[ "${new_postgres_password}" != "${old_postgres_password}" && -n "${old_postgres_password}" ]]; then
   for db_key in DATABASE_URL NOTIFIER_DATABASE_URL RESOLVER_DATABASE_URL; do
     current_db_url="$(get_env_key "${db_key}")"
     if [[ -n "${current_db_url}" && "${current_db_url}" == *"${old_postgres_password}"* ]]; then
-      set_env_key "${db_key}" "${current_db_url//${old_postgres_password}/${new_postgres_password}}"
+      updated_url="$(printf '%s' "${current_db_url}" | sed "s|${old_postgres_password}|${new_postgres_password}|g")"
+      set_env_key "${db_key}" "${updated_url}"
       randomized_keys+=("${db_key}")
     fi
   done
@@ -138,7 +155,8 @@ jwt_private_key="$(get_env_key JWT_PRIVATE_KEY)"
 jwt_public_key="$(get_env_key JWT_PUBLIC_KEY)"
 
 if [[ "${jwt_algorithm}" == "RS256" || "${jwt_algorithm}" == "ES256" ]]; then
-  if [[ "${jwt_auto_generate_keys,,}" == "true" ]]; then
+  jwt_auto_generate_keys_lower="$(printf '%s' "${jwt_auto_generate_keys}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "${jwt_auto_generate_keys_lower}" == "true" ]]; then
     if [[ -n "${jwt_private_key}" ]] && ! looks_like_pem_private_key "${jwt_private_key}"; then
       set_env_key "JWT_PRIVATE_KEY" ""
       randomized_keys+=("JWT_PRIVATE_KEY")
@@ -149,6 +167,7 @@ if [[ "${jwt_algorithm}" == "RS256" || "${jwt_algorithm}" == "ES256" ]]; then
     fi
   fi
 fi
+
 old_default_otlp_token="$(get_env_key DEFAULT_OTLP_TOKEN)"
 set_secret_if_insecure "DEFAULT_OTLP_TOKEN" "otlp_4fK9qL2mP8rS3tV6wX1yZ7" "otlp_$(random_hex 28)"
 default_otlp_token="$(get_env_key DEFAULT_OTLP_TOKEN)"
@@ -165,12 +184,12 @@ if is_insecure_value "${otel_otlp_token}" "otel_5qW1mN7rT3xY9pK2vL6" || [[ "${ot
   randomized_keys+=("OTEL_OTLP_TOKEN")
 fi
 
-set_secret_if_insecure "INBOUND_WEBHOOK_TOKEN" "whk_2nR8tV4pQ1xY6mK3zL7" "whk_$(random_hex 28)"
-set_secret_if_insecure "OTLP_INGEST_TOKEN" "otlp_ingest_9xR3mT7qP2vN6kY1zL5" "otlp_ingest_$(random_hex 28)"
-set_secret_if_insecure "AGENT_HEARTBEAT_TOKEN" "heartbeat_7mQ2rP9xT4vN1kY6zL3" "heartbeat_$(random_hex 28)"
-set_secret_if_insecure "GATEWAY_STATUS_OTLP_TOKEN" "status_7vN2qP8mR4tX1yZ6kL3" "status_$(random_hex 28)"
-set_secret_if_insecure "GATEWAY_INTERNAL_SERVICE_TOKEN" "svc_gateway_8mQ3tP7rN2vW6xY1kL4" "svc_gateway_$(random_hex 28)"
-set_secret_if_insecure "DATA_ENCRYPTION_KEY" "YXV0b19nZW5lcmF0ZV9pbl9pbnN0YWxsZXJfMzJfYnl0ZXM=" "$(random_fernet_key)"
+set_secret_if_insecure "INBOUND_WEBHOOK_TOKEN"          "whk_2nR8tV4pQ1xY6mK3zL7"           "whk_$(random_hex 28)"
+set_secret_if_insecure "OTLP_INGEST_TOKEN"              "otlp_ingest_9xR3mT7qP2vN6kY1zL5"   "otlp_ingest_$(random_hex 28)"
+set_secret_if_insecure "AGENT_HEARTBEAT_TOKEN"          "heartbeat_7mQ2rP9xT4vN1kY6zL3"     "heartbeat_$(random_hex 28)"
+set_secret_if_insecure "GATEWAY_STATUS_OTLP_TOKEN"      "status_7vN2qP8mR4tX1yZ6kL3"        "status_$(random_hex 28)"
+set_secret_if_insecure "GATEWAY_INTERNAL_SERVICE_TOKEN" "svc_gateway_8mQ3tP7rN2vW6xY1kL4"   "svc_gateway_$(random_hex 28)"
+set_secret_if_insecure "DATA_ENCRYPTION_KEY"            "YXV0b19nZW5lcmF0ZV9pbl9pbnN0YWxsZXJfMzJfYnl0ZXM=" "$(random_fernet_key)"
 
 notifier_service_token="$(get_env_key NOTIFIER_SERVICE_TOKEN)"
 notifier_expected_service_token="$(get_env_key NOTIFIER_EXPECTED_SERVICE_TOKEN)"
@@ -210,7 +229,8 @@ fi
 
 grafana_password="$(get_env_key GRAFANA_PASSWORD)"
 gf_security_admin_password="$(get_env_key GF_SECURITY_ADMIN_PASSWORD)"
-if is_insecure_value "${grafana_password}" "GrafanaR4nD0m21" || is_insecure_value "${gf_security_admin_password}" "GrafanaR4nD0m21" || [[ "${grafana_password}" == "Grafana!R4nD0m#21" ]] || [[ "${gf_security_admin_password}" == "Grafana!R4nD0m#21" ]]; then
+if is_insecure_value "${grafana_password}" "GrafanaR4nD0m21" || is_insecure_value "${gf_security_admin_password}" "GrafanaR4nD0m21" \
+  || [[ "${grafana_password}" == "Grafana!R4nD0m#21" ]] || [[ "${gf_security_admin_password}" == "Grafana!R4nD0m#21" ]]; then
   new_grafana_password="Grafana!$(random_hex 16)"
   set_env_key "GRAFANA_PASSWORD" "${new_grafana_password}"
   set_env_key "GF_SECURITY_ADMIN_PASSWORD" "${new_grafana_password}"
@@ -229,7 +249,7 @@ app_env="$(get_env_key APP_ENV)"
 if [[ -z "${app_env}" ]]; then
   app_env="$(get_env_key ENVIRONMENT)"
 fi
-app_env="${app_env,,}"
+app_env="$(printf '%s' "${app_env}" | tr '[:upper:]' '[:lower:]')"
 is_production_env=false
 if [[ "${app_env}" == "production" || "${app_env}" == "prod" ]]; then
   is_production_env=true
@@ -272,7 +292,7 @@ if [[ -n "${default_cors_origins}" ]]; then
   fi
 fi
 
-read -r -p "UI host IP or DNS [${default_ui_host}]: " input_ui_host
+read -r -p "What is the UI host IP or DNS (This is for CORS and where the UI will be accessible) [${default_ui_host}]: " input_ui_host
 ui_host="${input_ui_host:-${default_ui_host}}"
 ui_origin="http://${ui_host}:5173"
 api_base_url="http://${ui_host}:4319"
@@ -281,9 +301,9 @@ grafana_root_url="http://${ui_host}:8080/grafana/"
 app_login_url="${ui_origin}/login"
 
 read -r -p "Admin username [${default_admin_username:-admin}]: " input_admin_username
-read -r -s -p "Admin password [hidden, press Enter to keep default]: " input_admin_password
+read -r -s -p "Admin password (Needs to be at least 16 characters long) [hidden, press Enter to keep default]: " input_admin_password
 echo
-read -r -p "Admin email [${default_admin_email:-admin@observantio.local}]: " input_admin_email
+read -r -p "Admin email (Ensure it's a valid email address if you need to convert to OIDC) [${default_admin_email:-admin@observantio.local}]: " input_admin_email
 
 admin_username="${input_admin_username:-${default_admin_username:-admin}}"
 admin_password="${input_admin_password:-${default_admin_password:-Obsrv!AdminR4nD0m}}"
@@ -291,12 +311,12 @@ admin_email="${input_admin_email:-${default_admin_email:-admin@observantio.local
 
 set_env_key "DEFAULT_ADMIN_USERNAME" "$admin_username"
 set_env_key "DEFAULT_ADMIN_PASSWORD" "$admin_password"
-set_env_key "DEFAULT_ADMIN_EMAIL" "$admin_email"
-set_env_key "CORS_ORIGINS" "${ui_origin}"
-set_env_key "VITE_API_URL" "${api_base_url}"
+set_env_key "DEFAULT_ADMIN_EMAIL"    "$admin_email"
+set_env_key "CORS_ORIGINS"           "${ui_origin}"
+set_env_key "VITE_API_URL"           "${api_base_url}"
 set_env_key "VITE_OTLP_GATEWAY_HOST" "${otlp_gateway_url}"
-set_env_key "GF_SERVER_ROOT_URL" "${grafana_root_url}"
-set_env_key "APP_LOGIN_URL" "${app_login_url}"
+set_env_key "GF_SERVER_ROOT_URL"     "${grafana_root_url}"
+set_env_key "APP_LOGIN_URL"          "${app_login_url}"
 
 echo " "
 echo "Configured UI host settings:"
@@ -305,10 +325,10 @@ echo " - VITE_OTLP_GATEWAY_HOST=${otlp_gateway_url}"
 echo " - GF_SERVER_ROOT_URL=${grafana_root_url}"
 echo " - APP_LOGIN_URL=${app_login_url}"
 
-echo " "
 if [[ "${#randomized_keys[@]}" -gt 0 ]]; then
+  echo " "
   echo "Randomized secure defaults for:"
-  printf ' - %s\n' "${randomized_keys[@]}"
+  printf '%s\n' "${randomized_keys[@]}" | awk '!seen[$0]++ { print " - " $0 }'
 fi
 
 release_arch="$(get_env_key RELEASE_ARCH)"
@@ -320,6 +340,7 @@ if [[ -n "${release_arch}" && "${release_arch}" != "multi" ]]; then
     echo "Warning: bundle architecture is ${release_arch} but host appears to be ${host_arch}." >&2
   fi
 fi
+
 echo ""
 "${RUN_OPTIMAL_SCRIPT}"
 echo ""
@@ -331,12 +352,21 @@ echo " "
 if [[ -z "${start_now}" || "${start_now}" =~ ^[Yy]$ ]]; then
   "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml up -d
   echo " "
-  echo "Observantio is up. This is not an hardened setup, please update the .env file with secure values and consider additional hardening steps for production use."
-  if command -v python3 >/dev/null 2>&1; then
-    if ! python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:4319/health')"; then
-      echo "Warning: Watchdog health probe failed at http://localhost:4319/health"
-      echo "Check container status with: ${COMPOSE_CMD[*]} -f docker-compose.prod.yml ps"
-      echo "Inspect logs with: ${COMPOSE_CMD[*]} -f docker-compose.prod.yml logs watchdog"
+  echo "Your next steps should be to harden the .env. Please refer to the documentation for guidance: https://github.com/observantio/watchdog/blob/main/USER%20GUIDE.md"
+  echo "Thank you for using Observantio! Please star the project on GitHub if you find it useful: https://github.com/observantio/watchdog"
+  echo "You can access the UI at: ${ui_origin} (Username: ${admin_username})"
+  echo " "
+  if command -v curl >/dev/null 2>&1; then
+    if ! curl -sf "http://localhost:4319/health" >/dev/null; then
+      echo "Warning: health probe failed at http://localhost:4319/health" >&2
+      echo "Check status: ${COMPOSE_CMD[*]} -f docker-compose.prod.yml ps" >&2
+      echo "Inspect logs: ${COMPOSE_CMD[*]} -f docker-compose.prod.yml logs watchdog" >&2
+    fi
+  elif command -v wget >/dev/null 2>&1; then
+    if ! wget -qO- "http://localhost:4319/health" >/dev/null; then
+      echo "Warning: health probe failed at http://localhost:4319/health" >&2
+      echo "Check status: ${COMPOSE_CMD[*]} -f docker-compose.prod.yml ps" >&2
+      echo "Inspect logs: ${COMPOSE_CMD[*]} -f docker-compose.prod.yml logs watchdog" >&2
     fi
   fi
 else
