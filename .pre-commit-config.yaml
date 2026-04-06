@@ -23,24 +23,6 @@ repos:
         exclude: (^|/)tests/
         types: [python]
 
-      - id: root-ruff-check
-        name: Ruff check (autofix)
-        language: system
-        entry: .venv/bin/python
-        args: [-m, ruff, check, --config, pyproject.toml, --fix, --fix-only]
-        files: \.py$
-        exclude: (^|/)tests/|^(resolver|notifier)/
-        types: [python]
-
-      - id: root-ruff-format
-        name: Ruff format
-        language: system
-        entry: .venv/bin/python
-        args: [-m, ruff, format, --config, pyproject.toml]
-        files: \.py$
-        exclude: (^|/)tests/|^(resolver|notifier)/
-        types: [python]
-
       - id: watchdog-mypy
         name: Watchdog mypy
         language: system
