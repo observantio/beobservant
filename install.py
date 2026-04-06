@@ -430,9 +430,21 @@ def print_urls() -> None:
     hr()
 
 
+def run_optimal_config(workdir: Path) -> None:
+    script = workdir / "scripts" / "run_optimal_config.sh"
+    if not script.is_file():
+        warn(f"Optimal config script not found: {script}. Skipping config generation.")
+        return
+
+    info("Running optimal config generator")
+    run(["bash", str(script)], cwd=workdir)
+    ok("Generated optimal observability configs")
+
+
 def start_stack(workdir: Path, compose_file: Path, compose_cmd: Sequence[str]) -> None:
     if not compose_file.is_file():
         raise SystemExit(f"Compose file not found: {compose_file}")
+    run_optimal_config(workdir)
     info("Starting stack")
     run([*compose_cmd, "-f", str(compose_file), "--project-directory", str(workdir), "up", "-d", "--build"], cwd=workdir)
     ok("Stack started")
