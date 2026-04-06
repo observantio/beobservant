@@ -350,6 +350,7 @@ def prepare_env(
     upsert_env(env_file, "DEFAULT_ADMIN_EMAIL", admin_email)
     upsert_env_if_missing(env_file, "DEFAULT_ADMIN_TENANT", "default")
     upsert_env_if_missing(env_file, "DEFAULT_ORG_ID", "default")
+    upsert_env_if_missing(env_file, "MIMIR_TENANT_ID", "default")
 
     auth_provider = normalize_choice(
         read_env_value(env_file, "AUTH_PROVIDER") or "",
