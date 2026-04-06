@@ -118,8 +118,8 @@ jobs:
       - name: Build and push otel-agent
         uses: docker/build-push-action@v6
         with:
-          context: ./tests
-          file: ./tests/Dockerfile
+          context: ./otel
+          file: ./otel/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/${{ steps.owner.outputs.owner_lc }}/otel-agent:${{ needs.resolve-versions.outputs.otel_agent_version }}

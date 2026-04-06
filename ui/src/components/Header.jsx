@@ -13,10 +13,10 @@ import { useToast } from "../contexts/ToastContext";
 import { copyToClipboard } from "../utils/helpers";
 
 const NAV_ITEM_LIST = Object.values(NAV_ITEMS);
-const RELEASE_LABEL = "Wolfmegasaur v0.0.2";
+const RELEASE_LABEL = "Wolfmegasaur v0.0.3";
 const WATCHDOG_GITHUB_URL = "https://github.com/observantio/watchdog";
 const OJO_REPO_URL = "https://github.com/observantio/ojo";
-const OJO_RECOMMENDED_RELEASE_TAG = "v0.0.2";
+const OJO_RECOMMENDED_RELEASE_TAG = "v0.0.3";
 const OJO_RELEASES_URL = `${OJO_REPO_URL}/releases/latest`;
 const OJO_RECOMMENDED_RELEASE_URL = `${OJO_REPO_URL}/releases/tag/${OJO_RECOMMENDED_RELEASE_TAG}`;
 const RELEASE_FETCH_TIMEOUT_MS = 8000;

@@ -12,17 +12,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
+import settings
+import start
 import uvicorn
 from fastapi import FastAPI
-from pydantic import BaseModel
-
-import start
-import settings
 from middleware.openapi import install_custom_openapi
 from models.exceptions import DatabaseUnavailable
+from pydantic import BaseModel
 from routers import router as gateway_router
 from services.gateway_service import GatewayAuthService
 
@@ -97,7 +96,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="Watchdog Gateway Auth Service",
-    version="0.0.2",
+    version="0.0.3",
     docs_url="/docs" if settings.ENABLE_API_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_API_DOCS else None,
     openapi_url="/openapi.json" if settings.ENABLE_API_DOCS else None,

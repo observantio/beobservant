@@ -163,7 +163,7 @@ services:
 
   otel-agent:
     build:
-      context: ./tests
+      context: ./otel
       dockerfile: Dockerfile
     env_file:
       - .env

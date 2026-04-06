@@ -26,8 +26,7 @@ This folder contains repo-level automation scripts for quality gates, contract t
 Runs pytest for backend services with coverage and JUnit output. Default order: `resolver`, `gatekeeper`, `notifier`, `watchdog`.
 
 ```bash
-scripts/run_global_pytests.sh
-scripts/run_global_pytests.sh watchdog
+scripts/run_global_pytests.sh [SERVICE]
 ```
 
 Optional first argument: one of `resolver`, `gatekeeper`, `notifier`, or `watchdog` to run only that suite. Use `-h` / `--help` for usage.
@@ -43,8 +42,7 @@ Expect:
 Runs mypy using repo `pyproject.toml` defaults. By default all four services are checked; pass a service name to scope the run.
 
 ```bash
-scripts/run_global_mypy.sh
-scripts/run_global_mypy.sh resolver
+scripts/run_global_mypy.sh [SERVICE]
 ```
 
 Optional first argument: `resolver`, `gatekeeper`, `notifier`, or `watchdog`. Use `-h` / `--help` for usage.
@@ -59,8 +57,7 @@ Expect:
 Runs pylint with shared config. By default all four services are checked; pass a service name to scope the run.
 
 ```bash
-scripts/run_global_pylint.sh
-scripts/run_global_pylint.sh gatekeeper
+scripts/run_global_pylint.sh [SERVICE]
 ```
 
 Optional first argument: `resolver`, `gatekeeper`, `notifier`, or `watchdog`. Use `-h` / `--help` for usage.

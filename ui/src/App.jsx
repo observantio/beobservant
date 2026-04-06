@@ -213,7 +213,7 @@ function AppContent() {
 
   const footerBlock = (
     <footer className="container mt-8 mb-8 text-center text-xs text-sre-text-muted">
-      © Watchdog v0.0.2 — Apache 2.0 License —{" "}
+      © Watchdog v0.0.3 — Apache 2.0 License —{" "}
       <a
         href="https://github.com/observantio/watchdog"
         target="_blank"

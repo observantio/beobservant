@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [v0.0.3] - 2026-04-06
 
 ### Added
  
@@ -11,6 +11,14 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- Pinned root optional dependency groups (`watchdog`, `gatekeeper`, `notifier`, `resolver`) to explicit `==` versions for reproducible installs.
+- Pinned resolver runtime dependencies in `resolver/pyproject.toml` to explicit `==` versions.
+- Reworked notifier runtime dependency declaration to standard PEP 621 `dependencies = [...]` syntax and pinned all runtime dependencies to explicit `==` versions.
+- Updated root `README.md` and `scripts/README.md` to document the service-scoped global script invocation pattern (`scripts/run_global_*.sh [SERVICE]`).
+- Audited recent pylint-focused cleanup history from git log and retained the existing cleanup summary coverage in this changelog section:
+  - import ordering and grouping normalization.
+  - safe formatting and naming alignment.
+  - removal of protected-access and unnecessary dunder usage patterns.
 - Applied a broad pylint-focused cleanup/refactor pass across Watchdog and Gatekeeper with safe formatting-only and naming-only updates.
 - Tightened readability defaults in lint configuration (reduced max line length/module size) and normalized wrapping/structure in touched files.
 - Enforced stricter naming alignment for variables/attributes/constants across updated modules to match current pylint policy without intended runtime behavior changes.
@@ -46,6 +54,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- Renamed the otel agent directory from `tests/` to `otel`. This is the canary agent that generates logs, traces and metrics.
 - Refined dark-mode UI contrast across cards, borders, separators, hover states, and key surfaces to improve readability while preserving a minimal technical aesthetic.
 - Tightened light-theme contrast and border clarity, removed the bluish page gradient, and applied targeted darker card borders on Grafana content areas (excluding the main tab strip).
 - Unified card spacing and border consistency in shared UI primitives and page-level cards, including the Users summary card and embedded log volume widgets.
@@ -64,7 +73,7 @@ All notable changes to this project are documented here.
 - Removed border styling from auth entry cards (`Login` and OIDC callback) to match the cleaner sign-in visual direction.
 - Updated OIDC callback success handling to perform a hard redirect refresh (`location.replace("/")`) after token completion.
 - Switched layout defaults to sidebar navigation, with clearer section grouping, smaller nav links, and dedicated documentation topic links.
-- Updated header chrome in sidebar mode to show release/build context (`wolfmegasaur v0.0.2`) plus quick GitHub/Ojo links.
+- Updated header chrome in sidebar mode to show release/build context (`wolfmegasaur v0.0.3`) plus quick GitHub/Ojo links.
 - Refined “OTel Collector Overview” template panels by removing empty-prone CPU/network breakdowns and adding resilient process-disk throughput coverage.
 - Updated Grafana launch URL normalization to strip internal `orgId` query params and forward only `org-key`.
 - Updated Audit & Compliance filter semantics:
