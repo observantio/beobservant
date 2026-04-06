@@ -10,11 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import List
-
-from fastapi import Body, Depends, Query, HTTPException, Path, status
-from pydantic import BaseModel
-
+from fastapi import Body, Depends, HTTPException, Path, Query, status
 from middleware.dependencies import (
     apply_scoped_rate_limit,
     auth_service,
@@ -24,6 +20,7 @@ from middleware.dependencies import (
 from middleware.error_handlers import handle_route_errors
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUpdateRequest, ApiKeyShareUser, ApiKeyUpdate
 from models.access.auth_models import Permission, TokenData
+from pydantic import BaseModel
 
 from .shared import SAFE_PATH_ID_PATTERN, router, rtp
 
@@ -32,11 +29,11 @@ class HideTogglePayload(BaseModel):
     hidden: bool = True
 
 
-@router.get("/api-keys", response_model=List[ApiKey])
+@router.get("/api-keys", response_model=list[ApiKey])
 async def list_api_keys(
     show_hidden: str = Query("false", pattern=r"^(true|false)$"),
     current_user: TokenData = Depends(require_permission(Permission.READ_API_KEYS)),
-) -> List[ApiKey]:
+) -> list[ApiKey]:
     apply_scoped_rate_limit(current_user, "auth")
     return await rtp(auth_service.list_api_keys, current_user.user_id, show_hidden == "true")
 
@@ -91,32 +88,28 @@ async def hide_api_key(
     return {"status": "success", "hidden": bool(payload.hidden)}
 
 
-@router.get("/api-keys/{key_id}/shares", response_model=List[ApiKeyShareUser])
+@router.get("/api-keys/{key_id}/shares", response_model=list[ApiKeyShareUser])
 @handle_route_errors()
 async def get_api_key_shares(
     key_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_API_KEYS, "auth")),
-) -> List[ApiKeyShareUser]:
+) -> list[ApiKeyShareUser]:
     try:
         result = await rtp(auth_service.list_api_key_shares, current_user.user_id, current_user.tenant_id, key_id)
     except ValueError as exc:
         if "not found" in str(exc).lower():
             raise HTTPException(status.HTTP_404_NOT_FOUND, "API key not found") from exc
         raise
-    if not result:
-        keys = await rtp(auth_service.list_api_keys, current_user.user_id, True)
-        if not any(str(getattr(key, "id", "")) == key_id for key in keys):
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "API key not found")
     return [ApiKeyShareUser.model_validate(item) if isinstance(item, dict) else item for item in result]
 
 
-@router.put("/api-keys/{key_id}/shares", response_model=List[ApiKeyShareUser])
+@router.put("/api-keys/{key_id}/shares", response_model=list[ApiKeyShareUser])
 @handle_route_errors()
 async def put_api_key_shares(
     key_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
     payload: ApiKeyShareUpdateRequest = Body(...),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_API_KEYS, "auth")),
-) -> List[ApiKeyShareUser]:
+) -> list[ApiKeyShareUser]:
     result = await rtp(
         auth_service.replace_api_key_shares,
         current_user.user_id,
