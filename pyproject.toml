@@ -135,6 +135,7 @@ line-ending = "auto"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "N", "PTH", "RUF", "ERA", "T20"]
+per-file-ignores = { "watchdog/config.py" = ["B010"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["resolver", "gatekeeper", "notifier", "watchdog"]

@@ -12,42 +12,41 @@ import importlib
 import logging
 import os
 import secrets
-from typing import Any, List, Optional
+from typing import Any
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-
 from services.secrets.provider import EnvSecretProvider, SecretProvider
 
 logger = logging.getLogger(__name__)
 
 
-def _to_bool(value: Optional[str], default: bool = False) -> bool:
+def _to_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
-def _to_list(value: Optional[str], default: Optional[List[str]] = None) -> List[str]:
+def _to_list(value: str | None, default: list[str] | None = None) -> list[str]:
     if value is None:
         return default or []
     parsed = [item.strip() for item in value.split(",") if item.strip()]
     return parsed if parsed else (default or [])
 
 
-def _is_placeholder(value: Optional[str], placeholders: List[str]) -> bool:
+def _is_placeholder(value: str | None, placeholders: list[str]) -> bool:
     if value is None:
         return True
     normalized = value.strip()
     return not normalized or normalized in placeholders
 
 
-def _normalized_secret(value: Optional[str]) -> str:
+def _normalized_secret(value: str | None) -> str:
     return str(value or "").strip().lower()
 
 
-def _is_weak_secret(value: Optional[str]) -> bool:
+def _is_weak_secret(value: str | None) -> bool:
     normalized = _normalized_secret(value)
     if not normalized:
         return True
@@ -99,7 +98,7 @@ def _is_production_env() -> bool:
     return _env_name() in {"prod", "production"}
 
 
-def _slug_token(value: Optional[str], default: str) -> str:
+def _slug_token(value: str | None, default: str) -> str:
     raw = str(value or "").strip().lower()
     chars = [ch if ch.isalnum() else "-" for ch in raw]
     collapsed = "".join(chars).strip("-")
@@ -166,13 +165,9 @@ def _populate_config_services_and_http(cfg: "Config") -> None:
     cfg.QUOTA_NATIVE_TIMEOUT_SECONDS = float(os.getenv("QUOTA_NATIVE_TIMEOUT_SECONDS", "5.0"))
     cfg.LOKI_QUOTA_NATIVE_PATH = (os.getenv("LOKI_QUOTA_NATIVE_PATH") or "/loki/api/v1/status/limits").strip()
     cfg.TEMPO_QUOTA_NATIVE_PATH = (os.getenv("TEMPO_QUOTA_NATIVE_PATH") or "/status/overrides").strip()
-    cfg.LOKI_QUOTA_NATIVE_LIMIT_FIELD = (
-        os.getenv("LOKI_QUOTA_NATIVE_LIMIT_FIELD") or "max_streams_per_user"
-    ).strip()
+    cfg.LOKI_QUOTA_NATIVE_LIMIT_FIELD = (os.getenv("LOKI_QUOTA_NATIVE_LIMIT_FIELD") or "max_streams_per_user").strip()
     cfg.LOKI_QUOTA_NATIVE_USED_FIELD = (os.getenv("LOKI_QUOTA_NATIVE_USED_FIELD") or "").strip()
-    cfg.TEMPO_QUOTA_NATIVE_LIMIT_FIELD = (
-        os.getenv("TEMPO_QUOTA_NATIVE_LIMIT_FIELD") or "max_traces_per_user"
-    ).strip()
+    cfg.TEMPO_QUOTA_NATIVE_LIMIT_FIELD = (os.getenv("TEMPO_QUOTA_NATIVE_LIMIT_FIELD") or "max_traces_per_user").strip()
     cfg.TEMPO_QUOTA_NATIVE_USED_FIELD = (os.getenv("TEMPO_QUOTA_NATIVE_USED_FIELD") or "").strip()
     cfg.QUOTA_USAGE_WINDOW_SECONDS = int(os.getenv("QUOTA_USAGE_WINDOW_SECONDS", "3600"))
 
@@ -258,9 +253,7 @@ def _populate_config_jwt_oidc_and_admin_defaults(cfg: "Config") -> None:
     )
     cfg.OIDC_AUTO_PROVISION_USERS = _to_bool(os.getenv("OIDC_AUTO_PROVISION_USERS"), default=True)
     cfg.OIDC_AUTO_LINK_BY_EMAIL = _to_bool(os.getenv("OIDC_AUTO_LINK_BY_EMAIL"), default=True)
-    cfg.OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK = _to_bool(
-        os.getenv("OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK"), default=True
-    )
+    cfg.OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK = _to_bool(os.getenv("OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK"), default=True)
 
     cfg.SKIP_LOCAL_MFA_FOR_EXTERNAL = _to_bool(os.getenv("SKIP_LOCAL_MFA_FOR_EXTERNAL"), default=True)
 
@@ -379,8 +372,8 @@ class Config:
     MIMIR_URL: str
     GRAFANA_USERNAME: str
     GRAFANA_PASSWORD: str
-    GRAFANA_API_KEY: Optional[str]
-    DATA_ENCRYPTION_KEY: Optional[str]
+    GRAFANA_API_KEY: str | None
+    DATA_ENCRYPTION_KEY: str | None
     DATABASE_URL: str
     DEFAULT_TIMEOUT: float
     NOTIFIER_TIMEOUT_SECONDS: float
@@ -400,7 +393,7 @@ class Config:
     TEMPO_COUNT_QUERY_CONCURRENCY: int
     TEMPO_USE_METRICS_FOR_COUNT: bool
     SERVICE_CACHE_TTL_SECONDS: int
-    CORS_ORIGINS: List[str]
+    CORS_ORIGINS: list[str]
     CORS_ALLOW_CREDENTIALS: bool
     MAX_QUERY_LIMIT: int
     DEFAULT_QUERY_LIMIT: int
@@ -434,62 +427,62 @@ class Config:
     TTL_CACHE_REDIS_URL: str
     TTL_CACHE_KEY_PREFIX: str
     TRUST_PROXY_HEADERS: bool
-    AUTH_PUBLIC_IP_ALLOWLIST: Optional[str]
-    GATEWAY_IP_ALLOWLIST: Optional[str]
-    WEBHOOK_IP_ALLOWLIST: Optional[str]
-    AGENT_INGEST_IP_ALLOWLIST: Optional[str]
-    GRAFANA_PROXY_IP_ALLOWLIST: Optional[str]
-    AGENT_HEARTBEAT_TOKEN: Optional[str]
-    INBOUND_WEBHOOK_TOKEN: Optional[str]
-    OTLP_INGEST_TOKEN: Optional[str]
-    GATEWAY_INTERNAL_SERVICE_TOKEN: Optional[str]
-    NOTIFIER_SERVICE_TOKEN: Optional[str]
-    NOTIFIER_CONTEXT_SIGNING_KEY: Optional[str]
+    AUTH_PUBLIC_IP_ALLOWLIST: str | None
+    GATEWAY_IP_ALLOWLIST: str | None
+    WEBHOOK_IP_ALLOWLIST: str | None
+    AGENT_INGEST_IP_ALLOWLIST: str | None
+    GRAFANA_PROXY_IP_ALLOWLIST: str | None
+    AGENT_HEARTBEAT_TOKEN: str | None
+    INBOUND_WEBHOOK_TOKEN: str | None
+    OTLP_INGEST_TOKEN: str | None
+    GATEWAY_INTERNAL_SERVICE_TOKEN: str | None
+    NOTIFIER_SERVICE_TOKEN: str | None
+    NOTIFIER_CONTEXT_SIGNING_KEY: str | None
     NOTIFIER_CONTEXT_ISSUER: str
     NOTIFIER_CONTEXT_AUDIENCE: str
     NOTIFIER_CONTEXT_ALGORITHM: str
     NOTIFIER_CONTEXT_TTL_SECONDS: int
     NOTIFIER_TLS_ENABLED: bool
-    NOTIFIER_CA_CERT_PATH: Optional[str]
-    RESOLVER_SERVICE_TOKEN: Optional[str]
-    RESOLVER_CONTEXT_SIGNING_KEY: Optional[str]
+    NOTIFIER_CA_CERT_PATH: str | None
+    RESOLVER_SERVICE_TOKEN: str | None
+    RESOLVER_CONTEXT_SIGNING_KEY: str | None
     RESOLVER_CONTEXT_ISSUER: str
     RESOLVER_CONTEXT_AUDIENCE: str
     RESOLVER_CONTEXT_ALGORITHM: str
     RESOLVER_CONTEXT_TTL_SECONDS: int
     RESOLVER_PROXY_CACHE_TTL_SECONDS: int
     RESOLVER_TLS_ENABLED: bool
-    RESOLVER_CA_CERT_PATH: Optional[str]
+    RESOLVER_CA_CERT_PATH: str | None
     RESOLVER_ANALYZE_MAX_CONCURRENCY: int
     RESOLVER_ANALYZE_MAX_RETAINED_PER_USER: int
     RESOLVER_ANALYZE_JOB_TTL_SECONDS: int
     JWT_ALGORITHM: str
     JWT_EXPIRATION_MINUTES: int
     JWT_SECRET_KEY: str
-    JWT_PRIVATE_KEY: Optional[str]
-    JWT_PUBLIC_KEY: Optional[str]
+    JWT_PRIVATE_KEY: str | None
+    JWT_PUBLIC_KEY: str | None
     JWT_AUTO_GENERATE_KEYS: bool
     AUTH_PROVIDER: str
     AUTH_PASSWORD_FLOW_ENABLED: bool
-    OIDC_ISSUER_URL: Optional[str]
-    OIDC_CLIENT_ID: Optional[str]
-    OIDC_CLIENT_SECRET: Optional[str]
-    OIDC_AUDIENCE: Optional[str]
-    OIDC_JWKS_URL: Optional[str]
+    OIDC_ISSUER_URL: str | None
+    OIDC_CLIENT_ID: str | None
+    OIDC_CLIENT_SECRET: str | None
+    OIDC_AUDIENCE: str | None
+    OIDC_JWKS_URL: str | None
     OIDC_SCOPES: str
     OIDC_CLOCK_SKEW_LEEWAY_SECONDS: int
     OIDC_AUTO_PROVISION_USERS: bool
     OIDC_AUTO_LINK_BY_EMAIL: bool
     OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK: bool
     SKIP_LOCAL_MFA_FOR_EXTERNAL: bool
-    KEYCLOAK_ADMIN_URL: Optional[str]
-    KEYCLOAK_ADMIN_REALM: Optional[str]
-    KEYCLOAK_ADMIN_CLIENT_ID: Optional[str]
-    KEYCLOAK_ADMIN_CLIENT_SECRET: Optional[str]
+    KEYCLOAK_ADMIN_URL: str | None
+    KEYCLOAK_ADMIN_REALM: str | None
+    KEYCLOAK_ADMIN_CLIENT_ID: str | None
+    KEYCLOAK_ADMIN_CLIENT_SECRET: str | None
     KEYCLOAK_USER_PROVISIONING_ENABLED: bool
     DEFAULT_ADMIN_BOOTSTRAP_ENABLED: bool
     REQUIRE_TOTP_ENCRYPTION_KEY: bool
-    TRUSTED_PROXY_CIDRS: List[str]
+    TRUSTED_PROXY_CIDRS: list[str]
     REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS: bool
     FORCE_SECURE_COOKIES: bool
     ALLOWLIST_FAIL_OPEN: bool
@@ -507,13 +500,13 @@ class Config:
     DEFAULT_ORG_ID: str
     APP_ORG_KEY: str
     OTLP_GATEWAY_URL: str
-    DEFAULT_OTLP_TOKEN: Optional[str]
+    DEFAULT_OTLP_TOKEN: str | None
     VAULT_ENABLED: bool
-    VAULT_ADDR: Optional[str]
-    VAULT_TOKEN: Optional[str]
-    VAULT_ROLE_ID: Optional[str]
-    VAULT_SECRET_ID: Optional[str]
-    VAULT_CACERT: Optional[str]
+    VAULT_ADDR: str | None
+    VAULT_TOKEN: str | None
+    VAULT_ROLE_ID: str | None
+    VAULT_SECRET_ID: str | None
+    VAULT_CACERT: str | None
     VAULT_SECRETS_PREFIX: str
     VAULT_KV_VERSION: int
     VAULT_TIMEOUT: float
@@ -591,7 +584,7 @@ class Config:
                 setattr(self, sk, val)
                 logger.info("Loaded secret %s from Vault", sk)
 
-    def get_secret(self, key: str) -> Optional[str]:
+    def get_secret(self, key: str) -> str | None:
         val = getattr(self, key, None)
         if val:
             return val if isinstance(val, str) else str(val)
@@ -765,7 +758,7 @@ class Config:
 
 class Constants:
     APP_NAME: str = "Watchdog with Your Infrastructure"
-    APP_VERSION: str = "0.0.1"
+    APP_VERSION: str = "0.0.3"
     APP_DESCRIPTION: str = "Unified API for managing Tempo, Loki, AlertManager, Grafana, and Resolver"
 
     STATUS_HEALTHY: str = "Healthy"
