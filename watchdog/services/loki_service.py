@@ -12,13 +12,13 @@ http://www.apache.org/licenses/LICENSE-2.0
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Awaitable, Callable, Dict, List, Optional
 
 import httpx
-
 from config import config
+from custom_types.json import JSONDict
 from middleware.resilience import with_retry, with_timeout
 from models.observability.loki_models import (
     LogDirection,
@@ -28,7 +28,6 @@ from models.observability.loki_models import (
     LogResponse,
     LogStatsResponse,
 )
-from custom_types.json import JSONDict
 from services.common.http_client import create_async_client
 from services.common.ttl_cache import TTLCache
 from services.loki.fallback import (
@@ -43,26 +42,26 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 QueryParamValue = str | int | float | bool | None
-RequestQueryParamValue = str | int | float | bool | List[str | int | float | bool]
+RequestQueryParamValue = str | int | float | bool | list[str | int | float | bool]
 RequestQueryParams = dict[str, RequestQueryParamValue]
 
 
 @dataclass(frozen=True, slots=True)
 class SearchLogsByPatternParams:
     pattern: str
-    labels: Optional[Dict[str, str]] = None
-    start: Optional[int] = None
-    end: Optional[int] = None
+    labels: dict[str, str] | None = None
+    start: int | None = None
+    end: int | None = None
     limit: int = 100
     tenant_id: str = config.DEFAULT_ORG_ID
 
 
 @dataclass(frozen=True, slots=True)
 class FilterLogsParams:
-    labels: Dict[str, str]
-    filters: Optional[List[str]] = None
-    start: Optional[int] = None
-    end: Optional[int] = None
+    labels: dict[str, str]
+    filters: list[str] | None = None
+    start: int | None = None
+    end: int | None = None
     limit: int = 100
     tenant_id: str = config.DEFAULT_ORG_ID
 
@@ -87,7 +86,7 @@ class LokiService:
         self._client = create_async_client(config.DEFAULT_TIMEOUT)
         self._cache_ttl = max(1, int(config.SERVICE_CACHE_TTL_SECONDS))
         self._volume_cache_ttl = max(1, int(getattr(config, "LOKI_VOLUME_CACHE_TTL_SECONDS", self._cache_ttl)))
-        self._metrics: Dict[str, float] = {
+        self._metrics: dict[str, float] = {
             "loki_query_total": 0,
             "loki_query_errors_total": 0,
             "loki_query_fallbacks_total": 0,
@@ -95,20 +94,20 @@ class LokiService:
         }
         self._labels_cache = TTLCache()
         self._volume_cache = TTLCache()
-        self._volume_inflight: Dict[str, asyncio.Future[JSONDict]] = {}
+        self._volume_inflight: dict[str, asyncio.Future[JSONDict]] = {}
         self._volume_inflight_lock = asyncio.Lock()
         self._http = LokiHttpClient(self._metrics)
 
     def _observe(self, metric: str, value: float = 1.0) -> None:
         self._metrics[metric] = self._metrics.get(metric, 0.0) + value
 
-    def _headers(self, tenant_id: str = config.DEFAULT_ORG_ID) -> Dict[str, str]:
+    def _headers(self, tenant_id: str = config.DEFAULT_ORG_ID) -> dict[str, str]:
         return {"X-Scope-OrgID": tenant_id}
 
     def _escape_logql(self, value: str) -> str:
         return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
 
-    def _label_selector(self, labels: Dict[str, str]) -> str:
+    def _label_selector(self, labels: dict[str, str]) -> str:
         if not labels:
             return "{}"
         return "{" + ", ".join(f'{k}="{self._escape_logql(v)}"' for k, v in labels.items()) + "}"
@@ -125,7 +124,7 @@ class LokiService:
                 params[key] = val
         return params
 
-    def _normalize_range_for_step(self, start_ns: Optional[int], end_ns: Optional[int], step_s: int) -> tuple[int, int]:
+    def _normalize_range_for_step(self, start_ns: int | None, end_ns: int | None, step_s: int) -> tuple[int, int]:
         now_ns = int(time.time() * 1_000_000_000)
         end = int(end_ns or now_ns)
         start = int(start_ns or (end - 3_600 * 1_000_000_000))
@@ -136,7 +135,7 @@ class LokiService:
             end = start + step_ns
         return start, end
 
-    def _calculate_stats(self, payload: JSONDict) -> Optional[LogStatsResponse]:
+    def _calculate_stats(self, payload: JSONDict) -> LogStatsResponse | None:
         try:
             result = _object_list(payload.get("result"))
             if not result:
@@ -258,7 +257,7 @@ class LokiService:
     async def query_logs_instant(
         self,
         query_str: str,
-        at_time: Optional[int] = None,
+        at_time: int | None = None,
         tenant_id: str = config.DEFAULT_ORG_ID,
         limit: int = config.DEFAULT_QUERY_LIMIT,
     ) -> LogResponse:
@@ -299,13 +298,13 @@ class LokiService:
     @with_timeout()
     async def get_labels(
         self,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
+        start: int | None = None,
+        end: int | None = None,
         tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> LogLabelsResponse:
         cache_key = f"{tenant_id}:{start}:{end}"
 
-        async def _fetch() -> Optional[List[str]]:
+        async def _fetch() -> list[str] | None:
             params: RequestQueryParams = {}
             if start:
                 params["start"] = start
@@ -337,29 +336,40 @@ class LokiService:
     async def get_label_values(
         self,
         label: str,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
-        query: Optional[str] = None,
+        start: int | None = None,
+        end: int | None = None,
+        query: str | None = None,
         tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> LogLabelValuesResponse:
-        now_ns = int(datetime.now().timestamp() * 1e9)
-        end_ns = end or now_ns
-        start_ns = start or int((datetime.now() - timedelta(hours=1)).timestamp() * 1e9)
+        now_ns = int(time.time() * 1_000_000_000)
+        safe_end = end if isinstance(end, int) and end > 0 else None
+        safe_start = start if isinstance(start, int) and start > 0 else None
+        end_ns = safe_end or now_ns
+        default_start_ns = max(0, end_ns - (3600 * 1_000_000_000))
+        start_ns = safe_start or default_start_ns
 
         max_hours = int(getattr(config, "LOKI_LABEL_VALUES_MAX_RANGE_HOURS", 24))
         max_range_ns = int(max_hours * 3600 * 1e9)
-        if end_ns - start_ns > max_range_ns:
+        if start_ns >= end_ns:
+            start_ns = default_start_ns
+        elif end_ns - start_ns > max_range_ns:
             logger.debug("Label values range capped to last %s hours", max_hours)
             start_ns = int(end_ns - max_range_ns)
 
+        normalized_query = query.strip() if isinstance(query, str) else None
+        if normalized_query and normalized_query.lower() in {"null", "none", "undefined"}:
+            normalized_query = None
+        if normalized_query == "":
+            normalized_query = None
+
         params: RequestQueryParams = {"start": start_ns, "end": end_ns}
-        if query:
-            params["query"] = query
+        if normalized_query:
+            params["query"] = normalized_query
 
-        range_key = "default" if start is None and end is None else f"{start_ns}:{end_ns}"
-        cache_key = f"label_values:{tenant_id}:{label}:{range_key}:{query or ''}"
+        range_key = "default" if safe_start is None and safe_end is None else f"{start_ns}:{end_ns}"
+        cache_key = f"label_values:{tenant_id}:{label}:{range_key}:{normalized_query or ''}"
 
-        async def _fetch() -> List[str]:
+        async def _fetch() -> list[str]:
             payload = await self._http.safe_get_json(
                 self._client,
                 f"{self.loki_url}/loki/api/v1/label/{label}/values",
@@ -371,7 +381,11 @@ class LokiService:
                 values = _string_list(payload.get("data"))
             else:
                 self._observe("loki_query_fallbacks_total")
-                selector = query if isinstance(query, str) and query.strip().startswith("{") else f'{{{label}=~".+"}}'
+                selector = (
+                    normalized_query
+                    if isinstance(normalized_query, str) and normalized_query.startswith("{")
+                    else f'{{{label}=~".+"}}'
+                )
                 log_response = await self.query_logs(
                     LogQuery(
                         query=selector,
@@ -410,8 +424,8 @@ class LokiService:
     async def aggregate_logs(
         self,
         query_str: str,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
+        start: int | None = None,
+        end: int | None = None,
         step: int = 60,
         tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> JSONDict:
@@ -451,8 +465,8 @@ class LokiService:
     async def get_log_volume(
         self,
         query_str: str,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
+        start: int | None = None,
+        end: int | None = None,
         step: int = 300,
         tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> JSONDict:

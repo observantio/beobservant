@@ -204,6 +204,39 @@ async def test_query_logs_instant_get_labels_and_label_values_cover_error_paths(
 
 
 @pytest.mark.asyncio
+async def test_get_label_values_sanitizes_non_positive_range_and_null_query(monkeypatch):
+    service = LokiService(loki_url="http://example")
+    captured: dict[str, object] = {}
+    fixed_now = 1_700_000_000
+
+    async def safe_get_json(_client, endpoint, params=None, headers=None, quiet=False):
+        captured["endpoint"] = endpoint
+        captured["params"] = dict(params or {})
+        captured["headers"] = dict(headers or {})
+        return {"data": []}
+
+    monkeypatch.setattr("services.loki_service.time.time", lambda: fixed_now)
+    monkeypatch.setattr(service._http, "safe_get_json", safe_get_json)
+
+    response = await service.get_label_values(
+        "service_name",
+        start=-50,
+        end=0,
+        query="null",
+        tenant_id="tenant-a",
+    )
+
+    assert response.status == "success"
+    assert response.data == []
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert params["end"] == fixed_now * 1_000_000_000
+    assert params["start"] == (fixed_now - 3600) * 1_000_000_000
+    assert "query" not in params
+    assert captured["headers"] == {"X-Scope-OrgID": "tenant-a"}
+
+
+@pytest.mark.asyncio
 async def test_aggregate_volume_search_and_filter_cover_remaining_branches(monkeypatch):
     service = LokiService(loki_url="http://example")
 

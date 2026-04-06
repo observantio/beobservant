@@ -321,8 +321,10 @@ async def test_api_key_routes_cover_not_found_and_transformations(monkeypatch):
     shares = await api_keys_router.get_api_key_shares("k1", current_user)
     assert shares[0].user_id == "u2"
 
-    monkeypatch.setattr(api_keys_router.auth_service, "list_api_keys", lambda *_args: [])
-    monkeypatch.setattr(api_keys_router.auth_service, "list_api_key_shares", lambda *_args: [])
+    def _missing_shares(*_args):
+        raise ValueError("API key not found")
+
+    monkeypatch.setattr(api_keys_router.auth_service, "list_api_key_shares", _missing_shares)
     with pytest.raises(HTTPException) as exc:
         await api_keys_router.get_api_key_shares("missing", current_user)
     assert exc.value.status_code == 404
