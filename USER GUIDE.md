@@ -88,8 +88,10 @@ Internal-only services (Docker network only):
 ### Option A: Installer (evaluation)
 
 ```bash
-python3 install.py
+curl -fsSL https://raw.githubusercontent.com/observantio/watchdog/main/install.py -o install.py && python3 install.py
 ```
+
+The installer is the best option if you want to develop the code, because it creates a working `.env` and starts all required services cleanly for development.
 
 Installer behavior (current script):
 

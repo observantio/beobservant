@@ -223,7 +223,7 @@ Two practical warnings for new users:
 
 ### Option A: Experimental Installer
 
-The included installer is meant for evaluation and local testing.
+The included installer is meant for evaluation and local testing. It is best to use the Experimental Installer if you want to develop the code, since it creates a working `.env` and starts all the required services cleanly for development.
 
 It will:
 
@@ -234,7 +234,7 @@ It will:
 - Start the compose stack.
 
 ```bash
-python3 install.py
+curl -fsSL https://raw.githubusercontent.com/observantio/watchdog/main/install.py -o install.py && python3 install.py
 ```
 
 ### Option B: Manual Setup
