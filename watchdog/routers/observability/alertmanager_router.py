@@ -105,6 +105,7 @@ async def alertmanager_proxy(
         except JSONDecodeError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON body") from exc
         payload = validate_and_normalize_silence_payload(payload_raw, current_user)
+        payload.pop("shared_group_ids", None)
         request_body = json.dumps(payload).encode("utf-8")
 
     if path.strip("/").startswith("silences") and method in {"PUT", "DELETE"}:

@@ -122,13 +122,6 @@ async def test_alertmanager_public_rules_and_proxy_branches(monkeypatch):
     assert result["path"].endswith("/alerts")
     assert checked
 
-    monkeypatch.setattr(
-        alertmanager_router,
-        "validate_and_normalize_silence_payload",
-        lambda payload, _user: {"id": payload.get("id", "sil-1")},
-    )
-    monkeypatch.setattr(alertmanager_router, "extract_silence_id", lambda path, payload: (payload or {}).get("id"))
-
     async def fake_find_silence(*_args, **_kwargs):
         return {"id": "sil-1"}
 
@@ -159,6 +152,32 @@ async def test_alertmanager_public_rules_and_proxy_branches(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await alertmanager_router.alertmanager_proxy("silences", bad_json_request, _user())
     assert exc.value.status_code == 400
+
+    forwarded_silence = []
+    async def fake_forward_silence(fwd, **_kwargs):
+        forwarded_silence.append(unpack_notifier_forward(fwd))
+        return {"ok": True}
+
+    monkeypatch.setattr(alertmanager_router.notifier_proxy_service, "forward", fake_forward_silence)
+    monkeypatch.setattr(alertmanager_router, "required_permissions", lambda *_args: ["create:silences"])
+    monkeypatch.setattr(alertmanager_router, "check_permissions", lambda current_user, required: None)
+    monkeypatch.setattr(alertmanager_router, "apply_scoped_rate_limit", lambda *_args: None)
+    monkeypatch.setattr(alertmanager_router, "is_mutating", lambda method: method.upper() != "GET")
+
+    group_user = _user(group_ids=["g1", "g2"], is_superuser=False)
+    raw_body = b'{"matchers":[{"name":"service","value":"api","isRegex":false,"isEqual":true}],"startsAt":"2026-04-06T00:00:00Z","endsAt":"2026-04-06T01:00:00Z","comment":"maintenance","visibility":"group","shared_group_ids":["g1"]}'
+    silence_request = _request(
+        method="POST",
+        path="/api/alertmanager/silences",
+        headers=[(b"content-type", b"application/json")],
+        json_body=raw_body,
+    )
+    result = await alertmanager_router.alertmanager_proxy("silences", silence_request, group_user)
+    assert forwarded_silence
+    forwarded_body = forwarded_silence[0]["request_body"].decode("utf-8")
+    assert "shared_group_ids" not in forwarded_body
+    assert "sharedGroupIds" in forwarded_body
+    assert result == {"ok": True}
 
 
 @pytest.mark.asyncio
