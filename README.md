@@ -246,6 +246,7 @@ cp .env.example .env
 ```
 
 For local developer tooling, the workspace root and the `resolver` and `notifier` service folders now each include a `pyproject.toml` with the canonical pytest, coverage, and mypy defaults for that scope.
+The root `observantio` package is a meta package for tooling and extras; install with extras (for example `pip install -e ".[dev]"` or `pip install -e ".[schemathesis]"`) rather than expecting base runtime dependencies.
 
 Then edit `.env` and set, at minimum:
 
