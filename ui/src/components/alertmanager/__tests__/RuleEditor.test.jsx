@@ -89,6 +89,20 @@ describe("RuleEditor notification channel section", () => {
     expect(link).toHaveAttribute("href", "/integrations");
   });
 
+  it('shows a refresh button that triggers channel reload when no channels are configured', async () => {
+    useAuth.mockReturnValue({ hasPermission: () => true });
+    const refreshSpy = vi.fn();
+
+    await renderRuleEditor({ channels: [], onRefreshChannels: refreshSpy });
+    advanceToStep4();
+
+    const refreshButton = screen.getByRole('button', { name: /refresh channels/i });
+    expect(refreshButton).toBeInTheDocument();
+
+    fireEvent.click(refreshButton);
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("shows permission warning when user lacks read:channels", async () => {
     useAuth.mockReturnValue({ hasPermission: () => false });
 

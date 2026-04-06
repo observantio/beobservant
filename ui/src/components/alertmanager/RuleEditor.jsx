@@ -30,6 +30,7 @@ export default function RuleEditor({
   channels,
   apiKeys = [],
   availableCorrelationIds = [],
+  onRefreshChannels = () => {},
   onSave,
   onCancel,
 }) {
@@ -1989,17 +1990,14 @@ export default function RuleEditor({
                             ? "No Eligible Channels"
                             : "No Channels Configured"}
                         </h4>
-                        {canReadChannels && channels?.length > 0 ? (
-                          <p className="text-sre-text-muted mb-4">
-                            No channels match the current rule visibility. Change visibility to select channels.
-                          </p>
-                        ) : canReadChannels ? (
+                        <p className="text-sre-text-muted mb-4">
+                          {canReadChannels && channels?.length > 0
+                            ? "No channels match the current rule visibility. Change visibility to select channels."
+                            : "Configure notification channels before assigning them to alerts."}
+                        </p>
+                        {canReadChannels ? (
                           <>
-                            <p className="text-sre-text-muted mb-4">
-                              Configure notification channels before assigning
-                              them to alerts.
-                            </p>
-                            <div className="flex items-center justify-center gap-3">
+                            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                               <a
                                 href="/integrations"
                                 target="_blank"
@@ -2008,11 +2006,20 @@ export default function RuleEditor({
                               >
                                 Manage Integrations
                               </a>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={onRefreshChannels}
+                              >
+                                Refresh channels
+                              </Button>
                             </div>
-                            <p className="text-sm text-sre-text-muted mt-3">
-                              You can assign channels later after creating the
-                              rule.
-                            </p>
+                            {!(canReadChannels && channels?.length > 0) && (
+                              <p className="text-sm text-sre-text-muted mt-3">
+                                You can assign channels later after creating the
+                                rule.
+                              </p>
+                            )}
                           </>
                         ) : (
                           <p className="text-sre-text-muted mb-4">
@@ -2281,6 +2288,7 @@ RuleEditor.propTypes = {
     sharedGroupIds: PropTypes.arrayOf(PropTypes.string),
   }),
   channels: PropTypes.arrayOf(PropTypes.object),
+  onRefreshChannels: PropTypes.func,
   apiKeys: PropTypes.arrayOf(PropTypes.object),
   availableCorrelationIds: PropTypes.arrayOf(PropTypes.string),
   onSave: PropTypes.func.isRequired,

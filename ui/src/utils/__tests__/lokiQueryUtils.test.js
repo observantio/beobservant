@@ -66,6 +66,15 @@ describe("lokiQueryUtils", () => {
     expect(fallback.length).toBeGreaterThan(0);
   });
 
+  it("combines repeated label filters into a single regex selector", () => {
+    expect(
+      buildSelectorFromFilters([
+        { label: "service_name", value: "analytics-service" },
+        { label: "service_name", value: "billing-service" },
+      ]),
+    ).toBe('{service_name=~"analytics-service|billing-service"}');
+  });
+
   it("builds case-insensitive wildcard text clauses", () => {
     expect(wildcardToRegexPattern("error*timeout?")).toBe("error.*timeout.");
     expect(wildcardToRegexPattern("a.b")).toBe("a\\.b");

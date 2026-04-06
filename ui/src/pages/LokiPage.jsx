@@ -398,11 +398,16 @@ export default function LokiPage() {
   }
 
   function handleSelectLabelValue(label, value) {
-    const filters = [{ label, value }];
-    setSelectedFilters(filters);
+    const nextFilters = selectedFilters.some(
+      (filter) => filter.label === label && filter.value === value,
+    )
+      ? selectedFilters
+      : [...selectedFilters, { label, value }];
+
+    setSelectedFilters(nextFilters);
     setPattern("");
     setQueryMode("builder");
-    executeQuery(filters, "");
+    executeQuery(nextFilters, "");
   }
 
   function handleSelectPattern(term) {

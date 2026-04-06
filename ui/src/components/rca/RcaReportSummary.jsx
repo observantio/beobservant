@@ -48,7 +48,10 @@ export default function RcaReportSummary({ report, compact = false }) {
           <MetricCard
             label="Overall Severity"
             value={
-              <span className={severityValueClass(overallSeverity)}>
+              <span
+                className={`block truncate whitespace-nowrap max-w-full ${severityValueClass(overallSeverity)}`}
+                title={overallSeverity.toUpperCase()}
+              >
                 {overallSeverity.toUpperCase()}
               </span>
             }

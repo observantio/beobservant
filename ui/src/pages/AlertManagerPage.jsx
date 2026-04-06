@@ -1765,6 +1765,7 @@ export default function AlertManagerPage() {
           channels={channels}
           apiKeys={apiKeys}
           availableCorrelationIds={correlationIdOptions}
+          onRefreshChannels={reloadData}
           onSave={async (data) => {
             const ok = await handleSaveRule(data);
             if (ok) {

@@ -231,9 +231,18 @@ export function getVolumeValues(volumeResponse) {
   );
 }
 
-function buildLabelMatcher(label, value) {
-  if (value === "__any__") return `${label}=~".+"`;
-  return `${label}="${escapeLogQLValue(value)}"`;
+function buildLabelMatcher(label, values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return `${label}=~".+"`;
+  }
+  if (values.length === 1) {
+    return `${label}="${escapeLogQLValue(values[0])}"`;
+  }
+
+  const regex = values
+    .map((value) => escapeRegexLiteral(String(value)))
+    .join("|");
+  return `${label}=~"${escapeLogQLValue(regex)}"`;
 }
 
 export function buildFallbackVolume(response, totalLogs) {
@@ -260,8 +269,17 @@ export function buildSelectorFromFilters(
   if (!filters?.length) {
     return `{${fallbackLabel}=~".+"}`;
   }
-  const parts = filters.map((filter) =>
-    buildLabelMatcher(filter.label, filter.value),
+
+  const grouped = filters.reduce((acc, filter) => {
+    const label = filter.label;
+    const value = filter.value;
+    if (!acc[label]) acc[label] = [];
+    if (!acc[label].includes(value)) acc[label].push(value);
+    return acc;
+  }, {});
+
+  const parts = Object.entries(grouped).map(([label, values]) =>
+    buildLabelMatcher(label, values),
   );
   return `{${parts.join(",")}}`;
 }
