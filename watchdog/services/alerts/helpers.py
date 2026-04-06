@@ -14,7 +14,7 @@ import httpx
 from fastapi import HTTPException, Request, status
 
 from config import config
-from custom_types.json import JSONDict
+from custom_types.json import JSONDict, JSONValue
 from middleware.dependencies import enforce_header_token, enforce_public_endpoint_security
 from models.access.auth_models import Permission, TokenData
 from services.notifier_proxy_service import NotifierForwardRequest, notifier_proxy_service
@@ -156,6 +156,31 @@ def normalize_group_ids(raw: object) -> List[str]:
     return result
 
 
+def normalize_silence_matchers(raw: JSONValue) -> JSONValue:
+    if not isinstance(raw, list):
+        return raw
+    normalized: List[JSONDict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            normalized.append(item)
+            continue
+        matcher: JSONDict = {}
+        if "name" in item:
+            matcher["name"] = item["name"]
+        if "value" in item:
+            matcher["value"] = item["value"]
+        if "isRegex" in item:
+            matcher["isRegex"] = item["isRegex"]
+        elif "is_regex" in item:
+            matcher["isRegex"] = item["is_regex"]
+        if "isEqual" in item:
+            matcher["isEqual"] = item["isEqual"]
+        elif "is_equal" in item:
+            matcher["isEqual"] = item["is_equal"]
+        normalized.append(matcher)
+    return normalized
+
+
 def _extract_silence_meta(silence: JSONDict) -> JSONDict:
     def _try_parse(v: object) -> JSONDict:
         if isinstance(v, dict):
@@ -181,13 +206,24 @@ def validate_and_normalize_silence_payload(payload: JSONDict, current_user: Toke
     if not isinstance(payload, dict):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid silence payload")
 
-    normalized = dict(payload)
+    normalized: JSONDict = {}
+    if "matchers" in payload:
+        normalized["matchers"] = normalize_silence_matchers(payload.get("matchers"))
+    if "startsAt" in payload or "starts_at" in payload:
+        normalized["startsAt"] = payload.get("startsAt", payload.get("starts_at"))
+    if "endsAt" in payload or "ends_at" in payload:
+        normalized["endsAt"] = payload.get("endsAt", payload.get("ends_at"))
+    if "comment" in payload:
+        normalized["comment"] = payload.get("comment")
+
     visibility = str(normalized.get("visibility", "private")).strip().lower() or "private"
+    if "visibility" in payload:
+        visibility = str(payload.get("visibility", "private")).strip().lower() or "private"
     if visibility not in {"private", "group", "tenant"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid silence visibility")
     normalized["visibility"] = visibility
 
-    shared_group_ids = normalize_group_ids(normalized.get("sharedGroupIds", normalized.get("shared_group_ids")))
+    shared_group_ids = normalize_group_ids(payload.get("sharedGroupIds", payload.get("shared_group_ids")))
 
     if visibility == "group":
         if not shared_group_ids:

@@ -194,6 +194,31 @@ def test_validate_and_extract_silence_payload():
     assert normalized["shared_group_ids"] == ["g2", "g1"]
 
     normalized = helpers_mod.validate_and_normalize_silence_payload(
+        {
+            "matchers": [
+                {"id": "ui-1", "name": "service", "value": "checkout", "isRegex": False, "isEqual": True},
+                {"id": "ui-2", "name": "severity", "value": "warning", "is_regex": False, "is_equal": True},
+            ],
+            "startsAt": "2026-04-06T00:00:00Z",
+            "endsAt": "2026-04-06T01:00:00Z",
+            "comment": "maintenance window",
+            "createdBy": "user-ui-only",
+            "visibility": "private",
+            "sharedGroupIds": ["g2"],
+        },
+        user,
+    )
+    assert normalized["matchers"] == [
+        {"name": "service", "value": "checkout", "isRegex": False, "isEqual": True},
+        {"name": "severity", "value": "warning", "isRegex": False, "isEqual": True},
+    ]
+    assert normalized["startsAt"] == "2026-04-06T00:00:00Z"
+    assert normalized["endsAt"] == "2026-04-06T01:00:00Z"
+    assert normalized["comment"] == "maintenance window"
+    assert "createdBy" not in normalized
+    assert normalized["sharedGroupIds"] == []
+
+    normalized = helpers_mod.validate_and_normalize_silence_payload(
         {"visibility": "tenant", "sharedGroupIds": ["g2"]},
         user,
     )
