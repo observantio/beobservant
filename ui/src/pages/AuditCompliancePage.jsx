@@ -323,7 +323,7 @@ export default function AuditCompliancePage() {
           <tr
             key={row.id}
             role="button"
-            aria-label={`Open audit details ${row.id}`}
+            aria-label={`Audit details row ${row.id}`}
             className="align-top hover:bg-sre-surface/50"
             tabIndex={0}
             onClick={() => setSelected(row)}
@@ -373,6 +373,7 @@ export default function AuditCompliancePage() {
                 <div className="flex-shrink-0 flex gap-2">
                   <button
                     className="px-2 py-1 rounded-md text-sre-text-muted hover:text-sre-text hover:bg-sre-surface cursor-pointer text-xs"
+                    aria-label={`Open audit details ${row.id}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelected(row);
