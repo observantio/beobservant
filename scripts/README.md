@@ -81,44 +81,28 @@ Expect:
 - Updated sizing keys in `.env` depending on `OBS_RESOURCE_PROFILE`.
 - Useful for day-2 tuning and release restarts.
 
-### `run_schemathesis_full_stack.sh`
+### `run_schemathesis.sh`
 
-Runs contract + fuzz/stateful testing across all four services.
+Runs contract + fuzz/stateful testing for a single service selected by argument.
 
 ```bash
-scripts/run_schemathesis_full_stack.sh
+scripts/run_schemathesis.sh [SERVICE]
 ```
+
+Optional first argument: one of `resolver`, `gatekeeper`, `notifier`, or `watchdog`. Use `-h` / `--help` for usage.
 
 Expect:
 
-- Readiness checks for watchdog/notifier/resolver/gatekeeper.
-- Token/context bootstrap for authenticated APIs.
-- OpenAPI snapshots in `test-reports/openapi-*.json`.
-- Reports under `test-reports/schemathesis/` + JUnit XML at root of `test-reports/`.
-
-### Service-Specific Schemathesis Scripts
-
-Use these for faster targeted contract runs:
-
-```bash
-scripts/run_schemathesis_watchdog_only.sh
-scripts/run_schemathesis_gatekeeper_only.sh
-scripts/run_schemathesis_notifier_only.sh
-scripts/run_schemathesis_resolver_only.sh
-```
-
-Expect:
-
-- Same style of reports as full stack, but scoped to one service.
-- Faster iteration while preserving coverage/fuzzing/stateful phases.
+- Readiness checks and auth/context bootstrap for the selected service.
+- OpenAPI snapshot in `test-reports/openapi-<service>.json` and mirrored to `<service>/openapi.json`.
+- Reports under `test-reports/schemathesis/<service>/` + JUnit XML at root of `test-reports/`.
 
 ## Recommended Gate Order
 
 1. `scripts/run_global_mypy.sh`
 2. `scripts/run_global_pylint.sh`
 3. `scripts/run_global_pytests.sh`
-4. Service-specific Schemathesis script(s)
-5. `scripts/run_schemathesis_full_stack.sh` for release-level confidence
+4. `scripts/run_schemathesis.sh <service>` for each service you changed
 
 ## Troubleshooting
 
