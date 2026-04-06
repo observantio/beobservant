@@ -11,29 +11,29 @@
   </p>
 </div>
 
-This `tests/` folder contains the root-level OTEL canary agent setup used to generate and forward **logs, traces, and metrics**.
+This `otel/` folder contains the root-level OTEL canary agent setup used to generate and forward **logs, traces, and metrics**.
 
 ## What This Canary Does
 
-- Runs `otelcol-contrib` with [`tests/configs/otel-agent.yaml`](./configs/otel-agent.yaml).
-- Generates traces using [`tests/traces.py`](./traces.py).
-- Generates logs using [`tests/logs.py`](./logs.py).
+- Runs `otelcol-contrib` with [`otel/configs/otel-agent.yaml`](./configs/otel-agent.yaml).
+- Generates traces using [`otel/traces.py`](./traces.py).
+- Generates logs using [`otel/logs.py`](./logs.py).
 - Ships host metrics via the OTEL `hostmetrics` receiver in the collector config.
 
 ## Main Entry Point
 
-Use [`tests/start.sh`](./start.sh) to launch the collector and generators.
+Use [`otel/start.sh`](./start.sh) to launch the collector and generators.
 
 ```bash
-bash tests/start.sh
+bash otel/start.sh
 ```
 
 ## Control Log and Trace Rate (`start.sh`)
 
 `start.sh` already supports env-based tuning for traffic rate and volume. You can either:
 
-- Export env vars before running `tests/start.sh`.
-- Or update default values inside `tests/start.sh`.
+- Export env vars before running `otel/start.sh`.
+- Or update default values inside `otel/start.sh`.
 
 ### Trace controls
 
@@ -59,7 +59,7 @@ Example tuned run:
 TRACE_COUNT=200 TRACE_PARALLEL=20 TRACE_LOOPS=0 TRACE_DELAY=0.01 \
 LOG_COUNT=400 LOG_PARALLEL=30 LOG_LOOPS=0 LOG_DELAY=0.005 \
 GENERATOR_START_DELAY=0.5 \
-bash tests/start.sh
+bash otel/start.sh
 ```
 
 ## Create the Dashboard (Mimir + OTEL Template)
@@ -69,12 +69,12 @@ To visualize canary metrics/log behavior in Grafana:
 1. Open Grafana and create/import a dashboard.
 2. Choose the default datasource: **`Mimir`**.
 3. Import the OTEL-native dashboard template provided in this repo:
-   `tests/configs/grafana-high-cpu-systems-otel.json`.
-4. Save the dashboard and verify panels populate while `tests/start.sh` is running.
+   `otel/configs/grafana-high-cpu-systems-otel.json`.
+4. Save the dashboard and verify panels populate while `otel/start.sh` is running.
 
 ## Related Files
 
-- Collector config: [`tests/configs/otel-agent.yaml`](./configs/otel-agent.yaml)
-- OTEL dashboard template: [`tests/configs/grafana-high-cpu-systems-otel.json`](./configs/grafana-high-cpu-systems-otel.json)
-- Startup script: [`tests/start.sh`](./start.sh)
-- Generators: [`tests/logs.py`](./logs.py), [`tests/traces.py`](./traces.py)
+- Collector config: [`otel/configs/otel-agent.yaml`](./configs/otel-agent.yaml)
+- OTEL dashboard template: [`otel/configs/grafana-high-cpu-systems-otel.json`](./configs/grafana-high-cpu-systems-otel.json)
+- Startup script: [`otel/start.sh`](./start.sh)
+- Generators: [`otel/logs.py`](./logs.py), [`otel/traces.py`](./traces.py)

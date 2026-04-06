@@ -11,7 +11,7 @@ usage() {
 Usage: bash download.sh [version] [arch]
 
 Arguments:
-  version   Optional release tag such as v0.0.2. Defaults to the latest GitHub release.
+  version   Optional release tag such as v0.0.3. Defaults to the latest GitHub release.
   arch      Optional asset architecture: amd64, arm64, or multi. Defaults to multi.
 USAGE
 }

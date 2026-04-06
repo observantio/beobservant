@@ -180,17 +180,17 @@ describe("Header user menu", () => {
   it("matches Windows assets only when filename contains windows (not win)", async () => {
     api.getOjoReleases.mockResolvedValueOnce({
       latest: {
-        tag_name: "v0.0.2",
+        tag_name: "v0.0.3",
         assets: [
           {
             id: "a1",
-            name: "ojo-docker-win-v0.0.2.exe",
-            browser_download_url: "https://example.com/ojo-docker-win-v0.0.2.exe",
+            name: "ojo-docker-win-v0.0.3.exe",
+            browser_download_url: "https://github.com/observantio/ojo/releases/download/v0.0.3/ojo-docker-win-v0.0.3.exe",
           },
           {
             id: "a2",
-            name: "ojo-v0.0.2-windows-x86_64.exe",
-            browser_download_url: "https://example.com/ojo-v0.0.2-windows-x86_64.exe",
+            name: "ojo-v0.0.3-windows-x86_64.exe",
+            browser_download_url: "https://github.com/observantio/ojo/releases/download/v0.0.3/ojo-v0.0.3-windows-x86_64.exe",
           },
         ],
       },
@@ -209,9 +209,9 @@ describe("Header user menu", () => {
 
     expect(await screen.findByText(/Matching assets \(1\)/i)).toBeInTheDocument();
     expect(
-      (await screen.findAllByText(/ojo-v0\.0\.2-windows-x86_64\.exe/i)).length,
+      (await screen.findAllByText(/ojo-v\d+\.\d+\.\d+-windows-x86_64\.exe/i)).length,
     ).toBeGreaterThan(0);
-    expect(screen.queryByText(/ojo-docker-win-v0\.0\.2\.exe/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ojo-docker-win-v\d+\.\d+\.\d+\.exe/i)).not.toBeInTheDocument();
   });
 
   it("treats scoped metrics activity as connected in the Ojo wizard", async () => {

@@ -182,7 +182,7 @@ The included `docker-compose.yml` brings up the full local stack:
 - `loki`, `tempo`, `mimir`, and `alertmanager` as the storage and routing backends.
 - `grafana` plus `grafana-proxy` on port `8080`.
 - `ui` on port `5173`.
-- `otel-agent` as a local telemetry generator/test harness.
+- `otel-agent` as a local telemetry generator harness which is under `otel` dir.
 
 ### Important Runtime Endpoints
 
@@ -277,6 +277,28 @@ curl http://localhost:4323/health
 ```
 
 For internal services that are not published to host ports (`gateway-auth`, `resolver`), use `docker compose logs` or container-internal checks.
+
+## Developer Quality Gates
+
+Global quality scripts in `scripts/` support either all services or a single service argument (`resolver`, `gatekeeper`, `notifier`, `watchdog`).
+
+Run all services:
+
+```bash
+scripts/run_global_mypy.sh
+scripts/run_global_pylint.sh
+scripts/run_global_pytests.sh
+```
+
+Run one service only:
+
+```bash
+scripts/run_global_mypy.sh watchdog
+scripts/run_global_pylint.sh watchdog
+scripts/run_global_pytests.sh watchdog
+```
+
+Use `-h` on each script for the full usage contract and environment options.
 
 
 ## First-Run User Journey

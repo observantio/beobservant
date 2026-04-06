@@ -35,9 +35,10 @@ showcase/
 .pylint-cache/
 configs/generated/*.yaml
 .vitest/
-.coveragerc
 coverage.xml
 test-reports/
 .hypothesis/
 .schemathesis
 .codex
+.coverage
+*.db
