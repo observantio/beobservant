@@ -121,6 +121,7 @@ omit = ["tests/*", "ui/*", "showcase/*"]
 
 [tool.coverage.report]
 exclude_also = ["if TYPE_CHECKING:"]
+fail_under = 100
 show_missing = true
 
 [tool.ruff]
