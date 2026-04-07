@@ -5,9 +5,18 @@
   <img src="assets/star.png" alt="Watchdog settings preview" width="150" />
 
   <p>
-    <img src="https://img.shields.io/badge/Stack-Grafana%20%7C%20Loki%20%7C%20Tempo%20%7C%20Mimir%20%7C%20Alertmanager-1f2937?style=flat-square" alt="Stack" />
-    <img src="https://img.shields.io/badge/Control%20plane-Watchdog-0f766e?style=flat-square" alt="Control Plane" />
-    <img src="https://img.shields.io/badge/RCA-AI--assisted-7c3aed?style=flat-square" alt="RCA" />
+    <a href="https://github.com/observantio/resolver">
+      <img src="https://img.shields.io/badge/RCA-Resolver-7c3aed?style=flat-square" alt="Resolver" />
+    </a>
+    <a href="https://github.com/observantio/ojo">
+      <img src="https://img.shields.io/badge/Telemetry-Ojo-0f766e?style=flat-square" alt="Ojo" />
+    </a>
+    <a href="https://github.com/observantio/notifier">
+      <img src="https://img.shields.io/badge/Alerting-Notifier-1f2937?style=flat-square" alt="Notifier" />
+    </a>
+    <a href="https://github.com/observantio/watchdog/tree/main/gatekeeper">
+      <img src="https://img.shields.io/badge/Security-Gatekeeper-0ea5e9?style=flat-square" alt="Gatekeeper" />
+    </a>
   </p>
   <p>
     <a href="https://github.com/observantio/watchdog/blob/main/DEPLOYMENT.md">
