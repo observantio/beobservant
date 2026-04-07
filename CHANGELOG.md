@@ -8,6 +8,7 @@ All notable changes to this project are documented here.
  
 - Added service-specific Schemathesis runners for watchdog and gatekeeper to support targeted contract validation workflows.
 - Added root-level OpenAPI snapshot refresh flow so `watchdog/openapi.json` and `gatekeeper/openapi.json` stay current for downstream contract tooling. 
+- Using a new script to run the otel collector safely and easily, it is at `otel/run_otel_collector.sh`
 
 ### Changed
 
@@ -29,6 +30,8 @@ All notable changes to this project are documented here.
   - private rules can invoke private owner channels only.
   - group rules can invoke private channels and overlapping group channels.
   - tenant/public rules can invoke private channels, overlapping group channels, and tenant/public channels.
+
+- Updated the Otel installation process to use the new otel collector scripts that are much safer and easier, same for the `Api` Page where it was used to create the YAML, is no longer used
 
 ## [v0.0.2] - 2026-03-26
 
