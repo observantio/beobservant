@@ -311,17 +311,15 @@ admin_email="${input_admin_email:-${default_admin_email:-admin@observantio.local
 
 set_env_key "DEFAULT_ADMIN_USERNAME" "$admin_username"
 set_env_key "DEFAULT_ADMIN_PASSWORD" "$admin_password"
-set_env_key "DEFAULT_ADMIN_EMAIL"    "$admin_email"
-set_env_key "CORS_ORIGINS"           "${ui_origin}"
-set_env_key "VITE_API_URL"           "${api_base_url}"
-set_env_key "VITE_OTLP_GATEWAY_HOST" "${otlp_gateway_url}"
-set_env_key "GF_SERVER_ROOT_URL"     "${grafana_root_url}"
-set_env_key "APP_LOGIN_URL"          "${app_login_url}"
+set_env_key "DEFAULT_ADMIN_EMAIL" "$admin_email"
+set_env_key "CORS_ORIGINS" "${ui_origin}"
+set_env_key "VITE_API_URL" "${api_base_url}"
+set_env_key "GF_SERVER_ROOT_URL" "${grafana_root_url}"
+set_env_key "APP_LOGIN_URL" "${app_login_url}"
 
 echo " "
 echo "Configured UI host settings:"
 echo " - CORS_ORIGINS=${ui_origin}"
-echo " - VITE_OTLP_GATEWAY_HOST=${otlp_gateway_url}"
 echo " - GF_SERVER_ROOT_URL=${grafana_root_url}"
 echo " - APP_LOGIN_URL=${app_login_url}"
 
