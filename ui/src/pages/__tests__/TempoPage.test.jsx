@@ -115,6 +115,43 @@ describe("TempoPage — fetch limit and pagination", () => {
     expect(call.service).toBe("");
   });
 
+  it("shows only services with current trace data after search", async () => {
+    api.fetchTempoServices.mockResolvedValue(["frontend", "checkout"]);
+    api.searchTraces.mockResolvedValue({
+      data: [
+        {
+          traceID: "t1",
+          spans: [
+            {
+              duration: 1000,
+              operationName: "GET /checkout",
+              serviceName: "checkout",
+              startTime: 1000,
+            },
+          ],
+        },
+      ],
+    });
+
+    const { getAllByRole, getByText } = render(<TempoPage />);
+    await waitFor(() => expect(api.fetchTempoServices).toHaveBeenCalled());
+
+    const selectElements = getAllByRole("combobox");
+    const serviceSelect = selectElements[0];
+    expect(serviceSelect.children.length).toBe(3); // All Services + frontend + checkout
+
+    fireEvent.change(serviceSelect, { target: { value: "checkout" } });
+    fireEvent.click(getByText(/Search Traces/i));
+    await waitFor(() => expect(api.searchTraces).toHaveBeenCalledTimes(1));
+
+    expect(serviceSelect.value).toBe("checkout");
+    expect(serviceSelect.children.length).toBe(2); // All Services + checkout only
+    expect(Array.from(serviceSelect.children).map((o) => o.value)).toEqual(["", "checkout"]);
+
+    const call = api.searchTraces.mock.calls[0][0];
+    expect(call.service).toBe("checkout");
+  });
+
   it("does not auto-lookup saved trace ids from localStorage", async () => {
     localStorage.setItem(
       "tempoPageState",
