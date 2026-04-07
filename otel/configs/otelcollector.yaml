@@ -1,0 +1,132 @@
+receivers:
+  hostmetrics:
+    collection_interval: 10s
+    scrapers:
+      cpu:
+      memory:
+      disk:
+      filesystem:
+      network:
+      paging:
+      load:
+      processes:
+      process:
+
+
+  filelog:
+    include:
+      - /var/log/*.log
+      - /var/log/**/*.log
+    exclude:
+      - /var/log/btmp
+      - /var/log/wtmp
+    start_at: end
+    include_file_path: true
+    include_file_name: false
+    operators:
+      - type: json_parser
+        if: 'body matches "^{"'
+        parse_from: body
+        timestamp:
+          parse_from: attributes.time
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05Z07:00"
+      - type: move
+        if: 'attributes["log.file.path"] != nil'
+        from: attributes["log.file.path"]
+        to: resource["log.file.path"]
+
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4355
+      grpc:
+        endpoint: 0.0.0.0:4356
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  resourcedetection:
+    detectors: [env, system]
+    timeout: 5s
+    override: false
+
+  batch:
+    send_batch_size: 1000
+    send_batch_max_size: 2000
+    timeout: 10s
+
+exporters:
+  otlp_http/loki:
+    endpoint: "http://localhost:4320/loki/otlp"
+    headers:
+      x-otlp-token: ${env:MIMIR_OTLP_TOKEN}
+    tls:
+      insecure: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 5m
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
+
+  otlp_http/tempo:
+    endpoint: "http://localhost:4320/tempo"
+    headers:
+      x-otlp-token: ${env:MIMIR_OTLP_TOKEN}
+    tls:
+      insecure: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 5m
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
+
+  prometheusremotewrite/mimir:
+    endpoint: "http://localhost:4320/mimir/api/v1/push"
+    headers:
+      x-otlp-token: ${env:MIMIR_OTLP_TOKEN}
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 5m
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp, filelog]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [otlp_http/loki]
+
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [otlp_http/tempo]
+
+    metrics:
+      receivers: [hostmetrics, otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [prometheusremotewrite/mimir]
+
+  telemetry:
+    logs:
+      level: warn
+    metrics:
+      level: basic
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8889
