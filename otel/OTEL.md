@@ -19,13 +19,13 @@ In Watchdog, copy the OTLP token — not the tenant key. The token is only shown
 From the repository root, use:
 
 ```bash
-bash otel/run_otel_collector.sh -t <MIMIR_OTLP_TOKEN>
+sudo bash otel/run_otel_collector.sh -t <MIMIR_OTLP_TOKEN> -c <CONFIG path>
 ```
 
 Example:
 
 ```bash
-bash otel/run_otel_collector.sh -t bo_....
+sudo bash otel/run_otel_collector.sh -t bo_....  -c otel/configs/ojo.yaml 
 ```
 
 ## How it runs

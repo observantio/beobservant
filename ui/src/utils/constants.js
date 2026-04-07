@@ -12,6 +12,8 @@ export const GRAFANA_URL =
   import.meta.env.VITE_GRAFANA_URL || "http://localhost:8080/grafana";
 export const APP_ORG_KEY =
   import.meta.env.VITE_APP_ORG_KEY || "observantio-default";
+export const APP_VERSION =
+  import.meta.env.VITE_APP_VERSION || "v0.0.3";
 export const OIDC_PROVIDER_LABEL =
   import.meta.env.VITE_OIDC_PROVIDER_LABEL || "SSO";
 
@@ -25,9 +27,6 @@ export const MIMIR_PROMETHEUS_URL =
 export const TEMPO_URL = import.meta.env.VITE_TEMPO_URL || "http://tempo:3200";
 export const TEMPO_OTLP_ENDPOINT =
   import.meta.env.VITE_TEMPO_OTLP_ENDPOINT || "tempo:4317";
-
-export const OTLP_GATEWAY_HOST =
-  import.meta.env.VITE_OTLP_GATEWAY_HOST || "http://localhost:4320";
 
 
 export const TIME_RANGES = [

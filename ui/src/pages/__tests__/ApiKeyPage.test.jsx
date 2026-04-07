@@ -96,7 +96,7 @@ describe("ApiKeyPage (shared-key UX)", () => {
     expect(await screen.findByText(/Shared by alice/i)).toBeInTheDocument();
   });
 
-  it("disables Generate Agent YAML when active key is shared", async () => {
+  it("disables View Secret Token when active key is shared", async () => {
     vi.mocked(api.listApiKeys).mockResolvedValue([sharedKey]);
     currentUser.api_keys = [sharedKey];
     const Page = (await import("../ApiKeyPage")).default;
@@ -104,7 +104,7 @@ describe("ApiKeyPage (shared-key UX)", () => {
     render(<Page />);
 
     const btn = await screen.findByRole("button", {
-      name: /Generate Agent YAML/i,
+      name: /View Secret Token/i,
     });
     expect(btn).toBeDisabled();
   });
@@ -150,7 +150,7 @@ describe("ApiKeyPage (shared-key UX)", () => {
     render(<Page />);
 
     const btn = await screen.findByRole("button", {
-      name: /Generate Agent YAML/i,
+      name: /View Secret Token/i,
     });
     expect(btn).toBeEnabled();
     fireEvent.click(btn);
@@ -178,38 +178,6 @@ describe("ApiKeyPage (shared-key UX)", () => {
   });
 });
 
-// ensure OTLP gateway host input is remembered across modal opens
-describe("ApiKeyPage (gateway host persistence)", () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
-  it("remembers a custom gateway host when reopening YAML modal", async () => {
-    currentUser.api_keys = [ownedKey];
-    const Page = (await import("../ApiKeyPage")).default;
-
-    render(<Page />);
-
-    const genBtn = await screen.findByRole("button", {
-      name: /Generate Agent YAML/i,
-    });
-    fireEvent.click(genBtn);
-
-    const modal = await screen.findByRole("dialog");
-    const { within } = await import("@testing-library/react");
-    // label isn’t linked to the input so use placeholder text instead
-    const input = within(modal).getByPlaceholderText(/http:\/\/localhost/i);
-    fireEvent.change(input, { target: { value: "http://foo:4317" } });
-
-    // close and reopen modal
-    fireEvent.click(within(modal).getByRole("button", { name: /Close modal/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /Generate Agent YAML/i }));
-
-    const modal2 = await screen.findByRole("dialog");
-    const input2 = within(modal2).getByPlaceholderText(/http:\/\/localhost/i);
-    expect(input2.value).toBe("http://foo:4317");
-  });
-});
 
 describe("ApiKeyPage (quota capacity)", () => {
   it("disables Add New Key when max key limit is reached", async () => {

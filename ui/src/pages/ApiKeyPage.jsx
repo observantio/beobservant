@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { useLocalStorage } from "../hooks";
 import PageHeader from "../components/ui/PageHeader";
 import { Card, Input, Button, Select, Modal, Checkbox } from "../components/ui";
 import ConfirmModal from "../components/ConfirmModal";
@@ -8,7 +7,6 @@ import { useLayoutMode } from "../contexts/LayoutModeContext";
 import { useToast } from "../contexts/ToastContext";
 import HelpTooltip from "../components/HelpTooltip";
 import * as api from "../api";
-import { OTLP_GATEWAY_HOST } from "../utils/constants";
 import { buildOtelYaml } from "../utils/otelConfig";
 
 export default function ApiKeyPage() {
@@ -341,12 +339,6 @@ export default function ApiKeyPage() {
 
   const [showYamlModal, setShowYamlModal] = useState(false);
   const [yamlModalKeyId, setYamlModalKeyId] = useState("");
-  // remember a custom host so users don't have to re-enter it every time
-  const [gatewayHost, setGatewayHost] = useLocalStorage(
-    "ApiKeyPage.gatewayHost",
-    OTLP_GATEWAY_HOST,
-  );
-
   const [yamlShowToken, setYamlShowToken] = useState(false);
   const [regeneratingToken, setRegeneratingToken] = useState(false);
 
@@ -359,27 +351,9 @@ export default function ApiKeyPage() {
     setYamlShowToken(false);
   }, [yamlModalKeyId, showYamlModal]);
 
-  const derivedLoki = useMemo(
-    () => `${gatewayHost.replace(/\/$/, "")}/loki/otlp`,
-    [gatewayHost],
-  );
-  const derivedTempo = useMemo(
-    () => `${gatewayHost.replace(/\/$/, "")}/tempo`,
-    [gatewayHost],
-  );
-  const derivedMimir = useMemo(
-    () => `${gatewayHost.replace(/\/$/, "")}/mimir/api/v1/push`,
-    [gatewayHost],
-  );
-
   const yamlModalContent = useMemo(
-    () =>
-      buildOtelYaml(yamlModalToken || "", {
-        lokiEndpoint: derivedLoki,
-        tempoEndpoint: derivedTempo,
-        mimirEndpoint: derivedMimir,
-      }),
-    [yamlModalToken, derivedLoki, derivedTempo, derivedMimir],
+    () => buildOtelYaml(yamlModalToken || ""),
+    [yamlModalToken],
   );
 
   const enabledCount = apiKeys.filter((k) => k.is_enabled).length;
@@ -554,7 +528,7 @@ export default function ApiKeyPage() {
                   disabled={!activeOwnedKeyCandidate}
                   aria-disabled={!activeOwnedKeyCandidate}
                 >
-                  Generate Agent YAML
+                  View Secret Token
                 </Button>
               </div>
             </div>
@@ -935,7 +909,7 @@ export default function ApiKeyPage() {
         <Modal
           isOpen={showYamlModal}
           onClose={() => setShowYamlModal(false)}
-          title="Generate OTEL Agent YAML"
+          title="View Secret Token"
           size="lg"
           closeOnOverlayClick={false}
         >
@@ -961,23 +935,6 @@ export default function ApiKeyPage() {
                 </Select>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="block text-sm font-medium text-sre-text mb-2">
-                    OTLP Gateway Host
-                  </label>
-                  <HelpTooltip text="Enter the gateway host only, if you are running an otel collector locally, then localhost will work, or else you need the IP/domain of the place your Observantio is hosted" />
-                </div>
-                <Input
-                  value={gatewayHost}
-                  onChange={(e) => setGatewayHost(e.target.value)}
-                  placeholder={OTLP_GATEWAY_HOST}
-                />
-                <p className="text-xs text-sre-text-muted mt-1">
-                  Gateway host URL for OTLP endpoints.
-                </p>
-              </div>
-
               <div className="col-span-2">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-medium text-sre-text mb-2">
@@ -986,7 +943,7 @@ export default function ApiKeyPage() {
                   <HelpTooltip text="This token will be sent as the 'x-otlp-token' HTTP header by exporters. Keep it secret." />
                 </div>
 
-                <div className="mt-1 p-2 bg-sre-background border border-sre-border rounded flex items-center justify-between gap-3">
+                <div className="mt-1 p-2 bg-sre-background rounded flex items-center justify-between gap-3">
                   <div className="font-mono text-xs truncate break-words">
                     {isYamlKeyShared
                       ? "OTLP token not available for shared keys"
@@ -1054,36 +1011,42 @@ export default function ApiKeyPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  handleCopy(yamlModalContent, "OTEL YAML copied to clipboard")
-                }
-                aria-label="Copy YAML"
-                disabled={!canUseYaml}
-              >
-                <span className="material-icons mr-2">content_copy</span>Copy
-                YAML
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => handleDownloadYaml(yamlModalContent)}
-                aria-label="Download YAML"
-                disabled={!canUseYaml}
-              >
-                <span className="material-icons mr-2">download</span>Download
-                YAML
-              </Button>
-              <div className="text-xs text-sre-text-muted ml-auto">
-                sudo otelcol-contrib --config otel.yaml
+            <div className="space-y-3">
+              <div className="text-xs text-sre-text-muted">
+                Use the token shown above with the local collector script.
               </div>
-            </div>
-
-            <div className="bg-sre-background p-3 rounded border border-sre-border text-xs overflow-auto max-h-72">
-              <pre className="whitespace-pre-wrap break-words text-sre-text">
-                <code>{yamlModalContent}</code>
-              </pre>
+              <div className="rounded-xl bg-sre-surface px-3 py-3 shadow-sm sm:px-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-words text-[12px] leading-6 font-medium text-sre-text">
+                    <code>
+                      <span className="text-sre-primary">sudo</span> <span className="text-sre-success">bash</span> <span className="text-sre-info">otel/run_otel_collector.sh</span> <span className="text-sre-warning">-t</span> <span className="text-sre-secondary">{yamlShowToken && yamlModalToken ? yamlModalToken : '<YOUR_TOKEN_HERE>'}</span>
+                    </code>
+                  </pre>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="border-0 bg-transparent p-1 text-sre-text-muted hover:text-sre-text"
+                    onClick={() =>
+                      handleCopy(
+                        `sudo bash otel/run_otel_collector.sh -t ${yamlShowToken && yamlModalToken ? yamlModalToken : '<YOUR_TOKEN_HERE>'}`,
+                        "Collector command copied to clipboard",
+                      )
+                    }
+                    disabled={!yamlModalToken}
+                    aria-label="Copy command"
+                  >
+                    <span className="material-icons text-base">content_copy</span>
+                  </Button>
+                </div>
+              </div>
+              <a
+                href="https://github.com/observantio/watchdog/blob/main/otel/OTEL.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-medium text-sre-primary hover:underline"
+              >
+                Read the OTEL setup instructions
+              </a>
             </div>
           </div>
         </Modal>
