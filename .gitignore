@@ -42,3 +42,4 @@ test-reports/
 .codex
 .coverage
 *.db
+package-lock.json
