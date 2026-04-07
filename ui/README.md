@@ -5,9 +5,18 @@
   <img src="public/wolf.png" alt="Observantio UI wolf icon" width="150" />
 
   <p>
-    <img src="https://img.shields.io/badge/Frontend-React%20%2B%20Vite-1f2937?style=flat-square" alt="Frontend" />
-    <img src="https://img.shields.io/badge/Theme-Dark%20%2F%20Light-0f766e?style=flat-square" alt="Theme" />
-    <img src="https://img.shields.io/badge/Auth-RBAC%20Aware-0ea5e9?style=flat-square" alt="RBAC Aware" />
+    <a href="https://github.com/observantio/resolver">
+      <img src="https://img.shields.io/badge/RCA-Resolver-7c3aed?style=flat-square" alt="Resolver" />
+    </a>
+    <a href="https://github.com/observantio/ojo">
+      <img src="https://img.shields.io/badge/Telemetry-Ojo-0f766e?style=flat-square" alt="Ojo" />
+    </a>
+    <a href="https://github.com/observantio/notifier">
+      <img src="https://img.shields.io/badge/Alerting-Notifier-1f2937?style=flat-square" alt="Notifier" />
+    </a>
+    <a href="https://github.com/observantio/watchdog/tree/main/gatekeeper">
+      <img src="https://img.shields.io/badge/Security-Gatekeeper-0ea5e9?style=flat-square" alt="Gatekeeper" />
+    </a>
   </p>
   <p>
     <a href="https://github.com/observantio/watchdog/blob/main/USER%20GUIDE.md">

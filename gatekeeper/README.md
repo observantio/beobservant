@@ -4,10 +4,20 @@
 
   <img src="../assets/shield.png" alt="Gatekeeper shield icon" width="150" />
 
+
   <p>
-    <img src="https://img.shields.io/badge/Role-OTLP%20Gateway%20Auth-1f2937?style=flat-square" alt="Role" />
-    <img src="https://img.shields.io/badge/Used%20by-Watchdog-0f766e?style=flat-square" alt="Used by Watchdog" />
-    <img src="https://img.shields.io/badge/Protocol-OTLP-0ea5e9?style=flat-square" alt="Protocol" />
+    <a href="https://github.com/observantio/resolver">
+      <img src="https://img.shields.io/badge/RCA-Resolver-7c3aed?style=flat-square" alt="Resolver" />
+    </a>
+    <a href="https://github.com/observantio/ojo">
+      <img src="https://img.shields.io/badge/Telemetry-Ojo-0f766e?style=flat-square" alt="Ojo" />
+    </a>
+    <a href="https://github.com/observantio/notifier">
+      <img src="https://img.shields.io/badge/Alerting-Notifier-1f2937?style=flat-square" alt="Notifier" />
+    </a>
+    <a href="https://github.com/observantio/watchdog/tree/main/gatekeeper">
+      <img src="https://img.shields.io/badge/Security-Gatekeeper-0ea5e9?style=flat-square" alt="Gatekeeper" />
+    </a>
   </p>
 </div>
 

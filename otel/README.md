@@ -5,13 +5,24 @@
   <img src="../assets/scripts.png" alt="Observantio scripts icon" width="150" />
 
   <p>
-    <img src="https://img.shields.io/badge/Purpose-Canary%20Telemetry-1f2937?style=flat-square" alt="Purpose" />
-    <img src="https://img.shields.io/badge/Signals-Logs%20%7C%20Traces%20%7C%20Metrics-0f766e?style=flat-square" alt="Signals" />
-    <img src="https://img.shields.io/badge/Collector-OTEL%20Agent-0ea5e9?style=flat-square" alt="Collector" />
+    <a href="https://github.com/observantio/resolver">
+      <img src="https://img.shields.io/badge/RCA-Resolver-7c3aed?style=flat-square" alt="Resolver" />
+    </a>
+    <a href="https://github.com/observantio/ojo">
+      <img src="https://img.shields.io/badge/Telemetry-Ojo-0f766e?style=flat-square" alt="Ojo" />
+    </a>
+    <a href="https://github.com/observantio/notifier">
+      <img src="https://img.shields.io/badge/Alerting-Notifier-1f2937?style=flat-square" alt="Notifier" />
+    </a>
+    <a href="https://github.com/observantio/watchdog/tree/main/gatekeeper">
+      <img src="https://img.shields.io/badge/Security-Gatekeeper-0ea5e9?style=flat-square" alt="Gatekeeper" />
+    </a>
   </p>
 </div>
 
 This `otel/` folder contains the root-level OTEL canary agent setup used to generate and forward **logs, traces, and metrics**.
+
+For a simpler collector-only experience, including basic scraping and Ojo-compatible OTEL flow, see the root-level [`OTEL.md`](../OTEL.md) guide.
 
 ## What This Canary Does
 
@@ -75,6 +86,7 @@ To visualize canary metrics/log behavior in Grafana:
 ## Related Files
 
 - Collector config: [`otel/configs/otel-agent.yaml`](./configs/otel-agent.yaml)
-- OTEL dashboard template: [`otel/configs/grafana-high-cpu-systems-otel.json`](./configs/grafana-high-cpu-systems-otel.json)
-- Startup script: [`otel/start.sh`](./start.sh)
+- Collector startup script: [`otel/start.sh`](./start.sh)
+- Root OTEL guide: [`../OTEL.md`](../OTEL.md)
+- Ojo config: [`otel/configs/ojo.yaml`](./configs/ojo.yaml)
 - Generators: [`otel/logs.py`](./logs.py), [`otel/traces.py`](./traces.py)

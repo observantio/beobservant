@@ -5,9 +5,18 @@
   <img src="../assets/scripts.png" alt="Observantio scripts icon" width="150" />
 
   <p>
-    <img src="https://img.shields.io/badge/Scope-Repo%20Automation-1f2937?style=flat-square" alt="Scope" />
-    <img src="https://img.shields.io/badge/Quality-pytest%20%7C%20mypy%20%7C%20pylint-0f766e?style=flat-square" alt="Quality" />
-    <img src="https://img.shields.io/badge/Contracts-Schemathesis-0ea5e9?style=flat-square" alt="Schemathesis" />
+    <a href="https://github.com/observantio/resolver">
+      <img src="https://img.shields.io/badge/RCA-Resolver-7c3aed?style=flat-square" alt="Resolver" />
+    </a>
+    <a href="https://github.com/observantio/ojo">
+      <img src="https://img.shields.io/badge/Telemetry-Ojo-0f766e?style=flat-square" alt="Ojo" />
+    </a>
+    <a href="https://github.com/observantio/notifier">
+      <img src="https://img.shields.io/badge/Alerting-Notifier-1f2937?style=flat-square" alt="Notifier" />
+    </a>
+    <a href="https://github.com/observantio/watchdog/tree/main/gatekeeper">
+      <img src="https://img.shields.io/badge/Security-Gatekeeper-0ea5e9?style=flat-square" alt="Gatekeeper" />
+    </a>
   </p>
 </div>
 
