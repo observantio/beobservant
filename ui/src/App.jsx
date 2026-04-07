@@ -20,6 +20,7 @@ import ChangePasswordModal from "./components/ChangePasswordModal";
 import PermissionGuard from "./components/PermissionGuard";
 import { Spinner } from "./components/ui";
 import { fetchInfo } from "./api";
+import { APP_VERSION } from "./utils/constants";
 
 const TempoPage = lazy(() => import("./pages/TempoPage"));
 const LokiPage = lazy(() => import("./pages/LokiPage"));
@@ -213,7 +214,7 @@ function AppContent() {
 
   const footerBlock = (
     <footer className="container mt-8 mb-8 text-center text-xs text-sre-text-muted">
-      © Watchdog v0.0.3 — Apache 2.0 License —{" "}
+      © Observantio {APP_VERSION} — Apache 2.0 License —{" "}
       <a
         href="https://github.com/observantio/watchdog"
         target="_blank"

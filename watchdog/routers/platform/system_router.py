@@ -103,7 +103,7 @@ async def get_ojo_releases(
                     headers=headers,
                 ), await client.get(
                     GITHUB_OJO_RELEASES_URL,
-                    params={"per_page": 8},
+                    params={"per_page": 2},
                     headers=headers,
                 )
         except httpx.HTTPError:
