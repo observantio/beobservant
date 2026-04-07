@@ -27,7 +27,7 @@ export default function GroupCard({
               className="text-xs text-sre-text-muted truncate"
               title={group.description || "No description"}
             >
-              {group.description || "No description provided"}
+              {group.description || "No fun when there's no description"}
             </p>
           </div>
         </div>

@@ -20,17 +20,32 @@ export function DashboardLayout({ dashboardData, agentData }) {
       renderAsNotice: true,
       content: (
         <div className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-3xl border border-sre-border bg-sre-surface-light shadow-sm">
+                <img
+                  src="/wolf.png"
+                  alt="Observantio wolf logo"
+                  className="h-10 w-10"
+                />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-sre-text">
+                  Welcome to Observantio
+                </h2>
+                <div className="mt-2 inline-flex rounded-full bg-sre-surface px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sre-text-muted ring-1 ring-sre-border">
+                  Observability made beautiful
+                </div>
+              </div>
+            </div>
+          </div>
           <div>
-            <h2 className="text-xl mb-3 font-semibold text-sre-text">
-              Welcome to Observantio
-            </h2>
             <p className="text-sm text-sre-text-muted mt-1 leading-relaxed">
-              Observantio is an open-source observability tool that provides a unified platform for monitoring, alerting, and log management. It is designed to be user-friendly and customizable, allowing you to easily visualize and analyze your system's performance and health. Powered by LGTM, Alert manager, Resolver and Notifier
+              Observantio is an open-source observability tool that provides a unified platform for monitoring, alerting, and log management. It is designed to be user-friendly and customizable, allowing you to easily visualize and analyze your system's performance and health. Powered by LGTM, Alert manager, Resolver and Notifier.
             </p>
             <p className="text-xs text-sre-text-muted mt-3">
               Licensed under Apache License 2.0. You are free to use, modify,
-              and distribute with proper attribution and required NOTICE/
-              license credit.
+              and distribute with proper attribution and required NOTICE/license credit.
             </p>
           </div>
         </div>

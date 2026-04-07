@@ -287,7 +287,7 @@ export default function UsersPage() {
       </div>
 
       {/* Search Bar */}
-      <Card className="mb-6">
+      <Card className="mb-6 border-none p-0">
         <div className="flex items-center gap-2">
           <Input
             placeholder="Search users by username, email, or name..."
@@ -315,6 +315,7 @@ export default function UsersPage() {
       </Card>
 
       <Card
+        className="border-none p-0"
         title="Users"
         subtitle={`We've found ${filteredUsers.length} user${filteredUsers.length === 1 ? "" : "s"} from the database${searchQuery ? " (filtered)" : ""}`}
       >

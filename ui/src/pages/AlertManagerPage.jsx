@@ -1328,9 +1328,9 @@ export default function AlertManagerPage() {
                             <div className="w-full">
                               <div
                                 className="text-sm text-sre-text-muted leading-relaxed line-clamp-2"
-                                title={rule.annotations?.summary || "No description provided"}
+                                title={rule.annotations?.summary || "No fun when there's no description"}
                               >
-                                {rule.annotations?.summary || "No description provided"}
+                                {rule.annotations?.summary || "No fun when there's no description"}
                               </div>
                             </div>
                           </div>

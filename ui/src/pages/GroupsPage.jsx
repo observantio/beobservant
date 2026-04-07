@@ -316,7 +316,7 @@ export default function GroupsPage() {
       </div>
 
       {/* Search Bar */}
-      <Card>
+      <Card className="border-none p-0">
         <div className="flex items-center gap-2">
           <Input
             placeholder="Search groups by name or description..."
@@ -349,29 +349,35 @@ export default function GroupsPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sre-primary"></div>
         </div>
       ) : (
-        <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
-          {filteredGroups.map((group) => {
-            const usersCount = (users || []).filter((u) =>
-              (u.group_ids || []).includes(group.id),
-            ).length;
-            const permsCount = (group.permissions || []).length || 0;
-            return (
-              <GroupCard
-                key={group.id}
-                group={group}
-                usersCount={usersCount}
-                permsCount={permsCount}
-                onOpenPermissions={openPermissionsModal}
-                onEdit={openEditModal}
-                onDelete={setDeleteConfirm}
-              />
-            );
-          })}
-        </div>
+        <Card
+          className="border-none p-0"
+          title="Groups"
+          subtitle={`We've found ${filteredGroups.length} group${filteredGroups.length === 1 ? "" : "s"} from the database${searchQuery ? " (filtered)" : ""}`}
+        >
+          <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
+            {filteredGroups.map((group) => {
+              const usersCount = (users || []).filter((u) =>
+                (u.group_ids || []).includes(group.id),
+              ).length;
+              const permsCount = (group.permissions || []).length || 0;
+              return (
+                <GroupCard
+                  key={group.id}
+                  group={group}
+                  usersCount={usersCount}
+                  permsCount={permsCount}
+                  onOpenPermissions={openPermissionsModal}
+                  onEdit={openEditModal}
+                  onDelete={setDeleteConfirm}
+                />
+              );
+            })}
+          </div>
+        </Card>
       )}
 
       {filteredGroups.length === 0 && !loading && (
-        <Card className="text-center py-12">
+        <Card className="text-center py-12 border-none">
           <svg
             className="w-16 h-16 mx-auto text-sre-text-muted mb-4"
             fill="none"

@@ -873,7 +873,7 @@ export default function IncidentBoardPage() {
 
   const RESOLVE_BLOCK_TOAST = "Alert still active. Resolve it first.";
   const RESOLVE_BLOCK_BODY =
-    "Wait a few minutes since this will take some time to reset to prevent automatic refiring. Alert still active. Resolve it first.";
+    "Wait a few minutes since this will take some time to reset to prevent automatic refiring. Alert still active. Resolve it first. If you have already resolved the alert, please wait a few minutes and try again. If the issue persists, contact your administrator.";
 
   const isResolveBlockedError = useCallback((err) => {
     const detail = String(err?.body?.detail || err?.message || "").toLowerCase();
@@ -1431,10 +1431,34 @@ export default function IncidentBoardPage() {
   }
 
   if (error) {
+    const showResolveBlockMascot = error === RESOLVE_BLOCK_BODY;
     return (
       <div className="text-center py-16">
-        <Alert variant="error" className="max-w-md mx-auto">
-          {error}
+        <Alert
+          variant="error"
+          className="max-w-md mx-auto text-center bg-transparent border-none text-sre-text"
+        >
+          {showResolveBlockMascot && (
+            <div className="mb-4 flex justify-center">
+              <img
+                src="/wolf.png"
+                alt="Wolf mascot"
+                className="h-20 w-20 rounded-full border border-sre-border bg-white p-2 shadow-md"
+              />
+            </div>
+          )}
+          <div>{error}</div>
+          {showResolveBlockMascot && (
+            <div className="mt-4 text-center">
+              <a
+                href="/incidents"
+                className="inline-flex items-center gap-2 rounded-full bg-sre-surface px-4 py-2 text-sm font-semibold text-sre-primary hover:bg-sre-surface-light"
+              >
+                <span className="material-icons text-base">arrow_back</span>
+                Go to incidents
+              </a>
+            </div>
+          )}
         </Alert>
       </div>
     );
