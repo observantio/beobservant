@@ -22,13 +22,15 @@ export function DashboardLayout({ dashboardData, agentData }) {
         <div className="space-y-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-3xl border border-sre-border bg-sre-surface-light shadow-sm">
-                <img
-                  src="/wolf.png"
-                  alt="Observantio wolf logo"
-                  className="h-10 w-10"
-                />
-              </div>
+              {sidebarMode ? (
+                <div className="flex h-14 w-14 items-center justify-center rounded-3xl border border-sre-border bg-sre-surface-light shadow-sm">
+                  <img
+                    src="/wolf.png"
+                    alt="Observantio wolf logo"
+                    className="h-10 w-10"
+                  />
+                </div>
+              ) : null}
               <div>
                 <h2 className="text-xl font-semibold text-sre-text">
                   Welcome to Observantio

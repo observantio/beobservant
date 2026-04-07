@@ -170,5 +170,6 @@ describe("dashboard subcomponents", () => {
     layoutModeState = { sidebarMode: false };
     rerender(<DashboardLayout dashboardData={dashboardData} agentData={agentData} />);
     expect(container.firstChild.className).toContain("lg:grid-cols-4");
+    expect(screen.queryByAltText(/Observantio wolf logo/i)).not.toBeInTheDocument();
   });
 });

@@ -148,6 +148,7 @@ describe("GroupsPage coverage", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/No groups yet/i)).toBeInTheDocument();
+      expect(screen.queryByText(/We've found 0 groups from the database/i)).not.toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Create Group/i }));

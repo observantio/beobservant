@@ -348,7 +348,7 @@ export default function GroupsPage() {
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sre-primary"></div>
         </div>
-      ) : (
+      ) : filteredGroups.length > 0 ? (
         <Card
           className="border-none p-0"
           title="Groups"
@@ -374,7 +374,7 @@ export default function GroupsPage() {
             })}
           </div>
         </Card>
-      )}
+      ) : null}
 
       {filteredGroups.length === 0 && !loading && (
         <Card className="text-center py-12 border-none">
