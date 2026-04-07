@@ -228,10 +228,18 @@ export default function LokiPage() {
 
   function getEffectiveFilters(overrideFilters) {
     if (overrideFilters) return overrideFilters;
-    if (selectedFilters.length) return selectedFilters;
-    if (selectedLabel && selectedValue)
-      return [{ label: selectedLabel, value: selectedValue }];
-    return [];
+
+    const filters = [...selectedFilters];
+    if (selectedLabel && selectedValue) {
+      const exists = filters.some(
+        (filter) => filter.label === selectedLabel && filter.value === selectedValue,
+      );
+      if (!exists) {
+        filters.push({ label: selectedLabel, value: selectedValue });
+      }
+    }
+
+    return filters;
   }
 
   function toggleLogExpand(logKey) {
@@ -394,6 +402,10 @@ export default function LokiPage() {
 
   function runQuery(e) {
     e?.preventDefault?.();
+    const effectiveFilters = getEffectiveFilters();
+    if (effectiveFilters.length !== selectedFilters.length) {
+      setSelectedFilters(effectiveFilters);
+    }
     executeQuery();
   }
 
