@@ -2,7 +2,7 @@
 
 # Observantio's Watchdog
 
-  <img src="assets/star.png" alt="Watchdog settings preview" width="150" />
+  <img src="assets/wolf.png" alt="Watchdog settings preview" width="150" />
 
   <p>
     <a href="https://github.com/observantio/resolver">

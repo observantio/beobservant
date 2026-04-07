@@ -2,7 +2,7 @@
 
 # Observantio Scripts Guide
 
-  <img src="../assets/scripts.png" alt="Observantio scripts icon" width="150" />
+  <img src="../assets/star.png" alt="Observantio scripts icon" width="150" />
 
   <p>
     <a href="https://github.com/observantio/resolver">
