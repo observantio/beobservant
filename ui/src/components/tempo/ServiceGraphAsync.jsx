@@ -11,6 +11,7 @@ import ReactFlow, {
   MarkerType,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import { toBlob } from "html-to-image";
 import { formatDuration } from "../../utils/formatters";
 import {
   buildServiceGraphData,
@@ -19,6 +20,8 @@ import {
   buildServiceGraphEdges,
   layoutServiceGraph,
 } from "../../utils/serviceGraphUtils";
+import { useToast } from "../../contexts/ToastContext";
+import { copyBlobToClipboard, downloadFile } from "../../utils/helpers";
 
 
 const STATUS_COLOR = (errorRate, isPain) => {
@@ -208,6 +211,9 @@ export default function ServiceGraphAsync({ traces }) {
   const [activeNodeId, setActiveNodeId] = useState(null);
   const [activeEdgeId, setActiveEdgeId] = useState(null);
   const [hoverNodeId, setHoverNodeId] = useState(null);
+  const [capturing, setCapturing] = useState(false);
+  const graphContainerRef = useRef(null);
+  const toast = useToast();
 
   const hasSpanData =
     traces?.length > 0 && traces.some((t) => t.spans?.length > 1);
@@ -310,6 +316,35 @@ export default function ServiceGraphAsync({ traces }) {
   const handleNodeMouseEnter = useCallback((_, n) => setHoverNodeId(n.id), []);
   const handleNodeMouseLeave = useCallback(() => setHoverNodeId(null), []);
 
+  const handleCaptureMap = useCallback(async () => {
+    if (!graphContainerRef.current) return;
+    setCapturing(true);
+    try {
+      const blob = await toBlob(graphContainerRef.current, {
+        cacheBust: true,
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+        fontEmbedCSS: "",
+      });
+      if (!blob) throw new Error("Could not render dependency map image");
+      const filename = `service-dependency-map-${new Date()
+        .toISOString()
+        .slice(0, 10)}.png`;
+      downloadFile(blob, filename, "image/png");
+      const copied = await copyBlobToClipboard(blob);
+      if (copied) {
+        toast.success("Dependency map downloaded and copied to clipboard");
+      } else {
+        toast.success(
+          "Dependency map downloaded. Clipboard copy is not available in this browser.",
+        );
+      }
+    } catch (err) {
+      toast.error(`Failed to capture dependency map: ${err?.message || err}`);
+    } finally {
+      setCapturing(false);
+    }
+  }, [toast]);
+
   const miniMapNodeColor = useCallback((node) => {
     const err = node?.data?.stats?.errorRateNum;
     if (err == null || Number.isNaN(+err)) return "#94a3b8";
@@ -391,6 +426,15 @@ export default function ServiceGraphAsync({ traces }) {
             <span className="text-[11px] text-sre-text-muted bg-sre-surface/80 px-2.5 py-1 rounded-lg border border-sre-border/40">
               {edges.length} connections
             </span>
+            <button
+              type="button"
+              onClick={handleCaptureMap}
+              className="flex items-center gap-1 text-[11px] text-sre-text rounded-lg border border-sre-border/40 bg-sre-surface/80 px-3 py-1 transition hover:bg-sre-surface hover:border-sre-primary/40"
+              disabled={capturing}
+            >
+              <span className="material-icons text-base">camera_alt</span>
+              {capturing ? "Capturing…" : "Capture"}
+            </button>
           </div>
         </div>
 
@@ -528,6 +572,7 @@ export default function ServiceGraphAsync({ traces }) {
 
         {/* Canvas */}
         <div
+          ref={graphContainerRef}
           className="rounded-2xl overflow-hidden border border-sre-border/50"
           style={{ height: 560 }}
         >

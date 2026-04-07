@@ -7,7 +7,15 @@ if (typeof global.ResizeObserver === "undefined") {
 }
 
 import { render } from "@testing-library/react";
+import { vi } from "vitest";
 import ServiceGraphAsync from "../ServiceGraphAsync.jsx";
+
+vi.mock("../../../contexts/ToastContext", () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
 
 const dummyTraces = [
   {

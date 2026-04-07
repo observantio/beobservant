@@ -247,6 +247,28 @@ export function downloadFile(
 }
 
 /**
+ * Copy an image blob to the clipboard.
+ * @param {Blob} blob - Image blob to copy.
+ * @returns {Promise<boolean>} True when copied successfully.
+ */
+export async function copyBlobToClipboard(blob) {
+  try {
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.clipboard?.write &&
+      typeof ClipboardItem !== "undefined"
+    ) {
+      const item = new ClipboardItem({ [blob.type || "image/png"]: blob });
+      await navigator.clipboard.write([item]);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+/**
  * Debounce function
  * @param {Function} func - Function to debounce
  * @param {number} wait - Wait time in ms
