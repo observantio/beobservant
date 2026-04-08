@@ -3,7 +3,6 @@
 All notable changes to this project are documented here.
 
 ## [Unreleased]
-Here’s a clean, concise changelog entry aligned with your diff:
 
 ### Changed
 
