@@ -11,6 +11,13 @@ import { formatDuration } from "./formatters";
 export const PAIN_P95_THRESHOLD_US = 1_000_000;
 export const WARN_P95_THRESHOLD_US = 300_000;
 
+function isSystraceLineSpan(span) {
+  return (
+    (span?.operationName || span?.operation_name || span?.name) ===
+    "systrace.trace.line"
+  );
+}
+
 function findParentSpanById(spans, parentId) {
   return spans.find((span) => (span.spanId || span.spanID) === parentId);
 }
@@ -96,27 +103,29 @@ export function buildServiceGraphData(traces) {
         }
       }
 
-      const peerServiceRaw = getSpanAttribute(span, [
-        "peer.service",
-        "peer.service.name",
-        "rpc.service",
-        "rpc.system",
-        "server.address",
-        "server.name",
-      ]);
-      const peerService = peerServiceRaw ? String(peerServiceRaw) : null;
-      if (peerService && peerService !== serviceName) {
-        if (!services.has(peerService)) {
-          services.set(peerService, {
-            spans: 0,
-            errors: 0,
-            durations: [],
-            traces: new Set(),
-            inbound: 0,
-            outbound: 0,
-          });
+      if (!isSystraceLineSpan(span)) {
+        const peerServiceRaw = getSpanAttribute(span, [
+          "peer.service",
+          "peer.service.name",
+          "rpc.service",
+          "rpc.system",
+          "server.address",
+          "server.name",
+        ]);
+        const peerService = peerServiceRaw ? String(peerServiceRaw) : null;
+        if (peerService && peerService !== serviceName) {
+          if (!services.has(peerService)) {
+            services.set(peerService, {
+              spans: 0,
+              errors: 0,
+              durations: [],
+              traces: new Set(),
+              inbound: 0,
+              outbound: 0,
+            });
+          }
+          addLocalEdge(serviceName, peerService, duration, hasError, 1);
         }
-        addLocalEdge(serviceName, peerService, duration, hasError, 1);
       }
     });
 

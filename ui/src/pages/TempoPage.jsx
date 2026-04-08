@@ -805,7 +805,7 @@ export default function TempoPage() {
             graphLoading
               ? "Building dependency map for selected traces…"
               : graphTraces.length
-                ? `Showing relationships between ${new Set(graphTraces.flatMap((t) => t.spans?.map((s) => getServiceName(s)).filter(Boolean) || [])).size} services (selected)`
+                ? `Showing relationships between ${new Set(graphTraces.flatMap((t) => t.spans?.map((s) => getServiceName(s)).filter(Boolean) || [])).size} services (selected) Note that systraces are not traces but dependencies`
                 : filteredTraces.length
                   ? "Select one of the traces below to build the dependency map"
                   : "Run a search to see the dependency map"

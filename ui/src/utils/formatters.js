@@ -31,18 +31,18 @@ export function formatRelativeTime(ns) {
 }
 
 /**
- * Format duration in nanoseconds to human-readable string
- * @param {number} ns - Duration in nanoseconds
- * @returns {string} Formatted duration (e.g., "150ms", "2.5s")
+ * Format duration in microseconds to human-readable string.
+ * Tempo spans in this app are modeled as microseconds.
+ * @param {number} us - Duration in microseconds
+ * @returns {string} Formatted duration (e.g., "150μs", "2.50ms", "1.20s")
  */
-export function formatDuration(ns) {
-  if (ns === null || ns === undefined || Number.isNaN(ns)) return "0ms";
-  const safe = Math.max(0, Number(ns));
-  const ms = safe / 1000000;
+export function formatDuration(us) {
+  if (us === null || us === undefined || Number.isNaN(us)) return "0μs";
+  const safeUs = Math.max(0, Number(us));
 
-  if (ms < 1) return `${(safe / 1000).toFixed(0)}μs`;
-  if (ms < 1000) return `${ms.toFixed(2)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
+  if (safeUs < 1000) return `${safeUs.toFixed(0)}μs`;
+  if (safeUs < 1_000_000) return `${(safeUs / 1000).toFixed(2)}ms`;
+  return `${(safeUs / 1_000_000).toFixed(2)}s`;
 }
 
 /**
