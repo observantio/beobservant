@@ -19,6 +19,7 @@ All notable changes to this project are documented here.
 - Added service-specific Schemathesis runners for watchdog and gatekeeper to support targeted contract validation workflows.
 - Added root-level OpenAPI snapshot refresh flow so `watchdog/openapi.json` and `gatekeeper/openapi.json` stay current for downstream contract tooling. 
 - Using a new script to run the otel collector safely and easily, it is at `otel/run_otel_collector.sh`
+- Added new dashboards to support the new ojo services
 
 ### Changed
 

@@ -293,8 +293,9 @@ export default function ServiceGraphAsync({ traces }) {
           selected: isActive,
           style: {
             stroke: color,
-            strokeWidth: isActive ? 2 : 1,
-            opacity: dimmed ? 0.15 : 1,
+            strokeWidth: isActive ? 2 : 1.5,
+            opacity: dimmed ? 0.35 : 1,
+            strokeLinecap: "round",
           },
         };
       }),

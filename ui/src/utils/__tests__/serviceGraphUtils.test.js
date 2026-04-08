@@ -109,4 +109,51 @@ describe("serviceGraphUtils", () => {
       expect(Number.isFinite(node.position.y)).toBe(true);
     });
   });
+
+  it("does not infer call edges from systrace trace-line parent chains", () => {
+    const data = buildServiceGraphData([
+      {
+        traceID: "t-systrace",
+        spans: [
+          {
+            spanId: "root",
+            serviceName: "ojo-systrace",
+            operationName: "systrace.collect",
+            duration: 200000,
+          },
+          {
+            spanId: "rpc",
+            parentSpanId: "root",
+            serviceName: "kernel.rpc",
+            operationName: "rpc.call",
+            duration: 25,
+          },
+          {
+            spanId: "l1",
+            parentSpanId: "root",
+            serviceName: "kernel.exc_page_fault",
+            operationName: "systrace.trace.line",
+            duration: 5,
+          },
+          {
+            spanId: "l2",
+            parentSpanId: "l1",
+            serviceName: "kernel.asm_exc_page_fault",
+            operationName: "systrace.trace.line",
+            duration: 5,
+          },
+        ],
+      },
+    ]);
+
+    expect(data.services.has("ojo-systrace")).toBe(true);
+    expect(data.services.has("kernel.rpc")).toBe(true);
+    expect(data.services.has("kernel.exc_page_fault")).toBe(true);
+    expect(data.services.has("kernel.asm_exc_page_fault")).toBe(true);
+    expect(data.edges.has("ojo-systrace->kernel.rpc")).toBe(true);
+    expect(data.edges.has("ojo-systrace->kernel.exc_page_fault")).toBe(false);
+    expect(
+      data.edges.has("kernel.exc_page_fault->kernel.asm_exc_page_fault"),
+    ).toBe(false);
+  });
 });

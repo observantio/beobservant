@@ -36,7 +36,9 @@ vi.mock("../../components/ui", () => ({
 }));
 vi.mock("../../components/HelpTooltip", () => ({ default: () => <span /> }));
 vi.mock("../../components/tempo/TraceResults", () => ({
-  default: ({ traces }) => <div>Trace results: {traces?.length || 0}</div>,
+  default: ({ traces }) => (
+    <div>Trace results: {traces?.map((t) => t.traceID || t.traceId || t.id).join(",")}</div>
+  ),
 }));
 vi.mock("../../components/tempo/TraceTimeline", () => ({
   default: () => <div>Trace timeline</div>,
@@ -150,6 +152,35 @@ describe("TempoPage — fetch limit and pagination", () => {
 
     const call = api.searchTraces.mock.calls[0][0];
     expect(call.service).toBe("checkout");
+  });
+
+  it("orders trace search results newest first", async () => {
+    api.fetchTempoServices.mockResolvedValue([]);
+    api.searchTraces.mockResolvedValue({
+      data: [
+        {
+          traceID: "oldest",
+          spans: [{ duration: 1000, operationName: "GET /old", startTime: 1000 }],
+        },
+        {
+          traceID: "newest",
+          spans: [{ duration: 1000, operationName: "GET /new", startTime: 3000 }],
+        },
+        {
+          traceID: "middle",
+          spans: [{ duration: 1000, operationName: "GET /mid", startTime: 2000 }],
+        },
+      ],
+    });
+
+    const { getByText, findByText } = render(<TempoPage />);
+    const searchBtn = getByText(/Search Traces/i);
+    fireEvent.click(searchBtn);
+
+    await waitFor(() => expect(api.searchTraces).toHaveBeenCalled());
+    expect(await findByText(/Trace results:/i)).toHaveTextContent(
+      "Trace results: newest,middle,oldest",
+    );
   });
 
   it("does not auto-lookup saved trace ids from localStorage", async () => {

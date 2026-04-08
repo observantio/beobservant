@@ -7,6 +7,7 @@ import mysql from "./mysql.json";
 import gpu from "./gpu.json";
 import sensors from "./sensors.json";
 import nfsClient from "./nfs-client.json";
+import syslog from "./syslog.json";
 
 const DASHBOARDS = [
   native,
@@ -18,6 +19,7 @@ const DASHBOARDS = [
   gpu,
   sensors,
   nfsClient,
+  syslog,
 ];
 
 const PROMQL_KEYWORDS = new Set([

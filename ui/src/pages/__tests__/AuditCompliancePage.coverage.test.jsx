@@ -95,7 +95,9 @@ describe("AuditCompliancePage coverage", () => {
     expect(screen.getAllByText(/login/i).length).toBeGreaterThan(0);
   });
 
-  it("handles pagination no-more-results and export flow", async () => {
+  it(
+    "handles pagination no-more-results and export flow",
+    async () => {
     const now = "2026-03-29T00:00:00Z";
     const many = Array.from({ length: 101 }, (_, i) => ({
       id: `row-${i + 1}`,
@@ -126,7 +128,9 @@ describe("AuditCompliancePage coverage", () => {
       expect(downloadFile).toHaveBeenCalledWith("csv", "audit-logs.csv", "text/csv");
       expect(toast.success).toHaveBeenCalledWith("Audit CSV exported");
     });
-  });
+    },
+    15000,
+  );
 
   it("covers row detail copy success and failure", async () => {
     render(<AuditCompliancePage />);

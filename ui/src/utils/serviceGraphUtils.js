@@ -18,6 +18,10 @@ function isSystraceLineSpan(span) {
   );
 }
 
+function shouldBuildParentEdge(span, parentSpan) {
+  return !isSystraceLineSpan(span) && !isSystraceLineSpan(parentSpan);
+}
+
 function findParentSpanById(spans, parentId) {
   return spans.find((span) => (span.spanId || span.spanID) === parentId);
 }
@@ -97,7 +101,7 @@ export function buildServiceGraphData(traces) {
       const parentId = span.parentSpanId || span.parentSpanID;
       if (parentId) {
         const parentSpan = findParentSpanById(spans, parentId);
-        if (parentSpan) {
+        if (parentSpan && shouldBuildParentEdge(span, parentSpan)) {
           const parentService = getServiceName(parentSpan);
           addLocalEdge(parentService, serviceName, duration, hasError, 1);
         }

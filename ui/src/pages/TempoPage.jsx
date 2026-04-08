@@ -388,6 +388,13 @@ export default function TempoPage() {
     }
   }
 
+  const getTraceStartTime = useCallback((trace) => {
+    const spans = Array.isArray(trace?.spans) ? trace.spans : [];
+    const rootSpan =
+      spans.find((span) => !span.parentSpanId && !span.parentSpanID) || spans[0];
+    return Number(rootSpan?.startTime || 0);
+  }, []);
+
   const filteredTraces = useMemo(() => {
     if (!traces?.data) return [];
     const selectedService = String(service || "").trim().toLowerCase();
@@ -408,39 +415,41 @@ export default function TempoPage() {
       }, 0);
     };
 
-    return traces.data.filter((trace) => {
-      const spans = Array.isArray(trace?.spans) ? trace.spans : [];
-      if (!spans.length) return false;
+    return traces.data
+      .filter((trace) => {
+        const spans = Array.isArray(trace?.spans) ? trace.spans : [];
+        if (!spans.length) return false;
 
-      if (selectedService) {
-        const hasService = spans.some(
-          (span) =>
-            String(getServiceName(span) || "")
-              .trim()
-              .toLowerCase() === selectedService,
-        );
-        if (!hasService) return false;
-      }
+        if (selectedService) {
+          const hasService = spans.some(
+            (span) =>
+              String(getServiceName(span) || "")
+                .trim()
+                .toLowerCase() === selectedService,
+          );
+          if (!hasService) return false;
+        }
 
-      if (selectedOperation) {
-        const hasOperation = spans.some((span) =>
-          String(span?.operationName || "")
-            .toLowerCase()
-            .includes(selectedOperation),
-        );
-        if (!hasOperation) return false;
-      }
+        if (selectedOperation) {
+          const hasOperation = spans.some((span) =>
+            String(span?.operationName || "")
+              .toLowerCase()
+              .includes(selectedOperation),
+          );
+          if (!hasOperation) return false;
+        }
 
-      const durationUs = traceDurationUs(trace);
-      if (durationUs < minDurationUs || durationUs > maxDurationUs) {
-        return false;
-      }
+        const durationUs = traceDurationUs(trace);
+        if (durationUs < minDurationUs || durationUs > maxDurationUs) {
+          return false;
+        }
 
-      if (statusFilter === "error") return trace.spans.some(hasSpanError);
-      if (statusFilter === "ok") return !trace.spans.some(hasSpanError);
-      return true;
-    });
-  }, [traces, statusFilter, service, operation, durationRange]);
+        if (statusFilter === "error") return trace.spans.some(hasSpanError);
+        if (statusFilter === "ok") return !trace.spans.some(hasSpanError);
+        return true;
+      })
+      .sort((a, b) => getTraceStartTime(b) - getTraceStartTime(a));
+  }, [traces, statusFilter, service, operation, durationRange, getTraceStartTime]);
 
   const traceStats = useMemo(() => {
     return computeTraceStats(filteredTraces);

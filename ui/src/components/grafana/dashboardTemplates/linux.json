@@ -2747,7 +2747,7 @@
       "targets": [
         {
           "expr": "sum by (network_interface_name) (system_network_rx_bytes_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
-          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
+          "legendFormat": "{{device}}",
           "refId": "A"
         }
       ]
@@ -2831,7 +2831,7 @@
       "targets": [
         {
           "expr": "sum by (network_interface_name) (system_network_tx_bytes_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
-          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
+          "legendFormat": "{{device}}",
           "refId": "A"
         }
       ]
@@ -2915,7 +2915,7 @@
       "targets": [
         {
           "expr": "sum by (network_interface_name) (system_network_rx_packets_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
-          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
+          "legendFormat": "{{device}}",
           "refId": "A"
         }
       ]
@@ -2999,7 +2999,7 @@
       "targets": [
         {
           "expr": "sum by (network_interface_name) (system_network_tx_packets_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
-          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
+          "legendFormat": "{{device}}",
           "refId": "A"
         }
       ]
@@ -3083,7 +3083,7 @@
       "targets": [
         {
           "expr": "sum by (network_interface_name) (system_network_rx_errors_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
-          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
+          "legendFormat": "{{device}}",
           "refId": "A"
         }
       ]
@@ -3167,7 +3167,7 @@
       "targets": [
         {
           "expr": "sum by (network_interface_name) (system_network_tx_errors_per_sec{instance=~\"$instance\",network_interface_name=~\"$interface\"})",
-          "legendFormat": "{{system_device}}{{network_interface_name}}{{device}}",
+          "legendFormat": "{{device}}",
           "refId": "A"
         }
       ]

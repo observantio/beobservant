@@ -7,6 +7,11 @@ import mysql from "./mysql.json";
 import gpu from "./gpu.json";
 import sensors from "./sensors.json";
 import nfsClient from "./nfs-client.json";
+import systemd from "./systemd.json";
+import nginx from "./nginx.json";
+import redis from "./redis.json";
+import systrace from "./systrace.json";
+import syslog from "./syslog.json";
 
 export const DASHBOARD_TEMPLATES = [
   {
@@ -87,5 +92,50 @@ export const DASHBOARD_TEMPLATES = [
       "NFS client RPC, throughput, and latency from Ojo NFS client metrics.",
     datasourceUid: "Prometheus",
     dashboard: nfsClient,
+  },
+  {
+    id: "ojo-systemd",
+    name: "Ojo — systemd",
+    icon: "settings",
+    summary:
+      "Systemd unit, job, and service metrics from Ojo systemd monitoring.",
+    datasourceUid: "Prometheus",
+    dashboard: systemd,
+  },
+  {
+    id: "ojo-nginx",
+    name: "Ojo — NGINX",
+    icon: "cloud",
+    summary:
+      "NGINX availability, connection, and request metrics from Ojo NGINX metrics.",
+    datasourceUid: "Prometheus",
+    dashboard: nginx,
+  },
+  {
+    id: "ojo-redis",
+    name: "Ojo — Redis",
+    icon: "storage",
+    summary:
+      "Redis client, memory, command, and throughput metrics from Ojo Redis metrics.",
+    datasourceUid: "Prometheus",
+    dashboard: redis,
+  },
+  {
+    id: "ojo-systrace",
+    name: "Ojo — Systrace",
+    icon: "timeline",
+    summary:
+      "Systrace health, kernel event, and trace buffer metrics from Ojo Systrace telemetry.",
+    datasourceUid: "Prometheus",
+    dashboard: systrace,
+  },
+  {
+    id: "ojo-syslog",
+    name: "Ojo — Syslog",
+    icon: "article",
+    summary:
+      "Syslog source availability, pipeline throughput, and exporter reliability from Ojo Syslog metrics.",
+    datasourceUid: "Prometheus",
+    dashboard: syslog,
   },
 ];
