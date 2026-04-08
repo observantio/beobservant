@@ -936,7 +936,7 @@ async def test_tempo_utility_edges(monkeypatch):
             "startTimeUnixNano": 5000.4,
             "endTimeUnixNano": True,
             "parentSpanId": "",
-            "attributes": [],
+            "attributes": [{"key": "service.name", "value": {"stringValue": "kernel.idle"}}],
         },
         "trace-a",
         "proc-a",
@@ -946,10 +946,60 @@ async def test_tempo_utility_edges(monkeypatch):
     assert span.span_id == ""
     assert span.operation_name == ""
     assert span.parent_span_id is None
-    assert span.service_name == "svc-a"
-    assert span.attributes["service.name"] == "svc-a"
+    assert span.service_name == "kernel.idle"
+    assert span.attributes["service.name"] == "kernel.idle"
     assert span.attributes["resource.attr"] == "x"
     assert span.duration == -5
+
+    systrace_span = tempo_parsers.parse_span(
+        {
+            "spanId": "line-a",
+            "name": "systrace.trace.line",
+            "startTimeUnixNano": "1000",
+            "endTimeUnixNano": "2000",
+            "attributes": [
+                {
+                    "key": "systrace.trace.line",
+                    "value": {
+                        "stringValue": "Chrome_ChildIOT-120922 [000] d..2. 12680.501510: sched_switch"
+                    },
+                }
+            ],
+        },
+        "trace-a",
+        "proc-a",
+        "ojo-systrace",
+        {"host.name": "lubuntu", "service.name": "ojo-systrace"},
+    )
+    assert systrace_span.service_name == "kernel.chrome_childiot"
+    assert systrace_span.attributes["service.name"] == "kernel.chrome_childiot"
+
+    short_span = tempo_parsers.parse_span(
+        {
+            "spanId": "line-b",
+            "name": "systrace.trace.line",
+            "startTimeUnixNano": "1001",
+            "endTimeUnixNano": "1999",
+            "attributes": [
+                {
+                    "key": "systrace.trace.line",
+                    "value": {"stringValue": "idle-0 [000] ...."},
+                }
+            ],
+        },
+        "trace-a",
+        "proc-a",
+        "ojo-systrace",
+        {"service.name": "ojo-systrace"},
+    )
+    assert short_span.duration == 1
+
+    assert (
+        tempo_parsers._derive_systrace_component_from_line("kworker/0:1-123 [000] ....")
+        == "kernel.kworker.0"
+    )
+    assert tempo_parsers._derive_systrace_component_from_line("") is None
+    assert tempo_parsers._derive_systrace_component_from_line(None) is None
 
     trace = tempo_parsers.parse_tempo_trace(
         "trace-b",

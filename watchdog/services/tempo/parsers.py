@@ -42,6 +42,47 @@ def _int_value(value: object) -> int:
     return 0
 
 
+def _derive_systrace_component_from_line(line: object) -> Optional[str]:
+    if not isinstance(line, str):
+        return None
+    text = line.strip()
+    if not text:
+        return None
+
+    token = text.split()[0] if text.split() else ""
+    if not token:
+        return None
+    prefix = token.split(":", 1)[0]
+
+    # Linux scheduler traces commonly emit task names like: name-12345
+    # Keep the task stem and normalize to a service-like component key.
+    stem = prefix
+    if "-" in prefix:
+        maybe_name, maybe_pid = prefix.rsplit("-", 1)
+        if maybe_name and maybe_pid.isdigit():
+            stem = maybe_name
+
+    normalized_chars: list[str] = []
+    prev_dot = False
+    for ch in stem:
+        if ch.isalnum() or ch in "-_":
+            normalized_chars.append(ch.lower())
+            prev_dot = False
+            continue
+        if ch in "/:.":
+            if normalized_chars and not prev_dot:
+                normalized_chars.append(".")
+                prev_dot = True
+            continue
+
+    while normalized_chars and normalized_chars[-1] == ".":
+        normalized_chars.pop()
+    normalized = "".join(normalized_chars)
+    if not normalized:
+        return None
+    return f"kernel.{normalized}"
+
+
 def parse_attributes(attrs: List[JSONDict]) -> JSONDict:
     parsed: JSONDict = {}
     for attr in attrs or []:
@@ -64,24 +105,50 @@ def parse_span(
     resource_attrs: Optional[JSONDict] = None,
 ) -> Span:
     attr_map = parse_attributes(_json_dict_list(span_data.get("attributes", [])))
-    tags = [SpanAttribute(key=k, value=v) for k, v in attr_map.items()]
-
-    if service_name and SERVICE_NAME_KEY not in attr_map:
-        attr_map[SERVICE_NAME_KEY] = service_name
-        tags.append(SpanAttribute(key=SERVICE_NAME_KEY, value=service_name))
 
     if resource_attrs:
         for k, v in resource_attrs.items():
             attr_map.setdefault(k, v)
 
-    start_time = _int_value(span_data.get("startTimeUnixNano")) // 1000
-    end_time = _int_value(span_data.get("endTimeUnixNano")) // 1000
+    operation_name = span_data.get("name")
+    derived_systrace_component = _derive_systrace_component_from_line(attr_map.get("systrace.trace.line"))
+    is_systrace_line = isinstance(operation_name, str) and operation_name == "systrace.trace.line"
+
+    preferred_service_name: object | None = (
+        derived_systrace_component if is_systrace_line and derived_systrace_component else None
+    )
+
+    span_service_name_value = (
+        preferred_service_name
+        or attr_map.get(SERVICE_NAME_KEY)
+        or attr_map.get(SERVICE_ALIAS_KEY)
+        or attr_map.get("service_name")
+        or service_name
+        or "unknown"
+    )
+    span_service_name = (
+        span_service_name_value
+        if isinstance(span_service_name_value, str)
+        else str(span_service_name_value)
+    )
+
+    if span_service_name and (SERVICE_NAME_KEY not in attr_map or preferred_service_name is not None):
+        attr_map[SERVICE_NAME_KEY] = span_service_name
+
+    tags = [SpanAttribute(key=k, value=v) for k, v in attr_map.items()]
+
+    start_ns = _int_value(span_data.get("startTimeUnixNano"))
+    end_ns = _int_value(span_data.get("endTimeUnixNano"))
+    start_time = start_ns // 1000
+    end_time = end_ns // 1000
+    duration = end_time - start_time
+    # Preserve very short positive spans that would otherwise be truncated to 0us.
+    if duration == 0 and end_ns > start_ns:
+        duration = 1
     parent_span_id_value = span_data.get("parentSpanId")
     parent_span_id = parent_span_id_value if isinstance(parent_span_id_value, str) and parent_span_id_value else None
 
     span_id = span_data.get("spanId")
-    operation_name = span_data.get("name")
-
     return Span.model_validate(
         {
             "spanID": span_id if isinstance(span_id, str) else "",
@@ -89,11 +156,11 @@ def parse_span(
             "parentSpanID": parent_span_id,
             "operationName": operation_name if isinstance(operation_name, str) else "",
             "startTime": start_time,
-            "duration": end_time - start_time,
+            "duration": duration,
             "tags": [{"key": t.key, "value": t.value} for t in tags],
-            "serviceName": service_name,
+            "serviceName": span_service_name,
             "attributes": attr_map,
-            "processID": process_id,
+            "processID": str(span_service_name or process_id),
             "warnings": None,
         }
     )

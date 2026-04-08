@@ -216,7 +216,7 @@ export default function ServiceGraphAsync({ traces }) {
   const toast = useToast();
 
   const hasSpanData =
-    traces?.length > 0 && traces.some((t) => t.spans?.length > 1);
+    traces?.length > 0 && traces.some((t) => t.spans?.length > 0);
 
   const graphData = useMemo(
     () =>
@@ -363,8 +363,8 @@ export default function ServiceGraphAsync({ traces }) {
           Full trace data required
         </p>
         <p className="text-xs text-sre-text-muted max-w-sm mx-auto">
-          The service graph needs traces with multiple spans. Try loading
-          individual traces or narrowing your time range.
+          The service graph needs at least one span in the selected trace.
+          Try loading individual traces or narrowing your time range.
         </p>
       </div>
     ) : null;
