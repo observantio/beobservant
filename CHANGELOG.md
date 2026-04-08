@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+Here’s a clean, concise changelog entry aligned with your diff:
+
+### Changed
+
+* Improved systrace integration by deriving `service.name` from kernel trace lines
+* Enabled service graph rendering for single-span traces
+* Fixed span duration truncation for very short spans
+* Enhanced service name resolution and parsing consistency
+* Updated UI messaging and added edge case test coverage 
+
 ## [v0.0.3] - 2026-04-06
 
 ### Added
