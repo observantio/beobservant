@@ -316,7 +316,7 @@ export default function GroupsPage() {
       </div>
 
       {/* Search Bar */}
-      <Card className="border-none p-0">
+      <Card unstyled>
         <div className="flex items-center gap-2">
           <Input
             placeholder="Search groups by name or description..."
@@ -350,7 +350,7 @@ export default function GroupsPage() {
         </div>
       ) : filteredGroups.length > 0 ? (
         <Card
-          className="border-none p-0"
+          unstyled
           title="Groups"
           subtitle={`We've found ${filteredGroups.length} group${filteredGroups.length === 1 ? "" : "s"} from the database${searchQuery ? " (filtered)" : ""}`}
         >
@@ -377,7 +377,7 @@ export default function GroupsPage() {
       ) : null}
 
       {filteredGroups.length === 0 && !loading && (
-        <Card className="text-center py-12 border-none">
+        <Card unstyled className="text-center py-12">
           <svg
             className="w-16 h-16 mx-auto text-sre-text-muted mb-4"
             fill="none"

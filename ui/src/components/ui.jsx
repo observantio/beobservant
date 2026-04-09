@@ -105,6 +105,7 @@ export function Card({
   title,
   subtitle,
   action,
+  unstyled = false,
   ...props
 }) {
   const isInteractive =
@@ -118,9 +119,11 @@ export function Card({
   return (
     <Component
       className={clsx(
-        "w-full bg-sre-surface/50 rounded-xl border border-sre-border/60 p-4",
-        "transition-all duration-300",
-        "hover:border-sre-border/80",
+        !unstyled && [
+          "w-full bg-sre-surface/50 rounded-xl border border-sre-border/60 p-4",
+          "transition-all duration-300",
+          "hover:border-sre-border/80",
+        ],
         className,
       )}
       {...(isInteractive ? { type: "button" } : {})}
@@ -154,6 +157,7 @@ Card.propTypes = {
   title: PropTypes.string,
   subtitle: PropTypes.string,
   action: PropTypes.node,
+  unstyled: PropTypes.bool,
 };
 
 /**

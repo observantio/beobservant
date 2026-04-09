@@ -42,6 +42,39 @@ const DEFAULT_GRAFANA_FILTERS = {
   folderKey: "",
   showHidden: false,
 };
+const GRAFANA_ORDER_STORAGE_PREFIX = "grafana:list-order:v1";
+const GRAFANA_ORDER_TYPES = {
+  dashboards: "dashboards",
+  datasources: "datasources",
+  folders: "folders",
+};
+
+function moveItemByIds(items, sourceId, targetId, getId) {
+  const fromId = String(sourceId || "");
+  const toId = String(targetId || "");
+  if (!fromId || !toId || fromId === toId) return items;
+  const fromIndex = items.findIndex((item) => getId(item) === fromId);
+  const toIndex = items.findIndex((item) => getId(item) === toId);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return items;
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function dashboardOrderId(item) {
+  return String(item?.uid || "");
+}
+
+function datasourceOrderId(item) {
+  return String(item?.uid || "");
+}
+
+function folderOrderId(item) {
+  if (item?.uid) return `uid:${String(item.uid)}`;
+  if (item?.id != null) return `id:${String(item.id)}`;
+  return `title:${String(item?.title || "")}`;
+}
 
 function collectDatasourceReferences(node, refs) {
   if (!node || typeof node !== "object") return;
@@ -263,6 +296,82 @@ export default function GrafanaPage() {
   });
   const [dashboardKeyNamesByUid, setDashboardKeyNamesByUid] = useState({});
 
+  const orderScope = String(
+    user?.id || user?.username || user?.email || "anonymous",
+  );
+
+  const storageKeyForOrder = useCallback(
+    (type) => `${GRAFANA_ORDER_STORAGE_PREFIX}:${orderScope}:${type}`,
+    [orderScope],
+  );
+
+  const readPersistedOrder = useCallback(
+    (type) => {
+      try {
+        const raw = globalThis?.localStorage?.getItem(storageKeyForOrder(type));
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map((id) => String(id || "")).filter(Boolean);
+      } catch {
+        return [];
+      }
+    },
+    [storageKeyForOrder],
+  );
+
+  const persistOrder = useCallback(
+    (type, orderedIds) => {
+      try {
+        const normalized = (Array.isArray(orderedIds) ? orderedIds : [])
+          .map((id) => String(id || ""))
+          .filter(Boolean);
+        globalThis?.localStorage?.setItem(
+          storageKeyForOrder(type),
+          JSON.stringify(normalized),
+        );
+      } catch {
+        /* ignore local storage failures */
+      }
+    },
+    [storageKeyForOrder],
+  );
+
+  const reconcileWithPersistedOrder = useCallback(
+    (type, items, getId) => {
+      const incoming = Array.isArray(items) ? items : [];
+      const ids = incoming.map((item) => getId(item)).filter(Boolean);
+      const idSet = new Set(ids);
+      const savedOrder = readPersistedOrder(type);
+      const keep = [];
+      const seen = new Set();
+      savedOrder.forEach((id) => {
+        if (idSet.has(id) && !seen.has(id)) {
+          keep.push(id);
+          seen.add(id);
+        }
+      });
+      ids.forEach((id) => {
+        if (!seen.has(id)) keep.push(id);
+      });
+
+      const changed =
+        keep.length !== savedOrder.length ||
+        keep.some((id, idx) => id !== savedOrder[idx]);
+      if (changed) {
+        persistOrder(type, keep);
+      }
+
+      const rank = new Map(keep.map((id, idx) => [id, idx]));
+      return [...incoming].sort((a, b) => {
+        const ai = rank.get(getId(a));
+        const bi = rank.get(getId(b));
+        return (ai ?? Number.MAX_SAFE_INTEGER) - (bi ?? Number.MAX_SAFE_INTEGER);
+      });
+    },
+    [persistOrder, readPersistedOrder],
+  );
+
   function openInGrafana(path) {
     setGrafanaConfirmDialog({
       isOpen: true,
@@ -416,9 +525,27 @@ export default function GrafanaPage() {
             getDatasources().catch(() => []),
           ]);
         if (!isMountedRef.current) return;
-        setDashboards(dashboardsData);
-        setFolders(foldersData);
-        setDatasources(datasourcesData);
+        setDashboards(
+          reconcileWithPersistedOrder(
+            GRAFANA_ORDER_TYPES.dashboards,
+            dashboardsData,
+            dashboardOrderId,
+          ),
+        );
+        setFolders(
+          reconcileWithPersistedOrder(
+            GRAFANA_ORDER_TYPES.folders,
+            foldersData,
+            folderOrderId,
+          ),
+        );
+        setDatasources(
+          reconcileWithPersistedOrder(
+            GRAFANA_ORDER_TYPES.datasources,
+            datasourcesData,
+            datasourceOrderId,
+          ),
+        );
       } else if (activeTab === "datasources") {
         const [datasourcesData] = await Promise.all([
           getDatasources({
@@ -428,13 +555,25 @@ export default function GrafanaPage() {
           }).catch(() => []),
         ]);
         if (!isMountedRef.current) return;
-        setDatasources(datasourcesData);
+        setDatasources(
+          reconcileWithPersistedOrder(
+            GRAFANA_ORDER_TYPES.datasources,
+            datasourcesData,
+            datasourceOrderId,
+          ),
+        );
       } else if (activeTab === "folders") {
         const foldersData = await getFolders({
           showHidden: currentFilters.showHidden,
         }).catch(() => []);
         if (!isMountedRef.current) return;
-        setFolders(foldersData);
+        setFolders(
+          reconcileWithPersistedOrder(
+            GRAFANA_ORDER_TYPES.folders,
+            foldersData,
+            folderOrderId,
+          ),
+        );
       }
     } catch (e) {
       handleApiError(e);
@@ -443,7 +582,52 @@ export default function GrafanaPage() {
         setLoading(false);
       }
     }
-  }, [activeTab, handleApiError]);
+  }, [activeTab, handleApiError, reconcileWithPersistedOrder]);
+
+  const handleReorderDashboards = useCallback(
+    (sourceId, targetId) => {
+      setDashboards((prev) => {
+        const next = moveItemByIds(prev, sourceId, targetId, dashboardOrderId);
+        if (next === prev) return prev;
+        persistOrder(
+          GRAFANA_ORDER_TYPES.dashboards,
+          next.map((item) => dashboardOrderId(item)).filter(Boolean),
+        );
+        return next;
+      });
+    },
+    [persistOrder],
+  );
+
+  const handleReorderDatasources = useCallback(
+    (sourceId, targetId) => {
+      setDatasources((prev) => {
+        const next = moveItemByIds(prev, sourceId, targetId, datasourceOrderId);
+        if (next === prev) return prev;
+        persistOrder(
+          GRAFANA_ORDER_TYPES.datasources,
+          next.map((item) => datasourceOrderId(item)).filter(Boolean),
+        );
+        return next;
+      });
+    },
+    [persistOrder],
+  );
+
+  const handleReorderFolders = useCallback(
+    (sourceId, targetId) => {
+      setFolders((prev) => {
+        const next = moveItemByIds(prev, sourceId, targetId, folderOrderId);
+        if (next === prev) return prev;
+        persistOrder(
+          GRAFANA_ORDER_TYPES.folders,
+          next.map((item) => folderOrderId(item)).filter(Boolean),
+        );
+        return next;
+      });
+    },
+    [persistOrder],
+  );
 
   useEffect(() => {
     loadData();
@@ -1229,10 +1413,12 @@ export default function GrafanaPage() {
         onOpenGrafana={openInGrafana}
         onDeleteDashboard={handleDeleteDashboard}
         onToggleDashboardHidden={handleToggleDashboardHidden}
+        onReorderDashboards={handleReorderDashboards}
         openDatasourceEditor={openDatasourceEditor}
         onDeleteDatasource={handleDeleteDatasource}
         onToggleDatasourceHidden={handleToggleDatasourceHidden}
         onViewDatasourceMetrics={handleViewDatasourceMetrics}
+        onReorderDatasources={handleReorderDatasources}
         getDatasourceIcon={getDatasourceIcon}
         getDatasourceKeyName={(datasource) =>
           resolveDatasourceKeyMeta(datasource).keyName
@@ -1242,6 +1428,7 @@ export default function GrafanaPage() {
         onEditFolder={openFolderEditor}
         onDeleteFolder={handleDeleteFolder}
         onToggleFolderHidden={handleToggleFolderHidden}
+        onReorderFolders={handleReorderFolders}
       />
 
       <DashboardEditorModal

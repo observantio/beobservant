@@ -2,6 +2,24 @@ import PropTypes from "prop-types";
 import { Button, Input } from "../ui";
 import { useState, useMemo } from "react";
 
+function setInvisibleDragImage(event) {
+  const dragImage = globalThis?.document?.createElement?.("img");
+  if (!dragImage) return;
+  dragImage.src =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  dragImage.alt = "";
+  dragImage.width = 1;
+  dragImage.height = 1;
+  dragImage.style.position = "fixed";
+  dragImage.style.top = "0";
+  dragImage.style.left = "0";
+  dragImage.style.opacity = "0";
+  dragImage.style.pointerEvents = "none";
+  globalThis.document.body.appendChild(dragImage);
+  event.dataTransfer.setDragImage(dragImage, 0, 0);
+  globalThis.setTimeout(() => dragImage.remove(), 0);
+}
+
 export default function FoldersTab({
   folders,
   filters,
@@ -12,8 +30,17 @@ export default function FoldersTab({
   onEditFolder,
   onDeleteFolder,
   onToggleHidden,
+  onReorder,
 }) {
   const [query, setQuery] = useState("");
+  const [draggedFolderId, setDraggedFolderId] = useState("");
+  const [dragTargetFolderId, setDragTargetFolderId] = useState("");
+
+  const getFolderOrderId = (folder) => {
+    if (folder?.uid) return `uid:${String(folder.uid)}`;
+    if (folder?.id != null) return `id:${String(folder.id)}`;
+    return `title:${String(folder?.title || "")}`;
+  };
 
   const filtered = useMemo(() => {
     if (!query.trim()) return folders;
@@ -24,6 +51,16 @@ export default function FoldersTab({
   return (
     <>
       <div className="space-y-6">
+        <style>{`
+          @keyframes grafana-card-wiggle {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-0.7deg); }
+            75% { transform: rotate(0.7deg); }
+          }
+          .grafana-card-wiggle {
+            animation: grafana-card-wiggle 350ms ease-in-out infinite;
+          }
+        `}</style>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="material-icons text-2xl text-sre-text">
@@ -93,7 +130,52 @@ export default function FoldersTab({
             {filtered.map((folder) => (
               <div
                 key={folder.uid}
-                className="p-6 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200"
+                draggable
+                onDragStart={(event) => {
+                  const folderOrderId = getFolderOrderId(folder);
+                  setDraggedFolderId(folderOrderId);
+                  setDragTargetFolderId("");
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData(
+                    "application/x-grafana-reorder",
+                    folderOrderId,
+                  );
+                  setInvisibleDragImage(event);
+                }}
+                onDragOver={(event) => {
+                  const currentId = getFolderOrderId(folder);
+                  if (!draggedFolderId || draggedFolderId === currentId) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDragTargetFolderId(currentId);
+                }}
+                onDragLeave={() => {
+                  const currentId = getFolderOrderId(folder);
+                  if (dragTargetFolderId === currentId) {
+                    setDragTargetFolderId("");
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const source = draggedFolderId;
+                  const target = getFolderOrderId(folder);
+                  setDraggedFolderId("");
+                  setDragTargetFolderId("");
+                  if (source && source !== target) {
+                    onReorder?.(source, target);
+                  }
+                }}
+                onDragEnd={() => {
+                  setDraggedFolderId("");
+                  setDragTargetFolderId("");
+                }}
+                className={`relative p-6 bg-sre-surface border-2 border-sre-border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing ${
+                  dragTargetFolderId === getFolderOrderId(folder) &&
+                  draggedFolderId &&
+                  draggedFolderId !== getFolderOrderId(folder)
+                    ? "grafana-card-wiggle"
+                    : ""
+                }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
@@ -209,6 +291,13 @@ export default function FoldersTab({
                       </svg>
                     </Button>
                   </div>
+                  <span
+                    className="material-icons absolute bottom-2 right-2 text-[18px] text-sre-text-muted cursor-grab select-none bg-transparent dark:bg-transparent"
+                    style={{ backgroundColor: "transparent" }}
+                    title="Drag to reorder"
+                  >
+                    drag_indicator
+                  </span>
                 </div>
               </div>
             ))}
@@ -245,4 +334,5 @@ FoldersTab.propTypes = {
   onEditFolder: PropTypes.func.isRequired,
   onDeleteFolder: PropTypes.func.isRequired,
   onToggleHidden: PropTypes.func,
+  onReorder: PropTypes.func,
 };

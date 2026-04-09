@@ -4,6 +4,24 @@ import { Button, Input, Badge } from "../ui";
 import { useToast } from "../../contexts/ToastContext";
 import { copyToClipboard } from "../../utils/helpers";
 
+function setInvisibleDragImage(event) {
+  const dragImage = globalThis?.document?.createElement?.("img");
+  if (!dragImage) return;
+  dragImage.src =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  dragImage.alt = "";
+  dragImage.width = 1;
+  dragImage.height = 1;
+  dragImage.style.position = "fixed";
+  dragImage.style.top = "0";
+  dragImage.style.left = "0";
+  dragImage.style.opacity = "0";
+  dragImage.style.pointerEvents = "none";
+  globalThis.document.body.appendChild(dragImage);
+  event.dataTransfer.setDragImage(dragImage, 0, 0);
+  globalThis.setTimeout(() => dragImage.remove(), 0);
+}
+
 function FilterBar({
   filters,
   setFilters,
@@ -134,10 +152,13 @@ export default function DashboardsTab({
   onOpenGrafana,
   onDeleteDashboard,
   onToggleHidden,
+  onReorder,
   dashboardKeyNamesByUid,
 }) {
   const toast = useToast();
   const [copiedDashboardUid, setCopiedDashboardUid] = useState("");
+  const [draggedDashboardUid, setDraggedDashboardUid] = useState("");
+  const [dragTargetDashboardUid, setDragTargetDashboardUid] = useState("");
 
   const dashboardLink = (dashboard) => {
     const path =
@@ -168,6 +189,16 @@ export default function DashboardsTab({
 
   return (
     <div className="space-y-6">
+      <style>{`
+        @keyframes grafana-card-wiggle {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(-0.7deg); }
+          75% { transform: rotate(0.7deg); }
+        }
+        .grafana-card-wiggle {
+          animation: grafana-card-wiggle 350ms ease-in-out infinite;
+        }
+      `}</style>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="material-icons text-2xl text-sre-text">
@@ -249,10 +280,51 @@ export default function DashboardsTab({
           {dashboards.map((d) => (
             <div
               key={d.uid}
-              className={`p-4 bg-sre-surface border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+              draggable
+              onDragStart={(event) => {
+                setDraggedDashboardUid(String(d.uid || ""));
+                setDragTargetDashboardUid("");
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData(
+                  "application/x-grafana-reorder",
+                  String(d.uid || ""),
+                );
+                setInvisibleDragImage(event);
+              }}
+              onDragOver={(event) => {
+                if (!draggedDashboardUid || draggedDashboardUid === d.uid) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDragTargetDashboardUid(String(d.uid || ""));
+              }}
+              onDragLeave={() => {
+                if (dragTargetDashboardUid === d.uid) {
+                  setDragTargetDashboardUid("");
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const source = draggedDashboardUid;
+                setDraggedDashboardUid("");
+                setDragTargetDashboardUid("");
+                if (source && source !== d.uid) {
+                  onReorder?.(source, d.uid);
+                }
+              }}
+              onDragEnd={() => {
+                setDraggedDashboardUid("");
+                setDragTargetDashboardUid("");
+              }}
+              className={`relative p-4 bg-sre-surface border rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing ${
                 d.is_hidden
                   ? "border-dashed border-sre-border/50 opacity-60"
                   : "border-sre-border"
+              } ${
+                dragTargetDashboardUid === d.uid &&
+                draggedDashboardUid &&
+                draggedDashboardUid !== d.uid
+                  ? "grafana-card-wiggle"
+                  : ""
               }`}
             >
               <div className="flex flex-col gap-2">
@@ -459,8 +531,14 @@ export default function DashboardsTab({
                   <div className="text-sm text-sre-text-muted">
                     <span className="font-mono text-xs">UID: {d.uid}</span>
                   </div>
+                  <span
+                    className="material-icons absolute bottom-2 right-2 text-[18px] text-sre-text-muted cursor-grab select-none bg-transparent dark:bg-transparent"
+                    style={{ backgroundColor: "transparent" }}
+                    title="Drag to reorder"
+                  >
+                    drag_indicator
+                  </span>
                 </div>
-
               </div>
             </div>
           ))}
@@ -501,6 +579,7 @@ DashboardsTab.propTypes = {
   onOpenGrafana: PropTypes.func.isRequired,
   onDeleteDashboard: PropTypes.func.isRequired,
   onToggleHidden: PropTypes.func,
+  onReorder: PropTypes.func,
   dashboardKeyNamesByUid: PropTypes.object,
   onEditLabels: PropTypes.func,
 };

@@ -2,6 +2,24 @@ import { useState } from "react";
 import PropTypes from "prop-types";
 import { Button, Badge, Input } from "../ui";
 
+function setInvisibleDragImage(event) {
+  const dragImage = globalThis?.document?.createElement?.("img");
+  if (!dragImage) return;
+  dragImage.src =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  dragImage.alt = "";
+  dragImage.width = 1;
+  dragImage.height = 1;
+  dragImage.style.position = "fixed";
+  dragImage.style.top = "0";
+  dragImage.style.left = "0";
+  dragImage.style.opacity = "0";
+  dragImage.style.pointerEvents = "none";
+  globalThis.document.body.appendChild(dragImage);
+  event.dataTransfer.setDragImage(dragImage, 0, 0);
+  globalThis.setTimeout(() => dragImage.remove(), 0);
+}
+
 function DsFilterBar({
   filters,
   setFilters,
@@ -111,11 +129,24 @@ export default function DatasourcesTab({
   onDeleteDatasource,
   onToggleHidden,
   onViewMetrics,
+  onReorder,
   getDatasourceIcon,
   getDatasourceKeyName,
 }) {
+  const [draggedDatasourceUid, setDraggedDatasourceUid] = useState("");
+  const [dragTargetDatasourceUid, setDragTargetDatasourceUid] = useState("");
   return (
     <div className="space-y-6">
+      <style>{`
+        @keyframes grafana-card-wiggle {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(-0.7deg); }
+          75% { transform: rotate(0.7deg); }
+        }
+        .grafana-card-wiggle {
+          animation: grafana-card-wiggle 350ms ease-in-out infinite;
+        }
+      `}</style>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="material-icons text-2xl text-sre-text">
@@ -199,10 +230,51 @@ export default function DatasourcesTab({
           {datasources.map((ds) => (
             <div
               key={ds.uid}
-              className={`p-6 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 ${
+              draggable
+              onDragStart={(event) => {
+                setDraggedDatasourceUid(String(ds.uid || ""));
+                setDragTargetDatasourceUid("");
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData(
+                  "application/x-grafana-reorder",
+                  String(ds.uid || ""),
+                );
+                setInvisibleDragImage(event);
+              }}
+              onDragOver={(event) => {
+                if (!draggedDatasourceUid || draggedDatasourceUid === ds.uid) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDragTargetDatasourceUid(String(ds.uid || ""));
+              }}
+              onDragLeave={() => {
+                if (dragTargetDatasourceUid === ds.uid) {
+                  setDragTargetDatasourceUid("");
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const source = draggedDatasourceUid;
+                setDraggedDatasourceUid("");
+                setDragTargetDatasourceUid("");
+                if (source && source !== ds.uid) {
+                  onReorder?.(source, ds.uid);
+                }
+              }}
+              onDragEnd={() => {
+                setDraggedDatasourceUid("");
+                setDragTargetDatasourceUid("");
+              }}
+              className={`relative p-6 bg-sre-surface border-2 rounded-xl hover:border-sre-primary/50 hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing ${
                 ds.is_hidden
                   ? "border-dashed border-sre-border/50 opacity-60"
                   : "border-sre-border"
+              } ${
+                dragTargetDatasourceUid === ds.uid &&
+                draggedDatasourceUid &&
+                draggedDatasourceUid !== ds.uid
+                  ? "grafana-card-wiggle"
+                  : ""
               }`}
             >
               <div className="flex items-start justify-between">
@@ -360,6 +432,13 @@ export default function DatasourcesTab({
                     </svg>
                   </Button>
                 </div>
+                <span
+                  className="material-icons absolute bottom-2 right-2 text-[18px] text-sre-text-muted cursor-grab select-none bg-transparent dark:bg-transparent"
+                  style={{ backgroundColor: "transparent" }}
+                  title="Drag to reorder"
+                >
+                  drag_indicator
+                </span>
               </div>
             </div>
           ))}
@@ -399,6 +478,7 @@ DatasourcesTab.propTypes = {
   onDeleteDatasource: PropTypes.func.isRequired,
   onToggleHidden: PropTypes.func,
   onViewMetrics: PropTypes.func,
+  onReorder: PropTypes.func,
   onEditLabels: PropTypes.func,
   getDatasourceIcon: PropTypes.func.isRequired,
   getDatasourceKeyName: PropTypes.func,
