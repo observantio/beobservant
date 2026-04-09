@@ -22,10 +22,12 @@ export default function GrafanaContent({
   onOpenGrafana,
   onDeleteDashboard,
   onToggleDashboardHidden,
+  onReorderDashboards,
   openDatasourceEditor,
   onDeleteDatasource,
   onToggleDatasourceHidden,
   onViewDatasourceMetrics,
+  onReorderDatasources,
   getDatasourceIcon,
   getDatasourceKeyName,
   dashboardKeyNamesByUid,
@@ -33,6 +35,7 @@ export default function GrafanaContent({
   onEditFolder,
   onDeleteFolder,
   onToggleFolderHidden,
+  onReorderFolders,
 }) {
   if (loading) {
     return (
@@ -59,6 +62,7 @@ export default function GrafanaContent({
         onOpenGrafana={onOpenGrafana}
         onDeleteDashboard={onDeleteDashboard}
         onToggleHidden={onToggleDashboardHidden}
+        onReorder={onReorderDashboards}
         dashboardKeyNamesByUid={dashboardKeyNamesByUid}
       />
     );
@@ -80,6 +84,7 @@ export default function GrafanaContent({
         onDeleteDatasource={onDeleteDatasource}
         onToggleHidden={onToggleDatasourceHidden}
         onViewMetrics={onViewDatasourceMetrics}
+        onReorder={onReorderDatasources}
         getDatasourceIcon={getDatasourceIcon}
         getDatasourceKeyName={getDatasourceKeyName}
       />
@@ -97,6 +102,7 @@ export default function GrafanaContent({
       onEditFolder={onEditFolder}
       onDeleteFolder={onDeleteFolder}
       onToggleHidden={onToggleFolderHidden}
+      onReorder={onReorderFolders}
     />
   );
 }
@@ -119,11 +125,13 @@ GrafanaContent.propTypes = {
   onOpenGrafana: PropTypes.func.isRequired,
   onDeleteDashboard: PropTypes.func.isRequired,
   onToggleDashboardHidden: PropTypes.func,
+  onReorderDashboards: PropTypes.func,
   onEditDashboardLabels: PropTypes.func,
   openDatasourceEditor: PropTypes.func.isRequired,
   onDeleteDatasource: PropTypes.func.isRequired,
   onToggleDatasourceHidden: PropTypes.func,
   onViewDatasourceMetrics: PropTypes.func,
+  onReorderDatasources: PropTypes.func,
   onEditDatasourceLabels: PropTypes.func,
   getDatasourceIcon: PropTypes.func.isRequired,
   getDatasourceKeyName: PropTypes.func,
@@ -132,4 +140,5 @@ GrafanaContent.propTypes = {
   onEditFolder: PropTypes.func.isRequired,
   onDeleteFolder: PropTypes.func.isRequired,
   onToggleFolderHidden: PropTypes.func,
+  onReorderFolders: PropTypes.func,
 };

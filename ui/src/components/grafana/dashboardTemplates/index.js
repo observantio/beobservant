@@ -95,7 +95,7 @@ export const DASHBOARD_TEMPLATES = [
   },
   {
     id: "ojo-systemd",
-    name: "Ojo — systemd",
+    name: "Ojo — Systemd",
     icon: "settings",
     summary:
       "Systemd unit, job, and service metrics from Ojo systemd monitoring.",
