@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   createSilence,
   deleteSilence,
@@ -27,6 +27,71 @@ import {
   buildRulePayload,
 } from "../utils/alertmanagerRuleUtils";
 import { DEFAULT_FORM } from "../components/alertmanager/ruleEditorUtils";
+
+const ALERTMANAGER_ORDER_STORAGE_PREFIX = "alertmanager:list-order:v1";
+
+function setInvisibleDragImage(event) {
+  const dragImage = globalThis?.document?.createElement?.("img");
+  if (!dragImage) return;
+  dragImage.src =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  dragImage.alt = "";
+  dragImage.width = 1;
+  dragImage.height = 1;
+  dragImage.style.position = "fixed";
+  dragImage.style.top = "0";
+  dragImage.style.left = "0";
+  dragImage.style.opacity = "0";
+  dragImage.style.pointerEvents = "none";
+  globalThis.document.body.appendChild(dragImage);
+  event.dataTransfer.setDragImage(dragImage, 0, 0);
+  globalThis.setTimeout(() => dragImage.remove(), 0);
+}
+
+function normalizeOrderedIds(items, getId, orderedIds) {
+  const ids = (Array.isArray(items) ? items : [])
+    .map((item) => String(getId(item) || ""))
+    .filter(Boolean);
+  const idSet = new Set(ids);
+  const cleaned = [];
+  const seen = new Set();
+  for (const value of Array.isArray(orderedIds) ? orderedIds : []) {
+    const id = String(value || "");
+    if (!id || !idSet.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    cleaned.push(id);
+  }
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    cleaned.push(id);
+  }
+  return cleaned;
+}
+
+function moveIdInOrderedIds(orderedIds, sourceId, targetId) {
+  const source = String(sourceId || "");
+  const target = String(targetId || "");
+  if (!source || !target || source === target) return orderedIds;
+  const fromIndex = orderedIds.indexOf(source);
+  const toIndex = orderedIds.indexOf(target);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return orderedIds;
+  const next = [...orderedIds];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function orderItemsByIds(items, getId, orderedIds) {
+  const normalized = normalizeOrderedIds(items, getId, orderedIds);
+  const rank = new Map(normalized.map((id, index) => [id, index]));
+  return [...(Array.isArray(items) ? items : [])].sort((a, b) => {
+    const aId = String(getId(a) || "");
+    const bId = String(getId(b) || "");
+    return (rank.get(aId) ?? Number.MAX_SAFE_INTEGER) -
+      (rank.get(bId) ?? Number.MAX_SAFE_INTEGER);
+  });
+}
 
 export default function AlertManagerPage() {
   const { user } = useAuth();
@@ -92,6 +157,19 @@ export default function AlertManagerPage() {
     "alertmanager-show-hidden-silences",
     false,
   );
+  const orderScope = String(user?.id || "anonymous");
+  const [rulesOrder, setRulesOrder] = useLocalStorage(
+    `${ALERTMANAGER_ORDER_STORAGE_PREFIX}:${orderScope}:rules`,
+    [],
+  );
+  const [silencesOrder, setSilencesOrder] = useLocalStorage(
+    `${ALERTMANAGER_ORDER_STORAGE_PREFIX}:${orderScope}:silences`,
+    [],
+  );
+  const [draggedRuleId, setDraggedRuleId] = useState("");
+  const [dragTargetRuleId, setDragTargetRuleId] = useState("");
+  const [draggedSilenceId, setDraggedSilenceId] = useState("");
+  const [dragTargetSilenceId, setDragTargetSilenceId] = useState("");
   const [importYamlContent, setImportYamlContent] = useState("");
   const [importRunning, setImportRunning] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -507,11 +585,88 @@ export default function AlertManagerPage() {
     }
   }, [rulesApiKeyFilter]);
 
+  useEffect(() => {
+    if (loading) return;
+    const normalized = normalizeOrderedIds(
+      rules,
+      (rule) => String(rule?.id || ""),
+      rulesOrder,
+    );
+    const currentSerialized = JSON.stringify(Array.isArray(rulesOrder) ? rulesOrder : []);
+    const nextSerialized = JSON.stringify(normalized);
+    if (currentSerialized !== nextSerialized) {
+      setRulesOrder(normalized);
+    }
+  }, [rules, rulesOrder, loading, setRulesOrder]);
+
+  useEffect(() => {
+    if (loading) return;
+    const normalized = normalizeOrderedIds(
+      silences,
+      (silence) => String(silence?.id || ""),
+      silencesOrder,
+    );
+    const currentSerialized = JSON.stringify(
+      Array.isArray(silencesOrder) ? silencesOrder : [],
+    );
+    const nextSerialized = JSON.stringify(normalized);
+    if (currentSerialized !== nextSerialized) {
+      setSilencesOrder(normalized);
+    }
+  }, [silences, silencesOrder, loading, setSilencesOrder]);
+
+  const orderedRules = useMemo(
+    () =>
+      orderItemsByIds(
+        rules,
+        (rule) => String(rule?.id || ""),
+        rulesOrder,
+      ),
+    [rules, rulesOrder],
+  );
+  const orderedSilences = useMemo(
+    () =>
+      orderItemsByIds(
+        silences,
+        (silence) => String(silence?.id || ""),
+        silencesOrder,
+      ),
+    [silences, silencesOrder],
+  );
+
+  const handleReorderRules = useCallback(
+    (sourceId, targetId) => {
+      setRulesOrder((previousOrder) => {
+        const normalized = normalizeOrderedIds(
+          rules,
+          (rule) => String(rule?.id || ""),
+          previousOrder,
+        );
+        return moveIdInOrderedIds(normalized, sourceId, targetId);
+      });
+    },
+    [rules, setRulesOrder],
+  );
+
+  const handleReorderSilences = useCallback(
+    (sourceId, targetId) => {
+      setSilencesOrder((previousOrder) => {
+        const normalized = normalizeOrderedIds(
+          silences,
+          (silence) => String(silence?.id || ""),
+          previousOrder,
+        );
+        return moveIdInOrderedIds(normalized, sourceId, targetId);
+      });
+    },
+    [silences, setSilencesOrder],
+  );
+
   const filteredRules = useMemo(() => {
     const currentUserId = String(user?.id || "").trim();
     const correlationQuery = String(rulesCorrelationSearch || "").trim().toLowerCase();
 
-    return (rules || []).filter((rule) => {
+    return (orderedRules || []).filter((rule) => {
       const ownerId = String(rule?.createdBy || rule?.created_by || "").trim();
       const isOwnRule = Boolean(currentUserId && ownerId && ownerId === currentUserId);
       const correlationId = String(rule?.group || "").trim();
@@ -536,7 +691,7 @@ export default function AlertManagerPage() {
       return true;
     });
   }, [
-    rules,
+    orderedRules,
     user?.id,
     rulesOwnerFilter,
     rulesCorrelationSearch,
@@ -621,6 +776,16 @@ export default function AlertManagerPage() {
 
   return (
     <div className="animate-fade-in">
+      <style>{`
+        @keyframes alert-card-wiggle {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(-0.7deg); }
+          75% { transform: rotate(0.7deg); }
+        }
+        .alert-card-wiggle {
+          animation: alert-card-wiggle 350ms ease-in-out infinite;
+        }
+      `}</style>
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-sre-text mb-2">Alerts &amp; Rules</h1>
         <p className="text-sre-text-muted">
@@ -1187,10 +1352,55 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={rule.id}
-                          className={`h-full p-4 bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border shadow-sm hover:border-sre-primary/40 hover:shadow-md transition-all duration-200 ${
+                          draggable
+                          onDragStart={(event) => {
+                            const ruleId = String(rule?.id || "");
+                            setDraggedRuleId(ruleId);
+                            setDragTargetRuleId("");
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData(
+                              "application/x-alertmanager-reorder",
+                              ruleId,
+                            );
+                            setInvisibleDragImage(event);
+                          }}
+                          onDragOver={(event) => {
+                            const targetId = String(rule?.id || "");
+                            if (!draggedRuleId || draggedRuleId === targetId) return;
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = "move";
+                            setDragTargetRuleId(targetId);
+                          }}
+                          onDragLeave={() => {
+                            const targetId = String(rule?.id || "");
+                            if (dragTargetRuleId === targetId) {
+                              setDragTargetRuleId("");
+                            }
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            const source = draggedRuleId;
+                            const target = String(rule?.id || "");
+                            setDraggedRuleId("");
+                            setDragTargetRuleId("");
+                            if (source && target && source !== target) {
+                              handleReorderRules(source, target);
+                            }
+                          }}
+                          onDragEnd={() => {
+                            setDraggedRuleId("");
+                            setDragTargetRuleId("");
+                          }}
+                          className={`relative h-full p-4 bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border shadow-sm hover:border-sre-primary/40 hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing ${
                             rule.isHidden || rule.is_hidden
                               ? "border-amber-400/60 opacity-90"
                               : "border-sre-border/50"
+                          } ${
+                            dragTargetRuleId === String(rule?.id || "") &&
+                            draggedRuleId &&
+                            draggedRuleId !== String(rule?.id || "")
+                              ? "alert-card-wiggle"
+                              : ""
                           }`}
                         >
                           <div className="space-y-3">
@@ -1333,6 +1543,13 @@ export default function AlertManagerPage() {
                                 {rule.annotations?.summary || "No fun when there's no description"}
                               </div>
                             </div>
+                            <span
+                              className="material-icons absolute bottom-2 right-2 text-[18px] text-sre-text-muted cursor-grab select-none bg-transparent dark:bg-transparent"
+                              style={{ backgroundColor: "transparent" }}
+                              title="Drag to reorder"
+                            >
+                              drag_indicator
+                            </span>
                           </div>
                         </div>
                       );
@@ -1419,7 +1636,7 @@ export default function AlertManagerPage() {
 
                 {silences.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {silences.map((s) => {
+                    {orderedSilences.map((s) => {
                       const silenceOwner = String(s.createdBy || s.created_by || "");
                       const isOwnSilence =
                         silenceOwner &&
@@ -1435,10 +1652,55 @@ export default function AlertManagerPage() {
                       return (
                         <div
                           key={s.id}
-                          className={`h-full p-4 bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border shadow-sm hover:border-sre-primary/40 hover:shadow-md transition-all duration-200 ${
+                          draggable
+                          onDragStart={(event) => {
+                            const silenceId = String(s?.id || "");
+                            setDraggedSilenceId(silenceId);
+                            setDragTargetSilenceId("");
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData(
+                              "application/x-alertmanager-reorder",
+                              silenceId,
+                            );
+                            setInvisibleDragImage(event);
+                          }}
+                          onDragOver={(event) => {
+                            const targetId = String(s?.id || "");
+                            if (!draggedSilenceId || draggedSilenceId === targetId) return;
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = "move";
+                            setDragTargetSilenceId(targetId);
+                          }}
+                          onDragLeave={() => {
+                            const targetId = String(s?.id || "");
+                            if (dragTargetSilenceId === targetId) {
+                              setDragTargetSilenceId("");
+                            }
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            const source = draggedSilenceId;
+                            const target = String(s?.id || "");
+                            setDraggedSilenceId("");
+                            setDragTargetSilenceId("");
+                            if (source && target && source !== target) {
+                              handleReorderSilences(source, target);
+                            }
+                          }}
+                          onDragEnd={() => {
+                            setDraggedSilenceId("");
+                            setDragTargetSilenceId("");
+                          }}
+                          className={`relative h-full p-4 bg-gradient-to-r from-sre-surface to-sre-bg-alt rounded-xl border shadow-sm hover:border-sre-primary/40 hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing ${
                             s.isHidden || s.is_hidden
                               ? "border-amber-400/60 opacity-90"
                               : "border-sre-border/50"
+                          } ${
+                            dragTargetSilenceId === String(s?.id || "") &&
+                            draggedSilenceId &&
+                            draggedSilenceId !== String(s?.id || "")
+                              ? "alert-card-wiggle"
+                              : ""
                           }`}
                         >
                           <div className="flex items-start justify-between">
@@ -1559,6 +1821,13 @@ export default function AlertManagerPage() {
                               </Button>
                             </div>
                           </div>
+                          <span
+                            className="material-icons absolute bottom-2 right-2 text-[18px] text-sre-text-muted cursor-grab select-none bg-transparent dark:bg-transparent"
+                            style={{ backgroundColor: "transparent" }}
+                            title="Drag to reorder"
+                          >
+                            drag_indicator
+                          </span>
                         </div>
                       );
                     })}

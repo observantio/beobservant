@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 
 /**
  * Hook for API calls with loading and error states
@@ -67,15 +67,40 @@ export function useDebounce(value, delay = 500) {
  * @returns {[any, Function]} Value and setter
  */
 export function useLocalStorage(key, initialValue) {
-  const [storedValue, setStoredValue] = useState(() => {
+  const initialValueRef = useRef(initialValue);
+
+  useEffect(() => {
+    initialValueRef.current = initialValue;
+  }, [initialValue]);
+
+  const readValue = useCallback(() => {
     try {
-      const item = globalThis.window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
+      const item = globalThis.window?.localStorage?.getItem(key);
+      return item ? JSON.parse(item) : initialValueRef.current;
     } catch (error) {
       console.error(`Error reading localStorage key "${key}":`, error);
-      return initialValue;
+      return initialValueRef.current;
     }
+  }, [key]);
+
+  const [storedValue, setStoredValue] = useState(() => {
+    return readValue();
   });
+
+  useLayoutEffect(() => {
+    setStoredValue(readValue());
+  }, [readValue]);
+
+  useEffect(() => {
+    const onStorage = (event) => {
+      if (event?.key !== key) return;
+      setStoredValue(readValue());
+    };
+    globalThis.window?.addEventListener?.("storage", onStorage);
+    return () => {
+      globalThis.window?.removeEventListener?.("storage", onStorage);
+    };
+  }, [key, readValue]);
 
   const setValue = useCallback(
     (value) => {
@@ -83,7 +108,7 @@ export function useLocalStorage(key, initialValue) {
         setStoredValue((previousValue) => {
           const valueToStore =
             typeof value === "function" ? value(previousValue) : value;
-          globalThis.window.localStorage.setItem(
+          globalThis.window?.localStorage?.setItem(
             key,
             JSON.stringify(valueToStore),
           );

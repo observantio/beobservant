@@ -63,8 +63,7 @@ describe("IntegrationsPage deletion flow", () => {
 
     render(<IntegrationsPage />);
 
-    
-    expect(await screen.findByText("ADMIN")).toBeInTheDocument();
+    await screen.findByRole("button", { name: /Delete channel/i });
 
     
     const rowDelete = screen.getByRole("button", { name: /Delete channel/i });
@@ -84,7 +83,7 @@ describe("IntegrationsPage deletion flow", () => {
     setupCommonMocks(new Error("failure"));
 
     render(<IntegrationsPage />);
-    expect(await screen.findByText("ADMIN")).toBeInTheDocument();
+    await screen.findByRole("button", { name: /Delete channel/i });
 
     fireEvent.click(screen.getByRole("button", { name: /Delete channel/i }));
     const dialog = await screen.findByRole("dialog");

@@ -16,6 +16,7 @@ import {
 } from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
+import { useLocalStorage } from "../hooks";
 import PageHeader from "../components/ui/PageHeader";
 import { Button, Card, Input, Modal, Select, Spinner } from "../components/ui";
 import ConfirmModal from "../components/ConfirmModal";
@@ -44,6 +45,71 @@ const VISIBILITY_TABS = [
     scopeTag: "Groups",
   },
 ];
+
+const INTEGRATIONS_ORDER_STORAGE_PREFIX = "integrations:list-order:v1";
+
+function setInvisibleDragImage(event) {
+  const dragImage = globalThis?.document?.createElement?.("img");
+  if (!dragImage) return;
+  dragImage.src =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  dragImage.alt = "";
+  dragImage.width = 1;
+  dragImage.height = 1;
+  dragImage.style.position = "fixed";
+  dragImage.style.top = "0";
+  dragImage.style.left = "0";
+  dragImage.style.opacity = "0";
+  dragImage.style.pointerEvents = "none";
+  globalThis.document.body.appendChild(dragImage);
+  event.dataTransfer.setDragImage(dragImage, 0, 0);
+  globalThis.setTimeout(() => dragImage.remove(), 0);
+}
+
+function normalizeOrderedIds(items, getId, orderedIds) {
+  const ids = (Array.isArray(items) ? items : [])
+    .map((item) => String(getId(item) || ""))
+    .filter(Boolean);
+  const idSet = new Set(ids);
+  const cleaned = [];
+  const seen = new Set();
+  for (const value of Array.isArray(orderedIds) ? orderedIds : []) {
+    const id = String(value || "");
+    if (!id || !idSet.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    cleaned.push(id);
+  }
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    cleaned.push(id);
+  }
+  return cleaned;
+}
+
+function moveIdInOrderedIds(orderedIds, sourceId, targetId) {
+  const source = String(sourceId || "");
+  const target = String(targetId || "");
+  if (!source || !target || source === target) return orderedIds;
+  const fromIndex = orderedIds.indexOf(source);
+  const toIndex = orderedIds.indexOf(target);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return orderedIds;
+  const next = [...orderedIds];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function orderItemsByIds(items, getId, orderedIds) {
+  const normalized = normalizeOrderedIds(items, getId, orderedIds);
+  const rank = new Map(normalized.map((id, index) => [id, index]));
+  return [...(Array.isArray(items) ? items : [])].sort((a, b) => {
+    const aId = String(getId(a) || "");
+    const bId = String(getId(b) || "");
+    return (rank.get(aId) ?? Number.MAX_SAFE_INTEGER) -
+      (rank.get(bId) ?? Number.MAX_SAFE_INTEGER);
+  });
+}
 
 function JiraIntegrationForm({ value, onChange, canUseSso = false }) {
   const next = (patch) => onChange({ ...value, ...patch });
@@ -238,6 +304,19 @@ export default function IntegrationsPage() {
   const [testResult, setTestResult] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const orderScope = String(user?.id || "anonymous");
+  const [channelOrder, setChannelOrder] = useLocalStorage(
+    `${INTEGRATIONS_ORDER_STORAGE_PREFIX}:${orderScope}:channels`,
+    [],
+  );
+  const [jiraOrder, setJiraOrder] = useLocalStorage(
+    `${INTEGRATIONS_ORDER_STORAGE_PREFIX}:${orderScope}:jira`,
+    [],
+  );
+  const [draggedChannelId, setDraggedChannelId] = useState("");
+  const [dragTargetChannelId, setDragTargetChannelId] = useState("");
+  const [draggedJiraId, setDraggedJiraId] = useState("");
+  const [dragTargetJiraId, setDragTargetJiraId] = useState("");
 
   const suppressDeleteConfirmUntilRef = useRef(0);
 
@@ -300,14 +379,61 @@ export default function IntegrationsPage() {
     loadAll();
   }, [loadAll]);
 
+  useEffect(() => {
+    if (loading) return;
+    const normalized = normalizeOrderedIds(
+      channels,
+      (channel) => String(channel?.id || ""),
+      channelOrder,
+    );
+    const currentSerialized = JSON.stringify(Array.isArray(channelOrder) ? channelOrder : []);
+    const nextSerialized = JSON.stringify(normalized);
+    if (currentSerialized !== nextSerialized) {
+      setChannelOrder(normalized);
+    }
+  }, [channels, channelOrder, loading, setChannelOrder]);
+
+  useEffect(() => {
+    if (loading) return;
+    const normalized = normalizeOrderedIds(
+      jiraIntegrations,
+      (integration) => String(integration?.id || ""),
+      jiraOrder,
+    );
+    const currentSerialized = JSON.stringify(Array.isArray(jiraOrder) ? jiraOrder : []);
+    const nextSerialized = JSON.stringify(normalized);
+    if (currentSerialized !== nextSerialized) {
+      setJiraOrder(normalized);
+    }
+  }, [jiraIntegrations, jiraOrder, loading, setJiraOrder]);
+
+  const orderedChannels = useMemo(
+    () =>
+      orderItemsByIds(
+        channels,
+        (channel) => String(channel?.id || ""),
+        channelOrder,
+      ),
+    [channels, channelOrder],
+  );
+  const orderedJiraIntegrations = useMemo(
+    () =>
+      orderItemsByIds(
+        jiraIntegrations,
+        (integration) => String(integration?.id || ""),
+        jiraOrder,
+      ),
+    [jiraIntegrations, jiraOrder],
+  );
+
   const visibleChannels = useMemo(
-    () => channels.filter((channel) => channel.visibility === activeTab),
-    [channels, activeTab]
+    () => orderedChannels.filter((channel) => channel.visibility === activeTab),
+    [orderedChannels, activeTab]
   );
 
   const visibleJiraIntegrations = useMemo(
-    () => jiraIntegrations.filter((item) => item.visibility === activeTab),
-    [jiraIntegrations, activeTab]
+    () => orderedJiraIntegrations.filter((item) => item.visibility === activeTab),
+    [orderedJiraIntegrations, activeTab]
   );
   const tabIntegrationCounts = useMemo(() => {
     const counts = {};
@@ -325,6 +451,34 @@ export default function IntegrationsPage() {
   const activeVisibilityMeta = useMemo(
     () => VISIBILITY_TABS.find((tab) => tab.key === activeTab) || VISIBILITY_TABS[0],
     [activeTab]
+  );
+
+  const handleReorderChannels = useCallback(
+    (sourceId, targetId) => {
+      setChannelOrder((previousOrder) => {
+        const normalized = normalizeOrderedIds(
+          channels,
+          (channel) => String(channel?.id || ""),
+          previousOrder,
+        );
+        return moveIdInOrderedIds(normalized, sourceId, targetId);
+      });
+    },
+    [channels, setChannelOrder],
+  );
+
+  const handleReorderJiraIntegrations = useCallback(
+    (sourceId, targetId) => {
+      setJiraOrder((previousOrder) => {
+        const normalized = normalizeOrderedIds(
+          jiraIntegrations,
+          (integration) => String(integration?.id || ""),
+          previousOrder,
+        );
+        return moveIdInOrderedIds(normalized, sourceId, targetId);
+      });
+    },
+    [jiraIntegrations, setJiraOrder],
   );
 
   const channelIconForType = (type) => {
@@ -434,12 +588,54 @@ export default function IntegrationsPage() {
     const canToggleHidden = !isOwner && (channel.visibility || "private") !== "private";
     const typeIcon = channelIconForType(channel.type);
     const colorClasses = channelColorForType(channel.type);
+    const channelId = String(channel?.id || "");
 
     const hasConfig =
       channel.config && typeof channel.config === "object" && Object.keys(channel.config).length > 0;
 
     return (
-      <div className="group relative p-4 rounded-xl border border-sre-border bg-gradient-to-br from-white/3 to-white/6 shadow-sm hover:shadow-lg transition-all transform hover:-translate-y-0.5">
+      <div
+        draggable
+        onDragStart={(event) => {
+          setDraggedChannelId(channelId);
+          setDragTargetChannelId("");
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("application/x-integrations-reorder", channelId);
+          event.dataTransfer.setData("text/plain", channelId);
+          setInvisibleDragImage(event);
+        }}
+        onDragOver={(event) => {
+          if (!draggedChannelId || draggedChannelId === channelId) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          setDragTargetChannelId(channelId);
+        }}
+        onDragLeave={() => {
+          if (dragTargetChannelId === channelId) {
+            setDragTargetChannelId("");
+          }
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          const source = draggedChannelId;
+          setDraggedChannelId("");
+          setDragTargetChannelId("");
+          if (source && source !== channelId) {
+            handleReorderChannels(source, channelId);
+          }
+        }}
+        onDragEnd={() => {
+          setDraggedChannelId("");
+          setDragTargetChannelId("");
+        }}
+        className={`group relative p-4 rounded-xl border border-sre-border bg-gradient-to-br from-white/3 to-white/6 shadow-sm hover:shadow-lg transition-all transform hover:-translate-y-0.5 cursor-grab active:cursor-grabbing select-none touch-none ${
+          dragTargetChannelId === channelId &&
+          draggedChannelId &&
+          draggedChannelId !== channelId
+            ? "alert-card-wiggle"
+            : ""
+        }`}
+      >
         <div className="flex items-start gap-4">
           <div
             className={`w-12 h-12 rounded-lg flex items-center justify-center bg-gradient-to-br ${colorClasses} font-semibold`}
@@ -555,6 +751,13 @@ export default function IntegrationsPage() {
             </div>
           </div>
         </div>
+        <span
+          className="material-icons absolute bottom-1.5 right-1.5 inline-flex h-8 w-8 items-center justify-center text-[20px] text-sre-text-muted cursor-grab select-none bg-transparent dark:bg-transparent"
+          style={{ backgroundColor: "transparent" }}
+          title="Drag to reorder (or drag anywhere on card)"
+        >
+          drag_indicator
+        </span>
       </div>
     );
   }
@@ -562,9 +765,51 @@ export default function IntegrationsPage() {
   function JiraCard({ integration }) {
     const isOwner = integration.createdBy === userId;
     const canToggleHidden = !isOwner && (integration.visibility || "private") !== "private";
+    const integrationId = String(integration?.id || "");
 
     return (
-      <div className="p-4 rounded-xl border border-sre-border bg-white/3 shadow-sm hover:shadow-md transition-all hover:border-sre-primary/30">
+      <div
+        draggable
+        onDragStart={(event) => {
+          setDraggedJiraId(integrationId);
+          setDragTargetJiraId("");
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("application/x-integrations-reorder", integrationId);
+          event.dataTransfer.setData("text/plain", integrationId);
+          setInvisibleDragImage(event);
+        }}
+        onDragOver={(event) => {
+          if (!draggedJiraId || draggedJiraId === integrationId) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          setDragTargetJiraId(integrationId);
+        }}
+        onDragLeave={() => {
+          if (dragTargetJiraId === integrationId) {
+            setDragTargetJiraId("");
+          }
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          const source = draggedJiraId;
+          setDraggedJiraId("");
+          setDragTargetJiraId("");
+          if (source && source !== integrationId) {
+            handleReorderJiraIntegrations(source, integrationId);
+          }
+        }}
+        onDragEnd={() => {
+          setDraggedJiraId("");
+          setDragTargetJiraId("");
+        }}
+        className={`relative p-4 rounded-xl border border-sre-border bg-white/3 shadow-sm hover:shadow-md transition-all hover:border-sre-primary/30 cursor-grab active:cursor-grabbing select-none touch-none ${
+          dragTargetJiraId === integrationId &&
+          draggedJiraId &&
+          draggedJiraId !== integrationId
+            ? "alert-card-wiggle"
+            : ""
+        }`}
+      >
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-gradient-to-br from-indigo-100 to-indigo-50 text-indigo-700 font-semibold dark:from-indigo-900/30 dark:to-indigo-800/30 dark:text-indigo-400">
             <span className="material-icons">account_tree</span>
@@ -641,6 +886,13 @@ export default function IntegrationsPage() {
             </div>
           </div>
         </div>
+        <span
+          className="material-icons absolute bottom-1.5 right-1.5 inline-flex h-8 w-8 items-center justify-center text-[20px] text-sre-text-muted cursor-grab select-none bg-transparent dark:bg-transparent"
+          style={{ backgroundColor: "transparent" }}
+          title="Drag to reorder (or drag anywhere on card)"
+        >
+          drag_indicator
+        </span>
       </div>
     );
   }
@@ -775,6 +1027,16 @@ export default function IntegrationsPage() {
 
   return (
     <div className="animate-fade-in space-y-6">
+      <style>{`
+        @keyframes alert-card-wiggle {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(-0.7deg); }
+          75% { transform: rotate(0.7deg); }
+        }
+        .alert-card-wiggle {
+          animation: alert-card-wiggle 350ms ease-in-out infinite;
+        }
+      `}</style>
       <PageHeader
         icon="integration_instructions"
         title="Integrations"
