@@ -11,6 +11,12 @@ All notable changes to this project are documented here.
 * Fixed span duration truncation for very short spans
 * Enhanced service name resolution and parsing consistency
 * Updated UI messaging and added edge case test coverage 
+* Added persistent drag-and-drop ordering across Grafana dashboards/datasources/folders and extended persistent ordering to Alert Rules, Silences, Notification Channels, and Jira integrations, including graceful reordering when items are added or removed by other users.
+* Refined drag UX by removing browser-default drag ghosts, adding clearer drag indicators, and improving target-card wiggle feedback.
+* Updated Ojo Agent Setup Wizard `Extra services` to include all current sidecars (Docker, GPU, Sensors, Postgres, MySQL, NFS client, NGINX, Redis, Systemd, Systrace, Syslog) with refreshed helper copy.
+* Updated command-copy affordances in setup/token flows to use compact top-row `Copy` buttons and improved code-block readability in light theme.
+* Added a top-down dependency-map layout toggle in Tempo service graph views and removed the systrace validation dataset panel from the UI template flow.
+* Updated sidebar/top-nav layout toggle button icon to a blob/splash style icon for visual consistency.
 
 ## [v0.0.3] - 2026-04-06
 
