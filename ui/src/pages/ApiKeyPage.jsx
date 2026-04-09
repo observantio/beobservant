@@ -1015,32 +1015,35 @@ export default function ApiKeyPage() {
               <div className="text-xs text-sre-text-muted">
                 Use the token shown above with the local collector script.
               </div>
-              <div className="rounded-xl bg-sre-surface px-3 py-3 shadow-sm sm:px-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-words text-[12px] leading-6 font-medium text-sre-text">
-                    <code>
-                      <span className="text-sre-primary">sudo</span> <span className="text-sre-success">bash</span> <span className="text-sre-info">otel/run_otel_collector.sh</span> <span className="text-sre-warning">-t</span> <span className="text-sre-secondary">{yamlShowToken && yamlModalToken ? yamlModalToken : '<YOUR_TOKEN_HERE>'}</span>
-                    </code>
-                  </pre>
+              <div className="overflow-hidden rounded-xl border border-sre-border bg-sre-surface shadow-sm">
+                <div className="flex items-center justify-between gap-2 border-b border-sre-border bg-sre-bg-alt px-3 py-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted">
+                    bash
+                  </span>
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="border-0 bg-transparent p-1 text-sre-text-muted hover:text-sre-text"
+                    className="rounded-md border border-sre-border/70 bg-sre-surface px-1.5 py-0.5 text-[10px] leading-4 text-sre-text hover:border-sre-primary/40"
                     onClick={() =>
                       handleCopy(
-                        `sudo bash otel/run_otel_collector.sh -t ${yamlShowToken && yamlModalToken ? yamlModalToken : '<YOUR_TOKEN_HERE>'}`,
+                        `sudo bash otel/run_otel_collector.sh -t ${yamlShowToken && yamlModalToken ? yamlModalToken : '<YOUR_TOKEN_HERE>'} -c otel/configs/ojo.yaml`,
                         "Collector command copied to clipboard",
                       )
                     }
                     disabled={!yamlModalToken}
                     aria-label="Copy command"
                   >
-                    <span className="material-icons text-base">content_copy</span>
+                    Copy
                   </Button>
                 </div>
+                <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-words px-3 py-3 text-[12px] leading-6 font-medium text-sre-text">
+                  <code>
+                    <span className="text-sre-primary">sudo</span> <span className="text-sre-success">bash</span> <span className="text-sre-info">otel/run_otel_collector.sh</span> <span className="text-sre-warning">-t</span> <span className="text-sre-secondary">{yamlShowToken && yamlModalToken ? yamlModalToken : '<YOUR_TOKEN_HERE>'}</span> <span className="text-sre-warning">-c</span> <span className="text-sre-success">otel/configs/ojo.yaml</span>
+                  </code>
+                </pre>
               </div>
               <a
-                href="https://github.com/observantio/watchdog/blob/main/otel/OTEL.md"
+                href="https://github.com/observantio/ojo/blob/main/run_otel_collector.sh"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-medium text-sre-primary hover:underline"

@@ -808,7 +808,7 @@ export default function Header() {
             title="Top navigation"
           >
             <span className="material-icons text-[22px] leading-none" aria-hidden>
-              view_headline
+              blur_on
             </span>
           </button>
           {actionsCluster}
@@ -1171,4 +1171,3 @@ UserMenu.propTypes = {
   openChangePassword: PropTypes.func,
   compact: PropTypes.bool,
 };
-

@@ -166,7 +166,8 @@ describe("Header user menu", () => {
     expect(await screen.findByText(/ojo-gpu · gpu.yaml/i)).toBeInTheDocument();
     expect(screen.queryByText(/ojo-postgres · postgres.yaml/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /GPU/i }));
+    const gpuServiceCard = await screen.findByText(/ojo-gpu · gpu.yaml/i);
+    fireEvent.click(gpuServiceCard.closest("button"));
     fireEvent.click(screen.getByRole("button", { name: /Next/i }));
     expect(await screen.findByText(/Suggested install command/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Next/i }));
@@ -204,7 +205,9 @@ describe("Header user menu", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Download Ojo Agent/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^Windows$/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Windows Use the Windows package/i }),
+    );
     fireEvent.click(screen.getByRole("button", { name: /Next/i }));
 
     expect(await screen.findByText(/Matching assets \(1\)/i)).toBeInTheDocument();

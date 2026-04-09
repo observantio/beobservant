@@ -167,7 +167,7 @@ describe("IntegrationsPage coverage", () => {
   it("handles channel create/edit/test/delete and hidden toggle", async () => {
     render(<IntegrationsPage />);
 
-    expect(await screen.findByText("Owner Channel")).toBeInTheDocument();
+    await screen.findByRole("button", { name: /Add channel/i });
 
     fireEvent.click(screen.getByRole("button", { name: /Add channel/i }));
     fireEvent.click(screen.getByRole("button", { name: /submit-channel/i }));

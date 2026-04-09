@@ -57,7 +57,7 @@ export default function AppSidebar() {
           title="Switch to Top Nav"
         >
           <span className="material-icons text-[22px] leading-none" aria-hidden>
-            view_headline
+            blur_on
           </span>
         </button>
       </div>

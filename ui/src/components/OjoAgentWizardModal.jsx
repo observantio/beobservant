@@ -12,12 +12,29 @@ const OJO_RELEASES_URL = `${OJO_REPO_URL}/releases/latest`;
 const OJO_RECOMMENDED_RELEASE_TAG = APP_VERSION;
 const OJO_RECOMMENDED_RELEASE_URL = `${OJO_REPO_URL}/releases/tag/${OJO_RECOMMENDED_RELEASE_TAG}`;
 const OJO_CONFIG_BASE_URL = `${OJO_REPO_URL}/blob/main`;
+const OTEL_SETUP_DOC_URL = "https://github.com/observantio/watchdog/blob/main/otel/OTEL.md";
+const EXTRA_SERVICES_OTEL_SETUP_URL = "https://github.com/observantio/ojo/blob/main/run_otel_collector.sh";
 const RELEASE_FETCH_TIMEOUT_MS = 8000;
 
 const OJO_OS_OPTIONS = [
-  { key: "linux", label: "Linux", icon: "terminal", color: "success" },
-  { key: "windows", label: "Windows", icon: "desktop_windows", color: "primary" },
-  { key: "extras", label: "Extra services", icon: "extension", color: "warning" },
+  {
+    key: "linux",
+    label: "Linux",
+    icon: "computer",
+    description: "Install the core Ojo agent for Linux hosts.",
+  },
+  {
+    key: "windows",
+    label: "Windows",
+    icon: "desktop_windows",
+    description: "Use the Windows package and host-level collector flow.",
+  },
+  {
+    key: "extras",
+    label: "Extra services",
+    icon: "widgets",
+    description: "Add sidecar-style service collectors like Docker or GPU.",
+  },
 ];
 
 const OJO_OS_STYLES = {
@@ -80,6 +97,60 @@ const OJO_EXTRA_SERVICES = [
     configFile: "mysql.yaml",
     keywords: ["mysql", "database", "sql", "mariadb"],
     description: "MySQL availability, connection, query rate, and throughput metrics.",
+  },
+  {
+    key: "nfs-client",
+    label: "NFS client",
+    icon: "folder_shared",
+    packageName: "ojo-nfs-client",
+    configFile: "nfs-client.yaml",
+    keywords: ["nfs", "client", "rpc", "mounts", "filesystem"],
+    description: "NFS client mount inventory and RPC throughput/retransmission telemetry.",
+  },
+  {
+    key: "nginx",
+    label: "NGINX",
+    icon: "language",
+    packageName: "ojo-nginx",
+    configFile: "nginx.yaml",
+    keywords: ["nginx", "http", "web", "reverse proxy", "stub_status"],
+    description: "NGINX availability, connection states, totals, and request/accept rates.",
+  },
+  {
+    key: "redis",
+    label: "Redis",
+    icon: "dns",
+    packageName: "ojo-redis",
+    configFile: "redis.yaml",
+    keywords: ["redis", "cache", "key-value", "commands", "memory"],
+    description: "Redis INFO telemetry for clients, command rates, keyspace health, and memory.",
+  },
+  {
+    key: "systemd",
+    label: "Systemd",
+    icon: "settings",
+    packageName: "ojo-systemd",
+    configFile: "systemd.yaml",
+    keywords: ["systemd", "units", "services", "jobs", "linux"],
+    description: "Systemd unit/job state metrics including active, failed, and queued counts.",
+  },
+  {
+    key: "systrace",
+    label: "Systrace",
+    icon: "account_tree",
+    packageName: "ojo-systrace",
+    configFile: "systrace.yaml",
+    keywords: ["systrace", "trace", "kernel", "ebpf", "etw"],
+    description: "Kernel/system tracing metrics and traces with exporter health telemetry.",
+  },
+  {
+    key: "syslog",
+    label: "Syslog",
+    icon: "article",
+    packageName: "ojo-syslog",
+    configFile: "syslog.yaml",
+    keywords: ["syslog", "logs", "journald", "windows events", "events"],
+    description: "Low-cardinality log ingestion health, buffering, and export pipeline metrics.",
   },
 ];
 
@@ -322,6 +393,10 @@ function OjoAgentWizardModal({ open, onClose, apiKeys = [], onRefreshKeys }) {
   const selectedToken = String(
     apiKeyTokenMap[selectedApiKeyId] || selectedApiKey?.otlp_token || "",
   ).trim();
+  const collectorCommand =
+    selectedOs === "extras"
+      ? `sudo bash run_otel_collector.sh -t ${selectedToken || "<YOUR_TOKEN_HERE>"} -c otel.yaml`
+      : `sudo bash otel/run_otel_collector.sh -t ${selectedToken || "<YOUR_TOKEN_HERE>"} -c otel/configs/ojo.yaml`;
 
   const installCommandByOs = {
     linux: `curl -L ${resolvedBinaryUrl} -o ojo
@@ -495,7 +570,7 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
               <h3 className="text-base font-semibold text-sre-text">
                 1. Pick your operating system
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 {OJO_OS_OPTIONS.map((option) => {
                   const styles = OJO_OS_STYLES[option.key] || {
                     selected: "border-sre-primary bg-sre-primary/10 text-sre-primary",
@@ -512,17 +587,32 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
                           setSelectedExtraServiceKey(OJO_EXTRA_SERVICES[0]?.key || "");
                         }
                       }}
-                      className={`rounded-lg border px-4 py-3 text-left transition-colors ${
+                      className={`group rounded-xl border px-4 py-4 text-left transition-all duration-200 ${
                         selectedOs === option.key
-                          ? styles.selected
-                          : `border-sre-border bg-sre-surface ${styles.hover}`
+                          ? `${styles.selected} shadow-sm`
+                          : `border-sre-border bg-sre-surface ${styles.hover} hover:-translate-y-0.5 hover:shadow-sm`
                       }`}
                     >
-                      <div className="flex items-center gap-2 text-current">
-                        <span className="material-icons text-base" aria-hidden>
-                          {option.icon}
-                        </span>
-                        <span className="font-semibold">{option.label}</span>
+                      <div className="flex items-start gap-3 text-current">
+                        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${
+                          selectedOs === option.key
+                            ? "border-current/30 bg-current/10"
+                            : "border-sre-border bg-sre-bg-alt"
+                        }`}>
+                          <span className="material-icons text-[20px] leading-none" aria-hidden>
+                            {option.icon}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{option.label}</span>
+                          </div>
+                          <p className={`mt-1 text-xs leading-5 ${
+                            selectedOs === option.key ? "opacity-90" : "text-sre-text-muted"
+                          }`}>
+                            {option.description}
+                          </p>
+                        </div>
                       </div>
                     </button>
                   );
@@ -537,14 +627,14 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
                         Extra services
                       </h4>
                       <p className="mt-1 text-sm text-sre-text-muted">
-                        Add focused sidecar collectors for Docker, GPU, sensors, Postgres, or MySQL. Each runs as its own binary and sends OTLP metrics to the same collector endpoint.
+                        Add focused sidecar collectors for Docker, GPU, sensors, Postgres, MySQL, NFS client, NGINX, Redis, Systemd, Systrace, or Syslog. Each runs as its own binary and sends OTLP metrics to the same collector endpoint.
                       </p>
                     </div>
                     <div className="w-full sm:max-w-xs">
                       <input
                         value={extraServiceSearch}
                         onChange={(event) => setExtraServiceSearch(event.target.value)}
-                        placeholder="Search gpu, docker, postgres..."
+                        placeholder="Search redis, nginx, systrace..."
                         className="w-full rounded-xl border border-sre-border bg-sre-surface px-3 py-2 text-sm text-sre-text focus:border-sre-primary focus:outline-none focus:ring-1 focus:ring-sre-primary"
                       />
                     </div>
@@ -597,7 +687,7 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
 
                   {filteredExtraServices.length === 0 ? (
                     <div className="mt-4 rounded-xl border border-dashed border-sre-border bg-sre-bg p-4 text-sm text-sre-text-muted">
-                      No matching extra services found. Try `gpu`, `sensors`, `postgres`, `mysql`, or `docker`.
+                      No matching extra services found. Try `docker`, `gpu`, `sensors`, `postgres`, `mysql`, `nfs-client`, `nginx`, `redis`, `systemd`, `systrace`, or `syslog`.
                     </div>
                   ) : null}
                 </div>
@@ -968,29 +1058,43 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
               </div>
 
               <div className="rounded-lg border border-sre-border bg-sre-bg-alt p-3 space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-sre-text-muted">
-                    Ojo collector command
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      copyText(
-                        `sudo bash otel/run_otel_collector.sh -t ${selectedToken || '<YOUR_TOKEN_HERE>'} -c otel/configs/ojo.yaml`,
-                      )
-                    }
-                    className="rounded-md border border-sre-border px-2 py-1 text-xs text-sre-text hover:border-sre-primary/40"
-                  >
-                    Copy command
-                  </button>
-                </div>
-                <div className="overflow-x-auto rounded-md bg-sre-surface p-3 text-xs font-medium text-sre-text">
-                  <code className="whitespace-pre-wrap">
-                    sudo bash otel/run_otel_collector.sh -t <span className="text-sre-primary">{selectedToken || '<YOUR_TOKEN_HERE>'}</span> -c <span className="text-sre-success">otel/configs/ojo.yaml</span>
-                  </code>
+                <p className="text-xs font-semibold uppercase tracking-wide text-sre-text-muted">
+                  Ojo collector command
+                </p>
+                <div className="overflow-hidden rounded-md border border-sre-border bg-sre-surface shadow-sm">
+                  <div className="flex items-center justify-between gap-2 border-b border-sre-border bg-sre-bg-alt px-3 py-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted">
+                      bash
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyText(collectorCommand)}
+                      className="rounded-md border border-sre-border/70 bg-sre-surface px-1.5 py-0.5 text-[10px] leading-4 text-sre-text hover:border-sre-primary/40"
+                      title="Copy command"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-3 text-xs leading-6 font-medium text-sre-text">
+                    <code>
+                      {selectedOs === "extras" ? (
+                        <>
+                          sudo bash <span className="text-sre-info">run_otel_collector.sh</span> -t{" "}
+                          <span className="text-sre-primary">{selectedToken || "<YOUR_TOKEN_HERE>"}</span> -c{" "}
+                          <span className="text-sre-success">otel.yaml</span>
+                        </>
+                      ) : (
+                        <>
+                          sudo bash <span className="text-sre-info">otel/run_otel_collector.sh</span> -t{" "}
+                          <span className="text-sre-primary">{selectedToken || "<YOUR_TOKEN_HERE>"}</span> -c{" "}
+                          <span className="text-sre-success">otel/configs/ojo.yaml</span>
+                        </>
+                      )}
+                    </code>
+                  </pre>
                 </div>
                 <a
-                  href="https://github.com/observantio/watchdog/blob/main/otel/OTEL.md"
+                  href={selectedOs === "extras" ? EXTRA_SERVICES_OTEL_SETUP_URL : OTEL_SETUP_DOC_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs font-medium text-sre-primary hover:underline"
