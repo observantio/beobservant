@@ -19,6 +19,11 @@
     </a>
   </p>
   <p>
+    <a href="https://github.com/observantio/watchdog/actions/workflows/ci.yml">
+      <img src="https://github.com/observantio/watchdog/actions/workflows/ci.yml/badge.svg?branch=main" alt="Watchdog CI" />
+    </a>
+  </p>
+  <p>
     <a href="https://github.com/observantio/watchdog/blob/main/DEPLOYMENT.md">
       <img src="https://img.shields.io/badge/🚀%20Deploy-Quick%20Setup-0ea5e9?style=flat-square&logo=docker&logoColor=white" alt="Deploy" />
     </a>
