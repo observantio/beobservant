@@ -156,4 +156,44 @@ describe("serviceGraphUtils", () => {
       data.edges.has("kernel.exc_page_fault->kernel.asm_exc_page_fault"),
     ).toBe(false);
   });
+
+  it("uses systrace.component as node identity so child spans are not ghost nodes", () => {
+    const data = buildServiceGraphData([
+      {
+        traceID: "t-systrace-components",
+        spans: [
+          {
+            spanId: "root",
+            operationName: "systrace.collect",
+            serviceName: "ojo-systrace",
+            duration: 200000,
+          },
+          {
+            spanId: "summary",
+            parentSpanId: "root",
+            operationName: "systrace.snapshot",
+            serviceName: "ojo-systrace",
+            attributes: { "systrace.component": "kernel.entry_syscall" },
+            duration: 1500,
+          },
+          {
+            spanId: "code",
+            parentSpanId: "summary",
+            operationName: "systrace.trace.component",
+            serviceName: "ojo-systrace",
+            attributes: { "systrace.component": "kernel.code" },
+            duration: 3500,
+          },
+        ],
+      },
+    ]);
+
+    const entry = data.services.get("kernel.entry_syscall");
+    const code = data.services.get("kernel.code");
+    expect(entry).toBeTruthy();
+    expect(code).toBeTruthy();
+    expect(entry.spans).toBeGreaterThan(0);
+    expect(code.spans).toBeGreaterThan(0);
+    expect(data.edges.has("kernel.entry_syscall->kernel.code")).toBe(true);
+  });
 });

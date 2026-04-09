@@ -32,6 +32,16 @@ function findRootSpan(spans) {
   );
 }
 
+function getGraphNodeName(span) {
+  // Systrace emits multiple logical kernel components under one process service.
+  // Use component identity for graph nodes so child spans are attributed correctly.
+  const systraceComponent = getSpanAttribute(span, "systrace.component");
+  if (systraceComponent != null && String(systraceComponent).trim()) {
+    return String(systraceComponent);
+  }
+  return getServiceName(span);
+}
+
 export function buildServiceGraphData(traces) {
   const services = new Map();
   const edges = new Map();
@@ -79,7 +89,7 @@ export function buildServiceGraphData(traces) {
     };
 
     spans.forEach((span) => {
-      const serviceName = getServiceName(span);
+      const serviceName = getGraphNodeName(span);
       if (!services.has(serviceName)) {
         services.set(serviceName, {
           spans: 0,
@@ -102,7 +112,7 @@ export function buildServiceGraphData(traces) {
       if (parentId) {
         const parentSpan = findParentSpanById(spans, parentId);
         if (parentSpan && shouldBuildParentEdge(span, parentSpan)) {
-          const parentService = getServiceName(parentSpan);
+          const parentService = getGraphNodeName(parentSpan);
           addLocalEdge(parentService, serviceName, duration, hasError, 1);
         }
       }
@@ -135,9 +145,9 @@ export function buildServiceGraphData(traces) {
 
     if (localEdges.size === 0 && spans.length > 1) {
       const rootSpan = findRootSpan(spans);
-      const rootService = getServiceName(rootSpan);
+      const rootService = getGraphNodeName(rootSpan);
       const servicesInTrace = new Set(
-        spans.map((span) => getServiceName(span)).filter(Boolean),
+        spans.map((span) => getGraphNodeName(span)).filter(Boolean),
       );
       servicesInTrace.delete(rootService);
       servicesInTrace.forEach((service) => {
@@ -399,17 +409,17 @@ export function buildServiceGraphEdges(graphData, activeEdgeId, activeNodeId) {
   });
 }
 
-export function layoutServiceGraph(nodes, edges) {
+export function layoutServiceGraph(nodes, edges, options = {}) {
+  const requestedRankdir = options?.rankdir === "TB" ? "TB" : "LR";
   const nodeWidth = 260;
   const nodeHeight = 140;
-
   const graph = new dagre.graphlib.Graph();
   graph.setDefaultEdgeLabel(() => ({}));
   graph.setGraph({
-    rankdir: "LR",
+    rankdir: requestedRankdir,
     ranker: "tight-tree",
-    nodesep: 80,
-    ranksep: 140,
+    nodesep: requestedRankdir === "TB" ? 56 : 80,
+    ranksep: requestedRankdir === "TB" ? 110 : 140,
     edgesep: 20,
     marginx: 20,
     marginy: 20,
@@ -424,6 +434,18 @@ export function layoutServiceGraph(nodes, edges) {
   });
 
   dagre.layout(graph);
+
+  const nodePosMap = new Map();
+  nodes.forEach((node) => {
+    const pos = graph.node(node.id) || { x: 0, y: 0 };
+    nodePosMap.set(node.id, {
+      x: pos.x - nodeWidth / 2,
+      y: pos.y - nodeHeight / 2,
+    });
+  });
+
+  const sourcePosition = requestedRankdir === "TB" ? Position.Bottom : Position.Right;
+  const targetPosition = requestedRankdir === "TB" ? Position.Top : Position.Left;
 
   const adj = new Map();
   nodes.forEach((n) => adj.set(n.id, new Set()));
@@ -449,28 +471,34 @@ export function layoutServiceGraph(nodes, edges) {
     }
     components.push(comp);
   }
-  const nodePosMap = new Map();
-  nodes.forEach((node) => {
-    const pos = graph.node(node.id) || { x: 0, y: 0 };
-    nodePosMap.set(node.id, {
-      x: pos.x - nodeWidth / 2,
-      y: pos.y - nodeHeight / 2,
-    });
-  });
-
   const compOffsets = new Map();
-  const verticalGap = Math.max(80, graph.graph().ranksep || 140);
-  components.forEach((comp, idx) => {
-    let minY = Infinity;
-    comp.forEach((nid) => {
-      const p = nodePosMap.get(nid);
-      if (p && p.y < minY) minY = p.y;
+  if (requestedRankdir === "LR") {
+    const verticalGap = Math.max(80, graph.graph().ranksep || 140);
+    components.forEach((comp, idx) => {
+      let minY = Infinity;
+      comp.forEach((nid) => {
+        const p = nodePosMap.get(nid);
+        if (p && p.y < minY) minY = p.y;
+      });
+      if (minY === Infinity) minY = 0;
+      const desiredTop = idx * (nodeHeight + verticalGap);
+      const offset = desiredTop - minY;
+      compOffsets.set(idx, { x: 0, y: offset });
     });
-    if (minY === Infinity) minY = 0;
-    const desiredTop = idx * (nodeHeight + verticalGap);
-    const offset = desiredTop - minY;
-    compOffsets.set(idx, offset);
-  });
+  } else {
+    const horizontalGap = Math.max(80, graph.graph().nodesep || 80);
+    components.forEach((comp, idx) => {
+      let minX = Infinity;
+      comp.forEach((nid) => {
+        const p = nodePosMap.get(nid);
+        if (p && p.x < minX) minX = p.x;
+      });
+      if (minX === Infinity) minX = 0;
+      const desiredLeft = idx * (nodeWidth + horizontalGap);
+      const offset = desiredLeft - minX;
+      compOffsets.set(idx, { x: offset, y: 0 });
+    });
+  }
 
   const nodeToComp = new Map();
   components.forEach((comp, idx) =>
@@ -480,13 +508,15 @@ export function layoutServiceGraph(nodes, edges) {
   const layoutedNodes = nodes.map((node) => {
     const base = nodePosMap.get(node.id) || { x: 0, y: 0 };
     const compIdx = nodeToComp.get(node.id) || 0;
-    const offset = compOffsets.get(compIdx) || 0;
+    const offset = compOffsets.get(compIdx) || { x: 0, y: 0 };
     return {
       ...node,
-      position: { x: base.x, y: base.y + offset },
+      sourcePosition,
+      targetPosition,
+      position: { x: base.x + offset.x, y: base.y + offset.y },
       style: { width: nodeWidth, height: nodeHeight },
     };
   });
 
-  return { nodes: layoutedNodes, edges };
+  return { nodes: layoutedNodes, edges, direction: requestedRankdir };
 }

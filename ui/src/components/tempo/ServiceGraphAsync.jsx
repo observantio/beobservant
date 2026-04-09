@@ -72,7 +72,7 @@ Stat.propTypes = {
   highlight: PropTypes.string,
 };
 
-const ServiceNode = ({ data }) => {
+const ServiceNode = ({ data, sourcePosition, targetPosition }) => {
   const { name, stats, isActive, isHovered } = data;
   const isPain = stats.pain;
   const errorRate = stats.errorRateNum;
@@ -102,12 +102,12 @@ const ServiceNode = ({ data }) => {
     >
       <Handle
         type="target"
-        position={Position.Left}
+        position={targetPosition ?? Position.Left}
         className="!w-2.5 !h-2.5 !border-2 !border-sre-bg !bg-sre-primary/60 hover:!bg-sre-primary transition-colors"
       />
       <Handle
         type="source"
-        position={Position.Right}
+        position={sourcePosition ?? Position.Right}
         className="!w-2.5 !h-2.5 !border-2 !border-sre-bg !bg-sre-primary/60 hover:!bg-sre-primary transition-colors"
       />
 
@@ -139,7 +139,7 @@ const ServiceNode = ({ data }) => {
         <Stat label="P95" value={stats.p95} highlight={p95Hi} />
         <Stat label="Spans" value={stats.spans} />
         <Stat label="Error" value={stats.errorRate} highlight={errHi} />
-        <Stat label="I/O" value={`${stats.inbound}/${stats.outbound}`} />
+        <Stat label="In/Out" value={`${stats.inbound}/${stats.outbound}`} />
       </div>
 
       <div className="flex items-center gap-1.5">
@@ -211,6 +211,7 @@ export default function ServiceGraphAsync({ traces }) {
   const [activeNodeId, setActiveNodeId] = useState(null);
   const [activeEdgeId, setActiveEdgeId] = useState(null);
   const [hoverNodeId, setHoverNodeId] = useState(null);
+  const [layoutDirection, setLayoutDirection] = useState("LR");
   const [capturing, setCapturing] = useState(false);
   const graphContainerRef = useRef(null);
   const toast = useToast();
@@ -239,22 +240,32 @@ export default function ServiceGraphAsync({ traces }) {
     [graphData],
   );
   const layouted = useMemo(
-    () => layoutServiceGraph(structuralNodes, structuralEdges),
-    [structuralNodes, structuralEdges],
+    () =>
+      layoutServiceGraph(structuralNodes, structuralEdges, {
+        rankdir: layoutDirection,
+      }),
+    [structuralNodes, structuralEdges, layoutDirection],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const prevKeyRef = useRef(null);
+  const prevGraphKeyRef = useRef(null);
+  const prevLayoutRef = useRef(layoutDirection);
 
   useEffect(() => {
-    const key = [
+    const graphKey = [
       ...Array.from(graphData.services.keys()).sort(),
       "|",
       ...Array.from(graphData.edges.keys()).sort(),
     ].join(",");
-    if (prevKeyRef.current === key) return;
-    const posById = new Map(nodes.map((n) => [n.id, n.position]));
+    const graphChanged = prevGraphKeyRef.current !== graphKey;
+    const layoutChanged = prevLayoutRef.current !== layoutDirection;
+    if (!graphChanged && !layoutChanged) return;
+
+    const preserveDraggedPositions = graphChanged && !layoutChanged;
+    const posById = preserveDraggedPositions
+      ? new Map(nodes.map((n) => [n.id, n.position]))
+      : new Map();
     setNodes(
       layouted.nodes.map((n) => {
         const p = posById.get(n.id);
@@ -262,8 +273,9 @@ export default function ServiceGraphAsync({ traces }) {
       }),
     );
     setEdges(layouted.edges);
-    prevKeyRef.current = key;
-  }, [graphData, layouted, nodes, setNodes, setEdges]);
+    prevGraphKeyRef.current = graphKey;
+    prevLayoutRef.current = layoutDirection;
+  }, [graphData, layoutDirection, layouted, nodes, setNodes, setEdges]);
 
   useEffect(() => {
     setNodes((prev) =>
@@ -427,6 +439,32 @@ export default function ServiceGraphAsync({ traces }) {
             <span className="text-[11px] text-sre-text-muted bg-sre-surface/80 px-2.5 py-1 rounded-lg border border-sre-border/40">
               {edges.length} connections
             </span>
+            <div className="inline-flex items-center rounded-lg border border-sre-border/40 bg-sre-surface/80 p-0.5">
+              <button
+                type="button"
+                onClick={() => setLayoutDirection("LR")}
+                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] transition ${
+                  layouted.direction === "LR"
+                    ? "bg-sre-primary/20 text-sre-primary"
+                    : "text-sre-text-muted hover:text-sre-text"
+                }`}
+              >
+                <span className="material-icons text-[14px]">horizontal_rule</span>
+                Left-right
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayoutDirection("TB")}
+                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] transition ${
+                  layouted.direction === "TB"
+                    ? "bg-sre-primary/20 text-sre-primary"
+                    : "text-sre-text-muted hover:text-sre-text"
+                }`}
+              >
+                <span className="material-icons text-[14px]">vertical_align_center</span>
+                Top-down
+              </button>
+            </div>
             <button
               type="button"
               onClick={handleCaptureMap}
@@ -672,7 +710,7 @@ export default function ServiceGraphAsync({ traces }) {
             </div>
           </div>
           <span className="text-[10px] text-sre-text-muted/50">
-            Edge labels: calls · p95 · error%
+            Edge labels: calls · p95 · error% · node In/Out = flow counts
           </span>
         </div>
       </div>
