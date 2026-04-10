@@ -23,6 +23,7 @@ export default function LoginPage() {
   const [setupCode, setSetupCode] = useState("");
   const [verifiedSetupCode, setVerifiedSetupCode] = useState("");
   const [setupRecoveryCodes, setSetupRecoveryCodes] = useState([]);
+  const [isOidcMfaSetupFlow, setIsOidcMfaSetupFlow] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [oidcLoading, setOidcLoading] = useState(false);
@@ -40,6 +41,18 @@ export default function LoginPage() {
       navigate("/", { replace: true });
     }
   }, [authLoading, isAuthenticated, navigate]);
+
+  useEffect(() => {
+    const query = new URLSearchParams(globalThis.location.search || "");
+    const requestedMfaSetup = query.get("mfa_setup") === "required";
+    const setupToken = api.getSetupToken();
+    if (!requestedMfaSetup || !setupToken) return;
+    setIsOidcMfaSetupFlow(true);
+    setShowMfaSetup(true);
+    setSetupStep(0);
+    setMfaRequired(false);
+    setError("Complete MFA setup to continue with Single Sign-On.");
+  }, []);
 
   const hasOIDC = Boolean(authMode?.oidc_enabled);
   const hasPassword = Boolean(authMode?.password_enabled);
@@ -87,6 +100,7 @@ export default function LoginPage() {
         try {
           api.setSetupToken(setupToken);
         } catch (_) {}
+        setIsOidcMfaSetupFlow(false);
         setSetupStep(0);
         setSetupSecret("");
         setSetupQrUrl("");
@@ -182,6 +196,7 @@ export default function LoginPage() {
 
   const cancelMfaSetup = () => {
     api.clearSetupToken();
+    setIsOidcMfaSetupFlow(false);
     setShowMfaSetup(false);
     setSetupStep(0);
     setSetupSecret("");
@@ -192,11 +207,9 @@ export default function LoginPage() {
   };
 
   const providerLabel = hasOIDC ? OIDC_PROVIDER_LABEL : "Single Sign-On";
-  const panelShadow = mfaRequired || showMfaSetup ? "shadow-xl" : "shadow-none";
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4">
-      <div className={`w-full max-w-md rounded-2xl bg-white/90 p-6 ${panelShadow} backdrop-blur-sm dark:bg-transparent dark:p-0 dark:shadow-none dark:backdrop-blur-none`}>
+      <div className="w-full max-w-md rounded-2xl bg-transparent p-6 shadow-none border-0 backdrop-blur-none">
         <div className="text-center mb-8">
           {showLoginLogo && (
             <img
@@ -229,7 +242,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        {!authModeLoading && hasOIDC && (
+        {!authModeLoading && hasOIDC && !showMfaSetup && (
           <OIDCLoginButton
             loading={oidcLoading}
             onClick={handleOIDCLogin}
@@ -237,16 +250,14 @@ export default function LoginPage() {
           />
         )}
 
-        {!authModeLoading && showDivider && (
+        {!authModeLoading && showDivider && !showMfaSetup && (
           <div className="my-4 text-center text-xs text-sre-text-muted uppercase tracking-wide">
             or use password
           </div>
         )}
 
-        {!authModeLoading &&
-          hasPassword &&
-          (showMfaSetup ? (
-            <div className="space-y-4">
+        {!authModeLoading && showMfaSetup && (
+          <div className="space-y-4">
               <div className="flex items-center justify-between text-xs text-sre-text-muted">
                 <span>Step {Math.min(setupStep + 1, 3)} of 3</span>
                 <button
@@ -264,8 +275,9 @@ export default function LoginPage() {
                     Set up two-factor authentication
                   </h2>
                   <p className="text-sm text-sre-text-muted">
-                    Your account requires MFA before you can continue. Click
-                    below to generate your authenticator setup.
+                    {isOidcMfaSetupFlow
+                      ? "Your account requires MFA before you can continue with Single Sign-On. Click below to generate your authenticator setup."
+                      : "Your account requires MFA before you can continue. Click below to generate your authenticator setup."}
                   </p>
                   <button
                     type="button"
@@ -411,6 +423,17 @@ export default function LoginPage() {
                         setSetupLoading(true);
                         setError("");
                         try {
+                          if (isOidcMfaSetupFlow) {
+                            api.clearSetupToken();
+                            setShowMfaSetup(false);
+                            setSetupStep(0);
+                            setSetupCode("");
+                            setVerifiedSetupCode("");
+                            setSetupRecoveryCodes([]);
+                            setIsOidcMfaSetupFlow(false);
+                            await startOIDCLogin();
+                            return;
+                          }
                           await login(
                             username.trim(),
                             password,
@@ -435,17 +458,26 @@ export default function LoginPage() {
                       {setupLoading ? (
                         <span className="flex items-center gap-2">
                           <Spinner size="sm" />
-                          Logging in...
+                          {isOidcMfaSetupFlow
+                            ? "Continuing..."
+                            : "Logging in..."}
                         </span>
                       ) : (
-                        "Login"
+                        isOidcMfaSetupFlow
+                          ? "Continue with Single Sign-On"
+                          : "Login"
                       )}
                     </button>
                   </div>
                 </div>
               )}
             </div>
-          ) : mfaRequired ? (
+        )}
+
+        {!authModeLoading &&
+          hasPassword &&
+          !showMfaSetup &&
+          (mfaRequired ? (
             <form onSubmit={handleVerifyMfa} className="space-y-4">
               <div>
                 <label

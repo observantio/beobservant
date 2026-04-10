@@ -22,7 +22,6 @@ import {
   getRoleVariant,
   getUserInitials,
 } from "../components/users/userUiUtils";
-import { copyToClipboard as clipboardCopy } from "../utils/helpers";
 
 export default function UsersPage() {
   const toast = useToast();
@@ -56,7 +55,8 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showTwoFactor, setShowTwoFactor] = useState(false);
 
-  const { user: currentUser, hasPermission } = useAuth();
+  const { user: currentUser, hasPermission, authMode } = useAuth();
+  const oidcEnabled = Boolean(authMode?.oidc_enabled);
 
   const isCurrentUserAdmin = currentUser?.role === "admin";
   const canManageUsers =
@@ -150,7 +150,7 @@ export default function UsersPage() {
       setTempPasswordResult({
         userId: resetTargetUser.id,
         username: resetTargetUser.username,
-        temporary_password: res?.temporary_password || "",
+        recipient_email: resetTargetUser.email || "",
         email_sent: !!res?.email_sent,
         message: res?.message || "Temporary password generated.",
       });
@@ -762,11 +762,19 @@ export default function UsersPage() {
             </div>
           }
         >
+          <div className="space-y-3">
           <p className="text-sm text-sre-text-muted">
             This will revoke active sessions immediately and require{" "}
             <strong>{resetTargetUser.username}</strong> to change their password
             at next login.
           </p>
+          {oidcEnabled && (
+            <p className="text-xs text-yellow-600">
+              OIDC is currently enabled. This temporary password will only be usable
+              if authentication is later switched to password/local login.
+            </p>
+          )}
+          </div>
         </Modal>
       )}
 
@@ -792,31 +800,23 @@ export default function UsersPage() {
             <p className="text-sm text-sre-text-muted">
               {tempPasswordResult.message}
             </p>
-            <div className="p-3 rounded border border-sre-border bg-sre-bg-alt">
-              <div className="text-xs text-sre-text-muted mb-1">
-                Temporary password (shown once)
-              </div>
-              <div className="font-mono text-sm text-sre-text break-all">
-                {tempPasswordResult.temporary_password}
-              </div>
-            </div>
-            <div className="text-xs text-sre-text-muted">
-              Email delivery:{" "}
-              {tempPasswordResult.email_sent ? "sent" : "not sent"}
-            </div>
-            <div>
-              <Button
-                variant="secondary"
-                onClick={async () => {
-                  const ok = await clipboardCopy(
-                    tempPasswordResult.temporary_password,
-                  );
-                  if (ok) toast.success("Temporary password copied");
-                  else toast.error("Unable to copy temporary password");
-                }}
-              >
-                Copy Temporary Password
-              </Button>
+            <div
+              className={`rounded-md border px-3 py-2 text-sm ${
+                tempPasswordResult.email_sent
+                  ? "border-green-500/40 bg-green-500/10 text-green-700"
+                  : "border-yellow-500/40 bg-yellow-500/10 text-yellow-700"
+              }`}
+            >
+              {tempPasswordResult.email_sent ? (
+                <span>
+                  Email delivery has been successfully sent to{" "}
+                  <strong>{tempPasswordResult.recipient_email || "the user"}</strong>.
+                </span>
+              ) : (
+                <span>
+                  Email delivery was not sent. Check SMTP configuration and credentials.
+                </span>
+              )}
             </div>
           </div>
         </Modal>
