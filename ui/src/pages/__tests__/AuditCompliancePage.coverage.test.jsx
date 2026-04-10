@@ -89,7 +89,9 @@ describe("AuditCompliancePage coverage", () => {
       expect(screen.getByText(/Audit & Compliance/i)).toBeInTheDocument();
     });
 
-    const rowButton = screen.getByRole("button", { name: /Open audit details a1/i });
+    const rowButton = await screen.findByRole("button", {
+      name: /Open audit details a1/i,
+    });
     fireEvent.click(rowButton);
 
     expect(screen.getAllByText(/login/i).length).toBeGreaterThan(0);
