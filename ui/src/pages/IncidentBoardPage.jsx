@@ -7,6 +7,13 @@ export function getUserLabel(userItem) {
   return `${name}${email}`;
 }
 
+function getUserAssigneeValue(userItem) {
+  const email = String(userItem?.email || "").trim();
+  if (email) return email;
+  const id = String(userItem?.id || "").trim();
+  return id;
+}
+
 function looksLikeUuid(value) {
   const s = String(value || "").trim();
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -18,7 +25,7 @@ function getIncidentAssigneeLabel(incident, userById = {}, currentUser = null) {
   const assignee = String(incident?.assignee || "").trim();
   if (!assignee) return "Unassigned";
 
-  const mapped = userById[assignee];
+  const mapped = userById[assignee] || userById[assignee.toLowerCase()];
   if (mapped) return getUserLabel(mapped);
 
   const explicitName =
@@ -111,6 +118,23 @@ import {
   Input,
   Alert,
 } from "../components/ui";
+
+function setInvisibleDragImage(event) {
+  const dragImage = globalThis?.document?.createElement?.("img");
+  if (!dragImage || !event?.dataTransfer?.setDragImage) return;
+  dragImage.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  dragImage.alt = "";
+  dragImage.width = 1;
+  dragImage.height = 1;
+  dragImage.style.position = "fixed";
+  dragImage.style.top = "0";
+  dragImage.style.left = "0";
+  dragImage.style.opacity = "0";
+  dragImage.style.pointerEvents = "none";
+  globalThis.document.body.appendChild(dragImage);
+  event.dataTransfer.setDragImage(dragImage, 0, 0);
+  globalThis.setTimeout(() => dragImage.remove(), 0);
+}
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useSharedIncidentSummary } from "../contexts/IncidentSummaryContext";
@@ -167,6 +191,7 @@ const IncidentCard = memo(function IncidentCard({
     <div
       draggable={!!canUpdateIncidents}
       onDragStart={(e) => {
+        setInvisibleDragImage(e);
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/incident", String(incident.id));
         e.currentTarget.classList.add("opacity-50", "scale-95", "rotate-2");
@@ -806,7 +831,13 @@ export default function IncidentBoardPage() {
   const userById = useMemo(() => {
     const map = {};
     for (const userItem of incidentUsers) {
-      map[userItem.id] = userItem;
+      const id = String(userItem?.id || "").trim();
+      const email = String(userItem?.email || "").trim();
+      if (id) map[id] = userItem;
+      if (email) {
+        map[email] = userItem;
+        map[email.toLowerCase()] = userItem;
+      }
     }
     return map;
   }, [incidentUsers]);
@@ -1955,15 +1986,15 @@ export default function IncidentBoardPage() {
                           size="xs"
                           variant="ghost"
                           onClick={() =>
-                            setIncidentDrafts((prev) => ({
-                              ...prev,
-                              [activeIncident.id]: {
-                                ...(prev[activeIncident.id] || {}),
-                                assignee: user?.id || "",
-                              },
-                            }))
-                          }
-                          disabled={!canUpdateIncidents || !user?.id}
+                                setIncidentDrafts((prev) => ({
+                                  ...prev,
+                                  [activeIncident.id]: {
+                                    ...(prev[activeIncident.id] || {}),
+                                    assignee: getUserAssigneeValue(user),
+                                  },
+                                }))
+                              }
+                          disabled={!canUpdateIncidents || !getUserAssigneeValue(user)}
                           title="Assign to me"
                           className="flex items-center font-bold gap-1 whitespace-nowrap"
                         >
@@ -1997,9 +2028,13 @@ export default function IncidentBoardPage() {
                           <span className="truncate min-w-0">Unassigned</span>
                         </button>
                         {filteredIncidentUsers.map((userItem) => {
+                          const assigneeValue = getUserAssigneeValue(userItem);
+                          const legacyId = String(userItem?.id || "").trim();
+                          const currentAssignee = String(
+                            activeIncidentDraft.assignee ?? activeIncident.assignee ?? "",
+                          ).trim();
                           const selected =
-                            (activeIncidentDraft.assignee ??
-                              activeIncident.assignee) === userItem.id;
+                            currentAssignee === assigneeValue || (legacyId && currentAssignee === legacyId);
                           return (
                             <button
                               type="button"
@@ -2010,7 +2045,7 @@ export default function IncidentBoardPage() {
                                   ...prev,
                                   [activeIncident.id]: {
                                     ...(prev[activeIncident.id] || {}),
-                                    assignee: userItem.id,
+                                    assignee: assigneeValue,
                                   },
                                 }))
                               }

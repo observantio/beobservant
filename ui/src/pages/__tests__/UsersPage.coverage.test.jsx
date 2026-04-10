@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import UsersPage from "../UsersPage";
 import * as api from "../../api";
-import { copyToClipboard } from "../../utils/helpers";
 
 let authState = {
   user: { id: "me", role: "admin" },
   hasPermission: () => true,
+  authMode: { oidc_enabled: false },
 };
 
 const navigate = vi.fn();
@@ -104,10 +104,6 @@ vi.mock("../../components/TwoFactorModal", () => ({
   default: ({ isOpen }) => (isOpen ? <div>two-factor-modal</div> : null),
 }));
 
-vi.mock("../../utils/helpers", () => ({
-  copyToClipboard: vi.fn(),
-}));
-
 vi.mock("../../api");
 
 describe("UsersPage coverage", () => {
@@ -116,6 +112,7 @@ describe("UsersPage coverage", () => {
     authState = {
       user: { id: "me", role: "admin" },
       hasPermission: () => true,
+      authMode: { oidc_enabled: false },
     };
     navigate.mockReset();
     toastSuccess.mockReset();
@@ -148,11 +145,9 @@ describe("UsersPage coverage", () => {
     api.updateUser.mockResolvedValue({ ok: true });
     api.deleteUser.mockResolvedValue({ ok: true });
     api.resetUserPasswordTemp.mockResolvedValue({
-      temporary_password: "Temp-123",
       email_sent: false,
       message: "Temporary password generated.",
     });
-    copyToClipboard.mockResolvedValue(true);
   });
 
   it("shows access denied view when user lacks management permission", () => {
@@ -268,11 +263,26 @@ describe("UsersPage coverage", () => {
       ).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Copy Temporary Password/i }));
-    await waitFor(() => {
-      expect(copyToClipboard).toHaveBeenCalledWith("Temp-123");
-      expect(toastSuccess).toHaveBeenCalledWith("Temporary password copied");
-    });
+    expect(
+      screen.getByText(/Email delivery was not sent/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows OIDC note in reset password modal when oidc mode is enabled", async () => {
+    authState = {
+      user: { id: "me", role: "admin" },
+      hasPermission: () => true,
+      authMode: { oidc_enabled: true },
+    };
+    render(<UsersPage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Reset password for alice/i }),
+    );
+
+    expect(
+      screen.getByText(/OIDC is currently enabled/i),
+    ).toBeInTheDocument();
   });
 
   it("handles API error branches for load, delete and reset password", async () => {
@@ -281,8 +291,6 @@ describe("UsersPage coverage", () => {
     api.resetUserPasswordTemp.mockRejectedValueOnce(
       new Error("reset failed"),
     );
-    copyToClipboard.mockResolvedValueOnce(false);
-
     render(<UsersPage />);
 
     await waitFor(() => {

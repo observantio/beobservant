@@ -82,6 +82,10 @@ export function setSetupToken(token) {
   setupToken = token;
 }
 
+export function getSetupToken() {
+  return setupToken;
+}
+
 export function clearSetupToken() {
   setupToken = null;
 }
@@ -102,6 +106,25 @@ export function setUserOrgIds(orgIds) {
 
 export function getUserOrgIds() {
   return userOrgIds && userOrgIds.length > 0 ? userOrgIds : [];
+}
+
+function toErrorMessage(value, fallback = "Request failed") {
+  if (value == null) return fallback;
+  if (typeof value === "string") return value || fallback;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value instanceof Error) return value.message || fallback;
+  if (typeof value === "object") {
+    if (value.mfa_setup_required === true) return "Multi-factor setup is required to continue.";
+    if (typeof value.detail === "string") return value.detail;
+    if (typeof value.message === "string") return value.message;
+    if (typeof value.error === "string") return value.error;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
 }
 
 async function requestWithHeaders(path, opts = {}, headers = {}) {
@@ -238,7 +261,7 @@ async function requestWithHeaders(path, opts = {}, headers = {}) {
     }
 
     const err = new Error(
-      body?.message || body?.detail || text || res.statusText,
+      toErrorMessage(body?.message || body?.detail || body || text || res.statusText, res.statusText || "Request failed"),
     );
     err.status = res.status;
     err.code = `HTTP_${res.status}`;
@@ -404,10 +427,19 @@ export async function getOIDCAuthorizeUrl(
 export async function exchangeOIDCCode(
   code,
   redirect_uri,
-  { state = null, transaction_id = null, code_verifier = null } = {},
+  {
+    state = null,
+    transaction_id = null,
+    code_verifier = null,
+    mfa_code = null,
+    mfa_challenge_id = null,
+  } = {},
 ) {
+  const payload = { code, redirect_uri, state, transaction_id, code_verifier };
+  if (mfa_code) payload.mfa_code = mfa_code;
+  if (mfa_challenge_id) payload.mfa_challenge_id = mfa_challenge_id;
   return requestJson("/api/auth/oidc/exchange", {
-    payload: { code, redirect_uri, state, transaction_id, code_verifier },
+    payload,
   });
 }
 

@@ -402,7 +402,7 @@ export default function CreateUserModal({
                 must_setup_mfa: !formData.must_setup_mfa,
               })
             }
-            label="Require Two‑Factor on first login"
+            label="Require Two‑Factor on first login if MFA is enabled and using local authentication"
           />
           <HelpTooltip text="When enabled the user will be required to enroll in 2FA at their next login." />
         </div>

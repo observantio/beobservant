@@ -8,6 +8,7 @@ const enrollMFAMock = vi.fn();
 const verifyMFAMock = vi.fn();
 const clearSetupTokenMock = vi.fn();
 const setSetupTokenMock = vi.fn();
+const getSetupTokenMock = vi.fn(() => null);
 const copyToClipboardMock = vi.fn();
 const downloadFileMock = vi.fn();
 
@@ -42,6 +43,7 @@ vi.mock("../../api", () => ({
   verifyMFA: (...args) => verifyMFAMock(...args),
   clearSetupToken: (...args) => clearSetupTokenMock(...args),
   setSetupToken: (...args) => setSetupTokenMock(...args),
+  getSetupToken: (...args) => getSetupTokenMock(...args),
 }));
 
 vi.mock("../../utils/helpers", () => ({
@@ -89,6 +91,7 @@ describe("LoginPage extra coverage", () => {
     enrollMFAMock.mockResolvedValue({ secret: "sec", otpauth_url: "otpauth://x" });
     verifyMFAMock.mockResolvedValue({ recovery_codes: ["r1", "r2"] });
     copyToClipboardMock.mockResolvedValue(true);
+    getSetupTokenMock.mockReturnValue(null);
   });
 
   it("handles auth mode edge states and password form validation", async () => {
@@ -188,5 +191,44 @@ describe("LoginPage extra coverage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Cancel/i }));
     expect(clearSetupTokenMock).toHaveBeenCalled();
+  });
+
+  it("continues oidc after setup when redirected with mfa_setup query", async () => {
+    authState.authMode = { oidc_enabled: true, password_enabled: false };
+    getSetupTokenMock.mockReturnValue("setup-oidc-1");
+    window.history.pushState({}, "", "/login?mfa_setup=required");
+
+    render(<LoginPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Complete MFA setup to continue with Single Sign-On/i),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Start MFA setup/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Verify/i })).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText(/Authentication code/i), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Verify/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Continue with Single Sign-On/i }),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Continue with Single Sign-On/i }),
+    );
+
+    await waitFor(() => {
+      expect(clearSetupTokenMock).toHaveBeenCalled();
+      expect(startOIDCLoginMock).toHaveBeenCalled();
+    });
   });
 });

@@ -15,8 +15,12 @@ vi.mock("react-router-dom", async () => {
 
 vi.mock("../contexts/AuthContext", () => ({
   useAuth: () => ({
-    finishOIDCLogin: async ({ code, state }) => {
-      return await api.exchangeOIDCCode(code, "", { state });
+    finishOIDCLogin: async ({ code, state, mfaCode = null, mfaChallengeId = null }) => {
+      return await api.exchangeOIDCCode(code, "", {
+        state,
+        mfa_code: mfaCode,
+        mfa_challenge_id: mfaChallengeId,
+      });
     },
   }),
 }));
@@ -132,6 +136,81 @@ describe("OIDCCallbackPage", () => {
     );
 
     expect(await screen.findByText(/OIDC login failed hard/i)).toBeInTheDocument();
+  });
+
+  it("redirects to mfa setup flow when oidc challenge requires setup", async () => {
+    Object.defineProperty(window, "location", {
+      value: {
+        href: "http://localhost:5173/auth/callback?code=foo&state=bar",
+      },
+      writable: true,
+    });
+    const setSetupTokenSpy = vi
+      .spyOn(api, "setSetupToken")
+      .mockImplementation(() => {});
+    vi.spyOn(api, "exchangeOIDCCode").mockRejectedValueOnce({
+      status: 401,
+      body: { detail: { mfa_setup_required: true, setup_token: "setup-42" } },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/auth/callback"]}>
+        <Routes>
+          <Route path="/auth/callback" element={<OIDCCallbackPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(setSetupTokenSpy).toHaveBeenCalledWith("setup-42");
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/login?mfa_setup=required",
+        { replace: true },
+      );
+    });
+  });
+
+  it("prompts for mfa code and completes oidc callback on verification", async () => {
+    Object.defineProperty(window, "location", {
+      value: {
+        href: "http://localhost:5173/auth/callback?code=foo&state=bar",
+      },
+      writable: true,
+    });
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState");
+    vi.spyOn(api, "exchangeOIDCCode")
+      .mockRejectedValueOnce({
+        status: 401,
+        body: { detail: { mfa_required: true, mfa_challenge_id: "challenge-1" } },
+      })
+      .mockResolvedValueOnce({});
+
+    render(
+      <MemoryRouter initialEntries={["/auth/callback"]}>
+        <Routes>
+          <Route path="/auth/callback" element={<OIDCCallbackPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: /Verify MFA/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/MFA code/i), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Verify and continue/i }));
+
+    await waitFor(() => {
+      expect(api.exchangeOIDCCode.mock.calls.length).toBeGreaterThanOrEqual(2);
+      const hasMfaRetry = api.exchangeOIDCCode.mock.calls.some(
+        (call) =>
+          call?.[2]?.state === "bar" &&
+          call?.[2]?.mfa_code === "123456" &&
+          call?.[2]?.mfa_challenge_id === "challenge-1",
+      );
+      expect(hasMfaRetry).toBe(true);
+      expect(replaceStateSpy).toHaveBeenCalledWith({}, "", "/");
+      expect(navigateMock).toHaveBeenCalledWith("/", { replace: true });
+    });
   });
 
   it("supports refresh page action while signing in", async () => {

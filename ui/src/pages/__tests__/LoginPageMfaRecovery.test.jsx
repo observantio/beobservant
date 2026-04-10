@@ -9,6 +9,7 @@ vi.mock("../../api", () => ({
   verifyMFA: vi.fn(),
   clearSetupToken: vi.fn(),
   setSetupToken: vi.fn(),
+  getSetupToken: vi.fn(() => null),
 }));
 
 vi.mock("../../contexts/ToastContext", () => ({

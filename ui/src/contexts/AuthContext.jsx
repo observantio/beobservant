@@ -188,7 +188,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const finishOIDCLogin = useCallback(
-    async ({ code, state }) => {
+    async ({ code, state, mfaCode = null, mfaChallengeId = null }) => {
       const expectedState = sessionStorage.getItem(OIDC_STATE_KEY);
       const txId = sessionStorage.getItem(OIDC_TX_KEY);
       const verifier = sessionStorage.getItem(OIDC_CODE_VERIFIER_KEY);
@@ -206,6 +206,8 @@ export function AuthProvider({ children }) {
           state,
           transaction_id: txId,
           code_verifier: verifier,
+          mfa_code: mfaCode,
+          mfa_challenge_id: mfaChallengeId,
         });
 
         const accessToken = resp?.access_token || null;
