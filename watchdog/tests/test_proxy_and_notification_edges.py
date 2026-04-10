@@ -67,8 +67,6 @@ def test_notification_service_helpers_and_messages(monkeypatch):
         "USER_WELCOME_SMTP_PORT": "not-a-number",
         "PASSWORD_RESET_EMAIL_ENABLED": "1",
         "PASSWORD_RESET_SMTP_HOST": "smtp-reset.example.com",
-        "INCIDENT_ASSIGNMENT_EMAIL_ENABLED": "true",
-        "INCIDENT_ASSIGNMENT_SMTP_HOST": "smtp-inc.example.com",
         "APP_LOGIN_URL": "https://app/login",
     }
     monkeypatch.setattr(notification_mod.config, "get_secret", lambda key: secrets.get(key))
@@ -84,6 +82,13 @@ def test_notification_service_helpers_and_messages(monkeypatch):
     assert cfg["hostname"] == "smtp.example.com"
     assert cfg["port"] == 587
     assert cfg["from_addr"] == "admin@example.com"
+    assert cfg["envelope_from"] == "admin@example.com"
+
+    secrets["USER_WELCOME_FROM"] = "Observantio"
+    cfg_with_name = notification_mod._smtp_config("USER_WELCOME")
+    assert "Observantio" in cfg_with_name["from_addr"]
+    assert "admin@example.com" in cfg_with_name["from_addr"]
+    assert cfg_with_name["envelope_from"] == "admin@example.com"
 
     svc = notification_mod.NotificationService()
     message = svc._build_message(subject="Hello", cfg=cfg, recipient="u@example.com", body="Body")
@@ -96,8 +101,6 @@ async def test_notification_service_email_flows(monkeypatch):
     svc = notification_mod.NotificationService()
 
     enabled = {
-        "INCIDENT_ASSIGNMENT_EMAIL_ENABLED": "true",
-        "INCIDENT_ASSIGNMENT_SMTP_HOST": "smtp.incident",
         "USER_WELCOME_EMAIL_ENABLED": "true",
         "USER_WELCOME_SMTP_HOST": "smtp.welcome",
         "PASSWORD_RESET_EMAIL_ENABLED": "true",
@@ -115,15 +118,17 @@ async def test_notification_service_email_flows(monkeypatch):
 
     monkeypatch.setattr(svc, "_dispatch", fake_dispatch)
 
-    assert await svc.send_incident_assignment_email("u@example.com", "CPU", "open", "critical", "admin") is True
-    assert "Incident Assigned" in sent[-1][1]["Subject"]
-
     assert await svc.send_user_welcome_email("u@example.com", "user", "User") is True
     assert "Welcome to Watchdog" == sent[-1][1]["Subject"]
-    assert "Login URL: https://app/login" in sent[-1][1].get_content()
+    welcome_plain = sent[-1][1].get_body(preferencelist=("plain",))
+    assert welcome_plain is not None
+    assert "Login URL: https://app/login" in welcome_plain.get_content()
 
     assert await svc.send_temporary_password_email("u@example.com", "user", "Temp1234") is True
     assert "Temporary Password" in sent[-1][1]["Subject"]
+    temp_plain = sent[-1][1].get_body(preferencelist=("plain",))
+    assert temp_plain is not None
+    assert "Temp1234" in temp_plain.get_content()
 
 
 @pytest.mark.asyncio
@@ -132,7 +137,6 @@ async def test_notification_service_disabled_and_dispatch_failure_paths(monkeypa
     monkeypatch.setattr(notification_mod.config, "DEFAULT_ADMIN_EMAIL", "admin@example.com")
 
     monkeypatch.setattr(notification_mod.config, "get_secret", lambda _key: None)
-    assert await svc.send_incident_assignment_email("u@example.com", "CPU", "open", "critical", "admin") is False
     assert await svc.send_user_welcome_email("u@example.com", "user") is False
     assert await svc.send_temporary_password_email("u@example.com", "user", "Temp1234") is False
 

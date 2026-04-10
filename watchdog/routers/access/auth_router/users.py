@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from typing import List
 
-from fastapi import Depends, HTTPException, Query, status, Path, Body
+from fastapi import BackgroundTasks, Body, Depends, HTTPException, Path, Query, status
 
 from config import config
 from middleware.dependencies import (
@@ -125,6 +125,7 @@ async def list_users(
 @handle_route_errors()
 async def create_user(
     user_create: UserCreate,
+    background_tasks: BackgroundTasks,
     current_user: TokenData = Depends(require_any_permission([Permission.CREATE_USERS, Permission.MANAGE_USERS])),
 ) -> UserResponse:
     apply_scoped_rate_limit(current_user, "auth")
@@ -139,7 +140,8 @@ async def create_user(
             is_superuser=bool(getattr(current_user, "is_superuser", False)),
         ),
     )
-    await notification_service.send_user_welcome_email(
+    background_tasks.add_task(
+        notification_service.send_user_welcome_email,
         recipient_email=user.email,
         username=user.username,
         full_name=user.full_name,
@@ -232,9 +234,12 @@ async def reset_user_password_temp(
             login_url=None,
         )
     return TempPasswordResetResponse(
-        temporary_password=temp_pw,
         email_sent=bool(email_sent),
-        message="Temporary password generated; user must change password on next login.",
+        message=(
+            "Temporary password generated and delivered by email."
+            if email_sent
+            else "Temporary password generated. Deliver credentials through a secure out-of-band channel."
+        ),
     )
 
 

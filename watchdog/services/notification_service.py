@@ -11,9 +11,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from types import ModuleType
-from datetime import datetime, timezone
 from email.message import EmailMessage
+from email.utils import formataddr, parseaddr
+from html import escape as html_escape
+from string import Template
 from typing import Optional, TypedDict
 
 from config import config
@@ -29,6 +32,7 @@ else:
 logger = logging.getLogger(__name__)
 
 BOOL_TRUE = {"1", "true", "yes", "on"}
+_EMAIL_TEMPLATE_ROOT = Path(__file__).resolve().parents[1] / "templates" / "emails"
 
 
 class SMTPConfig(TypedDict):
@@ -37,6 +41,7 @@ class SMTPConfig(TypedDict):
     username: str | None
     password: str | None
     from_addr: str
+    envelope_from: str
     start_tls: bool
     use_tls: bool
 
@@ -73,15 +78,44 @@ def _smtp_config(*prefixes: str) -> SMTPConfig:
     except ValueError:
         port = 587
 
+    default_sender = str(config.DEFAULT_ADMIN_EMAIL or "").strip()
+    raw_from = str(get("FROM") or "").strip()
+    display_name, parsed_addr = parseaddr(raw_from)
+    has_valid_parsed_addr = "@" in parsed_addr
+    has_default_sender = "@" in default_sender
+    envelope_from = parsed_addr if has_valid_parsed_addr else (default_sender if has_default_sender else "")
+
+    if raw_from and not has_valid_parsed_addr and envelope_from:
+        header_from = formataddr((raw_from, envelope_from))
+    elif has_valid_parsed_addr:
+        header_from = formataddr((display_name, parsed_addr)) if display_name else parsed_addr
+    else:
+        header_from = envelope_from or raw_from or default_sender
+
     return {
         "hostname": (get("SMTP_HOST") or "").strip(),
         "port": port,
         "username": get("SMTP_USERNAME"),
         "password": get("SMTP_PASSWORD"),
-        "from_addr": get("FROM") or config.DEFAULT_ADMIN_EMAIL,
+        "from_addr": header_from,
+        "envelope_from": envelope_from or header_from,
         "start_tls": _as_bool(get("SMTP_STARTTLS") or "true"),
         "use_tls": _as_bool(get("SMTP_USE_SSL") or "false"),
     }
+
+
+def _render_html_template(template_name: str, values: dict[str, str]) -> Optional[str]:
+    path = _EMAIL_TEMPLATE_ROOT / template_name
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Email template %s could not be loaded: %s", path, exc)
+        return None
+    safe_values = {
+        k: (str(v or "") if k.endswith("_html") else html_escape(str(v or "")))
+        for k, v in values.items()
+    }
+    return Template(raw).safe_substitute(safe_values)
 
 
 class NotificationService:
@@ -98,6 +132,7 @@ class NotificationService:
             port=cfg["port"],
             username=cfg["username"],
             password=cfg["password"],
+            sender=cfg["envelope_from"],
             start_tls=cfg["start_tls"],
             use_tls=cfg["use_tls"],
             timeout=self.timeout,
@@ -118,38 +153,6 @@ class NotificationService:
         msg["To"] = recipient
         msg.set_content(body)
         return msg
-
-    async def send_incident_assignment_email(
-        self,
-        recipient_email: str,
-        incident_title: str,
-        incident_status: str,
-        incident_severity: str,
-        actor: str,
-    ) -> bool:
-        if not _is_enabled("INCIDENT_ASSIGNMENT_EMAIL_ENABLED"):
-            return False
-        cfg = _smtp_config("INCIDENT_ASSIGNMENT")
-        if not cfg["hostname"]:
-            logger.info("Incident assignment email skipped: SMTP host not set")
-            return False
-        msg = self._build_message(
-            subject=f"[Incident Assigned] {incident_title}",
-            cfg=cfg,
-            recipient=recipient_email,
-            body="\n".join(
-                [
-                    "You have been assigned an incident in Watchdog.",
-                    "",
-                    f"Title: {incident_title}",
-                    f"Status: {incident_status}",
-                    f"Severity: {incident_severity}",
-                    f"Updated by: {actor}",
-                    f"Timestamp: {datetime.now(timezone.utc).isoformat()}",
-                ]
-            ),
-        )
-        return await self._dispatch(cfg, msg, recipient_email)
 
     async def send_user_welcome_email(
         self,
@@ -175,9 +178,27 @@ class NotificationService:
                 "Your account was created in Watchdog.\n"
                 f"Username: {username}\n"
                 f"{login_line}"
-                "If this is your first login, follow your administrator's instructions for credentials and MFA setup.\n"
+                "If this is your first login, follow your administrator's instructions "
+                "for credentials and MFA setup. If OIDC is enabled, please just login "
+                "with this email account.\n"
             ),
         )
+        login_url_html = html_escape(app_login_url)
+        login_row_html = (
+            f"<p class='meta'><span>Login URL</span><br><a href='{login_url_html}'>{login_url_html}</a></p>"
+            if app_login_url
+            else ""
+        )
+        html_body = _render_html_template(
+            "welcome_user.html",
+            {
+                "display_name": full_name or username,
+                "username": username,
+                "login_row_html": login_row_html,
+            },
+        )
+        if html_body:
+            msg.add_alternative(html_body, subtype="html")
         result = await self._dispatch(cfg, msg, recipient_email)
         if result:
             logger.info("User welcome email sent to %s", recipient_email)
@@ -204,12 +225,31 @@ class NotificationService:
             recipient=recipient_email,
             body=(
                 f"Hello {username},\n\n"
-                "An administrator reset your password.\n"
-                f"Temporary password: {temporary_password}\n"
+                "Your password has been reset by an administrator.\n\n"
+                "Temporary password\n"
+                f"{temporary_password}\n\n"
                 f"{login_line}"
-                "You must change this password immediately after login.\n"
+                "Please change this password immediately after login.\n"
+                "This applies only to local/password authentication.\n\n"
+                "If you did not expect this change, contact your administrator.\n"
             ),
         )
+        login_url_html = html_escape(app_login_url)
+        login_row_html = (
+            f"<p class='meta'><span>Login URL</span><br><a href='{login_url_html}'>{login_url_html}</a></p>"
+            if app_login_url
+            else ""
+        )
+        html_body = _render_html_template(
+            "temporary_password.html",
+            {
+                "username": username,
+                "temporary_password": temporary_password,
+                "login_row_html": login_row_html,
+            },
+        )
+        if html_body:
+            msg.add_alternative(html_body, subtype="html")
         result = await self._dispatch(cfg, msg, recipient_email)
         if result:
             logger.info("Temporary password email sent to %s", recipient_email)

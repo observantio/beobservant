@@ -93,6 +93,7 @@ run_suite() {
 
   (
     cd "${ROOT_DIR}/${service_dir}"
+    PYTHONWARNINGS="${PYTHONWARNINGS:-ignore::ResourceWarning}" \
     COVERAGE_FILE="${cov_file}" "${VENV_PYTEST}" \
       -o "cache_dir=${cache_dir}" \
       --junitxml="${junit_file}" \

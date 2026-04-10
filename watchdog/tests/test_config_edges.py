@@ -95,6 +95,15 @@ def test_config_helper_functions_cover_none_paths():
     assert module._is_placeholder(None, ["x"]) is True
 
 
+def test_oidc_mfa_members_defaults_false(monkeypatch):
+    with monkeypatch.context() as ctx:
+        for key, value in _valid_dev_env().items():
+            ctx.setenv(key, value)
+        ctx.delenv("OIDC_REQUIRE_MFA_FOR_MEMBERS", raising=False)
+        module = _reload_config_module()
+        assert module.config.OIDC_REQUIRE_MFA_FOR_MEMBERS is False
+
+
 def test_config_vault_optional_warning_and_secret_loading_paths(monkeypatch):
     class FailingVaultProvider:
         def __init__(self, *args, **kwargs):

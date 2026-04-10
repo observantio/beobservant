@@ -179,6 +179,5 @@ class RecoveryCodesResponse(BaseModel):
 
 
 class TempPasswordResetResponse(BaseModel):
-    temporary_password: str
     email_sent: bool
     message: str

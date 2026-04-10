@@ -162,6 +162,8 @@ class OIDCCodeExchangeRequest(BaseModel):
     state: Optional[str] = None
     transaction_id: Optional[str] = None
     code_verifier: Optional[str] = None
+    mfa_code: Optional[str] = None
+    mfa_challenge_id: Optional[str] = None
 
 
 class OIDCAuthURLResponse(BaseModel):

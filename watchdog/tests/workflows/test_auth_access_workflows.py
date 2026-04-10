@@ -252,7 +252,9 @@ def test_user_group_role_and_permission_workflow(client, monkeypatch: pytest.Mon
         headers=admin_headers,
     )
     assert temp_password_response.status_code == 200
-    assert temp_password_response.json()["temporary_password"] == "Temp-Password-123"
+    temp_payload = temp_password_response.json()
+    assert isinstance(temp_payload["email_sent"], bool)
+    assert "Temporary password generated" in temp_payload["message"]
 
     reset_mfa_response = client.post(
         f"/api/auth/users/{viewer_id}/mfa/reset",

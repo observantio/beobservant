@@ -231,6 +231,20 @@ def authenticate_user(service: DatabaseAuthService, username: str, password: str
             if changed_at <= expiry_cutoff:
                 user.needs_password_change = True
 
+        temp_expiry_minutes = int(getattr(config, "TEMP_PASSWORD_EXPIRY_MINUTES", 1440) or 0)
+        reset_marker = getattr(user, "session_invalid_before", None)
+        if (
+            temp_expiry_minutes > 0
+            and bool(getattr(user, "needs_password_change", False))
+            and reset_marker is not None
+        ):
+            if getattr(changed_at, "tzinfo", None) is None:
+                changed_at = changed_at.replace(tzinfo=timezone.utc)
+            temp_expiry_cutoff = now - timedelta(minutes=temp_expiry_minutes)
+            if changed_at <= temp_expiry_cutoff:
+                service.logger.warning("Temporary password expired for user=%s", getattr(user, "id", "unknown"))
+                return None
+
         user.last_login = now
         db.flush()
 
