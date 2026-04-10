@@ -103,6 +103,8 @@ async def oidc_exchange_token(request: Request, payload: OIDCCodeExchangeRequest
             payload.transaction_id,
             payload.state,
             payload.code_verifier,
+            payload.mfa_code,
+            payload.mfa_challenge_id,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc) or "OIDC authentication failed") from exc
@@ -111,6 +113,10 @@ async def oidc_exchange_token(request: Request, payload: OIDCCodeExchangeRequest
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "OIDC authentication failed") from exc
     if not token_or_challenge:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "OIDC authentication failed")
+    if isinstance(token_or_challenge, dict) and token_or_challenge.get("mfa_required"):
+        if token_or_challenge.get("mfa_challenge_id"):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=token_or_challenge)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "MFA required")
     if isinstance(token_or_challenge, dict) and token_or_challenge.get("mfa_setup_required"):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=token_or_challenge)
     if isinstance(token_or_challenge, dict):

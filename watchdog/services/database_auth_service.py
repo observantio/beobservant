@@ -242,13 +242,15 @@ class _DatabaseAuthIdentityMixin(DatabaseAuthServiceState):
     def login(self, username: str, password: str, mfa_code: Optional[str] = None) -> Optional[Union[Token, JSONDict]]:
         return db_auth.login(_as_db_auth(self), username, password, mfa_code)
 
-    def exchange_oidc_authorization_code(
+    def exchange_oidc_authorization_code(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         code: str,
         redirect_uri: str,
         transaction_id: Optional[str] = None,
         state: Optional[str] = None,
         code_verifier: Optional[str] = None,
+        mfa_code: Optional[str] = None,
+        mfa_challenge_id: Optional[str] = None,
     ) -> Optional[Union[Token, JSONDict]]:
         return db_auth.exchange_oidc_authorization_code(
             _as_db_auth(self),
@@ -257,6 +259,8 @@ class _DatabaseAuthIdentityMixin(DatabaseAuthServiceState):
             transaction_id=transaction_id,
             state=state,
             code_verifier=code_verifier,
+            mfa_code=mfa_code,
+            mfa_challenge_id=mfa_challenge_id,
         )
 
     def get_oidc_authorization_url(
@@ -305,7 +309,7 @@ class _DatabaseAuthIdentityMixin(DatabaseAuthServiceState):
         )
 
     def _update_oidc_user(self, db: Session, user: User, email: str, full_name: Optional[str], subject: str) -> None:
-        db_oidc.update_oidc_user(db, user, email, full_name, subject)
+        db_oidc.update_oidc_user(_as_db_auth(self), db, user, email, full_name, subject)
 
     def get_user_permissions(self, user: User | UserSchema) -> List[str]:
         return db_permissions.get_user_permissions(_as_db_auth(self), user)

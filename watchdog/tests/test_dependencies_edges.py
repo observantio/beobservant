@@ -164,7 +164,9 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
             _request(), scope="public", limit=2, window_seconds=30, fallback_mode="bad"
         )
 
-    dependencies.enforce_header_token(_request(), header_name="x-test", expected_token=None, unauthorized_detail="bad")
+    with pytest.raises(HTTPException) as missing_token_config:
+        dependencies.enforce_header_token(_request(), header_name="x-test", expected_token=None, unauthorized_detail="bad")
+    assert missing_token_config.value.status_code == 500
     with pytest.raises(HTTPException) as unauthorized:
         dependencies.enforce_header_token(
             _request(), header_name="x-test", expected_token="secret", unauthorized_detail="bad"
@@ -233,7 +235,8 @@ def test_dependency_helper_misc_branches(monkeypatch):
     assert dependencies._normalize_group_ids(object()) == []
     assert dependencies._validate_rate_limit_fallback_mode(" ") is None
     assert dependencies._validate_rate_limit_fallback_mode(" MEMORY ") == "memory"
-    assert dependencies._scope_exists_in_other_tenants(scope_id=None, org_id=None, tenant_id="tenant-a") is False
+    with pytest.raises(ValueError):
+        dependencies._scope_exists_in_other_tenants(scope_id=None, org_id=None, tenant_id="tenant-a")
     assert [str(item) for item in dependencies._parse_ip_allowlist("10.0.0.0/24")] == ["10.0.0.0/24"]
     assert [str(item) for item in dependencies._parse_ip_allowlist("127.0.0.1, ,10.0.0.1")] == [
         "127.0.0.1/32",
@@ -383,7 +386,7 @@ def test_current_user_and_permission_dependency_edges(monkeypatch):
     assert scoped_calls[-1] == ("u1", "loki")
 
 
-def test_scope_aware_current_user_skips_base_rate_limit(monkeypatch):
+def test_scope_aware_current_user_applies_base_rate_limit(monkeypatch):
     auth_stub = types.SimpleNamespace(
         decode_token=lambda token: _token_data(),
         get_user_by_id=lambda user_id: types.SimpleNamespace(
@@ -405,7 +408,13 @@ def test_scope_aware_current_user_skips_base_rate_limit(monkeypatch):
 
     assert resolved.org_id == "org-live"
     assert resolved.permissions == ["read:traces"]
-    assert rate_limit_calls == []
+    assert rate_limit_calls == [
+        {
+            "key": "user:u1",
+            "limit": dependencies.config.RATE_LIMIT_USER_PER_MINUTE,
+            "window_seconds": 60,
+        }
+    ]
 
 
 def test_scope_aware_current_user_dependency_does_not_require_body(monkeypatch):

@@ -107,6 +107,9 @@ class FakeDB:
     def flush(self):
         self.flushed += 1
 
+    def commit(self):
+        return None
+
 
 class PermissionsDB:
     def __init__(self, user_row, permission_rows):
@@ -168,7 +171,9 @@ def test_database_auth_auth_helpers_and_login_flows(monkeypatch):
         "sub": "1"
     }
     tokens = auth_mod._OidcTokens(access_token="access", id_token="")
-    assert auth_mod._resolve_oidc_claims(service, tokens=tokens, expected_nonce="", enforce_nonce=False) == {"sub": "1"}
+    assert auth_mod._resolve_oidc_claims(service, tokens=tokens, expected_nonce="", enforce_nonce=False) is None
+    tokens = auth_mod._OidcTokens(access_token="access", id_token="id")
+    assert auth_mod._resolve_oidc_claims(service, tokens=tokens, expected_nonce="", enforce_nonce=True) is None
     tokens = auth_mod._OidcTokens(access_token="fallback", id_token="")
     assert auth_mod._resolve_oidc_claims(service, tokens=tokens, expected_nonce="nonce", enforce_nonce=True) is None
 

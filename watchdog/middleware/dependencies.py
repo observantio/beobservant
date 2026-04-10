@@ -38,6 +38,10 @@ GENERIC_ACCESS_DENIED_DETAIL = "Access denied"
 GENERIC_SCOPE_DENIED_DETAIL = "Requested tenant scope is not permitted"
 RATE_LIMIT_FALLBACK_MODES = {"memory", "deny", "allow"}
 TOKEN_SUBJECT_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
+SCOPE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,199}$")
+MAX_TOKEN_GROUP_IDS = 256
+MAX_GROUP_ID_LENGTH = 200
+MAX_SCOPE_ROWS_PER_QUERY = 1000
 
 
 def _is_safe_token_subject(value: object) -> bool:
@@ -52,6 +56,8 @@ def _extract_bearer_token(
 ) -> str | None:
     if credentials and getattr(credentials, "credentials", None):
         return credentials.credentials
+    # Cookie fallback is accepted only for tokens minted by this service; secure
+    # cookie flags are enforced when the cookie is issued.
     cookie_token = request.cookies.get("watchdog_token")
     if cookie_token:
         return cookie_token
@@ -71,8 +77,11 @@ def _normalize_group_ids(group_ids: object) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
     for group_id in source_group_ids:
+        if len(normalized) >= MAX_TOKEN_GROUP_IDS:
+            logger.warning("Truncated token group_ids to %s entries", MAX_TOKEN_GROUP_IDS)
+            break
         value = str(group_id).strip()
-        if not value or value in seen:
+        if not value or len(value) > MAX_GROUP_ID_LENGTH or value in seen:
             continue
         seen.add(value)
         normalized.append(value)
@@ -146,6 +155,12 @@ def _authenticate_request(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="MFA setup not permitted for this user",
             )
+        if apply_base_rate_limit:
+            enforce_rate_limit(
+                key=f"user:{token_data.user_id}:mfa_setup",
+                limit=max(1, int(getattr(config, "RATE_LIMIT_LOGIN_PER_MINUTE", 10))),
+                window_seconds=60,
+            )
         return token_data
 
     try:
@@ -195,6 +210,17 @@ async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
     if not candidate_scope_id or candidate_scope_id == default_scope_id:
         return default_scope_id
 
+    if not SCOPE_ID_PATTERN.fullmatch(candidate_scope_id):
+        logger.warning(
+            "Rejected malformed tenant scope header for user=%s tenant=%s",
+            current_user.user_id,
+            current_user.tenant_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=GENERIC_SCOPE_DENIED_DETAIL,
+        )
+
     if getattr(current_user, "is_superuser", False):
         return candidate_scope_id
 
@@ -228,6 +254,11 @@ async def resolve_tenant_id(request: Request, current_user: TokenData) -> str:
             scope_id=candidate_scope_id,
             tenant_id=current_user.tenant_id,
         )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=GENERIC_SCOPE_DENIED_DETAIL,
+        ) from exc
     except SQLAlchemyError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -261,29 +292,26 @@ def _load_allowed_scope_ids_for_user(*, current_user: TokenData, default_scope_i
         if active_scope_id:
             allowed_scope_ids.add(active_scope_id)
 
-        own_enabled_rows = (
-            db.query(UserApiKey.key)
-            .filter(
-                UserApiKey.user_id == current_user.user_id,
-                UserApiKey.tenant_id == current_user.tenant_id,
-                UserApiKey.is_enabled.is_(True),
-            )
-            .all()
+        own_query = db.query(UserApiKey.key).filter(
+            UserApiKey.user_id == current_user.user_id,
+            UserApiKey.tenant_id == current_user.tenant_id,
+            UserApiKey.is_enabled.is_(True),
         )
+        if hasattr(own_query, "limit"):
+            own_query = own_query.limit(MAX_SCOPE_ROWS_PER_QUERY)
+        own_enabled_rows = own_query.all()
         allowed_scope_ids.update(str(row[0]) for row in own_enabled_rows if row and row[0])
 
-        shared_rows = (
-            db.query(UserApiKey.key)
-            .join(ApiKeyShare, ApiKeyShare.api_key_id == UserApiKey.id)
-            .filter(
-                ApiKeyShare.shared_user_id == current_user.user_id,
-                ApiKeyShare.can_use.is_(True),
-                ApiKeyShare.tenant_id == current_user.tenant_id,
-                UserApiKey.tenant_id == current_user.tenant_id,
-                UserApiKey.is_enabled.is_(True),
-            )
-            .all()
+        shared_query = db.query(UserApiKey.key).join(ApiKeyShare, ApiKeyShare.api_key_id == UserApiKey.id).filter(
+            ApiKeyShare.shared_user_id == current_user.user_id,
+            ApiKeyShare.can_use.is_(True),
+            ApiKeyShare.tenant_id == current_user.tenant_id,
+            UserApiKey.tenant_id == current_user.tenant_id,
+            UserApiKey.is_enabled.is_(True),
         )
+        if hasattr(shared_query, "limit"):
+            shared_query = shared_query.limit(MAX_SCOPE_ROWS_PER_QUERY)
+        shared_rows = shared_query.all()
         allowed_scope_ids.update(str(row[0]) for row in shared_rows if row and row[0])
 
     allowed_scope_ids.add(str(default_scope_id))
@@ -291,15 +319,20 @@ def _load_allowed_scope_ids_for_user(*, current_user: TokenData, default_scope_i
 
 
 def _scope_exists_in_other_tenants(*, scope_id: str | None = None, tenant_id: str, org_id: str | None = None) -> bool:
+    tenant_value = str(tenant_id or "").strip()
+    if not tenant_value:
+        raise ValueError("tenant_id is required")
+
     resolved_scope_id = str(scope_id or org_id or "").strip()
     if not resolved_scope_id:
-        return False
+        raise ValueError("scope_id or org_id is required")
+
     with get_db_session() as db:
         conflict = (
             db.query(UserApiKey.id)
             .filter(
                 UserApiKey.key == resolved_scope_id,
-                UserApiKey.tenant_id != tenant_id,
+                UserApiKey.tenant_id != tenant_value,
             )
             .first()
         )
@@ -314,7 +347,7 @@ def _scope_aware_current_user(
         request,
         credentials,
         missing_detail="Authentication required",
-        apply_base_rate_limit=False,
+        apply_base_rate_limit=True,
     )
 
 
@@ -341,7 +374,14 @@ def _enforce_session_revocation(user: object, token_data: TokenData) -> None:
             detail="Your session has expired or your token is invalid. Let's get you a new one.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token_iat_dt = datetime.fromtimestamp(int(token_iat), tz=timezone.utc)
+    try:
+        token_iat_dt = datetime.fromtimestamp(int(token_iat), tz=timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your session has expired or your token is invalid. Let's get you a new one.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
     if token_iat_dt <= invalid_before:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -369,7 +409,7 @@ def _parse_ip_allowlist(allowlist: str | None) -> list[IPv4Network | IPv6Network
             logger.error("Invalid IP allowlist entry %r — failing closed", entry)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: server misconfiguration",
+                detail=GENERIC_ACCESS_DENIED_DETAIL,
             ) from exc
     return networks
 
@@ -445,8 +485,14 @@ def enforce_header_token(
     header_name: str,
     expected_token: str | None,
     unauthorized_detail: str,
+    require_configured_token: bool = True,
 ) -> None:
     if not expected_token:
+        if require_configured_token:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Server token configuration missing",
+            )
         return
     provided = request.headers.get(header_name)
     if not provided or not compare_digest(provided, expected_token):

@@ -57,7 +57,6 @@ def test_username_input_normalization_and_model_validators():
 
 def test_misc_model_payloads_cover_status_aliases_and_time_validation():
     response = TempPasswordResetResponse(
-        temporary_password="TempPassword123!",
         email_sent=True,
         message="sent",
     )

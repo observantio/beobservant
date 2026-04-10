@@ -132,6 +132,7 @@ def test_bootstrap_indexes_and_api_key_helpers(monkeypatch):
     monkeypatch.setattr(boot_mod.config, "DEFAULT_ADMIN_USERNAME", "admin", raising=False)
     monkeypatch.setattr(boot_mod.config, "DEFAULT_OTLP_TOKEN", "configured", raising=False)
     monkeypatch.setattr(boot_mod.config, "DEFAULT_ORG_ID", "org-default", raising=False)
+    monkeypatch.setattr(boot_mod, "_is_default_admin_user", lambda _db, user: user.username == "admin")
     fake_api_key = lambda **kwargs: SimpleNamespace(id="new-key", **kwargs)
     monkeypatch.setattr(boot_mod, "UserApiKey", fake_api_key)
 
@@ -178,7 +179,8 @@ def test_bootstrap_schema_helpers(monkeypatch):
 
     db = _DB()
     boot_mod._backfill_password_changed_at(db)
-    assert db.flushed == 1 and "UPDATE users" in db.executed[0][0]
+    assert db.flushed == 1
+    assert any("UPDATE users" in stmt for stmt, _params in db.executed)
 
     captured = []
     monkeypatch.setattr(boot_mod, "_ensure_indexes", lambda db, statements: captured.extend(statements))

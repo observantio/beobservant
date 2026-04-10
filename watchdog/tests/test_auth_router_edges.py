@@ -391,11 +391,19 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
 
     monkeypatch.setattr(users_router.notification_service, "send_user_welcome_email", fake_welcome_email)
     monkeypatch.setattr(users_router, "invalidate_grafana_proxy_auth_cache", lambda: sent.append({"cache": True}))
+    scheduled = []
+
+    class _BackgroundTasks:
+        def add_task(self, fn, **kwargs):
+            scheduled.append((fn, kwargs))
+
     created = await users_router.create_user(
-        UserCreate(username="user2", email="u2@example.com", password="password123"), admin_user
+        UserCreate(username="user2", email="u2@example.com", password="password123"),
+        _BackgroundTasks(),
+        admin_user,
     )
     assert created is response_obj
-    assert any("recipient_email" in entry for entry in sent)
+    assert any("recipient_email" in kwargs for _fn, kwargs in scheduled)
 
     limited_user = _current_user(is_superuser=False, permissions=[Permission.MANAGE_TENANTS.value], role=Role.USER)
     with pytest.raises(HTTPException) as exc:
@@ -488,8 +496,8 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
 
     monkeypatch.setattr(users_router.notification_service, "send_temporary_password_email", fake_temp_email)
     reset = await users_router.reset_user_password_temp("u2", admin_user)
-    assert reset.temporary_password == "Temp1234"
     assert reset.email_sent is True
+    assert "delivered" in reset.message
 
     with pytest.raises(HTTPException) as exc:
         await users_router.delete_user("u2", _current_user(is_superuser=False, permissions=[], role=Role.USER))

@@ -85,17 +85,18 @@ def test_ensure_default_setup_bootstrap_disabled_warns_when_tenant_missing(monke
 
     monkeypatch.setattr(mod, "get_db_session", fake_session)
     monkeypatch.setattr(mod, "_pg_advisory_lock", lambda *_args, **_kwargs: events.append("lock"))
-    monkeypatch.setattr(mod, "_pg_advisory_unlock", lambda *_args, **_kwargs: events.append("unlock"))
     monkeypatch.setattr(mod, "_ensure_user_security_columns", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_ensure_grafana_folder_columns", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_ensure_api_key_constraints", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_backfill_password_changed_at", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "_backfill_otlp_token_hashes", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "_sync_admin_permissions", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(mod, "ensure_permissions", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod.config, "DEFAULT_ADMIN_BOOTSTRAP_ENABLED", False, raising=False)
     monkeypatch.setattr(mod.config, "DEFAULT_ADMIN_TENANT", "default", raising=False)
 
     mod.ensure_default_setup(service)
-    assert events == ["lock", "unlock"]
+    assert events == ["lock"]
     assert warnings
 
 
@@ -111,11 +112,12 @@ def test_ensure_default_setup_validates_required_config(monkeypatch):
 
     monkeypatch.setattr(mod, "get_db_session", fake_session)
     monkeypatch.setattr(mod, "_pg_advisory_lock", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(mod, "_pg_advisory_unlock", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_ensure_user_security_columns", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_ensure_grafana_folder_columns", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_ensure_api_key_constraints", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_backfill_password_changed_at", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "_backfill_otlp_token_hashes", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "_sync_admin_permissions", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(mod, "ensure_permissions", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod.config, "DEFAULT_ADMIN_BOOTSTRAP_ENABLED", True, raising=False)
 
@@ -153,11 +155,12 @@ def test_ensure_default_setup_existing_admin_runs_idempotent_paths(monkeypatch):
 
     monkeypatch.setattr(mod, "get_db_session", fake_session)
     monkeypatch.setattr(mod, "_pg_advisory_lock", lambda *_args, **_kwargs: calls.append("lock"))
-    monkeypatch.setattr(mod, "_pg_advisory_unlock", lambda *_args, **_kwargs: calls.append("unlock"))
     monkeypatch.setattr(mod, "_ensure_user_security_columns", lambda *_args, **_kwargs: calls.append("cols"))
     monkeypatch.setattr(mod, "_ensure_grafana_folder_columns", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_ensure_api_key_constraints", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(mod, "_backfill_password_changed_at", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "_backfill_otlp_token_hashes", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "_sync_admin_permissions", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(mod, "ensure_permissions", lambda *_args, **_kwargs: calls.append("permissions"))
     monkeypatch.setattr(mod, "ensure_default_api_key", lambda *_args, **_kwargs: calls.append("default-key"))
     monkeypatch.setattr(mod.config, "DEFAULT_ADMIN_BOOTSTRAP_ENABLED", True, raising=False)
@@ -167,7 +170,7 @@ def test_ensure_default_setup_existing_admin_runs_idempotent_paths(monkeypatch):
     mod.ensure_default_setup(service)
     assert "default-key" in calls
     assert db.commits == 1
-    assert calls[-1] == "unlock"
+    assert calls[0] == "lock"
 
 
 def test_ensure_default_setup_logs_and_reraises_sqlalchemy_errors(monkeypatch):

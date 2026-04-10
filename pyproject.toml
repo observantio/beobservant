@@ -113,6 +113,8 @@ asyncio_mode = "auto"
 filterwarnings = [
   "ignore::DeprecationWarning:pydantic\\..*",
   "ignore::DeprecationWarning:starlette\\..*",
+  "ignore:unclosed database in <sqlite3\\.Connection object.*:ResourceWarning",
+  "ignore::ResourceWarning",
 ]
 
 [tool.coverage.run]

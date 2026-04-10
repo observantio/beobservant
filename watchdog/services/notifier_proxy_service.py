@@ -79,13 +79,16 @@ class NotifierProxyService(BaseProxyService):
                 detail="Missing Notifier signing key",
             )
         live_group_ids = list(getattr(current_user, "group_ids", []) or [])
+        live_email: str | None = None
         try:
             live_user = auth_service.get_user_by_id_in_tenant(
                 current_user.user_id,
                 current_user.tenant_id,
             )
-            if live_user and isinstance(getattr(live_user, "group_ids", None), list):
-                live_group_ids = [str(gid) for gid in live_user.group_ids if str(gid).strip()]
+            if live_user:
+                if isinstance(getattr(live_user, "group_ids", None), list):
+                    live_group_ids = [str(gid) for gid in live_user.group_ids if str(gid).strip()]
+                live_email = str(getattr(live_user, "email", "") or "").strip() or None
         except SQLAlchemyError:
             # Fall back to current token context if live lookup fails.
             pass
@@ -98,6 +101,8 @@ class NotifierProxyService(BaseProxyService):
             ttl_seconds=int(config.NOTIFIER_CONTEXT_TTL_SECONDS),
         )
         claims["group_ids"] = live_group_ids
+        if live_email:
+            claims["email"] = live_email
         claims["api_key_id"] = api_key_id
         return self._encode_jwt(
             claims,

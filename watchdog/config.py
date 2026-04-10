@@ -254,6 +254,7 @@ def _populate_config_jwt_oidc_and_admin_defaults(cfg: "Config") -> None:
     cfg.OIDC_AUTO_PROVISION_USERS = _to_bool(os.getenv("OIDC_AUTO_PROVISION_USERS"), default=True)
     cfg.OIDC_AUTO_LINK_BY_EMAIL = _to_bool(os.getenv("OIDC_AUTO_LINK_BY_EMAIL"), default=True)
     cfg.OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK = _to_bool(os.getenv("OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK"), default=True)
+    cfg.OIDC_REQUIRE_MFA_FOR_MEMBERS = _to_bool(os.getenv("OIDC_REQUIRE_MFA_FOR_MEMBERS"), default=False)
 
     cfg.SKIP_LOCAL_MFA_FOR_EXTERNAL = _to_bool(os.getenv("SKIP_LOCAL_MFA_FOR_EXTERNAL"), default=True)
 
@@ -474,6 +475,7 @@ class Config:
     OIDC_AUTO_PROVISION_USERS: bool
     OIDC_AUTO_LINK_BY_EMAIL: bool
     OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK: bool
+    OIDC_REQUIRE_MFA_FOR_MEMBERS: bool
     SKIP_LOCAL_MFA_FOR_EXTERNAL: bool
     KEYCLOAK_ADMIN_URL: str | None
     KEYCLOAK_ADMIN_REALM: str | None

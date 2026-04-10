@@ -92,6 +92,10 @@ class _DB:
     def rollback(self):
         self.rollbacks += 1
 
+    @contextmanager
+    def begin_nested(self):
+        yield self
+
 
 @contextmanager
 def _ctx(db):
@@ -126,15 +130,16 @@ def test_delegation_helpers_and_oidc_pure_helpers(monkeypatch):
         service, db=db, actor_user_id="u1", tenant_id="tenant", actor_permissions=None
     ) == {"read:users"}
 
-    claims = {"permissions": [" read:users ", "bad"], "scp": ["write:users", " "]}
+    claims = {"permissions": [" read:users ", "bad"], "scp": ["write:alerts", " "]}
     assert oidc_mod._claim_str({"email": " a@b.c "}, "email") == "a@b.c"
-    assert oidc_mod.extract_permissions_from_oidc_claims(claims) == ["read:users", "write:users"]
+    assert oidc_mod.extract_permissions_from_oidc_claims(claims) == ["read:users", "write:alerts"]
     assert oidc_mod._normalize_claim_list([" a ", "", None]) == {"a", "None"}
     assert oidc_mod._claim_truthy("yes") is True
     assert oidc_mod._claim_truthy(0) is False
     monkeypatch.setattr(oidc_mod.config, "OIDC_AUTO_LINK_BY_EMAIL", True, raising=False)
     monkeypatch.setattr(oidc_mod.config, "OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK", True, raising=False)
-    assert oidc_mod._can_auto_link_by_email({"email_verified": True}) is True
+    monkeypatch.setattr(oidc_mod.config, "OIDC_ISSUER_URL", "https://issuer.example", raising=False)
+    assert oidc_mod._can_auto_link_by_email({"email_verified": True, "iss": "https://issuer.example"}) is True
     assert oidc_mod._normalize_email({"email": "UP@EXAMPLE.COM"}) == "up@example.com"
     assert oidc_mod._normalize_subject({"sub": " sub "}) == "sub"
     assert oidc_mod._preferred_username({"preferred_username": " Alice "}, "a@example.com") == "alice"
@@ -263,13 +268,15 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     monkeypatch.setattr(oidc_mod.config, "DEFAULT_ORG_ID", "org-default", raising=False)
     monkeypatch.setattr(oidc_mod.config, "AUTH_PROVIDER", "oidc", raising=False)
     monkeypatch.setattr(oidc_mod.config, "OIDC_AUTO_PROVISION_USERS", True, raising=False)
-    monkeypatch.setattr(oidc_mod.config, "REQUIRE_MFA_FOR_NEW_USERS", True, raising=False)
+    monkeypatch.setattr(oidc_mod.config, "OIDC_REQUIRE_MFA_FOR_MEMBERS", True, raising=False)
+    monkeypatch.setattr(oidc_mod.config, "REQUIRE_MFA_FOR_NEW_USERS", False, raising=False)
 
     service = SimpleNamespace(
         ensure_initialized=lambda: None,
         logger=SimpleNamespace(warning=lambda *args, **kwargs: None),
         hash_password=lambda password: f"hashed:{password}",
         ensure_default_api_key=lambda db, user: setattr(user, "api_key_created", True),
+        log_audit=lambda *args, **kwargs: None,
     )
 
     existing = SimpleNamespace(
@@ -280,7 +287,7 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     monkeypatch.setattr(
         oidc_mod,
         "update_oidc_user",
-        lambda db, user, email, full_name, subject: updated.append((email, full_name, subject)),
+        lambda service, db, user, email, full_name, subject: updated.append((email, full_name, subject)),
     )
     db = _DB(user=existing)
     monkeypatch.setattr(oidc_mod, "get_db_session", lambda: _ctx(db))
@@ -334,13 +341,24 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     assert getattr(provisioned, "api_key_created", False) is True
 
     user = SimpleNamespace(
-        id="u9", auth_provider="local", external_subject=None, email="old@example.com", full_name="Old"
+        id="u9",
+        tenant_id="tenant-1",
+        auth_provider="local",
+        external_subject=None,
+        email="old@example.com",
+        full_name="Old",
+        must_setup_mfa=True,
+        mfa_enabled=False,
     )
+    audit_service = SimpleNamespace(log_audit=lambda *args, **kwargs: None)
     db = _DB(conflict=None)
     monkeypatch.setattr(oidc_mod, "User", fake_user_model)
+    monkeypatch.setattr(oidc_mod.config, "OIDC_REQUIRE_MFA_FOR_MEMBERS", False, raising=False)
+    monkeypatch.setattr(oidc_mod.config, "REQUIRE_MFA_FOR_NEW_USERS", False, raising=False)
     monkeypatch.setattr(oidc_mod, "update_oidc_user", real_update_oidc_user)
-    oidc_mod.update_oidc_user(db, user, "new@example.com", "New", "subject")
+    oidc_mod.update_oidc_user(audit_service, db, user, "new@example.com", "New", "subject")
     assert user.auth_provider == "oidc"
     assert user.external_subject == "subject"
     assert user.email == "new@example.com"
     assert user.full_name == "New"
+    assert user.must_setup_mfa is False

@@ -11,17 +11,20 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 import secrets
 import string
+import threading
 from typing import Callable, Dict, TYPE_CHECKING, TypeVar
 
 import bcrypt
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from config import config
 from database import get_db_session
 from db_models import User
+from models.access.auth_models import Role
 
 from .audit import AuditLogRecord
 
@@ -29,6 +32,24 @@ if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
+_FALLBACK_PASSWORD_LOCK = threading.BoundedSemaphore(1)
+_PASSWORD_SEMAPHORE_STATE = {"warned_missing": False}
+
+
+class PasswordResetResult(dict[str, str]):
+    """Mapping with redacted repr to reduce accidental credential disclosure in logs."""
+
+    def __repr__(self) -> str:
+        return (
+            "{"
+            "'temporary_password': '***redacted***', "
+            f"'target_email': {self.get('target_email')!r}, "
+            f"'target_username': {self.get('target_username')!r}"
+            "}"
+        )
+
+    __str__ = __repr__
 
 
 def _with_password_semaphore(service: DatabaseAuthService, fn: Callable[[], T]) -> T:
@@ -36,7 +57,13 @@ def _with_password_semaphore(service: DatabaseAuthService, fn: Callable[[], T]) 
     if sem:
         with sem:
             return fn()
-    return fn()
+
+    if not _PASSWORD_SEMAPHORE_STATE["warned_missing"]:
+        logger.warning("Password semaphore missing; using process-wide fallback lock")
+        _PASSWORD_SEMAPHORE_STATE["warned_missing"] = True
+
+    with _FALLBACK_PASSWORD_LOCK:
+        return fn()
 
 
 def _bcrypt_rounds() -> int:
@@ -95,8 +122,8 @@ def _generate_temp_password(length: int) -> str:
 
 
 def _is_admin_role(role_value: object) -> bool:
-    s = str(role_value or "").strip().lower()
-    return s in {"admin", "role.admin"}
+    s = str(getattr(role_value, "value", role_value) or "").strip().lower()
+    return s in {Role.ADMIN.value, f"role.{Role.ADMIN.value}"}
 
 
 def _actor_can_reset_password(actor: User) -> bool:
@@ -123,9 +150,11 @@ def reset_user_password_temp(
     service: DatabaseAuthService, actor_user_id: str, target_user_id: str, tenant_id: str
 ) -> Dict[str, str]:
     with get_db_session() as db:
-        actor_query = db.query(User).filter_by(id=actor_user_id, tenant_id=tenant_id)
-        if hasattr(actor_query, "with_for_update"):
-            actor_query = actor_query.with_for_update()
+        actor_query = (
+            db.query(User)
+            .options(joinedload(User.permissions))
+            .filter_by(id=actor_user_id, tenant_id=tenant_id)
+        )
         actor = actor_query.first()
         if not actor:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Actor not permitted")
@@ -142,6 +171,11 @@ def reset_user_password_temp(
             )
 
         previous_auth_provider = str(getattr(target, "auth_provider", "local") or "local")
+        if previous_auth_provider != "local" and not getattr(actor, "is_superuser", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only superusers can reset externally managed accounts",
+            )
 
         length = getattr(config, "TEMP_PASSWORD_LENGTH", 20)
         temporary_password = _generate_temp_password(length)
@@ -166,14 +200,16 @@ def reset_user_password_temp(
                     "target_username": target.username,
                     "target_auth_provider_before": previous_auth_provider,
                     "target_auth_provider_after": target.auth_provider,
+                    "temporary_password_issued": True,
                 },
             ),
         )
 
         db.flush()
+        db.commit()
 
-        return {
-            "temporary_password": temporary_password,
-            "target_email": target.email,
-            "target_username": target.username,
-        }
+        return PasswordResetResult(
+            temporary_password=temporary_password,
+            target_email=target.email,
+            target_username=target.username,
+        )
