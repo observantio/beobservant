@@ -17,6 +17,11 @@ All notable changes to this project are documented here.
 * Updated command-copy affordances in setup/token flows to use compact top-row `Copy` buttons and improved code-block readability in light theme.
 * Added a top-down dependency-map layout toggle in Tempo service graph views and removed the systrace validation dataset panel from the UI template flow.
 * Updated sidebar/top-nav layout toggle button icon to a blob/splash style icon for visual consistency.
+* Hardened Watchdog authentication and tenant-scope validation with stricter OIDC nonce/issuer handling, PKCE verifier format checks, safer token/session parsing, bounded scope/group resolution, and improved bootstrap synchronization paths.
+* Added OIDC MFA challenge support across backend and UI callback flows, including challenge-based retry handling and OIDC-driven MFA setup continuation in the login page.
+* Added `OIDC_REQUIRE_MFA_FOR_MEMBERS` configuration support (with `.env.example` and config wiring) to enforce MFA onboarding policy for OIDC member accounts.
+* Updated temporary-password reset behavior to stop returning plaintext passwords in API responses, deliver credentials via email templates, and show email-delivery status in the Users UI.
+* Added Watchdog HTML email templates for welcome and temporary-password notifications, improved SMTP sender/envelope handling, and included templates in the Watchdog Docker image.
 
 ## [v0.0.3] - 2026-04-06
 
