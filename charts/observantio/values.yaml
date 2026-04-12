@@ -1,0 +1,338 @@
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+observantio:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/observantio/watchdog
+    tag: v0.0.3
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 4319
+  resources: {}
+  env:
+    APP_ENV: development
+    ENVIRONMENT: development
+    HOST: 0.0.0.0
+    LOG_LEVEL: info
+    PORT: "4319"
+    JWT_ALGORITHM: RS256
+    JWT_AUTO_GENERATE_KEYS: "true"
+    DB_AUTO_CREATE_SCHEMA: "true"
+    CORS_ALLOW_CREDENTIALS: "false"
+    RATE_LIMIT_BACKEND: redis
+    RATE_LIMIT_REDIS_URL: redis://{{ .Release.Name }}-redis:6379/0
+    DATABASE_URL: postgresql://watchdog:watchdog@{{ .Release.Name }}-postgres:5432/watchdog
+    TEMPO_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "tempo") }}:3200
+    LOKI_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "loki") }}:3100
+    MIMIR_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "mimir") }}:9009
+    ALERTMANAGER_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "alertmanager") }}:9093
+    GRAFANA_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "grafana") }}:3000
+    NOTIFIER_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "notifier") }}:4323
+    RESOLVER_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "resolver") }}:4322
+    DEFAULT_OTLP_TOKEN: "{{ .Values.secrets.DEFAULT_OTLP_TOKEN }}"
+  probes:
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+gatekeeper:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/observantio/gatekeeper
+    tag: v0.0.3
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 4321
+  resources: {}
+  env:
+    APP_ENV: development
+    ENVIRONMENT: development
+    GATEWAY_HOST: 0.0.0.0
+    GATEWAY_PORT: "4321"
+    RATE_LIMIT_BACKEND: redis
+    RATE_LIMIT_REDIS_URL: redis://{{ .Release.Name }}-redis:6379/0
+    GATEWAY_TOKEN_CACHE_REDIS_URL: redis://{{ .Release.Name }}-redis:6379/1
+    DATABASE_URL: postgresql://watchdog:watchdog@{{ .Release.Name }}-postgres:5432/watchdog
+    GATEWAY_AUTH_API_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "observantio") }}:4319/api/internal/otlp/validate
+    GATEWAY_ALLOWLIST_FAIL_OPEN: "true"
+    GATEWAY_STARTUP_CHECK_MODE: warn
+  probes:
+    path: /api/gateway/health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+notifier:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/observantio/notifier
+    tag: v0.0.3
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 4323
+  resources: {}
+  env:
+    APP_ENV: development
+    ENVIRONMENT: development
+    HOST: 0.0.0.0
+    PORT: "4323"
+    DATABASE_URL: postgresql://watchdog:watchdog@{{ .Release.Name }}-postgres:5432/watchdog
+    NOTIFIER_DATABASE_URL: postgresql://watchdog:watchdog@{{ .Release.Name }}-postgres:5432/watchdog_notified
+    REDIS_URL: redis://{{ .Release.Name }}-redis:6379/0
+    ALERTMANAGER_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "alertmanager") }}:9093
+    MIMIR_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "mimir") }}:9009
+  probes:
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+resolver:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/observantio/resolver
+    tag: v0.0.3
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 4322
+  resources: {}
+  env:
+    APP_ENV: development
+    ENVIRONMENT: development
+    RESOLVER_HOST: 0.0.0.0
+    RESOLVER_PORT: "4322"
+    REDIS_URL: redis://{{ .Release.Name }}-redis:6379/0
+    RESOLVER_DATABASE_URL: postgresql://watchdog:watchdog@{{ .Release.Name }}-postgres:5432/watchdog_resolver
+    RESOLVER_LOGS_LOKI_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "loki") }}:3100
+    RESOLVER_METRICS_MIMIR_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "mimir") }}:9009
+    RESOLVER_TRACES_TEMPO_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "tempo") }}:3200
+  probes:
+    path: /api/v1/ready
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+otlpGateway:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: envoyproxy/envoy
+    tag: v1.32-latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 4320
+  publicService:
+    enabled: false
+    type: LoadBalancer
+    port: 4320
+    annotations: {}
+    loadBalancerSourceRanges: []
+    externalTrafficPolicy: Local
+  resources: {}
+
+otelAgent:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: ghcr.io/observantio/otel-agent
+    tag: v0.0.3
+    pullPolicy: IfNotPresent
+  resources: {}
+  env:
+    OTEL_GATEWAY_BASE_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "otlp-gateway") }}:{{ .Values.otlpGateway.service.port }}
+    OTEL_OTLP_TOKEN: "{{ .Values.secrets.OTEL_OTLP_TOKEN }}"
+    OTEL_SCOPE_ORG_ID: "default"
+    TRACE_COUNT: "1"
+    TRACE_PARALLEL: "1"
+    TRACE_LOOPS: "0"
+    TRACE_DELAY: "2"
+    LOG_COUNT: "1"
+    LOG_PARALLEL: "1"
+    LOG_LOOPS: "0"
+    LOG_DELAY: "2"
+
+loki:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: grafana/loki
+    tag: 3.6.5
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3100
+  storage:
+    enabled: true
+    size: 5Gi
+    className: ""
+  resources: {}
+
+tempo:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: grafana/tempo
+    tag: 2.4.1
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 4318
+  storage:
+    enabled: true
+    size: 5Gi
+    className: ""
+  resources: {}
+
+mimir:
+  enabled: true
+  replicaCount: 1
+  replicationFactor: 1
+  image:
+    repository: grafana/mimir
+    tag: 2.12.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9009
+  storage:
+    enabled: true
+    size: 10Gi
+    className: ""
+  resources: {}
+
+alertmanager:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: prom/alertmanager
+    tag: v0.27.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9093
+  storage:
+    enabled: true
+    size: 2Gi
+    className: ""
+  resources: {}
+
+grafana:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: grafana/grafana
+    tag: 10.4.1
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  storage:
+    enabled: true
+    size: 5Gi
+    className: ""
+  resources: {}
+  env:
+    GF_SECURITY_ADMIN_USER: "{{ .Values.secrets.GRAFANA_USERNAME }}"
+    GF_SECURITY_ADMIN_PASSWORD: "{{ .Values.secrets.GRAFANA_PASSWORD }}"
+    GF_USERS_ALLOW_SIGN_UP: "false"
+    GF_AUTH_ANONYMOUS_ENABLED: "false"
+    GF_AUTH_BASIC_ENABLED: "true"
+    GF_SECURITY_ALLOW_EMBEDDING: "true"
+    GF_AUTH_PROXY_ENABLED: "true"
+    GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+    GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+    GF_AUTH_PROXY_WHITELIST: "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    GF_AUTH_PROXY_HEADERS: "Email:X-WEBAUTH-EMAIL Name:X-WEBAUTH-NAME Role:X-WEBAUTH-ROLE"
+    GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s/grafana/"
+    GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    MIMIR_TENANT_ID: default
+
+grafanaAuthGateway:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: nginx
+    tag: 1.27-alpine
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  resources: {}
+
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  storage:
+    size: 10Gi
+    className: ""
+  resources: {}
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  storage:
+    enabled: true
+    size: 2Gi
+    className: ""
+  resources: {}
+
+ui:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/observantio/ui
+    tag: v0.0.3
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+
+secrets:
+  POSTGRES_USER: watchdog
+  POSTGRES_PASSWORD: watchdog
+  POSTGRES_DB: watchdog
+  JWT_SECRET_KEY: change-me-in-production
+  DATA_ENCRYPTION_KEY: replace-with-base64-fernet-key
+  DEFAULT_OTLP_TOKEN: replace-with-otlp-token
+  OTEL_OTLP_TOKEN: replace-with-otlp-token
+  INBOUND_WEBHOOK_TOKEN: change-me
+  OTLP_INGEST_TOKEN: change-me
+  GATEWAY_INTERNAL_SERVICE_TOKEN: change-me
+  GATEWAY_STATUS_OTLP_TOKEN: change-me
+  NOTIFIER_SERVICE_TOKEN: change-me
+  NOTIFIER_EXPECTED_SERVICE_TOKEN: change-me
+  NOTIFIER_CONTEXT_SIGNING_KEY: change-me
+  NOTIFIER_CONTEXT_VERIFY_KEY: change-me
+  RESOLVER_SERVICE_TOKEN: change-me
+  RESOLVER_EXPECTED_SERVICE_TOKEN: change-me
+  RESOLVER_CONTEXT_SIGNING_KEY: change-me
+  RESOLVER_CONTEXT_VERIFY_KEY: change-me
+  GRAFANA_USERNAME: admin
+  GRAFANA_PASSWORD: change-me
+  GRAFANA_API_KEY: ""
+
+hardening:
+  automountServiceAccountToken: false
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
