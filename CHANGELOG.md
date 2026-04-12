@@ -22,6 +22,8 @@ All notable changes to this project are documented here.
 * Added `OIDC_REQUIRE_MFA_FOR_MEMBERS` configuration support (with `.env.example` and config wiring) to enforce MFA onboarding policy for OIDC member accounts.
 * Updated temporary-password reset behavior to stop returning plaintext passwords in API responses, deliver credentials via email templates, and show email-delivery status in the Users UI.
 * Added Watchdog HTML email templates for welcome and temporary-password notifications, improved SMTP sender/envelope handling, and included templates in the Watchdog Docker image.
+* Added strict global mutation testing runner and notifier mutation profile to enforce service-level mutation coverage and improve regression protection.
+* Added Grafana auth gateway `/grafana/` subpath support for hardened proxy deployments.
 
 ## [v0.0.3] - 2026-04-06
 
