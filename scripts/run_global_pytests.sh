@@ -105,7 +105,8 @@ run_suite() {
       --cov-fail-under="${COVERAGE_THRESHOLD}" \
       -ra \
       --show-capture=no \
-      --durations=10
+      --durations=10 \
+      tests
   )
 }
 
