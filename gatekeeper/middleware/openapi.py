@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
-JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
+JSON_SCHEMA_DIALECT = "https://spec.openapis.org/oas/3.1/dialect/base"
 _VALIDATE_PATH = "/api/gateway/validate"
 _ERROR_SCHEMA_REF = "#/components/schemas/ErrorResponse"
 _STANDARD_ERROR_CODES = ("400", "401", "403", "404", "429", "503")
