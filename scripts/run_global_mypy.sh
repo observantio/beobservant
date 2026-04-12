@@ -64,7 +64,8 @@ run_suite() {
   echo "==> Running mypy in ${service_dir}"
   (
     cd "${ROOT_DIR}/${service_dir}"
-    "${VENV_MYPY}" --cache-dir "${cache_dir}" --config-file "${config_file}" .
+    # Running per-service can make shared override sections appear "unused".
+    "${VENV_MYPY}" --cache-dir "${cache_dir}" --config-file "${config_file}" --no-warn-unused-configs .
   )
 }
 

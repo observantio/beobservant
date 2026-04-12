@@ -46,6 +46,23 @@ Expect:
 - Per-service and combined coverage in `test-reports/coverage/` (combined report includes only the services that ran).
 - Combined HTML report in `test-reports/coverage/html/index.html`.
 
+### `run_global_mutations.sh`
+
+Runs mutation testing service-by-service using centralized profiles in root `pyproject.toml` and writes a consolidated report.
+
+```bash
+scripts/run_global_mutations.sh [SERVICE] [--max-children N]
+```
+
+Optional first argument: `resolver`, `gatekeeper`, `notifier`, or `watchdog`.
+
+Expect:
+
+- Per-service mutmut run logs and results in a timestamped directory under `test-reports/mutations/`.
+- Consolidated summary in `test-reports/mutations/latest/summary.md`.
+- Known equivalent survivors are tracked separately from unexpected survivors.
+- Non-zero exit in strict mode when unexpected survivors or execution failures exist.
+
 ### `run_global_mypy.sh`
 
 Runs mypy using repo `pyproject.toml` defaults. By default all four services are checked; pass a service name to scope the run.
@@ -111,7 +128,8 @@ Expect:
 1. `scripts/run_global_mypy.sh`
 2. `scripts/run_global_pylint.sh`
 3. `scripts/run_global_pytests.sh`
-4. `scripts/run_schemathesis.sh <service>` for each service you changed
+4. `scripts/run_global_mutations.sh`
+5. `scripts/run_schemathesis.sh <service>` for each service you changed
 
 ## Troubleshooting
 
