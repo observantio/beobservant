@@ -17,12 +17,20 @@ from routers.observability import resolver_router
 from tests._proxy_stubs import unpack_resolver_json_request
 
 
-def _request() -> Request:
+def _request(
+    path: str = "/api/resolver/anomalies/metrics",
+    method: str = "POST",
+    headers: dict[str, str] | None = None,
+) -> Request:
+    encoded_headers = [
+        (name.lower().encode("latin-1"), value.encode("latin-1"))
+        for name, value in (headers or {}).items()
+    ]
     scope = {
         "type": "http",
-        "method": "POST",
-        "path": "/api/resolver/anomalies/metrics",
-        "headers": [],
+        "method": method,
+        "path": path,
+        "headers": encoded_headers,
     }
     return Request(scope)
 
@@ -52,13 +60,57 @@ async def test_proxy_post_overrides_payload_tenant(monkeypatch):
 
     monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
 
+    current_user = _user()
+    request = _request(headers={"x-correlation-id": "corr-123"})
+    payload = resolver_router.AnalyzeProxyPayload.model_validate(
+        {
+            "tenant_id": "spoofed",
+            "start": 1,
+            "end": 2,
+            "query": "up",
+            "optional": None,
+        }
+    )
+
     result = await resolver_router.anomalies_metrics(
-        request=_request(),
-        payload={"tenant_id": "spoofed", "query": "up"},
-        current_user=_user(),
+        request=request,
+        payload=payload,
+        current_user=current_user,
     )
     assert result == {"ok": True}
+    assert captured["method"] == "POST"
+    assert captured["upstream_path"] == "/api/v1/anomalies/metrics"
+    assert captured["current_user"] is current_user
+    assert captured["tenant_id"] == "tenant-a"
+    assert captured["audit_action"] == "resolver.proxy.metrics"
+    assert captured["correlation_id"] == "corr-123"
     assert captured["payload"]["tenant_id"] == "tenant-a"
+    assert captured["payload"]["query"] == "up"
+    assert captured["payload"]["start"] == 1
+    assert captured["payload"]["end"] == 2
+    assert "optional" not in captured["payload"]
+
+
+@pytest.mark.asyncio
+async def test_proxy_post_accepts_raw_dict_payload(monkeypatch):
+    captured = {}
+
+    async def fake_request_json(req, **_kwargs):
+        captured.update(unpack_resolver_json_request(req))
+        return {"ok": True}
+
+    monkeypatch.setattr(resolver_router.resolver_proxy_service, "request_json", fake_request_json)
+
+    current_user = _user()
+    result = await resolver_router._proxy_post(
+        request=_request(path="/api/resolver/correlate"),
+        current_user=current_user,
+        upstream_path="/api/v1/correlate",
+        payload={"raw": True, "tenant_id": "spoofed"},
+        audit_action="resolver.proxy.correlate",
+    )
+    assert result == {"ok": True}
+    assert captured["payload"] == {"raw": True, "tenant_id": "tenant-a"}
 
 
 @pytest.mark.asyncio
@@ -198,6 +250,7 @@ async def test_get_analyze_job_result_maps_conflict_to_job_summary(monkeypatch):
     assert result.report_id == "rep-3"
     assert result.status.value == "completed"
     assert result.result is None
+    assert "result" in result.model_fields_set
     assert calls == ["/api/v1/jobs/job-3/result", "/api/v1/jobs/job-3"]
 
 
