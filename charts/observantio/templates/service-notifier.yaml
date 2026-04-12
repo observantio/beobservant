@@ -1,0 +1,17 @@
+{{- if .Values.notifier.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "notifier") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.notifier.service.type }}
+  selector:
+    {{- include "observantio.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: notifier
+  ports:
+  - name: http
+    port: {{ .Values.notifier.service.port }}
+    targetPort: http
+{{- end }}

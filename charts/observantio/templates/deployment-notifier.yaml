@@ -1,0 +1,59 @@
+{{- if .Values.notifier.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "notifier") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.notifier.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: notifier
+  template:
+    metadata:
+      labels:
+        {{- include "observantio.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: notifier
+    spec:
+      automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+      serviceAccountName: {{ include "observantio.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: notifier
+        image: "{{ .Values.notifier.image.repository }}:{{ .Values.notifier.image.tag }}"
+        imagePullPolicy: {{ .Values.notifier.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.notifier.service.port }}
+          name: http
+        env:
+        {{- range $k, $v := .Values.notifier.env }}
+        - name: {{ $k }}
+          value: {{ tpl ($v | toString) $ | quote }}
+        {{- end }}
+        envFrom:
+        - secretRef:
+            name: {{ include "observantio.fullname" . }}-secrets
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.notifier.probes.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.notifier.probes.initialDelaySeconds }}
+          periodSeconds: {{ .Values.notifier.probes.periodSeconds }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.notifier.probes.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.notifier.probes.initialDelaySeconds }}
+          periodSeconds: {{ .Values.notifier.probes.periodSeconds }}
+        resources:
+          {{- toYaml .Values.notifier.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+{{- end }}

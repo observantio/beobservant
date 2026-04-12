@@ -1,0 +1,669 @@
+{{- if .Values.loki.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "loki-config") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+data:
+  loki.yaml: |
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9096
+    common:
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+    schema_config:
+      configs:
+        - from: 2024-01-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    storage_config:
+      tsdb_shipper:
+        active_index_directory: /loki/tsdb-index
+        cache_location: /loki/tsdb-cache
+      filesystem:
+        directory: /loki/chunks
+    limits_config:
+      allow_structured_metadata: true
+      retention_period: 168h
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "loki") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.loki.service.type }}
+  selector:
+    {{- include "observantio.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+  ports:
+  - name: http
+    port: {{ .Values.loki.service.port }}
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "loki") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.loki.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: loki
+  template:
+    metadata:
+      labels:
+        {{- include "observantio.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: loki
+    spec:
+      automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+      containers:
+      - name: loki
+        image: "{{ .Values.loki.image.repository }}:{{ .Values.loki.image.tag }}"
+        imagePullPolicy: {{ .Values.loki.image.pullPolicy }}
+        args: ["-config.file=/etc/loki/loki.yaml", "-config.expand-env=true"]
+        ports:
+        - name: http
+          containerPort: {{ .Values.loki.service.port }}
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        volumeMounts:
+        - name: config
+          mountPath: /etc/loki
+        {{- if .Values.loki.storage.enabled }}
+        - name: data
+          mountPath: /loki
+        {{- end }}
+        resources:
+          {{- toYaml .Values.loki.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "observantio.componentFullname" (dict "root" . "name" "loki-config") }}
+      {{- if .Values.loki.storage.enabled }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ include "observantio.componentFullname" (dict "root" . "name" "loki-data") }}
+      {{- end }}
+---
+{{- if .Values.loki.storage.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "loki-data") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.loki.storage.className }}
+  storageClassName: {{ .Values.loki.storage.className }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.loki.storage.size }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.tempo.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "tempo-config") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+data:
+  tempo.yaml: |
+    server:
+      http_listen_port: 3200
+    multitenancy_enabled: false
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            http:
+              endpoint: 0.0.0.0:4318
+    storage:
+      trace:
+        backend: local
+        wal:
+          path: /tmp/tempo/wal
+        local:
+          path: /tmp/tempo/blocks
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "tempo") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.tempo.service.type }}
+  selector:
+    {{- include "observantio.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: tempo
+  ports:
+  - name: otlp-http
+    port: {{ .Values.tempo.service.port }}
+    targetPort: otlp-http
+  - name: http
+    port: 3200
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "tempo") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.tempo.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: tempo
+  template:
+    metadata:
+      labels:
+        {{- include "observantio.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: tempo
+    spec:
+      automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+      containers:
+      - name: tempo
+        image: "{{ .Values.tempo.image.repository }}:{{ .Values.tempo.image.tag }}"
+        imagePullPolicy: {{ .Values.tempo.image.pullPolicy }}
+        args: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
+        ports:
+        - name: otlp-http
+          containerPort: {{ .Values.tempo.service.port }}
+        - name: http
+          containerPort: 3200
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        volumeMounts:
+        - name: config
+          mountPath: /etc/tempo
+        {{- if .Values.tempo.storage.enabled }}
+        - name: data
+          mountPath: /tmp/tempo
+        {{- end }}
+        resources:
+          {{- toYaml .Values.tempo.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "observantio.componentFullname" (dict "root" . "name" "tempo-config") }}
+      {{- if .Values.tempo.storage.enabled }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ include "observantio.componentFullname" (dict "root" . "name" "tempo-data") }}
+      {{- end }}
+---
+{{- if .Values.tempo.storage.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "tempo-data") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.tempo.storage.className }}
+  storageClassName: {{ .Values.tempo.storage.className }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.tempo.storage.size }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.alertmanager.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "alertmanager-config") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: watchdog-webhook
+    receivers:
+      - name: watchdog-webhook
+        webhook_configs:
+          - url: http://{{ include "observantio.componentFullname" (dict "root" . "name" "notifier") }}:{{ .Values.notifier.service.port }}/internal/v1/alertmanager/alerts/webhook
+            send_resolved: true
+            http_config:
+              authorization:
+                type: Bearer
+                credentials_file: /tmp/inbound_webhook_token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "alertmanager") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.alertmanager.service.type }}
+  selector:
+    {{- include "observantio.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+  ports:
+  - name: http
+    port: {{ .Values.alertmanager.service.port }}
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "alertmanager") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.alertmanager.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: alertmanager
+  template:
+    metadata:
+      labels:
+        {{- include "observantio.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: alertmanager
+    spec:
+      automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+      containers:
+      - name: alertmanager
+        image: "{{ .Values.alertmanager.image.repository }}:{{ .Values.alertmanager.image.tag }}"
+        imagePullPolicy: {{ .Values.alertmanager.image.pullPolicy }}
+        command: ["/bin/sh", "-ec"]
+        args:
+        - |
+          umask 077
+          printf "%s" "$INBOUND_WEBHOOK_TOKEN" > /tmp/inbound_webhook_token
+          exec /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager
+        ports:
+        - name: http
+          containerPort: {{ .Values.alertmanager.service.port }}
+        envFrom:
+        - secretRef:
+            name: {{ include "observantio.fullname" . }}-secrets
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        volumeMounts:
+        - name: config
+          mountPath: /etc/alertmanager
+        {{- if .Values.alertmanager.storage.enabled }}
+        - name: data
+          mountPath: /alertmanager
+        {{- end }}
+        resources:
+          {{- toYaml .Values.alertmanager.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "observantio.componentFullname" (dict "root" . "name" "alertmanager-config") }}
+      {{- if .Values.alertmanager.storage.enabled }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ include "observantio.componentFullname" (dict "root" . "name" "alertmanager-data") }}
+      {{- end }}
+---
+{{- if .Values.alertmanager.storage.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "alertmanager-data") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.alertmanager.storage.className }}
+  storageClassName: {{ .Values.alertmanager.storage.className }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.alertmanager.storage.size }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.mimir.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "mimir-config") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+data:
+  mimir.yaml: |
+    server:
+      http_listen_port: {{ .Values.mimir.service.port }}
+      grpc_listen_port: 9095
+    multitenancy_enabled: false
+    common:
+      storage:
+        backend: filesystem
+        filesystem:
+          dir: /data/blocks
+    memberlist:
+      join_members:
+        - {{ include "observantio.componentFullname" (dict "root" . "name" "mimir") }}
+    ingester:
+      ring:
+        replication_factor: {{ .Values.mimir.replicationFactor }}
+    ruler_storage:
+      backend: local
+      local:
+        directory: /data/ruler-storage
+    ruler:
+      rule_path: /ruler
+      alertmanager_url: http://{{ include "observantio.componentFullname" (dict "root" . "name" "alertmanager") }}:{{ .Values.alertmanager.service.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "mimir") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.mimir.service.type }}
+  selector:
+    {{- include "observantio.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mimir
+  ports:
+  - name: http
+    port: {{ .Values.mimir.service.port }}
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "mimir") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.mimir.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mimir
+  template:
+    metadata:
+      labels:
+        {{- include "observantio.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mimir
+    spec:
+      automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+      containers:
+      - name: mimir
+        image: "{{ .Values.mimir.image.repository }}:{{ .Values.mimir.image.tag }}"
+        imagePullPolicy: {{ .Values.mimir.image.pullPolicy }}
+        args:
+        - -config.file=/etc/mimir/mimir.yaml
+        - -config.expand-env=true
+        - -ingester.ring.replication-factor={{ .Values.mimir.replicationFactor }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.mimir.service.port }}
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        volumeMounts:
+        - name: config
+          mountPath: /etc/mimir
+        {{- if .Values.mimir.storage.enabled }}
+        - name: data
+          mountPath: /data
+        {{- end }}
+        resources:
+          {{- toYaml .Values.mimir.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "observantio.componentFullname" (dict "root" . "name" "mimir-config") }}
+      {{- if .Values.mimir.storage.enabled }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ include "observantio.componentFullname" (dict "root" . "name" "mimir-data") }}
+      {{- end }}
+---
+{{- if .Values.mimir.storage.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "mimir-data") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.mimir.storage.className }}
+  storageClassName: {{ .Values.mimir.storage.className }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.mimir.storage.size }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.grafana.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "grafana-datasources") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+data:
+  datasources.yml: |
+    apiVersion: 1
+    deleteDatasources:
+      - name: Mimir
+      - name: Loki
+      - name: Tempo
+    prune: true
+    datasources:
+      - name: Mimir
+        uid: mimir
+        type: prometheus
+        access: proxy
+        url: http://{{ include "observantio.componentFullname" (dict "root" . "name" "mimir") }}:{{ .Values.mimir.service.port }}/prometheus
+        isDefault: true
+        editable: true
+        jsonData:
+          httpHeaderName1: X-Scope-OrgID
+        secureJsonData:
+          httpHeaderValue1: ${MIMIR_TENANT_ID}
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://{{ include "observantio.componentFullname" (dict "root" . "name" "loki") }}:{{ .Values.loki.service.port }}
+        editable: true
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        access: proxy
+        url: http://{{ include "observantio.componentFullname" (dict "root" . "name" "tempo") }}:3200
+        editable: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "grafana") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.grafana.service.type }}
+  selector:
+    {{- include "observantio.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+  ports:
+  - name: http
+    port: {{ .Values.grafana.service.port }}
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "grafana") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.grafana.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: grafana
+  template:
+    metadata:
+      labels:
+        {{- include "observantio.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: grafana
+    spec:
+      automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+      containers:
+      - name: grafana
+        image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}"
+        imagePullPolicy: {{ .Values.grafana.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.grafana.service.port }}
+        env:
+        {{- range $k, $v := .Values.grafana.env }}
+        - name: {{ $k }}
+          value: {{ tpl ($v | toString) $ | quote }}
+        {{- end }}
+        envFrom:
+        - secretRef:
+            name: {{ include "observantio.fullname" . }}-secrets
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        volumeMounts:
+        - name: datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        {{- if .Values.grafana.storage.enabled }}
+        - name: data
+          mountPath: /var/lib/grafana
+        {{- end }}
+        resources:
+          {{- toYaml .Values.grafana.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+      volumes:
+      - name: datasources
+        configMap:
+          name: {{ include "observantio.componentFullname" (dict "root" . "name" "grafana-datasources") }}
+      {{- if .Values.grafana.storage.enabled }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ include "observantio.componentFullname" (dict "root" . "name" "grafana-data") }}
+      {{- end }}
+---
+{{- if .Values.grafana.storage.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "grafana-data") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.grafana.storage.className }}
+  storageClassName: {{ .Values.grafana.storage.className }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.grafana.storage.size }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,17 @@
+{{- if .Values.ui.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "observantio.fullname" . }}-ui
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.ui.service.type }}
+  selector:
+    {{- include "observantio.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  ports:
+  - name: http
+    port: {{ .Values.ui.service.port }}
+    targetPort: http
+{{- end }}

@@ -43,3 +43,4 @@ test-reports/
 .coverage
 *.db
 package-lock.json
+mutants

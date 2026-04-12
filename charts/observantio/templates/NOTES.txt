@@ -1,0 +1,33 @@
+1. Observantio API service DNS in cluster:
+   http://{{ include "observantio.fullname" . }}-observantio:{{ .Values.observantio.service.port }}
+
+{{- if .Values.ui.enabled }}
+2. UI service DNS in cluster:
+   http://{{ include "observantio.fullname" . }}-ui:{{ .Values.ui.service.port }}
+{{- end }}
+
+{{- if .Values.grafana.enabled }}
+3. Grafana service DNS in cluster:
+   http://{{ include "observantio.componentFullname" (dict "root" . "name" "grafana") }}:{{ .Values.grafana.service.port }}
+{{- $gag := .Values.grafanaAuthGateway | default (dict) }}
+{{- $gagService := (index $gag "service") | default (dict) }}
+{{- if (default true (index $gag "enabled")) }}
+   Grafana auth gateway (recommended UI entrypoint):
+   http://{{ include "observantio.componentFullname" (dict "root" . "name" "grafana-auth-gateway") }}:{{ default 8080 (index $gagService "port") }}/grafana/
+{{- end }}
+{{- end }}
+
+{{- if .Values.otlpGateway.enabled }}
+4. OTLP gateway service DNS in cluster:
+   http://{{ include "observantio.componentFullname" (dict "root" . "name" "otlp-gateway") }}:{{ .Values.otlpGateway.service.port }}
+{{- if .Values.otlpGateway.publicService.enabled }}
+   Public service:
+   {{ include "observantio.componentFullname" (dict "root" . "name" "otlp-gateway-public") }}:{{ .Values.otlpGateway.publicService.port }}
+{{- end }}
+{{- end }}
+
+5. To render manifests locally:
+   helm template {{ .Release.Name }} {{ .Chart.Name }}
+
+6. To install:
+   helm install {{ .Release.Name }} {{ .Chart.Name }} -n observantio --create-namespace
