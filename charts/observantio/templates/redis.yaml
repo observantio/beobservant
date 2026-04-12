@@ -1,0 +1,77 @@
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-redis
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "observantio.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-redis
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "observantio.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+      containers:
+      - name: redis
+        image: {{ .Values.redis.image }}
+        args: ["redis-server", "--appendonly", "yes"]
+        ports:
+        - containerPort: 6379
+          name: redis
+        {{- if .Values.redis.storage.enabled }}
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        {{- end }}
+        resources:
+          {{- toYaml .Values.redis.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+      {{- if .Values.redis.storage.enabled }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-redis-data
+      {{- end }}
+---
+{{- if .Values.redis.storage.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-redis-data
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.redis.storage.className }}
+  storageClassName: {{ .Values.redis.storage.className }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.storage.size }}
+{{- end }}
+{{- end }}

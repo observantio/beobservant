@@ -1,0 +1,17 @@
+{{- if .Values.gatekeeper.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "gatekeeper") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.gatekeeper.service.type }}
+  selector:
+    {{- include "observantio.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: gatekeeper
+  ports:
+  - name: http
+    port: {{ .Values.gatekeeper.service.port }}
+    targetPort: http
+{{- end }}

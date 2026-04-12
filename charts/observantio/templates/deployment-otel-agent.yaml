@@ -1,0 +1,176 @@
+{{- if .Values.otelAgent.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "otel-agent-config") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+data:
+  agent.yaml: |
+    receivers:
+      hostmetrics:
+        collection_interval: 60s
+        scrapers:
+          cpu:
+          memory:
+          process:
+          processes:
+          disk:
+          filesystem:
+          network:
+          paging:
+          load:
+
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+          grpc:
+            endpoint: 0.0.0.0:4317
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+        spike_limit_mib: 128
+
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
+        send_batch_max_size: 2048
+
+      transform/reduce_loki_streams:
+        log_statements:
+          - context: log
+            statements:
+              - set(attributes["host.name"], resource.attributes["host.name"])
+              - set(attributes["trace.id"], resource.attributes["trace.id"])
+              - set(attributes["request.id"], resource.attributes["request.id"])
+              - set(attributes["duration_ms"], resource.attributes["duration_ms"])
+              - set(attributes["http.status_code"], resource.attributes["http.status_code"])
+              - set(attributes["http.method"], resource.attributes["http.method"])
+              - set(attributes["http.route"], resource.attributes["http.route"])
+              - set(attributes["error.code"], resource.attributes["error.code"])
+          - context: resource
+            statements:
+              - delete_key(attributes, "host.name")
+              - delete_key(attributes, "trace.id")
+              - delete_key(attributes, "request.id")
+              - delete_key(attributes, "duration_ms")
+              - delete_key(attributes, "http.status_code")
+              - delete_key(attributes, "http.method")
+              - delete_key(attributes, "http.route")
+              - delete_key(attributes, "error.code")
+
+    exporters:
+      otlp_http/loki:
+        endpoint: "http://{{ include "observantio.componentFullname" (dict "root" . "name" "loki") }}:{{ .Values.loki.service.port }}/otlp"
+        tls:
+          insecure: true
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 2000
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 5m
+
+      otlp_http/tempo:
+        endpoint: "http://{{ include "observantio.componentFullname" (dict "root" . "name" "tempo") }}:{{ .Values.tempo.service.port }}"
+        tls:
+          insecure: true
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 2000
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 5m
+
+      prometheusremotewrite/mimir:
+        endpoint: "http://{{ include "observantio.componentFullname" (dict "root" . "name" "mimir") }}:{{ .Values.mimir.service.port }}/api/v1/push"
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 5m
+
+    service:
+      pipelines:
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, transform/reduce_loki_streams, batch]
+          exporters: [otlp_http/loki]
+
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp_http/tempo]
+
+        metrics:
+          receivers: [hostmetrics, otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheusremotewrite/mimir]
+
+      telemetry:
+        logs:
+          level: info
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "otel-agent") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.otelAgent.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: otel-agent
+  template:
+    metadata:
+      labels:
+        {{- include "observantio.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: otel-agent
+    spec:
+      automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: otel-agent
+        image: "{{ .Values.otelAgent.image.repository }}:{{ .Values.otelAgent.image.tag }}"
+        imagePullPolicy: {{ .Values.otelAgent.image.pullPolicy }}
+        env:
+        {{- range $k, $v := .Values.otelAgent.env }}
+        - name: {{ $k }}
+          value: {{ tpl ($v | toString) $ | quote }}
+        {{- end }}
+        {{- if not (hasKey .Values.otelAgent.env "OTEL_SCOPE_ORG_ID") }}
+        - name: OTEL_SCOPE_ORG_ID
+          value: "default"
+        {{- end }}
+        envFrom:
+        - secretRef:
+            name: {{ include "observantio.fullname" . }}-secrets
+        volumeMounts:
+        - name: agent-config
+          mountPath: /etc/otel/agent.yaml
+          subPath: agent.yaml
+        resources:
+          {{- toYaml .Values.otelAgent.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+      volumes:
+      - name: agent-config
+        configMap:
+          name: {{ include "observantio.componentFullname" (dict "root" . "name" "otel-agent-config") }}
+{{- end }}

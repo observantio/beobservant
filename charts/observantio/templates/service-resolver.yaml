@@ -1,0 +1,17 @@
+{{- if .Values.resolver.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "resolver") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.resolver.service.type }}
+  selector:
+    {{- include "observantio.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: resolver
+  ports:
+  - name: http
+    port: {{ .Values.resolver.service.port }}
+    targetPort: http
+{{- end }}

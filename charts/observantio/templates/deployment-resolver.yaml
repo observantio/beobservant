@@ -1,0 +1,59 @@
+{{- if .Values.resolver.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "resolver") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.resolver.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: resolver
+  template:
+    metadata:
+      labels:
+        {{- include "observantio.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: resolver
+    spec:
+      automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+      serviceAccountName: {{ include "observantio.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: resolver
+        image: "{{ .Values.resolver.image.repository }}:{{ .Values.resolver.image.tag }}"
+        imagePullPolicy: {{ .Values.resolver.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.resolver.service.port }}
+          name: http
+        env:
+        {{- range $k, $v := .Values.resolver.env }}
+        - name: {{ $k }}
+          value: {{ tpl ($v | toString) $ | quote }}
+        {{- end }}
+        envFrom:
+        - secretRef:
+            name: {{ include "observantio.fullname" . }}-secrets
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.resolver.probes.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.resolver.probes.initialDelaySeconds }}
+          periodSeconds: {{ .Values.resolver.probes.periodSeconds }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.resolver.probes.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.resolver.probes.initialDelaySeconds }}
+          periodSeconds: {{ .Values.resolver.probes.periodSeconds }}
+        resources:
+          {{- toYaml .Values.resolver.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+{{- end }}
