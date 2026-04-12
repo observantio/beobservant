@@ -139,4 +139,4 @@ components:
       description: OTLP token used to resolve organization scope in the gateway.
       in: header
       name: x-otlp-token
-jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+jsonSchemaDialect: https://spec.openapis.org/oas/3.1/dialect/base
