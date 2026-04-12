@@ -33,6 +33,7 @@ dev = [
   "pytest>=9.0.0",
   "pytest-cov>=7.0.0",
   "pytest-asyncio>=1.3.0",
+  "mutmut>=3.5.0",
   "observantio[resolver]",
 ]
 
@@ -117,6 +118,146 @@ filterwarnings = [
   "ignore::ResourceWarning",
 ]
 
+[tool.mutmut]
+paths_to_mutate = [
+  "resolver/api/routes",
+  "resolver/middleware",
+  "gatekeeper/routers",
+  "gatekeeper/middleware",
+  "gatekeeper/services",
+  "notifier/services/storage/revocation.py",
+  "watchdog/routers",
+  "watchdog/services",
+  "watchdog/middleware",
+]
+tests_dir = [
+  "resolver/tests",
+  "gatekeeper/tests",
+  "notifier/tests",
+  "watchdog/tests",
+]
+do_not_mutate = [
+  "*/tests/*",
+  "*/mutants/*",
+  "*/openapi.json",
+  "*/openapi.yaml",
+  "*/assets/*",
+  "*/configs/*",
+  "*/templates/*",
+  "*/migrations/*",
+]
+pytest_add_cli_args = ["-q"]
+mutate_only_covered_lines = true
+
+[tool.observantio.mutmut_profiles.defaults]
+do_not_mutate = [
+  "*/tests/*",
+  "*/mutants/*",
+  "*/openapi.json",
+  "*/openapi.yaml",
+  "*/assets/*",
+  "*/configs/*",
+  "*/templates/*",
+  "*/migrations/*",
+]
+pytest_add_cli_args = ["-q"]
+
+[tool.observantio.mutmut_profiles.resolver]
+paths_to_mutate = [
+  "api/routes/analyze.py",
+  "api/routes/jobs.py",
+  "api/routes/topology.py",
+]
+tests_dir = ["tests/test_jobs_routes.py"]
+also_copy = [
+  "api",
+  "connectors",
+  "services",
+  "engine",
+  "custom_types",
+  "datasources",
+  "store",
+  "config.py",
+  "database.py",
+  "db_models.py",
+]
+pytest_add_cli_args_test_selection = [
+  "tests/test_route_permissions.py",
+  "tests/test_mutation_routes.py",
+]
+mutate_only_covered_lines = false
+debug = true
+
+[tool.observantio.mutmut_profiles.gatekeeper]
+paths_to_mutate = ["routers/gateway_router.py"]
+tests_dir = ["tests"]
+also_copy = [
+  "routers",
+  "services",
+  "middleware",
+  "models",
+  "settings.py",
+  "main.py",
+  "start.py",
+]
+mutate_only_covered_lines = false
+
+[tool.observantio.mutmut_profiles.notifier]
+paths_to_mutate = [
+  "services/common/url_utils.py",
+]
+tests_dir = ["tests/test_url_utils.py"]
+also_copy = [
+  "routers",
+  "services",
+  "middleware",
+  "models",
+  "custom_types",
+  "templates",
+  "config.py",
+  "database.py",
+  "db_models.py",
+  "main.py",
+]
+mutate_only_covered_lines = true
+
+[tool.observantio.mutmut_profiles.watchdog]
+paths_to_mutate = [
+  "routers/access/auth_router/api_keys.py",
+  "routers/access/auth_router/authentication.py",
+  "routers/observability/grafana_router/dashboards.py",
+  "services/grafana/proxy_path_permissions.py",
+  "routers/observability/resolver_router.py",
+]
+also_copy = [
+  "routers",
+  "services",
+  "middleware",
+  "models",
+  "custom_types",
+  "config.py",
+  "database.py",
+  "db_models.py",
+  "main.py",
+]
+pytest_add_cli_args_test_selection = [
+  "tests/test_auth_security_policies.py",
+  "tests/test_auth_helper_more.py",
+  "tests/test_database_auth_and_helper_edges.py",
+  "tests/test_database_auth_service_delegation.py",
+  "tests/test_folder_scope_ops.py",
+  "tests/test_grafana_service_org_scope.py",
+  "tests/test_dashboard_ops_helpers_gap.py",
+  "tests/test_dashboard_ops_gap_closure.py",
+  "tests/test_dashboard_and_grafana_more_gap.py",
+  "tests/test_regression_route_gap_workflows.py",
+  "tests/test_resolver_router.py",
+  "tests/test_grafana_router_edges.py",
+  "tests/test_auth_router_edges.py",
+]
+mutate_only_covered_lines = true
+debug = true
+
 [tool.coverage.run]
 branch = true
 omit = ["tests/*", "ui/*", "showcase/*"]
@@ -166,6 +307,10 @@ explicit_package_bases = true
 exclude = [
   "^(ui|showcase|configs|build|dist|venv|\\.venv|__pycache__)/",
   "^(watchdog|gatekeeper|notifier|resolver)/tests/",
+  "^(watchdog|gatekeeper|notifier|resolver)/mutants/",
+  "^mutants/",
+  "^\\.mutmut-cache/",
+  "^mutation_tests/",
   # `run_global_mypy.sh` runs `mypy` from each service directory; paths are `tests/...`, not `<service>/tests/`.
   "^tests/",
 ]
@@ -177,9 +322,11 @@ ignore_missing_imports = true
 [tool.pylint.main]
 jobs = 1
 extension-pkg-allow-list = ["sqlalchemy", "sqlalchemy.orm"]
-ignore = [".git", "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "venv", "node_modules", "build", "dist", "tmp", "vendor"]
+ignore = [".git", "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "venv", "node_modules", "build", "dist", "tmp", "vendor", "mutants"]
 ignore-paths = [
   "^\\./?(?:resolver|gatekeeper|notifier|watchdog)/tests/.*$",
+  "^\\./?(?:resolver|gatekeeper|notifier|watchdog)/mutants/.*$",
+  "^\\./?mutants/.*$",
   "^\\./?(?:ui|showcase)/.*$",
 ]
 init-hook = """
