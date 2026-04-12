@@ -61,6 +61,41 @@ def _patch_threadpool(monkeypatch):
     monkeypatch.setattr(folders, "rtp", _rtp)
 
 
+def test_dashboard_search_param_containers_preserve_fields():
+    text = dashboards.SearchDashboardsTextParams(
+        query="latency",
+        tag="critical",
+        uid="dash-1",
+        team_id="team-1",
+    )
+    assert text.query == "latency"
+    assert text.tag == "critical"
+    assert text.uid == "dash-1"
+    assert text.team_id == "team-1"
+
+    folders_params = dashboards.SearchDashboardsFolderParams(
+        folder_ids=[1, 2],
+        folder_uids=["folder-a"],
+        dashboard_uids=["dash-1"],
+        search_type="dash-db",
+    )
+    assert folders_params.folder_ids == [1, 2]
+    assert folders_params.folder_uids == ["folder-a"]
+    assert folders_params.dashboard_uids == ["dash-1"]
+    assert folders_params.search_type == "dash-db"
+
+    paging = dashboards.SearchDashboardsPagingParams(
+        starred=False,
+        show_hidden="true",
+        limit=7,
+        offset=3,
+    )
+    assert paging.starred is False
+    assert paging.show_hidden == "true"
+    assert paging.limit == 7
+    assert paging.offset == 3
+
+
 @pytest.mark.asyncio
 async def test_dashboard_routes_cover_success_and_failure_paths(monkeypatch):
     current_user = _user()

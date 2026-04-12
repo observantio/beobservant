@@ -155,6 +155,27 @@ class ConfigSecurityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 _reload_config_module()
 
+    def test_rejects_missing_jwt_keypair_when_auto_generation_disabled_in_production(self):
+        with patch.dict(
+            os.environ,
+            {
+                "APP_ENV": "production",
+                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                "CORS_ORIGINS": "https://app.example.com",
+                "CORS_ALLOW_CREDENTIALS": "true",
+                "JWT_ALGORITHM": "RS256",
+                "JWT_AUTO_GENERATE_KEYS": "false",
+                "JWT_PRIVATE_KEY": "",
+                "JWT_PUBLIC_KEY": "",
+            },
+            clear=False,
+        ):
+            with self.assertRaisesRegex(
+                ValueError,
+                "JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be configured for RS256/ES256 tokens",
+            ):
+                _reload_config_module()
+
     def test_vault_enabled_in_production_without_addr_raises(self):
         with patch.dict(
             os.environ,
