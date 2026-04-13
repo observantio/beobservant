@@ -597,14 +597,22 @@ case "$SERVICE" in
     ;;
 esac
 
+SCHEMATHESIS_CMD=(
+  .venv/bin/schemathesis
+  run
+  "$SPEC_PATH"
+  "--url=$TARGET_URL"
+  "${EXTRA_HEADERS[@]}"
+  --exclude-checks=unsupported_method,positive_data_acceptance
+  --report-dir
+  "$REPORT_DIR"
+  "${COMMON_ARGS[@]}"
+  --report-junit-path
+  "$JUNIT_PATH"
+)
+
 set +e
-.venv/bin/schemathesis run "$SPEC_PATH" \
-  --url="$TARGET_URL" \
-  "${EXTRA_HEADERS[@]}" \
-  --exclude-checks=unsupported_method,positive_data_acceptance \
-  --report-dir "$REPORT_DIR" \
-  "${COMMON_ARGS[@]}" \
-  --report-junit-path "$JUNIT_PATH"
+"${SCHEMATHESIS_CMD[@]}"
 SCHEMATHESIS_EXIT=$?
 set -e
 
