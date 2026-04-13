@@ -22,6 +22,9 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 SERVICE="${1:-}"
+while [[ -n "$SERVICE" && "$SERVICE" == */ ]]; do
+  SERVICE="${SERVICE%/}"
+done
 if [[ -z "$SERVICE" ]]; then
   echo "Missing required service argument" >&2
   usage >&2
@@ -85,19 +88,61 @@ wait_for_http_ready() {
   done
 }
 
+resolve_proxy_network() {
+  if [[ -n "${SCHEMATHESIS_DOCKER_NETWORK:-}" ]]; then
+    echo "$SCHEMATHESIS_DOCKER_NETWORK"
+    return 0
+  fi
+
+  local watchdog_id
+  watchdog_id="$(docker compose ps -q watchdog 2>/dev/null || true)"
+  if [[ -n "$watchdog_id" ]]; then
+    local detected
+    detected="$(
+      docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{printf "%s\n" $k}}{{end}}' "$watchdog_id" 2>/dev/null \
+        | head -n1
+    )"
+    if [[ -n "$detected" ]]; then
+      echo "$detected"
+      return 0
+    fi
+  fi
+
+  if docker network inspect watchdog_obs >/dev/null 2>&1; then
+    echo "watchdog_obs"
+    return 0
+  fi
+
+  local obs_networks
+  obs_networks="$(docker network ls --format '{{.Name}}' | grep '_obs$' || true)"
+  if [[ -n "$obs_networks" ]]; then
+    echo "$obs_networks" | head -n1
+    return 0
+  fi
+
+  echo "Unable to determine Docker network for gateway-auth/resolver proxy." >&2
+  echo "Set SCHEMATHESIS_DOCKER_NETWORK explicitly (for example: observantio_obs)." >&2
+  return 1
+}
+
+PROXY_NETWORK=""
 setup_gatekeeper_proxy() {
   PROXY_CONTAINER="watchdog-gatekeeper-port-proxy"
   docker rm -f "$PROXY_CONTAINER" >/dev/null 2>&1 || true
-  docker run -d --name "$PROXY_CONTAINER" --network watchdog_obs -p 4321:4321 alpine/socat TCP-LISTEN:4321,fork,reuseaddr TCP:gateway-auth:4321 >/dev/null
+  docker run -d --name "$PROXY_CONTAINER" --network "$PROXY_NETWORK" -p 4321:4321 alpine/socat TCP-LISTEN:4321,fork,reuseaddr TCP:gateway-auth:4321 >/dev/null
 }
 
 setup_resolver_proxy() {
   PROXY_CONTAINER="watchdog-resolver-port-proxy"
   docker rm -f "$PROXY_CONTAINER" >/dev/null 2>&1 || true
-  docker run -d --name "$PROXY_CONTAINER" --network watchdog_obs -p 4322:4322 alpine/socat TCP-LISTEN:4322,fork,reuseaddr TCP:resolver:4322 >/dev/null
+  docker run -d --name "$PROXY_CONTAINER" --network "$PROXY_NETWORK" -p 4322:4322 alpine/socat TCP-LISTEN:4322,fork,reuseaddr TCP:resolver:4322 >/dev/null
 }
 
 wait_for_http_ready "watchdog" "http://127.0.0.1:4319/health" 180
+
+if [[ "$SERVICE" == "gatekeeper" || "$SERVICE" == "resolver" ]]; then
+  PROXY_NETWORK="$(resolve_proxy_network)"
+fi
 
 case "$SERVICE" in
   gatekeeper)
