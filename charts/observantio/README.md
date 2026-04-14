@@ -1,119 +1,125 @@
-# observantio Helm chart
+<div align="center">
 
-This chart now covers the main `docker-compose.prod.yml` topology:
-- core services: `observantio`, `gatekeeper`, `notifier`, `resolver`, optional `ui`
-- telemetry gateway: `otlp-gateway`, optional `otel-agent`
-- data services: optional in-cluster `postgres`, `redis`
-- observability stack: `loki`, `tempo`, `mimir`, `alertmanager`, `grafana`, `grafana-auth-gateway`
-- secret wiring via existing Kubernetes Secret or External Secrets Operator
+# Observantio Helm Chart
 
-## Render
+<img src="../../assets/kubernetes.png" alt="Kubernetes" width="120" />
+
+<p>
+  <a href="../../charts/observantio/installer.sh">
+    <img src="https://img.shields.io/badge/Installer-Production-0ea5e9?style=flat-square&logo=kubernetes&logoColor=white" alt="Installer" />
+  </a>
+  <a href="../../charts/observantio/values-production.yaml">
+    <img src="https://img.shields.io/badge/Profile-production-16a34a?style=flat-square" alt="Production Profile" />
+  </a>
+  <a href="../../charts/observantio/values-compact.yaml">
+    <img src="https://img.shields.io/badge/Profile-compact-1f2937?style=flat-square" alt="Compact Profile" />
+  </a>
+</p>
+
+<p>Simple production installer for Kubernetes with sane defaults.</p>
+
+</div>
+
+## Quick Start
+
+Run from repo root:
 
 ```bash
-helm template observantio charts/observantio
+bash charts/observantio/installer.sh --profile production --foreground
 ```
 
-## Install
+What this does:
+- Prompts for admin username, email, and password.
+- Prepares secrets.
+- Deploys the chart.
+- Waits for rollout.
+- Starts local port-forwards in foreground mode.
+
+Use detached or no port-forward mode if preferred:
 
 ```bash
-helm upgrade --install observantio charts/observantio -n observantio --create-namespace
+bash charts/observantio/installer.sh --profile production --detach
+bash charts/observantio/installer.sh --profile production --no-port-forward
 ```
 
-## Production Installer Script
+## Profiles
 
-The chart includes a production-oriented installer that manages secrets, internal TLS certificates,
-security defaults, rollout checks, and optional port-forwards.
+- `production`: Uses [`values-production.yaml`](values-production.yaml).
+- `compact`: Uses production values plus [`values-compact.yaml`](values-compact.yaml) for smaller clusters.
+
+Examples:
 
 ```bash
-# Direct chart path
+bash charts/observantio/installer.sh --profile production
+bash charts/observantio/installer.sh --profile compact
+```
+
+## Common Flags
+
+- `--release <name>` set Helm release (default: `observantio-prod`)
+- `--namespace <name>` set namespace (default: `observantio`)
+- `--chart <path>` set chart path
+- `--values <file>` add extra values file (repeatable)
+- `--profile production|compact`
+- `--existing-secret <name>` use existing app secret
+- `--skip-secret-management` skip secret create/update
+- `--run-checks` run post-deploy checks
+- `--no-checks` skip post-deploy checks
+- `--remove` uninstall release
+- `--purge` uninstall and purge namespace PVC/PV data
+- `--detach` detached port-forwards
+- `--foreground` foreground port-forwards
+- `--no-port-forward` disable port-forwards
+- `-h`, `--help` show help
+
+## Change Image Tags
+
+Recommended approach: extra values file.
+
+```yaml
+# /tmp/observantio-image-overrides.yaml
+observantio:
+  image:
+    repository: ghcr.io/observantio/watchdog
+    tag: latest-build-20260414
+notifier:
+  image:
+    repository: ghcr.io/observantio/notifier
+    tag: latest-build-20260414
+resolver:
+  image:
+    repository: ghcr.io/observantio/resolver
+    tag: latest-build-20260414
+```
+
+```bash
 bash charts/observantio/installer.sh \
-  --release observantio-prod \
-  --namespace observantio
-
-# Repository wrapper (delegates to charts/observantio/installer.sh)
-bash installer.sh --release observantio-prod --namespace observantio
+  --profile production \
+  --values /tmp/observantio-image-overrides.yaml
 ```
 
-Profile selection:
-- `--profile auto` (default) chooses `production` on sufficiently sized clusters and `compact` on constrained clusters.
-- `--profile production` enforces full production sizing and HA defaults.
-- `--profile compact` is a constrained-cluster compatibility mode (reduced replicas/resources, internal TLS off, gatekeeper off).
-
-Important:
-- Set `OBSERVANTIO_PASSWORD` (minimum 16 chars) or provide it interactively.
-- Set `CORS_ORIGINS` for production domains (for example `https://app.example.com`).
-- `--allow-local-cors` is only for local validation and should not be used for internet-facing deployments.
-
-`values.yaml` now defaults to hardened runtime values:
-- `APP_ENV=production`
-- `ENVIRONMENT=production`
-- `HOST=0.0.0.0`
-- `JWT_ALGORITHM=RS256`
-- `JWT_AUTO_GENERATE_KEYS=false`
-- `DB_AUTO_CREATE_SCHEMA=false`
-- `CORS_ALLOW_CREDENTIALS=false`
-- `GATEWAY_ALLOWLIST_FAIL_OPEN=false`
-- NetworkPolicy / PDB / HPA enabled by default
-- internal-only services (`ClusterIP`) by default, with optional dedicated public OTLP gateway
-
-## Secrets (Production)
-
-Production path uses an existing Kubernetes Secret (or External Secrets Operator) instead of inline chart-managed secrets.
+Notifier-only env override shortcut:
 
 ```bash
-helm upgrade --install observantio charts/observantio \
-  -n observantio --create-namespace \
-  -f charts/observantio/values-production.yaml
+NOTIFIER_IMAGE_REPOSITORY=ghcr.io/observantio/notifier \
+NOTIFIER_IMAGE_TAG=latest-build-20260414 \
+bash charts/observantio/installer.sh --profile production
 ```
 
-If you prefer chart-managed secret creation, enable it explicitly and provide all required values:
+## Make It Yours
+
+Start with `values-production.yaml`, then adapt for your environment:
+- Resource requests/limits
+- Replica counts and autoscaling
+- Network policy rules
+- TLS and secret management strategy
+- Service exposure and ingress choices
+
+Tip: keep your org-specific config in a separate values file and pass it with `--values`.
+
+## Cleanup
 
 ```bash
-helm upgrade --install observantio charts/observantio \
-  -n observantio --create-namespace \
-  --set secrets.create=true \
-  --set-string secrets.POSTGRES_USER='watchdog' \
-  --set-string secrets.POSTGRES_PASSWORD='<strong-db-password>' \
-  --set-string secrets.POSTGRES_DB='watchdog' \
-  --set-string secrets.JWT_SECRET_KEY='<strong-random-string>' \
-  --set-string secrets.DATA_ENCRYPTION_KEY='<fernet-key>' \
-  --set-string secrets.INBOUND_WEBHOOK_TOKEN='<webhook-token>' \
-  --set-string secrets.DEFAULT_OTLP_TOKEN='<otlp-token>' \
-  --set-string secrets.OTEL_OTLP_TOKEN='<otlp-token>' \
-  --set-string secrets.OTLP_INGEST_TOKEN='<otlp-ingest-token>' \
-  --set-string secrets.GATEWAY_INTERNAL_SERVICE_TOKEN='<gateway-internal-token>' \
-  --set-string secrets.GATEWAY_STATUS_OTLP_TOKEN='<gateway-health-token>' \
-  --set-string secrets.NOTIFIER_SERVICE_TOKEN='<token>' \
-  --set-string secrets.NOTIFIER_EXPECTED_SERVICE_TOKEN='<token>' \
-  --set-string secrets.NOTIFIER_CONTEXT_SIGNING_KEY='<key>' \
-  --set-string secrets.NOTIFIER_CONTEXT_VERIFY_KEY='<key>' \
-  --set-string secrets.RESOLVER_SERVICE_TOKEN='<token>' \
-  --set-string secrets.RESOLVER_EXPECTED_SERVICE_TOKEN='<token>' \
-  --set-string secrets.RESOLVER_CONTEXT_SIGNING_KEY='<key>' \
-  --set-string secrets.RESOLVER_CONTEXT_VERIFY_KEY='<key>' \
-  --set-string secrets.GRAFANA_USERNAME='admin' \
-  --set-string secrets.GRAFANA_PASSWORD='<strong-password>'
+bash charts/observantio/installer.sh --remove
+bash charts/observantio/installer.sh --purge
 ```
-
-To expose only Envoy OTLP publicly:
-
-```bash
-helm upgrade --install observantio charts/observantio \
-  -n observantio --create-namespace \
-  --set otlpGateway.publicService.enabled=true
-```
-
-## Access
-
-```bash
-~/.local/bin/kubectl -n observantio port-forward svc/observantio-observantio-observantio 4319:4319
-~/.local/bin/kubectl -n observantio port-forward svc/observantio-observantio-ui 5173:80
-~/.local/bin/kubectl -n observantio port-forward svc/observantio-observantio-grafana-auth-gateway 8080:8080
-```
-
-## Notes
-
-- By default, all components are enabled except `otel-agent`.
-- Use feature flags in `values.yaml` to disable parts of the stack, for example `loki.enabled=false` or `gatekeeper.enabled=false`.
-- `values-production.yaml` is included as a baseline for hardened cluster deployments.
-- `values-compact.yaml` is included for constrained clusters where full production sizing cannot schedule.
