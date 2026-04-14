@@ -636,8 +636,8 @@ async def test_internal_and_system_router_edges(monkeypatch):
         async def get(self, url, params=None, headers=None):
             self.calls.append((url, params))
             if "latest" in url:
-                return _FakeResponse({"tag_name": "v0.0.3"})
-            return _FakeResponse([{"tag_name": "v0.0.3"}])
+                return _FakeResponse({"tag_name": "v0.0.4"})
+            return _FakeResponse([{"tag_name": "v0.0.4"}])
 
     fake_client = _FakeAsyncClient()
     monkeypatch.setattr(system_router.httpx, "AsyncClient", lambda *args, **kwargs: fake_client)
@@ -648,8 +648,8 @@ async def test_internal_and_system_router_edges(monkeypatch):
 
     first = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
     second = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
-    assert first["latest"]["tag_name"] == "v0.0.3"
-    assert second["latest"]["tag_name"] == "v0.0.3"
+    assert first["latest"]["tag_name"] == "v0.0.4"
+    assert second["latest"]["tag_name"] == "v0.0.4"
     assert len(fake_client.calls) == 2
 
 

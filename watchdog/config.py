@@ -760,7 +760,7 @@ class Config:
 
 class Constants:
     APP_NAME: str = "Watchdog with Your Infrastructure"
-    APP_VERSION: str = "0.0.3"
+    APP_VERSION: str = "0.0.4"
     APP_DESCRIPTION: str = "Unified API for managing Tempo, Loki, AlertManager, Grafana, and Resolver"
 
     STATUS_HEALTHY: str = "Healthy"
