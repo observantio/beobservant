@@ -166,7 +166,7 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
 
     with pytest.raises(HTTPException) as missing_token_config:
         dependencies.enforce_header_token(_request(), header_name="x-test", expected_token=None, unauthorized_detail="bad")
-    assert missing_token_config.value.status_code == 500
+    assert missing_token_config.value.status_code == 401
     with pytest.raises(HTTPException) as unauthorized:
         dependencies.enforce_header_token(
             _request(), header_name="x-test", expected_token="secret", unauthorized_detail="bad"
