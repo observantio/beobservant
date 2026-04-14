@@ -67,6 +67,14 @@ spec:
         - name: {{ $k }}
           value: {{ tpl ($v | toString) $ | quote }}
         {{- end }}
+        {{- if .Values.internalTLS.enabled }}
+        - name: SSL_ENABLED
+          value: "true"
+        - name: SSL_CERTFILE
+          value: /etc/observantio/internal-tls/tls.crt
+        - name: SSL_KEYFILE
+          value: /etc/observantio/internal-tls/tls.key
+        {{- end }}
         envFrom:
         - secretRef:
             name: {{ include "observantio.secretName" . }}
@@ -75,17 +83,26 @@ spec:
         - name: internal-ca
           mountPath: /etc/observantio/internal-ca
           readOnly: true
+        - name: internal-tls
+          mountPath: /etc/observantio/internal-tls
+          readOnly: true
         {{- end }}
         livenessProbe:
           httpGet:
             path: {{ .Values.observantio.probes.path }}
             port: http
+            {{- if .Values.internalTLS.enabled }}
+            scheme: HTTPS
+            {{- end }}
           initialDelaySeconds: {{ .Values.observantio.probes.initialDelaySeconds }}
           periodSeconds: {{ .Values.observantio.probes.periodSeconds }}
         readinessProbe:
           httpGet:
             path: {{ .Values.observantio.probes.path }}
             port: http
+            {{- if .Values.internalTLS.enabled }}
+            scheme: HTTPS
+            {{- end }}
           initialDelaySeconds: {{ .Values.observantio.probes.initialDelaySeconds }}
           periodSeconds: {{ .Values.observantio.probes.periodSeconds }}
         resources:
@@ -100,5 +117,13 @@ spec:
           items:
           - key: {{ .Values.internalTLS.caKey }}
             path: ca.crt
+      - name: internal-tls
+        secret:
+          secretName: {{ include "observantio.internalTLSSecretName" . }}
+          items:
+          - key: {{ .Values.internalTLS.observantioCertKey }}
+            path: tls.crt
+          - key: {{ .Values.internalTLS.observantioKeyKey }}
+            path: tls.key
       {{- end }}
 {{- end }}

@@ -19,6 +19,31 @@ helm template observantio charts/observantio
 helm upgrade --install observantio charts/observantio -n observantio --create-namespace
 ```
 
+## Production Installer Script
+
+The chart includes a production-oriented installer that manages secrets, internal TLS certificates,
+security defaults, rollout checks, and optional port-forwards.
+
+```bash
+# Direct chart path
+bash charts/observantio/installer.sh \
+  --release observantio-prod \
+  --namespace observantio
+
+# Repository wrapper (delegates to charts/observantio/installer.sh)
+bash installer.sh --release observantio-prod --namespace observantio
+```
+
+Profile selection:
+- `--profile auto` (default) chooses `production` on sufficiently sized clusters and `compact` on constrained clusters.
+- `--profile production` enforces full production sizing and HA defaults.
+- `--profile compact` is a constrained-cluster compatibility mode (reduced replicas/resources, internal TLS off, gatekeeper off).
+
+Important:
+- Set `OBSERVANTIO_PASSWORD` (minimum 16 chars) or provide it interactively.
+- Set `CORS_ORIGINS` for production domains (for example `https://app.example.com`).
+- `--allow-local-cors` is only for local validation and should not be used for internet-facing deployments.
+
 `values.yaml` now defaults to hardened runtime values:
 - `APP_ENV=production`
 - `ENVIRONMENT=production`
@@ -91,3 +116,4 @@ helm upgrade --install observantio charts/observantio \
 - By default, all components are enabled except `otel-agent`.
 - Use feature flags in `values.yaml` to disable parts of the stack, for example `loki.enabled=false` or `gatekeeper.enabled=false`.
 - `values-production.yaml` is included as a baseline for hardened cluster deployments.
+- `values-compact.yaml` is included for constrained clusters where full production sizing cannot schedule.

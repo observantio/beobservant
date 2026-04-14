@@ -7,6 +7,8 @@ internalTLS:
   enabled: false
   secretName: ""
   caKey: ca.crt
+  observantioCertKey: observantio.crt
+  observantioKeyKey: observantio.key
 
 observantio:
   enabled: true
