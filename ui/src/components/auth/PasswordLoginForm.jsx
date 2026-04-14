@@ -25,6 +25,7 @@ export default function PasswordLoginForm({
           value={username}
           onChange={(e) => onUsernameChange(e.target.value.toLowerCase())}
           placeholder="Enter your username"
+          className="border-0 shadow-none focus:ring-0"
           required
           autoFocus
           autoComplete="username"
@@ -45,6 +46,7 @@ export default function PasswordLoginForm({
           value={password}
           onChange={(e) => onPasswordChange(e.target.value)}
           placeholder="Enter your password"
+          className="border-0 shadow-none focus:ring-0"
           required
           autoComplete="current-password"
           disabled={disabled}

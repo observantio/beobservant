@@ -189,6 +189,14 @@ select.text-xs {
   background-size: 0.85rem;
 }
 
+/* Keep login and MFA panels visually flat (no card border/shadow) in both themes. */
+.auth-login-page input,
+.auth-login-page .border,
+.auth-login-page .border-sre-border {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
 /* ReactFlow Custom Styles */
 .react-flow__node-service {
   border-radius: 12px !important;

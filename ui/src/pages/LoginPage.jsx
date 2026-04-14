@@ -208,7 +208,7 @@ export default function LoginPage() {
 
   const providerLabel = hasOIDC ? OIDC_PROVIDER_LABEL : "Single Sign-On";
   return (
-    <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4">
+    <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4 auth-login-page">
       <div className="w-full max-w-md rounded-2xl bg-transparent p-6 shadow-none border-0 backdrop-blur-none">
         <div className="text-center mb-8">
           {showLoginLogo && (
@@ -315,7 +315,7 @@ export default function LoginPage() {
                         type="text"
                         value={setupSecret}
                         readOnly
-                        className="w-full px-3 py-2 bg-sre-bg rounded text-sre-text dark:bg-transparent"
+                        className="w-full px-3 py-2 bg-sre-bg rounded text-sre-text dark:bg-transparent border-0 shadow-none focus:ring-0"
                       />
                     </div>
                   )}
@@ -332,7 +332,7 @@ export default function LoginPage() {
                       value={setupCode}
                       onChange={(e) => setSetupCode(e.target.value)}
                       placeholder="Enter 6-digit code"
-                      className="w-full px-3 py-2 bg-sre-bg rounded text-sre-text dark:bg-transparent"
+                      className="w-full px-3 py-2 bg-sre-bg rounded text-sre-text dark:bg-transparent border-0 shadow-none focus:ring-0"
                       autoFocus
                     />
                   </div>
@@ -496,7 +496,7 @@ export default function LoginPage() {
                       ? "Enter recovery code"
                       : "Enter 6-digit code"
                   }
-                  className="w-full px-3 py-2 bg-sre-bg rounded text-sre-text dark:bg-transparent"
+                  className="w-full px-3 py-2 bg-sre-bg rounded text-sre-text dark:bg-transparent border-0 shadow-none focus:ring-0"
                   autoFocus
                 />
                 <p className="text-xs text-sre-text-muted mt-2">
