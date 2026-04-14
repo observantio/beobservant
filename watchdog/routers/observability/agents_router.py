@@ -157,7 +157,15 @@ async def agent_metric_volume(
     }
 
 
-@router.post("/heartbeat")
+@router.post(
+    "/heartbeat",
+    responses={
+        400: {"description": "Bad Request"},
+        401: {"description": "Unauthorized"},
+        403: {"description": "Forbidden"},
+        429: {"description": "Too Many Requests"},
+    },
+)
 async def heartbeat(request: Request, payload: AgentHeartbeat) -> dict[str, str]:
     enforce_public_endpoint_security(
         request,

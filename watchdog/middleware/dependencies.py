@@ -490,8 +490,8 @@ def enforce_header_token(
     if not expected_token:
         if require_configured_token:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Server token configuration missing",
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=unauthorized_detail,
             )
         return
     provided = request.headers.get(header_name)

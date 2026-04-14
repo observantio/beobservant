@@ -283,6 +283,19 @@ async def test_agents_router_list_active_and_heartbeat(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_agents_heartbeat_missing_token_config_fails_closed(monkeypatch):
+    monkeypatch.setattr(agents_router, "enforce_public_endpoint_security", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(config, "AGENT_HEARTBEAT_TOKEN", None)
+
+    with pytest.raises(HTTPException) as exc:
+        await agents_router.heartbeat(
+            _request(method="POST", path="/api/agents/heartbeat"),
+            AgentHeartbeat(name="agent-a", tenant_id="tenant-a"),
+        )
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_agents_router_close_mimir_client(monkeypatch):
     closed = []
 

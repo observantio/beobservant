@@ -1824,6 +1824,12 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
         '400':
           description: Bad Request
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '429':
+          description: Too Many Requests
   /api/system/metrics:
     get:
       tags:
