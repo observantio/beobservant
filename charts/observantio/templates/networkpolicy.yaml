@@ -1,0 +1,61 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "observantio.fullname" . }}-default-deny
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "observantio.fullname" . }}-allow-internal-and-dns
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          {{- include "observantio.selectorLabels" . | nindent 10 }}
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          {{- include "observantio.selectorLabels" . | nindent 10 }}
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  {{- if .Values.networkPolicy.allowAllExternalEgress }}
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+  {{- end }}
+  {{- range .Values.networkPolicy.allowExternalEgressCidrs }}
+  - to:
+    - ipBlock:
+        cidr: {{ . | quote }}
+  {{- end }}
+{{- end }}

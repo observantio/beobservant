@@ -1,0 +1,61 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- if .Values.observantio.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "observantio") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: observantio
+---
+{{- end }}
+{{- if .Values.gatekeeper.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "gatekeeper") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gatekeeper
+---
+{{- end }}
+{{- if .Values.notifier.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "notifier") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: notifier
+---
+{{- end }}
+{{- if .Values.resolver.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "resolver") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "observantio.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: resolver
+{{- end }}
+{{- end }}

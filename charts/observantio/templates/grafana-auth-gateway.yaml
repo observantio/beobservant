@@ -25,6 +25,12 @@ data:
       "::"    1;
     }
 
+    map $http_origin $cors_origin {
+      default "";
+      "~^https?://localhost:5173$" $http_origin;
+      "~^https?://127\\.0\\.0\\.1:5173$" $http_origin;
+    }
+
     server {
       listen {{ default 8080 (index $gagService "port") }};
       absolute_redirect off;
@@ -56,6 +62,19 @@ data:
       }
 
       location /grafana/ {
+        if ($request_method = OPTIONS) {
+          add_header Access-Control-Allow-Origin $cors_origin always;
+          add_header Access-Control-Allow-Credentials "true" always;
+          add_header Access-Control-Allow-Methods "GET,POST,PUT,PATCH,DELETE,OPTIONS" always;
+          add_header Access-Control-Allow-Headers "Authorization,Content-Type,X-Requested-With" always;
+          add_header Vary "Origin" always;
+          return 204;
+        }
+
+        add_header Access-Control-Allow-Origin $cors_origin always;
+        add_header Access-Control-Allow-Credentials "true" always;
+        add_header Vary "Origin" always;
+
         auth_request /_auth;
 
         auth_request_set $webauth_user   $upstream_http_x_webauth_user;
@@ -120,7 +139,37 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" $gag) | nindent 8 }}
+      {{- with .Values.scheduling.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.scheduling.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "observantio.selectorLabels" . | nindent 18 }}
+                  app.kubernetes.io/component: grafana-auth-gateway
+      {{- end }}
+      {{- if .Values.scheduling.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+      - maxSkew: {{ .Values.scheduling.topologySpreadConstraints.maxSkew }}
+        topologyKey: {{ .Values.scheduling.topologySpreadConstraints.topologyKey }}
+        whenUnsatisfiable: {{ .Values.scheduling.topologySpreadConstraints.whenUnsatisfiable }}
+        labelSelector:
+          matchLabels:
+            {{- include "observantio.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: grafana-auth-gateway
+      {{- end }}
       containers:
       - name: grafana-auth-gateway
         image: "{{ default "nginx" (index $gagImage "repository") }}:{{ default "1.27-alpine" (index $gagImage "tag") }}"
@@ -147,7 +196,7 @@ spec:
         resources:
           {{- toYaml ((index $gag "resources") | default (dict)) | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" $gag "name" "grafana-auth-gateway") | nindent 10 }}
       volumes:
       - name: config
         configMap:

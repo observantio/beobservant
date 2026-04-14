@@ -3,9 +3,14 @@ fullnameOverride: ""
 
 imagePullSecrets: []
 
+internalTLS:
+  enabled: false
+  secretName: ""
+  caKey: ca.crt
+
 observantio:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: ghcr.io/observantio/watchdog
     tag: v0.0.3
@@ -13,20 +18,26 @@ observantio:
   service:
     type: ClusterIP
     port: 4319
-  resources: {}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
   env:
-    APP_ENV: development
-    ENVIRONMENT: development
+    APP_ENV: production
+    ENVIRONMENT: production
     HOST: 0.0.0.0
     LOG_LEVEL: info
     PORT: "4319"
     JWT_ALGORITHM: RS256
-    JWT_AUTO_GENERATE_KEYS: "true"
-    DB_AUTO_CREATE_SCHEMA: "true"
+    JWT_AUTO_GENERATE_KEYS: "false"
+    DB_AUTO_CREATE_SCHEMA: "false"
     CORS_ALLOW_CREDENTIALS: "false"
     RATE_LIMIT_BACKEND: redis
-    RATE_LIMIT_REDIS_URL: redis://{{ .Release.Name }}-redis:6379/0
-    DATABASE_URL: postgresql://watchdog:watchdog@{{ .Release.Name }}-postgres:5432/watchdog
+    RATE_LIMIT_REDIS_URL: redis://{{ include "observantio.redisServiceName" $ }}:6379/0
+    DATABASE_URL: postgresql://watchdog:watchdog@{{ include "observantio.postgresServiceName" $ }}:5432/watchdog
     TEMPO_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "tempo") }}:3200
     LOKI_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "loki") }}:3100
     MIMIR_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "mimir") }}:9009
@@ -42,7 +53,7 @@ observantio:
 
 gatekeeper:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: ghcr.io/observantio/gatekeeper
     tag: v0.0.3
@@ -50,18 +61,24 @@ gatekeeper:
   service:
     type: ClusterIP
     port: 4321
-  resources: {}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
   env:
-    APP_ENV: development
-    ENVIRONMENT: development
+    APP_ENV: production
+    ENVIRONMENT: production
     GATEWAY_HOST: 0.0.0.0
     GATEWAY_PORT: "4321"
     RATE_LIMIT_BACKEND: redis
-    RATE_LIMIT_REDIS_URL: redis://{{ .Release.Name }}-redis:6379/0
-    GATEWAY_TOKEN_CACHE_REDIS_URL: redis://{{ .Release.Name }}-redis:6379/1
-    DATABASE_URL: postgresql://watchdog:watchdog@{{ .Release.Name }}-postgres:5432/watchdog
+    RATE_LIMIT_REDIS_URL: redis://{{ include "observantio.redisServiceName" $ }}:6379/0
+    GATEWAY_TOKEN_CACHE_REDIS_URL: redis://{{ include "observantio.redisServiceName" $ }}:6379/1
+    DATABASE_URL: postgresql://watchdog:watchdog@{{ include "observantio.postgresServiceName" $ }}:5432/watchdog
     GATEWAY_AUTH_API_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "observantio") }}:4319/api/internal/otlp/validate
-    GATEWAY_ALLOWLIST_FAIL_OPEN: "true"
+    GATEWAY_ALLOWLIST_FAIL_OPEN: "false"
     GATEWAY_STARTUP_CHECK_MODE: warn
   probes:
     path: /api/gateway/health
@@ -70,7 +87,7 @@ gatekeeper:
 
 notifier:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: ghcr.io/observantio/notifier
     tag: v0.0.3
@@ -78,25 +95,37 @@ notifier:
   service:
     type: ClusterIP
     port: 4323
-  resources: {}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      cpu: "1"
+      memory: 768Mi
   env:
-    APP_ENV: development
-    ENVIRONMENT: development
+    APP_ENV: production
+    ENVIRONMENT: production
     HOST: 0.0.0.0
     PORT: "4323"
-    DATABASE_URL: postgresql://watchdog:watchdog@{{ .Release.Name }}-postgres:5432/watchdog
-    NOTIFIER_DATABASE_URL: postgresql://watchdog:watchdog@{{ .Release.Name }}-postgres:5432/watchdog_notified
-    REDIS_URL: redis://{{ .Release.Name }}-redis:6379/0
+    DATABASE_URL: postgresql://watchdog:watchdog@{{ include "observantio.postgresServiceName" $ }}:5432/watchdog
+    NOTIFIER_DATABASE_URL: postgresql://watchdog:watchdog@{{ include "observantio.postgresServiceName" $ }}:5432/watchdog_notified
+    REDIS_URL: redis://{{ include "observantio.redisServiceName" $ }}:6379/0
     ALERTMANAGER_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "alertmanager") }}:9093
     MIMIR_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "mimir") }}:9009
   probes:
     path: /health
     initialDelaySeconds: 10
     periodSeconds: 10
+  tls:
+    enabled: false
+    certSecretName: ""
+    certKey: notifier.crt
+    keyKey: notifier.key
+    mountPath: /etc/notifier/tls
 
 resolver:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: ghcr.io/observantio/resolver
     tag: v0.0.3
@@ -104,14 +133,20 @@ resolver:
   service:
     type: ClusterIP
     port: 4322
-  resources: {}
+  resources:
+    requests:
+      cpu: 300m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
   env:
-    APP_ENV: development
-    ENVIRONMENT: development
+    APP_ENV: production
+    ENVIRONMENT: production
     RESOLVER_HOST: 0.0.0.0
     RESOLVER_PORT: "4322"
-    REDIS_URL: redis://{{ .Release.Name }}-redis:6379/0
-    RESOLVER_DATABASE_URL: postgresql://watchdog:watchdog@{{ .Release.Name }}-postgres:5432/watchdog_resolver
+    REDIS_URL: redis://{{ include "observantio.redisServiceName" $ }}:6379/0
+    RESOLVER_DATABASE_URL: postgresql://watchdog:watchdog@{{ include "observantio.postgresServiceName" $ }}:5432/watchdog_resolver
     RESOLVER_LOGS_LOKI_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "loki") }}:3100
     RESOLVER_METRICS_MIMIR_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "mimir") }}:9009
     RESOLVER_TRACES_TEMPO_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "tempo") }}:3200
@@ -119,13 +154,19 @@ resolver:
     path: /api/v1/ready
     initialDelaySeconds: 10
     periodSeconds: 10
+  tls:
+    enabled: false
+    certSecretName: ""
+    certKey: resolver.crt
+    keyKey: resolver.key
+    mountPath: /etc/resolver/tls
 
 otlpGateway:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: envoyproxy/envoy
-    tag: v1.32-latest
+    tag: v1.32.4
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -137,7 +178,14 @@ otlpGateway:
     annotations: {}
     loadBalancerSourceRanges: []
     externalTrafficPolicy: Local
-  resources: {}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  containerSecurityContext: {}
 
 otelAgent:
   enabled: false
@@ -146,7 +194,13 @@ otelAgent:
     repository: ghcr.io/observantio/otel-agent
     tag: v0.0.3
     pullPolicy: IfNotPresent
-  resources: {}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
   env:
     OTEL_GATEWAY_BASE_URL: http://{{ include "observantio.componentFullname" (dict "root" $ "name" "otlp-gateway") }}:{{ .Values.otlpGateway.service.port }}
     OTEL_OTLP_TOKEN: "{{ .Values.secrets.OTEL_OTLP_TOKEN }}"
@@ -163,6 +217,9 @@ otelAgent:
 loki:
   enabled: true
   replicaCount: 1
+  authEnabled: false
+  replicationFactor: 1
+  ringStore: inmemory
   image:
     repository: grafana/loki
     tag: 3.6.5
@@ -172,13 +229,20 @@ loki:
     port: 3100
   storage:
     enabled: true
-    size: 5Gi
+    size: 20Gi
     className: ""
-  resources: {}
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
 
 tempo:
   enabled: true
   replicaCount: 1
+  multitenancyEnabled: false
   image:
     repository: grafana/tempo
     tag: 2.4.1
@@ -188,14 +252,21 @@ tempo:
     port: 4318
   storage:
     enabled: true
-    size: 5Gi
+    size: 20Gi
     className: ""
-  resources: {}
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
 
 mimir:
   enabled: true
   replicaCount: 1
   replicationFactor: 1
+  multitenancyEnabled: false
   image:
     repository: grafana/mimir
     tag: 2.12.0
@@ -205,9 +276,15 @@ mimir:
     port: 9009
   storage:
     enabled: true
-    size: 10Gi
+    size: 50Gi
     className: ""
-  resources: {}
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
 
 alertmanager:
   enabled: true
@@ -221,9 +298,15 @@ alertmanager:
     port: 9093
   storage:
     enabled: true
-    size: 2Gi
+    size: 10Gi
     className: ""
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 grafana:
   enabled: true
@@ -237,9 +320,15 @@ grafana:
     port: 3000
   storage:
     enabled: true
-    size: 5Gi
+    size: 20Gi
     className: ""
-  resources: {}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
   env:
     GF_SECURITY_ADMIN_USER: "{{ .Values.secrets.GRAFANA_USERNAME }}"
     GF_SECURITY_ADMIN_PASSWORD: "{{ .Values.secrets.GRAFANA_PASSWORD }}"
@@ -258,7 +347,7 @@ grafana:
 
 grafanaAuthGateway:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: nginx
     tag: 1.27-alpine
@@ -266,28 +355,49 @@ grafanaAuthGateway:
   service:
     type: ClusterIP
     port: 8080
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  containerSecurityContext: {}
 
 postgres:
   enabled: true
   image: postgres:16-alpine
   storage:
-    size: 10Gi
+    size: 50Gi
     className: ""
-  resources: {}
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  containerSecurityContext: {}
 
 redis:
   enabled: true
   image: redis:7-alpine
   storage:
     enabled: true
-    size: 2Gi
+    size: 10Gi
     className: ""
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  containerSecurityContext: {}
 
 ui:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: ghcr.io/observantio/ui
     tag: v0.0.3
@@ -295,31 +405,92 @@ ui:
   service:
     type: ClusterIP
     port: 80
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  containerSecurityContext: {}
 
 secrets:
-  POSTGRES_USER: watchdog
-  POSTGRES_PASSWORD: watchdog
-  POSTGRES_DB: watchdog
-  JWT_SECRET_KEY: change-me-in-production
-  DATA_ENCRYPTION_KEY: replace-with-base64-fernet-key
-  DEFAULT_OTLP_TOKEN: replace-with-otlp-token
-  OTEL_OTLP_TOKEN: replace-with-otlp-token
-  INBOUND_WEBHOOK_TOKEN: change-me
-  OTLP_INGEST_TOKEN: change-me
-  GATEWAY_INTERNAL_SERVICE_TOKEN: change-me
-  GATEWAY_STATUS_OTLP_TOKEN: change-me
-  NOTIFIER_SERVICE_TOKEN: change-me
-  NOTIFIER_EXPECTED_SERVICE_TOKEN: change-me
-  NOTIFIER_CONTEXT_SIGNING_KEY: change-me
-  NOTIFIER_CONTEXT_VERIFY_KEY: change-me
-  RESOLVER_SERVICE_TOKEN: change-me
-  RESOLVER_EXPECTED_SERVICE_TOKEN: change-me
-  RESOLVER_CONTEXT_SIGNING_KEY: change-me
-  RESOLVER_CONTEXT_VERIFY_KEY: change-me
-  GRAFANA_USERNAME: admin
-  GRAFANA_PASSWORD: change-me
+  create: false
+  existingSecretName: ""
+  POSTGRES_USER: ""
+  POSTGRES_PASSWORD: ""
+  POSTGRES_DB: ""
+  JWT_SECRET_KEY: ""
+  JWT_PRIVATE_KEY: ""
+  JWT_PUBLIC_KEY: ""
+  DATA_ENCRYPTION_KEY: ""
+  DEFAULT_OTLP_TOKEN: ""
+  OTEL_OTLP_TOKEN: ""
+  INBOUND_WEBHOOK_TOKEN: ""
+  OTLP_INGEST_TOKEN: ""
+  GATEWAY_INTERNAL_SERVICE_TOKEN: ""
+  GATEWAY_STATUS_OTLP_TOKEN: ""
+  NOTIFIER_SERVICE_TOKEN: ""
+  NOTIFIER_EXPECTED_SERVICE_TOKEN: ""
+  NOTIFIER_CONTEXT_SIGNING_KEY: ""
+  NOTIFIER_CONTEXT_VERIFY_KEY: ""
+  RESOLVER_SERVICE_TOKEN: ""
+  RESOLVER_EXPECTED_SERVICE_TOKEN: ""
+  RESOLVER_CONTEXT_SIGNING_KEY: ""
+  RESOLVER_CONTEXT_VERIFY_KEY: ""
+  GRAFANA_USERNAME: ""
+  GRAFANA_PASSWORD: ""
   GRAFANA_API_KEY: ""
+
+externalSecrets:
+  enabled: false
+  refreshInterval: 1h
+  secretStoreRef:
+    name: ""
+    kind: ClusterSecretStore
+  targetSecretName: ""
+  data: {}
+
+networkPolicy:
+  enabled: true
+  allowAllExternalEgress: true
+  allowExternalEgressCidrs: []
+
+podDisruptionBudget:
+  enabled: true
+
+autoscaling:
+  observantio:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  gatekeeper:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  notifier:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  resolver:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+scheduling:
+  podAntiAffinity:
+    enabled: true
+  topologySpreadConstraints:
+    enabled: true
+    maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+  nodeSelector: {}
+  tolerations: []
 
 hardening:
   automountServiceAccountToken: false

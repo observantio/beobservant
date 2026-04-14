@@ -188,7 +188,37 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.otlpGateway) | nindent 8 }}
+      {{- with .Values.scheduling.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.scheduling.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "observantio.selectorLabels" . | nindent 18 }}
+                  app.kubernetes.io/component: otlp-gateway
+      {{- end }}
+      {{- if .Values.scheduling.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+      - maxSkew: {{ .Values.scheduling.topologySpreadConstraints.maxSkew }}
+        topologyKey: {{ .Values.scheduling.topologySpreadConstraints.topologyKey }}
+        whenUnsatisfiable: {{ .Values.scheduling.topologySpreadConstraints.whenUnsatisfiable }}
+        labelSelector:
+          matchLabels:
+            {{- include "observantio.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: otlp-gateway
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -219,7 +249,7 @@ spec:
         resources:
           {{- toYaml .Values.otlpGateway.resources | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.otlpGateway "name" "otlp-gateway") | nindent 10 }}
       volumes:
       - name: config
         configMap:
