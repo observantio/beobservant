@@ -2,7 +2,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 RELEASE_NAME="${RELEASE_NAME:-observantio-prod}"
 NAMESPACE="${NAMESPACE:-observantio}"
@@ -47,7 +46,6 @@ GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-}"
 GRAFANA_API_KEY="${GRAFANA_API_KEY:-}"
 
 TEMP_API_PF_PID=""
-TEMP_GW_PF_PID=""
 TEMP_GATEKEEPER_PF_PID=""
 API_PF_PID=""
 GRAFANA_PF_PID=""
@@ -102,22 +100,6 @@ secret_key_or_empty() {
   local secret_name="$1"
   local key="$2"
   kubectl -n "$NAMESPACE" get secret "$secret_name" -o "jsonpath={.data.${key}}" 2>/dev/null | base64 -d 2>/dev/null || true
-}
-
-parse_timeout_seconds() {
-  local value="$1"
-  if [[ "$value" =~ ^([0-9]+)s$ ]]; then
-    echo "${BASH_REMATCH[1]}"
-  elif [[ "$value" =~ ^([0-9]+)m$ ]]; then
-    echo "$(( BASH_REMATCH[1] * 60 ))"
-  elif [[ "$value" =~ ^([0-9]+)h$ ]]; then
-    echo "$(( BASH_REMATCH[1] * 3600 ))"
-  elif [[ "$value" =~ ^[0-9]+$ ]]; then
-    echo "$value"
-  else
-    echo "Invalid timeout value: $value" >&2
-    exit 1
-  fi
 }
 
 detect_cluster_capacity() {
@@ -234,7 +216,6 @@ select_install_profile() {
 
 cleanup() {
   if [[ -n "$TEMP_API_PF_PID" ]]; then kill "$TEMP_API_PF_PID" >/dev/null 2>&1 || true; fi
-  if [[ -n "$TEMP_GW_PF_PID" ]]; then kill "$TEMP_GW_PF_PID" >/dev/null 2>&1 || true; fi
   if [[ -n "$TEMP_GATEKEEPER_PF_PID" ]]; then kill "$TEMP_GATEKEEPER_PF_PID" >/dev/null 2>&1 || true; fi
 
   if [[ "$PORT_FORWARD_MODE" == "foreground" ]]; then
@@ -728,12 +709,10 @@ run_post_deploy_checks() {
   local watchdog_pod="$1"
   local api_scheme="http"
   local curl_health_opts=(-fsS)
-  local curl_login_opts=(-sS)
 
   if [[ "$INTERNAL_TLS_REQUIRED" == "true" ]]; then
     api_scheme="https"
     curl_health_opts=(-kfsS)
-    curl_login_opts=(-ksS)
   fi
 
   mkdir -p "$PORT_FORWARD_LOG_DIR"
