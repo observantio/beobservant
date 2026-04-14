@@ -161,6 +161,36 @@ def test_dunder_main_runs_uvicorn(monkeypatch):
     assert captured["loop"] == "uvloop"
 
 
+def test_runtime_ssl_options_disabled(monkeypatch):
+    main_module = _load_main(monkeypatch)
+    monkeypatch.delenv("SSL_ENABLED", raising=False)
+    monkeypatch.delenv("SSL_CERTFILE", raising=False)
+    monkeypatch.delenv("SSL_KEYFILE", raising=False)
+    assert main_module._runtime_ssl_options() is None
+
+
+def test_runtime_ssl_options_enabled_requires_paths(monkeypatch):
+    main_module = _load_main(monkeypatch)
+    monkeypatch.setenv("SSL_ENABLED", "true")
+    monkeypatch.delenv("SSL_CERTFILE", raising=False)
+    monkeypatch.delenv("SSL_KEYFILE", raising=False)
+
+    with pytest.raises(ValueError, match="SSL_ENABLED=true requires SSL_CERTFILE and SSL_KEYFILE"):
+        main_module._runtime_ssl_options()
+
+
+def test_runtime_ssl_options_enabled_with_paths(monkeypatch):
+    main_module = _load_main(monkeypatch)
+    monkeypatch.setenv("SSL_ENABLED", "true")
+    monkeypatch.setenv("SSL_CERTFILE", "/tmp/tls.crt")
+    monkeypatch.setenv("SSL_KEYFILE", "/tmp/tls.key")
+
+    assert main_module._runtime_ssl_options() == {
+        "ssl_certfile": "/tmp/tls.crt",
+        "ssl_keyfile": "/tmp/tls.key",
+    }
+
+
 def test_encode_datetime_rfc3339_handles_naive_and_aware(monkeypatch):
     main_module = _load_main(monkeypatch)
     naive = datetime(2026, 1, 1, 0, 0, 0)

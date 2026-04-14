@@ -15,6 +15,8 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 import logging
 import asyncio
+import os
+from typing import TypedDict
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
@@ -250,7 +252,40 @@ async def ready() -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
 
 
+class _RuntimeSSLOptions(TypedDict):
+    ssl_certfile: str
+    ssl_keyfile: str
+
+
+def _runtime_ssl_options() -> _RuntimeSSLOptions | None:
+    enabled = (os.getenv("SSL_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on"))
+    if not enabled:
+        return None
+
+    certfile = os.getenv("SSL_CERTFILE", "").strip()
+    keyfile = os.getenv("SSL_KEYFILE", "").strip()
+    if not certfile or not keyfile:
+        raise ValueError("SSL_ENABLED=true requires SSL_CERTFILE and SSL_KEYFILE to be set")
+
+    return {
+        "ssl_certfile": certfile,
+        "ssl_keyfile": keyfile,
+    }
+
+
 if __name__ == "__main__":
     logger.info("Starting %s v%s", constants.APP_NAME, constants.APP_VERSION)
-
-    uvicorn.run(app, host=config.HOST, port=config.PORT, loop="uvloop", log_level=config.LOG_LEVEL)
+    ssl_options = _runtime_ssl_options()
+    if ssl_options is not None:
+        logger.info("SSL runtime enabled for watchdog listener")
+        uvicorn.run(
+            app,
+            host=config.HOST,
+            port=config.PORT,
+            loop="uvloop",
+            log_level=config.LOG_LEVEL,
+            ssl_certfile=ssl_options["ssl_certfile"],
+            ssl_keyfile=ssl_options["ssl_keyfile"],
+        )
+    else:
+        uvicorn.run(app, host=config.HOST, port=config.PORT, loop="uvloop", log_level=config.LOG_LEVEL)
