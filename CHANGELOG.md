@@ -6,7 +6,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 
-* Moved production installer ownership to `charts/observantio/installer.sh` and converted root `installer.sh` into a thin wrapper.
+* Moved production installer ownership to `charts/observantio/installer.sh` 
 * Added profile-aware install behavior (`auto|production|compact`) with cluster-capacity detection for safer rollout defaults on constrained clusters.
 * Added compact profile chart overrides for reduced replica/resource footprints and constrained-cluster compatibility defaults.
 * Hardened chart runtime wiring for internal TLS and fail-closed behavior, including chart-driven CA/cert mounts and service URL mode selection.
