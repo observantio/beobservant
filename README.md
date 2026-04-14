@@ -213,6 +213,35 @@ Internal-only services in the default compose layout:
 - `gateway-auth` (`4321`) is reachable on the Docker network, not via host `localhost`.
 - `resolver` (`4322`) is reachable on the Docker network, not via host `localhost`.
 
+## Kubernetes Helm Charts
+
+If you want Kubernetes deployment instead of Docker Compose, use the chart under `charts/observantio`.
+
+- Chart path: `charts/observantio`
+- Chart docs: [`charts/observantio/README.md`](charts/observantio/README.md)
+- Installer script: `charts/observantio/installer.sh`
+
+Quick start:
+
+```bash
+bash charts/observantio/installer.sh --profile production --foreground
+```
+
+Useful installer modes:
+
+- `--profile production` for full production defaults
+- `--profile compact` for smaller/constrained clusters
+- `--detach` for background port-forwards
+- `--no-port-forward` when you only want deployment
+- `--remove` to remove the release/namespace (smoke teardown)
+
+Customization points:
+
+- Base values: `charts/observantio/values.yaml`
+- Production defaults: `charts/observantio/values-production.yaml`
+- Compact overrides: `charts/observantio/values-compact.yaml`
+- Image versions: `release/versions.json` and chart values/image tags
+
 ## Environment File Overview
 
 The root `.env.example` is the configuration contract for the whole stack.
