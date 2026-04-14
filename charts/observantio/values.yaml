@@ -15,7 +15,7 @@ observantio:
   replicaCount: 2
   image:
     repository: ghcr.io/observantio/watchdog
-    tag: v0.0.3
+    tag: v0.0.4
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -58,7 +58,7 @@ gatekeeper:
   replicaCount: 2
   image:
     repository: ghcr.io/observantio/gatekeeper
-    tag: v0.0.3
+    tag: v0.0.4
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -92,7 +92,7 @@ notifier:
   replicaCount: 2
   image:
     repository: ghcr.io/observantio/notifier
-    tag: v0.0.3
+    tag: v0.0.4
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -130,7 +130,7 @@ resolver:
   replicaCount: 2
   image:
     repository: ghcr.io/observantio/resolver
-    tag: v0.0.3
+    tag: v0.0.4
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -194,7 +194,7 @@ otelAgent:
   replicaCount: 1
   image:
     repository: ghcr.io/observantio/otel-agent
-    tag: v0.0.3
+    tag: v0.0.4
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -403,7 +403,7 @@ ui:
   replicaCount: 2
   image:
     repository: ghcr.io/observantio/ui
-    tag: v0.0.3
+    tag: v0.0.4
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP

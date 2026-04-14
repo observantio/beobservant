@@ -17,8 +17,8 @@ curl -fsSL https://raw.githubusercontent.com/observantio/watchdog/main/download.
 bash download.sh
 
 # Optional:
-# bash download.sh v0.0.3 arm64
-# bash download.sh v0.0.3 amd64
+# bash download.sh v0.0.4 arm64
+# bash download.sh v0.0.4 amd64
 ```
 
 `download.sh` defaults to the latest GitHub release and `multi` architecture. Before it downloads anything, it checks that:
@@ -64,7 +64,7 @@ From the UI header, open **Download Ojo Agent** and follow the 5-slide wizard.
 
 - Slide 1: pick `Linux`, `Windows`, or `Extra services`.
 - Slide 2: download from GitHub releases and select a matching asset. The wizard now auto-uses the first matching asset in the install command when none is explicitly selected.
-- Slide 2 expected behavior: for the current `v0.0.3` core release flow, seeing **Matching assets (2)** for core binaries is normal.
+- Slide 2 expected behavior: for the current `v0.0.2` core release flow, seeing **Matching assets (2)** for core binaries is normal.
 - Slide 3+: generate config, bind API key token, and run connectivity verification.
 
 ## Required Network Ports
