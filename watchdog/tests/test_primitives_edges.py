@@ -608,6 +608,8 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
 
 @pytest.mark.asyncio
 async def test_internal_and_system_router_edges(monkeypatch):
+    release_tag = "v9.9.9"
+
     with pytest.raises(HTTPException) as exc:
         await internal_router.validate_otlp_token_post(OtlpValidateRequest(token=" "), None)
     assert exc.value.status_code == 400
@@ -636,8 +638,8 @@ async def test_internal_and_system_router_edges(monkeypatch):
         async def get(self, url, params=None, headers=None):
             self.calls.append((url, params))
             if "latest" in url:
-                return _FakeResponse({"tag_name": "v0.0.4"})
-            return _FakeResponse([{"tag_name": "v0.0.4"}])
+                return _FakeResponse({"tag_name": release_tag})
+            return _FakeResponse([{"tag_name": release_tag}])
 
     fake_client = _FakeAsyncClient()
     monkeypatch.setattr(system_router.httpx, "AsyncClient", lambda *args, **kwargs: fake_client)
@@ -648,8 +650,8 @@ async def test_internal_and_system_router_edges(monkeypatch):
 
     first = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
     second = await system_router.get_ojo_releases(_current_user=types.SimpleNamespace())
-    assert first["latest"]["tag_name"] == "v0.0.4"
-    assert second["latest"]["tag_name"] == "v0.0.4"
+    assert first["latest"]["tag_name"] == release_tag
+    assert second["latest"]["tag_name"] == release_tag
     assert len(fake_client.calls) == 2
 
 

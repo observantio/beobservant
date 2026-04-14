@@ -179,19 +179,20 @@ describe("Header user menu", () => {
   });
 
   it("matches Windows assets only when filename contains windows (not win)", async () => {
+    const releaseTag = "v9.9.9";
     api.getOjoReleases.mockResolvedValueOnce({
       latest: {
-        tag_name: "v0.0.2",
+        tag_name: releaseTag,
         assets: [
           {
             id: "a1",
-            name: "ojo-docker-win-v0.0.2.exe",
-            browser_download_url: "https://github.com/observantio/ojo/releases/download/v0.0.2/ojo-docker-win-v0.0.2.exe",
+            name: `ojo-docker-win-${releaseTag}.exe`,
+            browser_download_url: `https://github.com/observantio/ojo/releases/download/${releaseTag}/ojo-docker-win-${releaseTag}.exe`,
           },
           {
             id: "a2",
-            name: "ojo-v0.0.2-windows-x86_64.exe",
-            browser_download_url: "https://github.com/observantio/ojo/releases/download/v0.0.2/ojo-v0.0.2-windows-x86_64.exe",
+            name: `ojo-${releaseTag}-windows-x86_64.exe`,
+            browser_download_url: `https://github.com/observantio/ojo/releases/download/${releaseTag}/ojo-${releaseTag}-windows-x86_64.exe`,
           },
         ],
       },
