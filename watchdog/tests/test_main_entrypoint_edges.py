@@ -161,6 +161,22 @@ def test_dunder_main_runs_uvicorn(monkeypatch):
     assert captured["loop"] == "uvloop"
 
 
+def test_dunder_main_runs_uvicorn_with_ssl_runtime(monkeypatch):
+    _load_main(monkeypatch)
+    monkeypatch.setenv("SSL_ENABLED", "true")
+    monkeypatch.setenv("SSL_CERTFILE", "/tmp/watchdog.crt")
+    monkeypatch.setenv("SSL_KEYFILE", "/tmp/watchdog.key")
+    captured = {}
+    monkeypatch.setitem(
+        sys.modules,
+        "uvicorn",
+        types.SimpleNamespace(run=lambda app, **kwargs: captured.update({"app": app, **kwargs})),
+    )
+    runpy.run_module("main", run_name="__main__")
+    assert captured["ssl_certfile"] == "/tmp/watchdog.crt"
+    assert captured["ssl_keyfile"] == "/tmp/watchdog.key"
+
+
 def test_runtime_ssl_options_disabled(monkeypatch):
     main_module = _load_main(monkeypatch)
     monkeypatch.delenv("SSL_ENABLED", raising=False)
