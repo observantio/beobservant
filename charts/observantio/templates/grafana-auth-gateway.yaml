@@ -1,6 +1,10 @@
 {{- $gag := .Values.grafanaAuthGateway | default (dict) -}}
 {{- $gagService := (index $gag "service") | default (dict) -}}
 {{- $gagImage := (index $gag "image") | default (dict) -}}
+{{- $gagEnforceAuth := true -}}
+{{- if hasKey $gag "enforceAuth" -}}
+{{- $gagEnforceAuth = (index $gag "enforceAuth") -}}
+{{- end -}}
 {{- if and .Values.grafana.enabled (default true (index $gag "enabled")) }}
 apiVersion: v1
 kind: ConfigMap
@@ -75,6 +79,7 @@ data:
         add_header Access-Control-Allow-Credentials "true" always;
         add_header Vary "Origin" always;
 
+        {{- if $gagEnforceAuth }}
         auth_request /_auth;
 
         auth_request_set $webauth_user   $upstream_http_x_webauth_user;
@@ -82,6 +87,7 @@ data:
         auth_request_set $webauth_role   $upstream_http_x_webauth_role;
         auth_request_set $webauth_email  $upstream_http_x_webauth_email;
         auth_request_set $webauth_name   $upstream_http_x_webauth_name;
+        {{- end }}
 
         proxy_pass http://{{ include "observantio.componentFullname" (dict "root" . "name" "grafana") }}:{{ .Values.grafana.service.port }};
         proxy_set_header Host $host;
@@ -91,11 +97,13 @@ data:
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Port $server_port;
         proxy_set_header X-Forwarded-Prefix /grafana;
+        {{- if $gagEnforceAuth }}
         proxy_set_header X-WEBAUTH-USER $webauth_user;
         proxy_set_header X-WEBAUTH-TENANT $webauth_tenant;
         proxy_set_header X-WEBAUTH-ROLE $webauth_role;
         proxy_set_header X-WEBAUTH-EMAIL $webauth_email;
         proxy_set_header X-WEBAUTH-NAME $webauth_name;
+        {{- end }}
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

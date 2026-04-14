@@ -1,4 +1,5 @@
 {{- if .Values.otlpGateway.enabled }}
+{{- $gatekeeperEnabled := .Values.gatekeeper.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -50,6 +51,7 @@ data:
                                 body:
                                   inline_string: '{"status":"healthy","service":"otlp-gateway"}'
                     http_filters:
+                      {{- if $gatekeeperEnabled }}
                       - name: envoy.filters.http.ext_authz
                         typed_config:
                           "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
@@ -68,10 +70,12 @@ data:
                                 patterns:
                                   - exact: "x-scope-orgid"
                           failure_mode_allow: false
+                      {{- end }}
                       - name: envoy.filters.http.router
                         typed_config:
                           "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
       clusters:
+        {{- if $gatekeeperEnabled }}
         - name: gateway-auth
           connect_timeout: 2s
           type: logical_dns
@@ -85,6 +89,7 @@ data:
                         socket_address:
                           address: {{ include "observantio.componentFullname" (dict "root" . "name" "gatekeeper") }}
                           port_value: {{ .Values.gatekeeper.service.port }}
+        {{- end }}
         - name: loki
           connect_timeout: 5s
           type: logical_dns

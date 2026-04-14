@@ -1,6 +1,3 @@
-# Compact production profile for constrained clusters (single-node dev/staging)
-# Security defaults remain production-oriented; capacity/scaling are reduced.
-
 scheduling:
   podAntiAffinity:
     enabled: false
@@ -9,6 +6,11 @@ scheduling:
 
 internalTLS:
   enabled: false
+
+networkPolicy:
+  enabled: true
+  allowAllExternalEgress: true
+  allowExternalEgressCidrs: []
 
 autoscaling:
   observantio:
@@ -22,6 +24,9 @@ autoscaling:
 
 observantio:
   replicaCount: 1
+  env:
+    CORS_ORIGINS: "http://127.0.0.1:5173,http://localhost:5173"
+    CORS_ALLOW_CREDENTIALS: "true"
   resources:
     requests:
       cpu: 100m
@@ -63,11 +68,20 @@ otlpGateway:
       memory: 128Mi
 
 grafanaAuthGateway:
+  enforceAuth: false
   replicaCount: 1
   resources:
     requests:
       cpu: 50m
       memory: 64Mi
+
+otelAgent:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
 
 ui:
   replicaCount: 1
@@ -77,56 +91,42 @@ ui:
       memory: 64Mi
 
 loki:
-  storage:
-    size: 5Gi
   resources:
     requests:
       cpu: 150m
       memory: 256Mi
 
 tempo:
-  storage:
-    size: 5Gi
   resources:
     requests:
       cpu: 150m
       memory: 256Mi
 
 mimir:
-  storage:
-    size: 10Gi
   resources:
     requests:
       cpu: 200m
       memory: 384Mi
 
 alertmanager:
-  storage:
-    size: 5Gi
   resources:
     requests:
       cpu: 50m
       memory: 128Mi
 
 grafana:
-  storage:
-    size: 5Gi
   resources:
     requests:
       cpu: 100m
       memory: 256Mi
 
 postgres:
-  storage:
-    size: 10Gi
   resources:
     requests:
       cpu: 150m
       memory: 256Mi
 
 redis:
-  storage:
-    size: 2Gi
   resources:
     requests:
       cpu: 50m

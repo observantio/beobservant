@@ -8,12 +8,9 @@ NAMESPACE="${NAMESPACE:-observantio}"
 CHART_PATH="${CHART_PATH:-${SCRIPT_DIR}}"
 VALUES_FILE="${VALUES_FILE:-${SCRIPT_DIR}/values-production.yaml}"
 COMPACT_VALUES_FILE="${COMPACT_VALUES_FILE:-${SCRIPT_DIR}/values-compact.yaml}"
-INSTALL_PROFILE="${INSTALL_PROFILE:-auto}" # auto | production | compact
+INSTALL_PROFILE="${INSTALL_PROFILE:-production}" # production | compact
 HELM_TIMEOUT="${HELM_TIMEOUT:-20m}"
 ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-600s}"
-MIN_PROD_NODE_COUNT="${MIN_PROD_NODE_COUNT:-2}"
-MIN_PROD_CPU_MILLICORES="${MIN_PROD_CPU_MILLICORES:-4000}"
-MIN_PROD_MEMORY_MIB="${MIN_PROD_MEMORY_MIB:-8192}"
 LOCAL_API_PORT="${LOCAL_API_PORT:-4319}"
 API_FORWARD_PORT="${API_FORWARD_PORT:-$LOCAL_API_PORT}"
 GRAFANA_PROXY_FORWARD_PORT="${GRAFANA_PROXY_FORWARD_PORT:-8080}"
@@ -24,16 +21,14 @@ START_PORT_FORWARDS="${START_PORT_FORWARDS:-false}"
 RUN_POST_DEPLOY_CHECKS="${RUN_POST_DEPLOY_CHECKS:-true}"
 REUSE_EXISTING_SECRETS="${REUSE_EXISTING_SECRETS:-true}"
 MANAGE_APP_SECRET="${MANAGE_APP_SECRET:-true}"
-ALLOW_INSECURE_LOCAL_CORS="${ALLOW_INSECURE_LOCAL_CORS:-false}"
 REMOVE_MODE="false"
 PURGE_MODE="false"
 
 APP_SECRET_NAME="${APP_SECRET_NAME:-}"
 EXISTING_SECRET_NAME="${EXISTING_SECRET_NAME:-}"
 INTERNAL_TLS_SECRET_NAME="${INTERNAL_TLS_SECRET_NAME:-}"
-CORS_ORIGINS="${CORS_ORIGINS:-}"
 
-OBSERVANTIO_USERNAME="${OBSERVANTIO_USERNAME:-admin}"
+OBSERVANTIO_USERNAME="${OBSERVANTIO_USERNAME:-}"
 OBSERVANTIO_EMAIL="${OBSERVANTIO_EMAIL:-}"
 OBSERVANTIO_PASSWORD="${OBSERVANTIO_PASSWORD:-}"
 
@@ -41,9 +36,17 @@ POSTGRES_USER="${POSTGRES_USER:-watchdog}"
 POSTGRES_DB="${POSTGRES_DB:-watchdog}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 
+OBSERVANTIO_USERNAME="${OBSERVANTIO_USERNAME:-}"
+OBSERVANTIO_EMAIL="${OBSERVANTIO_EMAIL:-}"
+OBSERVANTIO_PASSWORD="${OBSERVANTIO_PASSWORD:-}"
+
 GRAFANA_USERNAME="${GRAFANA_USERNAME:-admin}"
 GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-}"
 GRAFANA_API_KEY="${GRAFANA_API_KEY:-}"
+
+NOTIFIER_IMAGE_REPOSITORY="${NOTIFIER_IMAGE_REPOSITORY:-}"
+NOTIFIER_IMAGE_TAG="${NOTIFIER_IMAGE_TAG:-}"
+NOTIFIER_IMAGE_PULL_POLICY="${NOTIFIER_IMAGE_PULL_POLICY:-IfNotPresent}"
 
 TEMP_API_PF_PID=""
 TEMP_GATEKEEPER_PF_PID=""
@@ -94,6 +97,73 @@ random_hex() {
 
 random_b64_32() {
   openssl rand -base64 32 | tr -d '\n'
+}
+
+is_valid_username() {
+  local candidate="$1"
+  [[ "$candidate" =~ ^[A-Za-z0-9._-]{3,64}$ ]]
+}
+
+is_valid_email() {
+  local candidate="$1"
+  [[ "$candidate" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]
+}
+
+prompt_admin_credentials() {
+  if [[ ! -t 0 ]]; then
+    [[ -n "$OBSERVANTIO_USERNAME" ]] || OBSERVANTIO_USERNAME="admin"
+    [[ -n "$OBSERVANTIO_EMAIL" ]] || OBSERVANTIO_EMAIL="${OBSERVANTIO_USERNAME}@example.com"
+    [[ -n "$OBSERVANTIO_PASSWORD" ]] || {
+      echo "OBSERVANTIO_PASSWORD is required in non-interactive mode" >&2
+      exit 1
+    }
+    return
+  fi
+
+  if [[ -z "$OBSERVANTIO_USERNAME" ]]; then
+    while true; do
+      read -r -p "Observantio admin username [admin]: " OBSERVANTIO_USERNAME
+      OBSERVANTIO_USERNAME="${OBSERVANTIO_USERNAME:-admin}"
+      if is_valid_username "$OBSERVANTIO_USERNAME"; then
+        break
+      fi
+      echo "Username must be 3-64 chars using letters, numbers, dot, underscore, or hyphen."
+    done
+  fi
+
+  if [[ -z "$OBSERVANTIO_EMAIL" ]]; then
+    local email_default
+    email_default="${OBSERVANTIO_USERNAME}@example.com"
+    while true; do
+      read -r -p "Observantio admin email [${email_default}]: " OBSERVANTIO_EMAIL
+      OBSERVANTIO_EMAIL="${OBSERVANTIO_EMAIL:-$email_default}"
+      if is_valid_email "$OBSERVANTIO_EMAIL"; then
+        break
+      fi
+      echo "Please enter a valid email address."
+    done
+  fi
+
+  if [[ -z "$OBSERVANTIO_PASSWORD" ]]; then
+    local password_confirm
+    while true; do
+      read -r -s -p "Observantio admin password (min 16 chars): " OBSERVANTIO_PASSWORD
+      echo
+      [[ ${#OBSERVANTIO_PASSWORD} -ge 16 ]] || {
+        echo "Password too short for production baseline."
+        continue
+      }
+
+      read -r -s -p "Confirm admin password: " password_confirm
+      echo
+      if [[ "$OBSERVANTIO_PASSWORD" != "$password_confirm" ]]; then
+        echo "Passwords do not match. Please try again."
+        OBSERVANTIO_PASSWORD=""
+        continue
+      fi
+      break
+    done
+  fi
 }
 
 secret_key_or_empty() {
@@ -171,47 +241,26 @@ PY
 
 select_install_profile() {
   case "$INSTALL_PROFILE" in
-    auto|production|compact) ;;
+    production|compact) ;;
     *)
-      echo "Invalid profile: $INSTALL_PROFILE (expected auto|production|compact)" >&2
+      echo "Invalid profile: $INSTALL_PROFILE (expected production|compact)" >&2
       exit 1
       ;;
   esac
 
   detect_cluster_capacity
-
-  if [[ "$INSTALL_PROFILE" == "auto" ]]; then
-    if (( CLUSTER_NODE_COUNT < MIN_PROD_NODE_COUNT \
-      || CLUSTER_ALLOCATABLE_CPU_M < MIN_PROD_CPU_MILLICORES \
-      || CLUSTER_ALLOCATABLE_MEMORY_MIB < MIN_PROD_MEMORY_MIB )); then
-      EFFECTIVE_PROFILE="compact"
-    else
-      EFFECTIVE_PROFILE="production"
-    fi
-  else
-    EFFECTIVE_PROFILE="$INSTALL_PROFILE"
-  fi
+  EFFECTIVE_PROFILE="$INSTALL_PROFILE"
 
   if [[ "$EFFECTIVE_PROFILE" == "compact" ]] && [[ ! -f "$COMPACT_VALUES_FILE" ]]; then
     echo "Compact profile selected but values file not found: $COMPACT_VALUES_FILE" >&2
     exit 1
   fi
 
-  if [[ "$EFFECTIVE_PROFILE" == "compact" ]]; then
-    INTERNAL_TLS_REQUIRED="false"
-    GATEKEEPER_REQUIRED="false"
-  else
-    INTERNAL_TLS_REQUIRED="true"
-    GATEKEEPER_REQUIRED="true"
-  fi
+  # TLS and gatekeeper are now profile-driven through values files.
+  INTERNAL_TLS_REQUIRED="false"
+  GATEKEEPER_REQUIRED="false"
 
   echo "Install profile: ${EFFECTIVE_PROFILE} (requested=${INSTALL_PROFILE}; allocatable=${CLUSTER_ALLOCATABLE_CPU_M}m CPU, ${CLUSTER_ALLOCATABLE_MEMORY_MIB}Mi memory, nodes=${CLUSTER_NODE_COUNT})"
-
-  if [[ "$INSTALL_PROFILE" == "production" ]] && (( CLUSTER_NODE_COUNT < MIN_PROD_NODE_COUNT \
-    || CLUSTER_ALLOCATABLE_CPU_M < MIN_PROD_CPU_MILLICORES \
-    || CLUSTER_ALLOCATABLE_MEMORY_MIB < MIN_PROD_MEMORY_MIB )); then
-    echo "Warning: cluster appears undersized for production profile; rollout may fail. Use --profile compact for constrained clusters." >&2
-  fi
 }
 
 cleanup() {
@@ -238,24 +287,22 @@ Options:
   --namespace <name>       Kubernetes namespace (default: ${NAMESPACE})
   --chart <path>           Chart path (default: ${CHART_PATH})
   --values <file>          Additional values file (repeatable)
-  --profile <mode>         Install profile: auto|production|compact (default: ${INSTALL_PROFILE})
+  --profile <mode>         Install profile: production|compact (default: ${INSTALL_PROFILE})
   --existing-secret <name> Use existing app secret and skip app secret generation
   --skip-secret-management Do not create/update app secret
   --remove                 Uninstall release
-  --purge                  With --remove, also delete namespace PVC/PV assets
+  --purge                  Uninstall and fully remove namespace PVC/PV assets
   --run-checks             Run post-deploy checks (default)
   --no-checks              Skip post-deploy checks
   --detach                 Start final port-forwards in detached mode
   --foreground             Start final port-forwards in foreground mode
   --no-port-forward        Do not start final port-forwards
-  --allow-local-cors       Allow localhost CORS for validation/demo only
   -h, --help               Show help
 
 Environment knobs:
   OBSERVANTIO_USERNAME / OBSERVANTIO_EMAIL / OBSERVANTIO_PASSWORD
-  CORS_ORIGINS (required unless --allow-local-cors is used)
   REUSE_EXISTING_SECRETS=true|false
-  INSTALL_PROFILE=auto|production|compact
+  INSTALL_PROFILE=production|compact
 USAGE
 }
 
@@ -269,13 +316,12 @@ while [[ $# -gt 0 ]]; do
     --existing-secret) EXISTING_SECRET_NAME="$2"; MANAGE_APP_SECRET="false"; shift 2 ;;
     --skip-secret-management) MANAGE_APP_SECRET="false"; shift ;;
     --remove) REMOVE_MODE="true"; shift ;;
-    --purge) PURGE_MODE="true"; shift ;;
+    --purge) PURGE_MODE="true"; REMOVE_MODE="true"; shift ;;
     --run-checks) RUN_POST_DEPLOY_CHECKS="true"; shift ;;
     --no-checks) RUN_POST_DEPLOY_CHECKS="false"; shift ;;
     --detach) START_PORT_FORWARDS="true"; PORT_FORWARD_MODE="detached"; shift ;;
     --foreground) START_PORT_FORWARDS="true"; PORT_FORWARD_MODE="foreground"; shift ;;
     --no-port-forward) START_PORT_FORWARDS="false"; PORT_FORWARD_MODE="disabled"; shift ;;
-    --allow-local-cors) ALLOW_INSECURE_LOCAL_CORS="true"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
@@ -285,7 +331,7 @@ if [[ -z "$APP_SECRET_NAME" ]]; then
   APP_SECRET_NAME="${RELEASE_NAME}-observantio-secrets"
 fi
 if [[ -z "$INTERNAL_TLS_SECRET_NAME" ]]; then
-  INTERNAL_TLS_SECRET_NAME="${RELEASE_NAME}-internal-tls"
+  INTERNAL_TLS_SECRET_NAME="${RELEASE_NAME}-observantio-internal-tls"
 fi
 if [[ -n "$EXISTING_SECRET_NAME" ]]; then
   ACTIVE_SECRET_NAME="$EXISTING_SECRET_NAME"
@@ -310,6 +356,7 @@ if [[ "$REMOVE_MODE" == "true" ]]; then
   helm -n "$NAMESPACE" uninstall "$RELEASE_NAME" >/dev/null 2>&1 || true
 
   if [[ "$PURGE_MODE" == "true" ]]; then
+    echo "Purging namespace and persistent data for namespace=${NAMESPACE}"
     if kubectl get ns "$NAMESPACE" >/dev/null 2>&1; then
       kubectl -n "$NAMESPACE" delete pvc --all --wait=false >/dev/null 2>&1 || true
       kubectl get pv -o custom-columns=NAME:.metadata.name,NS:.spec.claimRef.namespace --no-headers 2>/dev/null \
@@ -317,7 +364,7 @@ if [[ "$REMOVE_MODE" == "true" ]]; then
         | while read -r pv; do
             [[ -n "$pv" ]] && kubectl delete pv "$pv" --wait=false >/dev/null 2>&1 || true
           done
-      kubectl delete ns "$NAMESPACE" --wait=false >/dev/null 2>&1 || true
+      kubectl delete ns "$NAMESPACE" --wait=true --timeout=300s >/dev/null 2>&1 || true
     fi
   fi
 
@@ -326,17 +373,11 @@ if [[ "$REMOVE_MODE" == "true" ]]; then
 fi
 
 if [[ -z "$OBSERVANTIO_PASSWORD" ]]; then
-  if [[ -t 0 ]]; then
-    while true; do
-      read -r -s -p "Observantio admin password (min 16 chars): " OBSERVANTIO_PASSWORD
-      echo
-      [[ ${#OBSERVANTIO_PASSWORD} -ge 16 ]] && break
-      echo "Password too short for production baseline."
-    done
-  else
-    echo "OBSERVANTIO_PASSWORD is required in non-interactive mode" >&2
-    exit 1
-  fi
+  prompt_admin_credentials
+fi
+
+if [[ -z "$OBSERVANTIO_EMAIL" || -z "$OBSERVANTIO_USERNAME" ]]; then
+  prompt_admin_credentials
 fi
 
 if [[ ${#OBSERVANTIO_PASSWORD} -lt 16 ]]; then
@@ -348,13 +389,14 @@ if [[ -z "$OBSERVANTIO_EMAIL" ]]; then
   OBSERVANTIO_EMAIL="${OBSERVANTIO_USERNAME}@example.com"
 fi
 
-if [[ -z "$CORS_ORIGINS" ]]; then
-  if [[ "$ALLOW_INSECURE_LOCAL_CORS" == "true" ]]; then
-    CORS_ORIGINS='http://127.0.0.1:5173,http://localhost:5173'
-  else
-    echo "CORS_ORIGINS must be set for production deployment (or use --allow-local-cors for local validation)." >&2
-    exit 1
-  fi
+if ! is_valid_username "$OBSERVANTIO_USERNAME"; then
+  echo "OBSERVANTIO_USERNAME must be 3-64 chars using letters, numbers, dot, underscore, or hyphen." >&2
+  exit 1
+fi
+
+if ! is_valid_email "$OBSERVANTIO_EMAIL"; then
+  echo "OBSERVANTIO_EMAIL must be a valid email address." >&2
+  exit 1
 fi
 
 if ! kubectl get ns "$NAMESPACE" >/dev/null 2>&1; then
@@ -428,7 +470,7 @@ generate_missing_app_secret_values() {
   RESOLVER_CONTEXT_VERIFY_KEY="${RESOLVER_CONTEXT_VERIFY_KEY:-$RESOLVER_CONTEXT_SIGNING_KEY}"
 
   GRAFANA_USERNAME="${GRAFANA_USERNAME:-admin}"
-  GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-grafana_$(random_hex 16)}"
+  GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-grafana_$(random_hex 24)}"
 }
 
 apply_app_secret() {
@@ -597,8 +639,62 @@ EXT
 wait_ready_deployment() {
   local deployment="$1"
   if kubectl -n "$NAMESPACE" get deployment "$deployment" >/dev/null 2>&1; then
-    kubectl -n "$NAMESPACE" rollout status deployment "$deployment" --timeout="$ROLLOUT_TIMEOUT"
+    if ! kubectl -n "$NAMESPACE" rollout status deployment "$deployment" --timeout="$ROLLOUT_TIMEOUT"; then
+      echo "Rollout failed for deployment/${deployment}. Recent pod state and events:" >&2
+      kubectl -n "$NAMESPACE" get pods -l "app.kubernetes.io/instance=${RELEASE_NAME}" -o wide >&2 || true
+      kubectl -n "$NAMESPACE" describe deployment "$deployment" >&2 || true
+      kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -n 60 >&2 || true
+      exit 1
+    fi
   fi
+}
+
+fail_fast_if_tls_requested_but_unsupported_images() {
+  local payload
+  payload="$(kubectl -n "$NAMESPACE" get deploy \
+    "$OBSERVANTIO_SVC" \
+    "$NOTIFIER_SVC" \
+    "$RESOLVER_SVC" \
+    -o json 2>/dev/null || true)"
+
+  [[ -n "$payload" ]] || return 0
+
+  python3 - "$payload" <<'PY'
+import json
+import sys
+
+doc = json.loads(sys.argv[1])
+items = doc.get("items", [])
+
+checks = [
+    ("observantio", "SSL_ENABLED"),
+    ("notifier", "NOTIFIER_SSL_ENABLED"),
+    ("resolver", "RESOLVER_SSL_ENABLED"),
+]
+
+problems = []
+for item in items:
+    name = item.get("metadata", {}).get("name", "")
+    containers = item.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+    if not containers:
+        continue
+    c = containers[0]
+    image = str(c.get("image", ""))
+    env_map = {str(e.get("name", "")): str(e.get("value", "")) for e in c.get("env", [])}
+    for service_name, env_key in checks:
+        if service_name in name:
+            tls_on = env_map.get(env_key, "").strip().lower() in {"1", "true", "yes", "on"}
+            if tls_on and (":v0.0.3" in image or image.endswith("@sha256:7b4a02ed425ce9b79f7e445f3549a79f89a443ad64961e4d4db9ed8a5a89c6e8") or image.endswith("@sha256:2bc49a816d6a54f2f53d799f775ab46420a240d91d462031831d995640996650")):
+                problems.append((service_name, image, env_key))
+
+if problems:
+    print("TLS is enabled but one or more services are using older images without runtime TLS support:", file=sys.stderr)
+    for service_name, image, env_key in problems:
+        print(f"  - {service_name}: image={image} with {env_key}=true", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Use TLS-capable image tags (newer than v0.0.3) for observantio/notifier/resolver, or disable TLS in values.", file=sys.stderr)
+    sys.exit(2)
+PY
 }
 
 get_ready_pod_name() {
@@ -731,6 +827,54 @@ run_post_deploy_checks() {
     curl -fsS "http://127.0.0.1:14321/api/gateway/health" >/dev/null
   fi
 
+    kubectl -n "$NAMESPACE" exec -i "$watchdog_pod" -- \
+    env GF_URL="http://${RELEASE_NAME}-observantio-grafana:3000" python - <<'PY'
+import base64
+import json
+import os
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+username = os.environ.get("GRAFANA_USERNAME", "").strip()
+password = os.environ.get("GRAFANA_PASSWORD", "")
+grafana_url = os.environ["GF_URL"].rstrip("/")
+
+if not username or not password:
+    raise SystemExit("Grafana credentials are missing in observantio runtime environment")
+
+auth = base64.b64encode(f"{username}:{password}".encode()).decode()
+headers = {"Authorization": f"Basic {auth}", "Accept": "application/json"}
+
+def request(path: str):
+    req = Request(f"{grafana_url}{path}", headers=headers)
+    with urlopen(req, timeout=10) as resp:
+        return resp.status, resp.read().decode("utf-8", errors="ignore")
+
+try:
+    status_user, _ = request("/api/user")
+    if status_user >= 400:
+        raise SystemExit(f"Grafana credentials rejected with status={status_user}")
+
+    status_ds, body_ds = request("/api/datasources")
+    if status_ds >= 400:
+        raise SystemExit(f"Grafana datasource listing failed with status={status_ds}")
+
+    parsed = json.loads(body_ds or "[]")
+    if not isinstance(parsed, list):
+        raise SystemExit("Unexpected Grafana datasource response payload")
+
+except HTTPError as exc:
+    if exc.code == 401:
+        raise SystemExit(
+            "Grafana rejected configured credentials (401). Check shared secret parity and reset Grafana state if it was initialized with an old admin password."
+        )
+    raise SystemExit(f"Grafana credential validation failed: HTTP {exc.code}")
+except URLError as exc:
+    raise SystemExit(f"Grafana credential validation failed: {exc}")
+
+print("Grafana credential validation passed for observantio runtime.")
+PY
+
   kubectl -n "$NAMESPACE" exec -i "$watchdog_pod" -- \
     env OBS_USER="$OBSERVANTIO_USERNAME" python - <<'PY'
 import os
@@ -783,16 +927,14 @@ stop_existing_port_forwards() {
 
 echo "Preparing secrets and internal TLS for release=${RELEASE_NAME} namespace=${NAMESPACE}"
 ensure_application_secret
-if [[ "$INTERNAL_TLS_REQUIRED" == "true" ]]; then
-  ensure_internal_tls_secret
-fi
+ensure_internal_tls_secret
 
 POSTGRES_SERVICE="${RELEASE_NAME}-postgres"
 WATCHDOG_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_SERVICE}:5432/${POSTGRES_DB}"
 NOTIFIER_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_SERVICE}:5432/watchdog_notified"
 RESOLVER_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_SERVICE}:5432/watchdog_resolver"
 
-echo "Deploying production release ${RELEASE_NAME} in namespace ${NAMESPACE}"
+echo "Deploying ${EFFECTIVE_PROFILE} release ${RELEASE_NAME} in namespace ${NAMESPACE}"
 helm_args=(
   upgrade --install "$RELEASE_NAME" "$CHART_PATH"
   -n "$NAMESPACE"
@@ -814,6 +956,7 @@ helm_args+=(
   --set externalSecrets.enabled=false
   --set secrets.create=false
   --set-string secrets.existingSecretName="$ACTIVE_SECRET_NAME"
+  --set-string internalTLS.secretName="$INTERNAL_TLS_SECRET_NAME"
   --set networkPolicy.enabled=true
   --set podDisruptionBudget.enabled=true
   --set-string observantio.env.APP_ENV=production
@@ -828,8 +971,6 @@ helm_args+=(
   --set-string observantio.env.REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS=true
   --set-string observantio.env.REQUIRE_TOTP_ENCRYPTION_KEY=true
   --set-string observantio.env.SKIP_LOCAL_MFA_FOR_EXTERNAL=false
-  --set-string observantio.env.CORS_ORIGINS="$CORS_ORIGINS"
-  --set-string observantio.env.CORS_ALLOW_CREDENTIALS=true
   --set-string gatekeeper.env.DATABASE_URL="$WATCHDOG_DATABASE_URL"
   --set-string notifier.env.APP_ENV=production
   --set-string notifier.env.ENVIRONMENT=production
@@ -840,65 +981,18 @@ helm_args+=(
   --set-string resolver.env.RESOLVER_DATABASE_URL="$RESOLVER_DATABASE_URL"
 )
 
-if [[ "$INTERNAL_TLS_REQUIRED" == "true" ]]; then
-  helm_args+=(
-    --set internalTLS.enabled=true
-    --set-string internalTLS.secretName="$INTERNAL_TLS_SECRET_NAME"
-    --set notifier.tls.enabled=true
-    --set resolver.tls.enabled=true
-    --set-string observantio.env.NOTIFIER_URL="https://${NOTIFIER_SVC}:4323"
-    --set-string observantio.env.NOTIFIER_TLS_ENABLED=true
-    --set-string observantio.env.NOTIFIER_CA_CERT_PATH=/etc/observantio/internal-ca/ca.crt
-    --set-string observantio.env.RESOLVER_URL="https://${RESOLVER_SVC}:4322"
-    --set-string observantio.env.RESOLVER_TLS_ENABLED=true
-    --set-string observantio.env.RESOLVER_CA_CERT_PATH=/etc/observantio/internal-ca/ca.crt
-  )
-else
-  helm_args+=(
-    --set internalTLS.enabled=false
-    --set notifier.tls.enabled=false
-    --set resolver.tls.enabled=false
-    --set-string observantio.env.NOTIFIER_URL="http://${NOTIFIER_SVC}:4323"
-    --set-string observantio.env.NOTIFIER_TLS_ENABLED=false
-    --set-string observantio.env.NOTIFIER_CA_CERT_PATH=
-    --set-string observantio.env.RESOLVER_URL="http://${RESOLVER_SVC}:4322"
-    --set-string observantio.env.RESOLVER_TLS_ENABLED=false
-    --set-string observantio.env.RESOLVER_CA_CERT_PATH=
-  )
+if [[ -n "$NOTIFIER_IMAGE_REPOSITORY" ]]; then
+  helm_args+=( --set-string notifier.image.repository="$NOTIFIER_IMAGE_REPOSITORY" )
 fi
-
-if [[ "$GATEKEEPER_REQUIRED" == "true" ]]; then
-  helm_args+=(
-    --set gatekeeper.enabled=true
-    --set-string gatekeeper.env.APP_ENV=production
-    --set-string gatekeeper.env.ENVIRONMENT=production
-    --set-string gatekeeper.env.GATEWAY_AUTH_API_URL="https://${OBSERVANTIO_SVC}:4319/api/internal/otlp/validate"
-    --set-string gatekeeper.env.GATEWAY_ALLOWLIST_FAIL_OPEN=false
-    --set-string gatekeeper.env.GATEWAY_STARTUP_CHECK_MODE=strict
-  )
-else
-  helm_args+=(
-    --set gatekeeper.enabled=false
-  )
+if [[ -n "$NOTIFIER_IMAGE_TAG" ]]; then
+  helm_args+=( --set-string notifier.image.tag="$NOTIFIER_IMAGE_TAG" )
 fi
-
-if [[ "$EFFECTIVE_PROFILE" == "compact" ]]; then
-  helm_args+=(
-    --set autoscaling.observantio.enabled=false
-    --set autoscaling.gatekeeper.enabled=false
-    --set autoscaling.notifier.enabled=false
-    --set autoscaling.resolver.enabled=false
-  )
-else
-  helm_args+=(
-    --set autoscaling.observantio.enabled=true
-    --set autoscaling.gatekeeper.enabled=true
-    --set autoscaling.notifier.enabled=true
-    --set autoscaling.resolver.enabled=true
-  )
+if [[ -n "$NOTIFIER_IMAGE_REPOSITORY" || -n "$NOTIFIER_IMAGE_TAG" ]]; then
+  helm_args+=( --set-string notifier.image.pullPolicy="$NOTIFIER_IMAGE_PULL_POLICY" )
 fi
 
 helm "${helm_args[@]}" >/dev/null
+fail_fast_if_tls_requested_but_unsupported_images
 
 wait_ready_deployment "${OBSERVANTIO_SVC}"
 wait_ready_deployment "${RELEASE_NAME}-observantio-gatekeeper"
@@ -963,14 +1057,14 @@ if [[ "$START_PORT_FORWARDS" == "true" ]]; then
 fi
 
 echo
-echo "Production install complete"
+echo "Install complete"
 echo "  Namespace:            ${NAMESPACE}"
 echo "  Release:              ${RELEASE_NAME}"
 echo "  Secret:               ${ACTIVE_SECRET_NAME}"
 if [[ "$INTERNAL_TLS_REQUIRED" == "true" ]]; then
   echo "  Internal TLS secret:  ${INTERNAL_TLS_SECRET_NAME}"
 else
-  echo "  Internal TLS secret:  disabled for compact profile"
+  echo "  Internal TLS secret:  disabled by profile values"
 fi
 echo "  Install profile:      ${EFFECTIVE_PROFILE}"
 echo "  Admin username:       ${OBSERVANTIO_USERNAME}"
