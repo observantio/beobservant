@@ -34,7 +34,68 @@ externalSecrets:
     GRAFANA_USERNAME: observantio/prod/GRAFANA_USERNAME
     GRAFANA_PASSWORD: observantio/prod/GRAFANA_PASSWORD
 
+internalTLS:
+  enabled: true
+
+networkPolicy:
+  enabled: true
+  allowAllExternalEgress: true
+  allowExternalEgressCidrs: []
+
+scheduling:
+  podAntiAffinity:
+    enabled: false
+  topologySpreadConstraints:
+    enabled: false
+
+autoscaling:
+  observantio:
+    enabled: false
+  gatekeeper:
+    enabled: false
+  notifier:
+    enabled: false
+  resolver:
+    enabled: false
+
+observantio:
+  replicaCount: 1
+  env:
+    CORS_ORIGINS: "http://127.0.0.1:5173,http://localhost:5173"
+    CORS_ALLOW_CREDENTIALS: "true"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+gatekeeper:
+  enabled: false
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+notifier:
+  replicaCount: 1
+  tls:
+    enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+
+resolver:
+  replicaCount: 1
+  tls:
+    enabled: true
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+
 otlpGateway:
+  replicaCount: 1
   publicService:
     enabled: true
     type: LoadBalancer
@@ -42,11 +103,86 @@ otlpGateway:
     - 10.0.0.0/8
     - 172.16.0.0/12
     - 192.168.0.0/16
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
 
-networkPolicy:
+otelAgent:
   enabled: true
-  allowAllExternalEgress: false
-  allowExternalEgressCidrs:
-  - 10.0.0.0/8
-  - 172.16.0.0/12
-  - 192.168.0.0/16
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+
+grafanaAuthGateway:
+  enforceAuth: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+ui:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+loki:
+  storage:
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+
+tempo:
+  storage:
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+
+mimir:
+  storage:
+    size: 50Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+
+alertmanager:
+  storage:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+grafana:
+  storage:
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+postgres:
+  storage:
+    size: 50Gi
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+
+redis:
+  storage:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi

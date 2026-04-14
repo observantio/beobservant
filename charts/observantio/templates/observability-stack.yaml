@@ -421,9 +421,9 @@ data:
       ring:
         replication_factor: {{ .Values.mimir.replicationFactor }}
     ruler_storage:
-      backend: local
-      local:
-        directory: /data/ruler-storage
+      backend: filesystem
+      filesystem:
+        dir: /data/ruler-storage
     ruler:
       rule_path: /ruler
       alertmanager_url: http://{{ include "observantio.componentFullname" (dict "root" . "name" "alertmanager") }}:{{ .Values.alertmanager.service.port }}
@@ -465,6 +465,19 @@ spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
         {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.mimir) | nindent 8 }}
+      {{- if .Values.mimir.storage.enabled }}
+      initContainers:
+      - name: init-mimir-ruler-storage
+        image: busybox:1.36
+        command:
+        - /bin/sh
+        - -ec
+        - |
+          mkdir -p /data/blocks /data/ruler-storage /data/ruler-storage/anonymous /ruler
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      {{- end }}
       containers:
       - name: mimir
         image: "{{ .Values.mimir.image.repository }}:{{ .Values.mimir.image.tag }}"
@@ -613,9 +626,21 @@ spec:
         - name: http
           containerPort: {{ .Values.grafana.service.port }}
         env:
+        - name: GF_SECURITY_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "observantio.secretName" . }}
+              key: GRAFANA_USERNAME
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "observantio.secretName" . }}
+              key: GRAFANA_PASSWORD
         {{- range $k, $v := .Values.grafana.env }}
+        {{- if and (ne $k "GF_SECURITY_ADMIN_USER") (ne $k "GF_SECURITY_ADMIN_PASSWORD") }}
         - name: {{ $k }}
           value: {{ tpl ($v | toString) $ | quote }}
+        {{- end }}
         {{- end }}
         envFrom:
         - secretRef:

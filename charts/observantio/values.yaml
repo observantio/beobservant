@@ -349,6 +349,7 @@ grafana:
 
 grafanaAuthGateway:
   enabled: true
+  enforceAuth: true
   replicaCount: 2
   image:
     repository: nginx
