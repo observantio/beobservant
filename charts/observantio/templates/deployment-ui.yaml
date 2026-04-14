@@ -19,7 +19,15 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.ui) | nindent 8 }}
+      {{- with .Values.scheduling.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -34,5 +42,5 @@ spec:
         resources:
           {{- toYaml .Values.ui.resources | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.ui "name" "ui") | nindent 10 }}
 {{- end }}

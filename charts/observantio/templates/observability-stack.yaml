@@ -7,7 +7,7 @@ metadata:
     {{- include "observantio.labels" . | nindent 4 }}
 data:
   loki.yaml: |
-    auth_enabled: false
+    auth_enabled: {{ .Values.loki.authEnabled }}
     server:
       http_listen_port: 3100
       grpc_listen_port: 9096
@@ -17,10 +17,13 @@ data:
         filesystem:
           chunks_directory: /loki/chunks
           rules_directory: /loki/rules
-      replication_factor: 1
+      replication_factor: {{ .Values.loki.replicationFactor }}
       ring:
         kvstore:
-          store: inmemory
+          store: {{ .Values.loki.ringStore }}
+    memberlist:
+      join_members:
+        - {{ include "observantio.componentFullname" (dict "root" . "name" "loki") }}
     schema_config:
       configs:
         - from: 2024-01-01
@@ -76,7 +79,7 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.loki) | nindent 8 }}
       containers:
       - name: loki
         image: "{{ .Values.loki.image.repository }}:{{ .Values.loki.image.tag }}"
@@ -107,7 +110,7 @@ spec:
         resources:
           {{- toYaml .Values.loki.resources | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.loki "name" "loki") | nindent 10 }}
       volumes:
       - name: config
         configMap:
@@ -148,7 +151,7 @@ data:
   tempo.yaml: |
     server:
       http_listen_port: 3200
-    multitenancy_enabled: false
+    multitenancy_enabled: {{ .Values.tempo.multitenancyEnabled }}
     distributor:
       receivers:
         otlp:
@@ -202,7 +205,7 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.tempo) | nindent 8 }}
       containers:
       - name: tempo
         image: "{{ .Values.tempo.image.repository }}:{{ .Values.tempo.image.tag }}"
@@ -235,7 +238,7 @@ spec:
         resources:
           {{- toYaml .Values.tempo.resources | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.tempo "name" "tempo") | nindent 10 }}
       volumes:
       - name: config
         configMap:
@@ -324,7 +327,7 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.alertmanager) | nindent 8 }}
       containers:
       - name: alertmanager
         image: "{{ .Values.alertmanager.image.repository }}:{{ .Values.alertmanager.image.tag }}"
@@ -340,7 +343,7 @@ spec:
           containerPort: {{ .Values.alertmanager.service.port }}
         envFrom:
         - secretRef:
-            name: {{ include "observantio.fullname" . }}-secrets
+            name: {{ include "observantio.secretName" . }}
         readinessProbe:
           httpGet:
             path: /-/ready
@@ -363,7 +366,7 @@ spec:
         resources:
           {{- toYaml .Values.alertmanager.resources | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.alertmanager "name" "alertmanager") | nindent 10 }}
       volumes:
       - name: config
         configMap:
@@ -405,7 +408,7 @@ data:
     server:
       http_listen_port: {{ .Values.mimir.service.port }}
       grpc_listen_port: 9095
-    multitenancy_enabled: false
+    multitenancy_enabled: {{ .Values.mimir.multitenancyEnabled }}
     common:
       storage:
         backend: filesystem
@@ -461,7 +464,7 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.mimir) | nindent 8 }}
       containers:
       - name: mimir
         image: "{{ .Values.mimir.image.repository }}:{{ .Values.mimir.image.tag }}"
@@ -495,7 +498,7 @@ spec:
         resources:
           {{- toYaml .Values.mimir.resources | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.mimir "name" "mimir") | nindent 10 }}
       volumes:
       - name: config
         configMap:
@@ -601,7 +604,7 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.grafana) | nindent 8 }}
       containers:
       - name: grafana
         image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}"
@@ -616,7 +619,7 @@ spec:
         {{- end }}
         envFrom:
         - secretRef:
-            name: {{ include "observantio.fullname" . }}-secrets
+            name: {{ include "observantio.secretName" . }}
         readinessProbe:
           httpGet:
             path: /api/health
@@ -639,7 +642,7 @@ spec:
         resources:
           {{- toYaml .Values.grafana.resources | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.grafana "name" "grafana") | nindent 10 }}
       volumes:
       - name: datasources
         configMap:

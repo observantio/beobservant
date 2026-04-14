@@ -19,7 +19,37 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.resolver) | nindent 8 }}
+      {{- with .Values.scheduling.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.scheduling.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "observantio.selectorLabels" . | nindent 18 }}
+                  app.kubernetes.io/component: resolver
+      {{- end }}
+      {{- if .Values.scheduling.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+      - maxSkew: {{ .Values.scheduling.topologySpreadConstraints.maxSkew }}
+        topologyKey: {{ .Values.scheduling.topologySpreadConstraints.topologyKey }}
+        whenUnsatisfiable: {{ .Values.scheduling.topologySpreadConstraints.whenUnsatisfiable }}
+        labelSelector:
+          matchLabels:
+            {{- include "observantio.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: resolver
+      {{- end }}
       serviceAccountName: {{ include "observantio.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -29,6 +59,9 @@ spec:
       - name: resolver
         image: "{{ .Values.resolver.image.repository }}:{{ .Values.resolver.image.tag }}"
         imagePullPolicy: {{ .Values.resolver.image.pullPolicy }}
+        {{- if .Values.resolver.tls.enabled }}
+        command: ["python", "main.py"]
+        {{- end }}
         ports:
         - containerPort: {{ .Values.resolver.service.port }}
           name: http
@@ -37,23 +70,54 @@ spec:
         - name: {{ $k }}
           value: {{ tpl ($v | toString) $ | quote }}
         {{- end }}
+        {{- if .Values.resolver.tls.enabled }}
+        - name: RESOLVER_SSL_ENABLED
+          value: "true"
+        - name: RESOLVER_SSL_CERTFILE
+          value: {{ printf "%s/tls.crt" .Values.resolver.tls.mountPath | quote }}
+        - name: RESOLVER_SSL_KEYFILE
+          value: {{ printf "%s/tls.key" .Values.resolver.tls.mountPath | quote }}
+        {{- end }}
         envFrom:
         - secretRef:
-            name: {{ include "observantio.fullname" . }}-secrets
+            name: {{ include "observantio.secretName" . }}
+        {{- if .Values.resolver.tls.enabled }}
+        volumeMounts:
+        - name: resolver-tls
+          mountPath: {{ .Values.resolver.tls.mountPath }}
+          readOnly: true
+        {{- end }}
         livenessProbe:
           httpGet:
             path: {{ .Values.resolver.probes.path }}
             port: http
+            {{- if .Values.resolver.tls.enabled }}
+            scheme: HTTPS
+            {{- end }}
           initialDelaySeconds: {{ .Values.resolver.probes.initialDelaySeconds }}
           periodSeconds: {{ .Values.resolver.probes.periodSeconds }}
         readinessProbe:
           httpGet:
             path: {{ .Values.resolver.probes.path }}
             port: http
+            {{- if .Values.resolver.tls.enabled }}
+            scheme: HTTPS
+            {{- end }}
           initialDelaySeconds: {{ .Values.resolver.probes.initialDelaySeconds }}
           periodSeconds: {{ .Values.resolver.probes.periodSeconds }}
         resources:
           {{- toYaml .Values.resolver.resources | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.resolver "name" "resolver") | nindent 10 }}
+      {{- if .Values.resolver.tls.enabled }}
+      volumes:
+      - name: resolver-tls
+        secret:
+          secretName: {{ default (include "observantio.internalTLSSecretName" .) .Values.resolver.tls.certSecretName }}
+          items:
+          - key: {{ .Values.resolver.tls.certKey }}
+            path: tls.crt
+          - key: {{ .Values.resolver.tls.keyKey }}
+            path: tls.key
+      {{- end }}
 {{- end }}

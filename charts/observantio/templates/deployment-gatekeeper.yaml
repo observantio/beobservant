@@ -19,7 +19,37 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.gatekeeper) | nindent 8 }}
+      {{- with .Values.scheduling.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.scheduling.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.scheduling.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "observantio.selectorLabels" . | nindent 18 }}
+                  app.kubernetes.io/component: gatekeeper
+      {{- end }}
+      {{- if .Values.scheduling.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+      - maxSkew: {{ .Values.scheduling.topologySpreadConstraints.maxSkew }}
+        topologyKey: {{ .Values.scheduling.topologySpreadConstraints.topologyKey }}
+        whenUnsatisfiable: {{ .Values.scheduling.topologySpreadConstraints.whenUnsatisfiable }}
+        labelSelector:
+          matchLabels:
+            {{- include "observantio.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: gatekeeper
+      {{- end }}
       serviceAccountName: {{ include "observantio.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -39,7 +69,7 @@ spec:
         {{- end }}
         envFrom:
         - secretRef:
-            name: {{ include "observantio.fullname" . }}-secrets
+            name: {{ include "observantio.secretName" . }}
         livenessProbe:
           httpGet:
             path: {{ .Values.gatekeeper.probes.path }}
@@ -55,5 +85,5 @@ spec:
         resources:
           {{- toYaml .Values.gatekeeper.resources | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.gatekeeper "name" "gatekeeper") | nindent 10 }}
 {{- end }}

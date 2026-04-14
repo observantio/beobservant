@@ -1,0 +1,52 @@
+secrets:
+  create: false
+  existingSecretName: observantio-prod-secrets
+
+externalSecrets:
+  enabled: true
+  refreshInterval: 15m
+  secretStoreRef:
+    name: observantio-prod-secret-store
+    kind: ClusterSecretStore
+  targetSecretName: observantio-prod-secrets
+  data:
+    POSTGRES_USER: observantio/prod/POSTGRES_USER
+    POSTGRES_PASSWORD: observantio/prod/POSTGRES_PASSWORD
+    POSTGRES_DB: observantio/prod/POSTGRES_DB
+    JWT_SECRET_KEY: observantio/prod/JWT_SECRET_KEY
+    JWT_PRIVATE_KEY: observantio/prod/JWT_PRIVATE_KEY
+    JWT_PUBLIC_KEY: observantio/prod/JWT_PUBLIC_KEY
+    DATA_ENCRYPTION_KEY: observantio/prod/DATA_ENCRYPTION_KEY
+    DEFAULT_OTLP_TOKEN: observantio/prod/DEFAULT_OTLP_TOKEN
+    OTEL_OTLP_TOKEN: observantio/prod/OTEL_OTLP_TOKEN
+    INBOUND_WEBHOOK_TOKEN: observantio/prod/INBOUND_WEBHOOK_TOKEN
+    OTLP_INGEST_TOKEN: observantio/prod/OTLP_INGEST_TOKEN
+    GATEWAY_INTERNAL_SERVICE_TOKEN: observantio/prod/GATEWAY_INTERNAL_SERVICE_TOKEN
+    GATEWAY_STATUS_OTLP_TOKEN: observantio/prod/GATEWAY_STATUS_OTLP_TOKEN
+    NOTIFIER_SERVICE_TOKEN: observantio/prod/NOTIFIER_SERVICE_TOKEN
+    NOTIFIER_EXPECTED_SERVICE_TOKEN: observantio/prod/NOTIFIER_SERVICE_TOKEN
+    NOTIFIER_CONTEXT_SIGNING_KEY: observantio/prod/NOTIFIER_CONTEXT_SIGNING_KEY
+    NOTIFIER_CONTEXT_VERIFY_KEY: observantio/prod/NOTIFIER_CONTEXT_VERIFY_KEY
+    RESOLVER_SERVICE_TOKEN: observantio/prod/RESOLVER_SERVICE_TOKEN
+    RESOLVER_EXPECTED_SERVICE_TOKEN: observantio/prod/RESOLVER_SERVICE_TOKEN
+    RESOLVER_CONTEXT_SIGNING_KEY: observantio/prod/RESOLVER_CONTEXT_SIGNING_KEY
+    RESOLVER_CONTEXT_VERIFY_KEY: observantio/prod/RESOLVER_CONTEXT_VERIFY_KEY
+    GRAFANA_USERNAME: observantio/prod/GRAFANA_USERNAME
+    GRAFANA_PASSWORD: observantio/prod/GRAFANA_PASSWORD
+
+otlpGateway:
+  publicService:
+    enabled: true
+    type: LoadBalancer
+    loadBalancerSourceRanges:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+
+networkPolicy:
+  enabled: true
+  allowAllExternalEgress: false
+  allowExternalEgressCidrs:
+  - 10.0.0.0/8
+  - 172.16.0.0/12
+  - 192.168.0.0/16

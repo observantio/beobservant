@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-redis
+  name: {{ include "observantio.redisServiceName" . }}
   labels:
     {{- include "observantio.labels" . | nindent 4 }}
 spec:
@@ -17,7 +17,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-redis
+  name: {{ include "observantio.redisServiceName" . }}
   labels:
     {{- include "observantio.labels" . | nindent 4 }}
 spec:
@@ -34,7 +34,7 @@ spec:
     spec:
       automountServiceAccountToken: {{ .Values.hardening.automountServiceAccountToken }}
       securityContext:
-        {{- toYaml .Values.hardening.podSecurityContext | nindent 8 }}
+        {{- include "observantio.podSecurityContextFor" (dict "root" . "component" .Values.redis) | nindent 8 }}
       containers:
       - name: redis
         image: {{ .Values.redis.image }}
@@ -50,19 +50,19 @@ spec:
         resources:
           {{- toYaml .Values.redis.resources | nindent 10 }}
         securityContext:
-          {{- toYaml .Values.hardening.containerSecurityContext | nindent 10 }}
+          {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.redis "name" "redis") | nindent 10 }}
       {{- if .Values.redis.storage.enabled }}
       volumes:
       - name: data
         persistentVolumeClaim:
-          claimName: {{ .Release.Name }}-redis-data
+          claimName: {{ include "observantio.redisPvcName" . }}
       {{- end }}
 ---
 {{- if .Values.redis.storage.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ .Release.Name }}-redis-data
+  name: {{ include "observantio.redisPvcName" . }}
   labels:
     {{- include "observantio.labels" . | nindent 4 }}
 spec:

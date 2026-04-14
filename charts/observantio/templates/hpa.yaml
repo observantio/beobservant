@@ -1,0 +1,91 @@
+{{- if and .Values.observantio.enabled .Values.autoscaling.observantio.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "observantio") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "observantio.fullname" . }}-observantio
+  minReplicas: {{ .Values.autoscaling.observantio.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.observantio.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaling.observantio.targetCPUUtilizationPercentage }}
+---
+{{- end }}
+{{- if and .Values.gatekeeper.enabled .Values.autoscaling.gatekeeper.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "gatekeeper") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "observantio.componentFullname" (dict "root" . "name" "gatekeeper") }}
+  minReplicas: {{ .Values.autoscaling.gatekeeper.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.gatekeeper.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaling.gatekeeper.targetCPUUtilizationPercentage }}
+---
+{{- end }}
+{{- if and .Values.notifier.enabled .Values.autoscaling.notifier.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "notifier") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "observantio.componentFullname" (dict "root" . "name" "notifier") }}
+  minReplicas: {{ .Values.autoscaling.notifier.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.notifier.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaling.notifier.targetCPUUtilizationPercentage }}
+---
+{{- end }}
+{{- if and .Values.resolver.enabled .Values.autoscaling.resolver.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "observantio.componentFullname" (dict "root" . "name" "resolver") }}
+  labels:
+    {{- include "observantio.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "observantio.componentFullname" (dict "root" . "name" "resolver") }}
+  minReplicas: {{ .Values.autoscaling.resolver.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.resolver.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaling.resolver.targetCPUUtilizationPercentage }}
+{{- end }}
