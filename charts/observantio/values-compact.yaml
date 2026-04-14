@@ -1,0 +1,133 @@
+# Compact production profile for constrained clusters (single-node dev/staging)
+# Security defaults remain production-oriented; capacity/scaling are reduced.
+
+scheduling:
+  podAntiAffinity:
+    enabled: false
+  topologySpreadConstraints:
+    enabled: false
+
+internalTLS:
+  enabled: false
+
+autoscaling:
+  observantio:
+    enabled: false
+  gatekeeper:
+    enabled: false
+  notifier:
+    enabled: false
+  resolver:
+    enabled: false
+
+observantio:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+gatekeeper:
+  enabled: false
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+notifier:
+  replicaCount: 1
+  tls:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+
+resolver:
+  replicaCount: 1
+  tls:
+    enabled: false
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+
+otlpGateway:
+  replicaCount: 1
+  publicService:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+grafanaAuthGateway:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+ui:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+loki:
+  storage:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+
+tempo:
+  storage:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+
+mimir:
+  storage:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+
+alertmanager:
+  storage:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+grafana:
+  storage:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+postgres:
+  storage:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+
+redis:
+  storage:
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi

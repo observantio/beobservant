@@ -67,9 +67,19 @@ spec:
         - name: {{ $k }}
           value: {{ tpl ($v | toString) $ | quote }}
         {{- end }}
+        {{- if .Values.internalTLS.enabled }}
+        - name: GATEWAY_SSL_CA_CERTS
+          value: /etc/gatekeeper/internal-ca/ca.crt
+        {{- end }}
         envFrom:
         - secretRef:
             name: {{ include "observantio.secretName" . }}
+        {{- if .Values.internalTLS.enabled }}
+        volumeMounts:
+        - name: internal-ca
+          mountPath: /etc/gatekeeper/internal-ca
+          readOnly: true
+        {{- end }}
         livenessProbe:
           httpGet:
             path: {{ .Values.gatekeeper.probes.path }}
@@ -86,4 +96,13 @@ spec:
           {{- toYaml .Values.gatekeeper.resources | nindent 10 }}
         securityContext:
           {{- include "observantio.containerSecurityContextFor" (dict "root" . "component" .Values.gatekeeper "name" "gatekeeper") | nindent 10 }}
+      {{- if .Values.internalTLS.enabled }}
+      volumes:
+      - name: internal-ca
+        secret:
+          secretName: {{ include "observantio.internalTLSSecretName" . }}
+          items:
+          - key: {{ .Values.internalTLS.caKey }}
+            path: ca.crt
+      {{- end }}
 {{- end }}
