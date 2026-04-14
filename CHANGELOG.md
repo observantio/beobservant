@@ -6,6 +6,13 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+* Moved production installer ownership to `charts/observantio/installer.sh` and converted root `installer.sh` into a thin wrapper.
+* Added profile-aware install behavior (`auto|production|compact`) with cluster-capacity detection for safer rollout defaults on constrained clusters.
+* Added compact profile chart overrides for reduced replica/resource footprints and constrained-cluster compatibility defaults.
+* Hardened chart runtime wiring for internal TLS and fail-closed behavior, including chart-driven CA/cert mounts and service URL mode selection.
+* Updated chart deployment wiring to pass managed database credentials into component database URLs during install/upgrade.
+* Updated watchdog runtime server startup to support optional SSL listener mode via `SSL_ENABLED` + cert/key environment variables.
+
 * Improved systrace integration by deriving `service.name` from kernel trace lines
 * Enabled service graph rendering for single-span traces
 * Fixed span duration truncation for very short spans
