@@ -312,14 +312,38 @@ function QuickCreateApiKeyButton({ onCreated }) {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createdToken, setCreatedToken] = useState("");
+  const [copiedToken, setCopiedToken] = useState(false);
+  const copyTimerRef = useRef(null);
 
   useEffect(() => {
-    if (!createdToken) return undefined;
+    if (!createdToken) {
+      setCopiedToken(false);
+      return undefined;
+    }
     const timeoutId = window.setTimeout(() => {
       setCreatedToken("");
+      setCopiedToken(false);
     }, 30000);
-    return () => window.clearTimeout(timeoutId);
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearTimeout(copyTimerRef.current);
+    };
   }, [createdToken]);
+
+  const handleCopyToken = async () => {
+    if (!createdToken) return;
+    const copied = await copyToClipboard(createdToken);
+    if (!copied) {
+      toast.error("Failed to copy token");
+      return;
+    }
+    setCopiedToken(true);
+    toast.success("Copied to clipboard");
+    window.clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = window.setTimeout(() => {
+      setCopiedToken(false);
+    }, 2000);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -419,10 +443,10 @@ function QuickCreateApiKeyButton({ onCreated }) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => copyToClipboard(createdToken)}
+                    onClick={handleCopyToken}
                     className="rounded-md border border-sre-border px-2 py-0.5 text-[11px] font-medium text-sre-text hover:border-sre-primary/40"
                   >
-                    Copy
+                    {copiedToken ? "Copied" : "Copy"}
                   </button>
                 </div>
                 <div className="mt-1.5 break-all rounded-md bg-sre-bg px-2 py-1.5 font-mono text-[11px] text-sre-text">

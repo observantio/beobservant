@@ -200,6 +200,37 @@ export function useRcaJobs(scopeKey = "") {
     }
   }, [deletedReportIds, selectedJobId, toast]);
 
+  const refreshActiveJobs = useCallback(async () => {
+    const activeJobIds = jobsRef.current
+      .filter(
+        (job) =>
+          job?.job_id &&
+          !job.job_id.startsWith("pending-") &&
+          !isTerminalStatus(job?.status),
+      )
+      .map((job) => job.job_id);
+
+    if (activeJobIds.length === 0) return;
+
+    const settled = await Promise.allSettled(
+      activeJobIds.map((jobId) => getRcaJob(jobId)),
+    );
+    const updates = settled
+      .filter((result) => result.status === "fulfilled" && result.value?.job_id)
+      .map((result) => result.value);
+    if (updates.length === 0) return;
+
+    const updatesById = new Map(updates.map((job) => [job.job_id, job]));
+
+    setJobs((prev) =>
+      prev.map((job) =>
+        updatesById.has(job.job_id)
+          ? { ...job, ...updatesById.get(job.job_id) }
+          : job,
+      ),
+    );
+  }, []);
+
   useEffect(() => {
     const prev = prevScopeKeyRef.current;
     if (prev === undefined) {
@@ -236,9 +267,14 @@ export function useRcaJobs(scopeKey = "") {
 
   useEffect(() => {
     if (!hasActiveJobs(jobs)) return undefined;
-    const poll = () => {
+    const poll = async () => {
       if (typeof document !== "undefined" && document.hidden) return;
-      refreshJobs();
+      const selected = jobs.find((job) => job.job_id === selectedJobId);
+      if (selected && isTerminalStatus(selected.status)) {
+        await refreshActiveJobs();
+      } else {
+        await refreshJobs();
+      }
     };
     const timer = setInterval(() => {
       poll();
@@ -257,7 +293,7 @@ export function useRcaJobs(scopeKey = "") {
         document.removeEventListener("visibilitychange", onVisibilityChange);
       }
     };
-  }, [jobs, refreshJobs]);
+  }, [jobs, refreshJobs, refreshActiveJobs, selectedJobId]);
 
   const createJob = useCallback(
     async (payload) => {

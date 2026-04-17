@@ -3,6 +3,10 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
+vi.mock("../../utils/helpers", () => ({
+  copyToClipboard: vi.fn().mockResolvedValue(true),
+}));
+
 let authState = {
   user: {
     id: "u1",
@@ -148,6 +152,37 @@ describe("Header user menu", () => {
     expect(await screen.findByText(/This is OTLP token/i)).toBeInTheDocument();
     expect(await screen.findByText(/otlp-test-token/i)).toBeInTheDocument();
     expect(api.updateApiKey).toHaveBeenCalledWith("new-key-1", { is_enabled: true });
+  });
+
+  it("changes quick-create token button text to Copied after copy", async () => {
+    authState.user.api_keys = [
+      {
+        id: "key-1",
+        name: "Tenant A",
+        key: "tenant-a",
+        is_enabled: true,
+        is_shared: false,
+        can_use: true,
+        is_hidden: false,
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <Header />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Quick create API key/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Production Team/i), {
+      target: { value: "New Scope" },
+    });
+    fireEvent.click(document.querySelector('button[type="submit"]'));
+
+    expect(await screen.findByText(/This is OTLP token/i)).toBeInTheDocument();
+    const copyButton = await screen.findByRole("button", { name: /Copy/i });
+    fireEvent.click(copyButton);
+    expect(await screen.findByRole("button", { name: /Copied/i })).toBeInTheDocument();
   });
 
   it("shows extra services in the Ojo wizard with search and selection", async () => {

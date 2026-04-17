@@ -121,10 +121,23 @@ filterwarnings = [
 [tool.mutmut]
 paths_to_mutate = [
   "resolver/api/routes",
+  "resolver/services",
+  "resolver/datasources",
+  "resolver/connectors",
+  "resolver/store",
   "resolver/middleware",
   "gatekeeper/routers",
   "gatekeeper/middleware",
   "gatekeeper/services",
+  "notifier/middleware",
+  "notifier/routers/observability/alerts",
+  "notifier/routers/observability/incidents.py",
+  "notifier/routers/observability/jira",
+  "notifier/services/common",
+  "notifier/services/notification",
+  "notifier/services/alerting",
+  "notifier/services/storage",
+  "notifier/services/jira_service.py",
   "notifier/services/storage/revocation.py",
   "watchdog/routers",
   "watchdog/services",
@@ -164,11 +177,54 @@ pytest_add_cli_args = ["-q"]
 
 [tool.observantio.mutmut_profiles.resolver]
 paths_to_mutate = [
+  "config.py",
+  "database.py",
+  "db_models.py",
+  "custom_types/__init__.py",
+  "custom_types/json.py",
+  "api/requests/__init__.py",
+  "api/requests/_time_range.py",
+  "api/requests/analyze.py",
+  "api/requests/correlation.py",
+  "api/requests/events.py",
+  "api/requests/logs.py",
+  "api/requests/metrics.py",
+  "api/requests/slo.py",
+  "api/requests/topology.py",
+  "api/requests/traces.py",
+  "api/responses/__init__.py",
+  "api/responses/jobs.py",
   "api/routes/analyze.py",
+  "api/routes/causal.py",
+  "api/routes/common.py",
+  "api/routes/correlation.py",
+  "api/routes/events.py",
+  "api/routes/exception.py",
+  "api/routes/forecast.py",
+  "api/routes/health.py",
   "api/routes/jobs.py",
+  "api/routes/logs.py",
+  "api/routes/metrics.py",
+  "api/routes/ml.py",
+  "api/routes/slo.py",
   "api/routes/topology.py",
+  "api/routes/traces.py",
+  "services/analyze_service.py",
+  "services/analysis_config_service.py",
+  "services/rca_job_service.py",
+  "services/security_service.py",
+  "engine/__init__.py",
+  "engine/events/__init__.py",
+  "engine/events/models.py",
+  "engine/events/registry.py",
+  "engine/enums.py",
+  "store/client.py",
+  "store/events.py",
+  "store/granger.py",
+  "store/keys.py",
+  "store/weights.py",
 ]
-tests_dir = ["tests/test_jobs_routes.py"]
+tests_dir = ["tests/test_route_exception_wrapper.py"]
 also_copy = [
   "api",
   "connectors",
@@ -182,10 +238,9 @@ also_copy = [
   "db_models.py",
 ]
 pytest_add_cli_args_test_selection = [
-  "tests/test_route_permissions.py",
-  "tests/test_mutation_routes.py",
+  "tests/test_route_exception_wrapper.py",
 ]
-mutate_only_covered_lines = false
+mutate_only_covered_lines = true
 debug = true
 
 [tool.observantio.mutmut_profiles.gatekeeper]
@@ -204,7 +259,30 @@ mutate_only_covered_lines = false
 
 [tool.observantio.mutmut_profiles.notifier]
 paths_to_mutate = [
+  "custom_types/json.py",
+  "models/access/auth_models.py",
+  "middleware/dependencies.py",
+  "middleware/error_handlers.py",
+  "middleware/headers.py",
+  "middleware/request_size_limit.py",
+  "middleware/resilience.py",
+  "middleware/rate_limit/hybrid.py",
+  "middleware/rate_limit/in_memory.py",
+  "middleware/rate_limit/ip.py",
+  "middleware/rate_limit/models.py",
+  "middleware/rate_limit/redis_fixed_window.py",
+  "routers/observability/alerts/access.py",
+  "services/common/__init__.py",
+  "services/common/access.py",
+  "services/common/encryption.py",
+  "services/common/http_client.py",
+  "services/common/meta.py",
+  "services/common/pagination.py",
+  "services/common/tenants.py",
   "services/common/url_utils.py",
+  "services/common/visibility.py",
+  "services/secrets/provider.py",
+  "services/secrets/vault_client.py",
 ]
 tests_dir = ["tests/test_url_utils.py"]
 also_copy = [
@@ -218,6 +296,16 @@ also_copy = [
   "database.py",
   "db_models.py",
   "main.py",
+]
+pytest_add_cli_args_test_selection = ["tests/test_url_utils.py"]
+do_not_mutate = [
+  "*/tests/*",
+  "*/mutants/*",
+  "*/openapi.json",
+  "*/openapi.yaml",
+  "*/assets/*",
+  "*/configs/*",
+  "*/migrations/*",
 ]
 mutate_only_covered_lines = true
 
@@ -316,7 +404,7 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["requests.*", "setuptools.*"]
+module = ["requests.*"]
 ignore_missing_imports = true
 
 [tool.pylint.main]
