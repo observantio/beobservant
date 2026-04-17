@@ -58,6 +58,49 @@ describe("useRcaJobs", () => {
     expect(result.current.refreshJobs).toBeTypeOf("function");
   });
 
+  it(
+    "polls active RCA jobs without refreshing the whole queue when viewing a completed job",
+    async () => {
+      api.listRcaJobs.mockResolvedValueOnce({
+        items: [
+          {
+            job_id: "active-1",
+            report_id: "r1",
+            status: "running",
+            created_at: "2026-01-01",
+          },
+          {
+            job_id: "completed-1",
+            report_id: "r2",
+            status: "completed",
+            created_at: "2026-01-02",
+          },
+        ],
+      });
+      api.getRcaJob.mockResolvedValue({
+        job_id: "active-1",
+        report_id: "r1",
+        status: "running",
+        created_at: "2026-01-01",
+      });
+
+      const { result } = renderHook(() => useRcaJobs("org-a"));
+      await waitFor(() => expect(result.current.loadingJobs).toBe(false));
+
+      act(() => {
+        result.current.setSelectedJobId("completed-1");
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 5200));
+
+      await waitFor(() => {
+        expect(api.getRcaJob).toHaveBeenCalledWith("active-1");
+      });
+      expect(api.listRcaJobs).toHaveBeenCalledTimes(1);
+    },
+    15000,
+  );
+
   it("handles create and delete failures", async () => {
     api.listRcaJobs.mockResolvedValue({ items: [] });
     api.createRcaAnalyzeJob.mockRejectedValue(new Error("create failed"));

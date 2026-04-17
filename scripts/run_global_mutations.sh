@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,6 +19,10 @@ KNOWN_EQUIVALENT_MUTANTS=(
   "gatekeeper:routers.gateway_router.x__validate_otlp_token_request__mutmut_54"
   "gatekeeper:routers.gateway_router.x__validate_otlp_token_request__mutmut_61"
   "gatekeeper:routers.gateway_router.x__validate_otlp_token_request__mutmut_62"
+  "resolver:api.routes.exception.x_handle_exceptions__mutmut_3"
+  "resolver:api.routes.exception.x_handle_exceptions__mutmut_7"
+  "resolver:api.routes.exception.x_handle_exceptions__mutmut_12"
+  "resolver:api.routes.exception.x_handle_exceptions__mutmut_16"
   "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_17"
   "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_18"
   "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_25"
@@ -80,30 +85,23 @@ is_service() {
 }
 
 restore_temp_setup_cfgs() {
-  local backup_path
-  local setup_path
-  while IFS= read -r backup_path; do
-    setup_path="${backup_path%.mutmut-bak}"
-    if [[ -f "${backup_path}" ]]; then
-      mv "${backup_path}" "${setup_path}"
-    fi
-  done < <(find "${ROOT_DIR}" -maxdepth 2 -type f -name 'setup.cfg.mutmut-bak')
+  :
 }
 
 trap restore_temp_setup_cfgs EXIT
 
-render_service_setup_cfg() {
+render_service_pyproject() {
   local service="$1"
-  local setup_cfg_path="$2"
+  local pyproject_path="$2"
 
-  "${VENV_PYTHON}" - "${ROOT_PYPROJECT}" "${service}" "${setup_cfg_path}" <<'PY'
+  "${VENV_PYTHON}" - "${ROOT_PYPROJECT}" "${service}" "${pyproject_path}" <<'PY'
 import sys
 from pathlib import Path
 
 if sys.version_info >= (3, 11):
-    import tomllib
+  import tomllib
 else:
-    import tomli as tomllib
+  import tomli as tomllib
 
 root_pyproject, service_name, output_path = sys.argv[1:]
 data = tomllib.loads(Path(root_pyproject).read_text(encoding="utf-8"))
@@ -111,53 +109,59 @@ profiles = data.get("tool", {}).get("observantio", {}).get("mutmut_profiles", {}
 defaults = profiles.get("defaults", {})
 service_profile = profiles.get(service_name)
 if not isinstance(service_profile, dict):
-    raise SystemExit(
-        f"missing [tool.observantio.mutmut_profiles.{service_name}] in {root_pyproject}"
-    )
+  raise SystemExit(
+    f"missing [tool.observantio.mutmut_profiles.{service_name}] in {root_pyproject}"
+  )
 
 merged: dict[str, object] = {}
 if isinstance(defaults, dict):
-    merged.update(defaults)
+  merged.update(defaults)
 merged.update(service_profile)
 
 list_keys = [
-    "paths_to_mutate",
-    "tests_dir",
-    "also_copy",
-    "pytest_add_cli_args_test_selection",
-    "pytest_add_cli_args",
-    "do_not_mutate",
-    "type_check_command",
+  "paths_to_mutate",
+  "tests_dir",
+  "also_copy",
+  "pytest_add_cli_args_test_selection",
+  "pytest_add_cli_args",
+  "do_not_mutate",
+  "type_check_command",
 ]
 scalar_keys = [
-    "mutate_only_covered_lines",
-    "debug",
-    "max_stack_depth",
+  "mutate_only_covered_lines",
+  "debug",
+  "max_stack_depth",
 ]
 ordered_keys = list_keys + scalar_keys
 
-def render_list(values: list[object]) -> str:
-    lines = ["="]
-    for value in values:
-        lines.append(f"    {value}")
-    return "\n".join(lines)
+
+def toml_quote(value: object) -> str:
+  escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+  return f'"{escaped}"'
+
 
 def render_scalar(value: object) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
+  if isinstance(value, bool):
+    return "true" if value else "false"
+  if isinstance(value, (int, float)):
     return str(value)
+  return toml_quote(value)
 
-lines = ["[mutmut]"]
+
+lines = ["[tool.mutmut]"]
 for key in ordered_keys:
-    if key not in merged:
-        continue
-    value = merged[key]
-    if key in list_keys:
-        if not isinstance(value, list) or len(value) == 0:
-            continue
-        lines.append(f"{key} {render_list(value)}")
-    else:
-        lines.append(f"{key} = {render_scalar(value)}")
+  if key not in merged:
+    continue
+  value = merged[key]
+  if key in list_keys:
+    if not isinstance(value, list) or len(value) == 0:
+      continue
+    lines.append(f"{key} = [")
+    for item in value:
+      lines.append(f"  {toml_quote(item)},")
+    lines.append("]")
+  else:
+    lines.append(f"{key} = {render_scalar(value)}")
 
 Path(output_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
@@ -259,35 +263,30 @@ echo "max-children: ${MAX_CHILDREN}"
 
 for service in "${services_to_run[@]}"; do
   service_dir="${ROOT_DIR}/${service}"
-  setup_cfg="${service_dir}/setup.cfg"
-  setup_cfg_backup="${service_dir}/setup.cfg.mutmut-bak"
+  service_pyproject="${service_dir}/pyproject.toml"
   run_log="${RUN_DIR}/${service}.mutmut-run.log"
   results_file="${RUN_DIR}/${service}.mutmut-results.txt"
   export_log="${RUN_DIR}/${service}.mutmut-export.log"
   stats_file="${RUN_DIR}/${service}.mutmut-cicd-stats.json"
+  created_temp_pyproject=0
 
   echo
   echo "==> ${service}: mutmut run"
   rm -rf "${service_dir}/mutants"
   rm -rf "${service_dir}/.mutmut-cache"
 
-  rm -f "${setup_cfg_backup}"
-  if [[ -f "${setup_cfg}" ]]; then
-    mv "${setup_cfg}" "${setup_cfg_backup}"
-  fi
-
-  if ! render_service_setup_cfg "${service}" "${setup_cfg}"; then
-    if [[ -f "${setup_cfg_backup}" ]]; then
-      mv "${setup_cfg_backup}" "${setup_cfg}"
+  if [[ ! -f "${service_pyproject}" ]]; then
+    if ! render_service_pyproject "${service}" "${service_pyproject}"; then
+      echo "  status=error total=0 killed=0 survived=0 equivalent=0 unexpected=0"
+      summary_rows+=("${service}|error|0|0|0|0|0|1")
+      ((service_failures += 1))
+      if [[ ${CONTINUE_ON_ERROR} -eq 0 ]]; then
+        echo "Stopping early due to --no-continue-on-error"
+        break
+      fi
+      continue
     fi
-    echo "  status=error total=0 killed=0 survived=0 equivalent=0 unexpected=0"
-    summary_rows+=("${service}|error|0|0|0|0|0|1")
-    ((service_failures += 1))
-    if [[ ${CONTINUE_ON_ERROR} -eq 0 ]]; then
-      echo "Stopping early due to --no-continue-on-error"
-      break
-    fi
-    continue
+    created_temp_pyproject=1
   fi
 
   run_rc=0
@@ -308,9 +307,8 @@ for service in "${services_to_run[@]}"; do
     "${VENV_MUTMUT}" export-cicd-stats
   ) >"${export_log}" 2>&1 || export_rc=$?
 
-  rm -f "${setup_cfg}"
-  if [[ -f "${setup_cfg_backup}" ]]; then
-    mv "${setup_cfg_backup}" "${setup_cfg}"
+  if [[ ${created_temp_pyproject} -eq 1 ]]; then
+    rm -f "${service_pyproject}"
   fi
 
   if [[ -f "${service_dir}/mutants/mutmut-cicd-stats.json" ]]; then

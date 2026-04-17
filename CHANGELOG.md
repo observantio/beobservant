@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased] - 2026-04-17
+
+### Fixes
+
+* The copy button for quick API key now shows a success acknowledgement when the token is copied.
+* The RCA page polling now refreshes only active queued jobs when a completed job is selected, preventing unnecessary full queue refreshes.
+* Expanded mutation testing coverage and test tooling for resolver and notifier, and fixed related script/config issues.
+
+
 ## [v0.0.4] - 2026-04-14
 
 ### Changed
