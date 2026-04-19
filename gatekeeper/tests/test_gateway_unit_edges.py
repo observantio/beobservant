@@ -243,8 +243,8 @@ def test_fetch_org_from_api_variants(monkeypatch):
     FakeClient.response = FakeResponse(404)
     assert service._fetch_org_from_api("tok") is None
     FakeClient.response = FakeResponse(405)
-    monkeypatch.setattr(GatewayAuthService, "_fetch_org_from_api_legacy_query", lambda self, token: f"legacy:{token}")
-    assert service._fetch_org_from_api("tok") == "legacy:tok"
+    with pytest.raises(DatabaseUnavailable):
+        service._fetch_org_from_api("tok")
     FakeClient.response = FakeResponse(500)
     with pytest.raises(DatabaseUnavailable):
         service._fetch_org_from_api("tok")
@@ -254,7 +254,7 @@ def test_fetch_org_from_api_variants(monkeypatch):
     assert calls
 
 
-def test_fetch_org_from_api_legacy_query_variants(monkeypatch):
+def test_resolve_auth_api_response_variants():
     service = GatewayAuthService(rate_limit_per_minute=10, ip_allowlist="127.0.0.1")
 
     class FakeResponse:
@@ -265,37 +265,12 @@ def test_fetch_org_from_api_legacy_query_variants(monkeypatch):
         def json(self):
             return self._payload
 
-    class FakeClient:
-        response = FakeResponse(200, {"org_id": "org-2"})
-        error = None
-
-        def __init__(self, *_args, **_kwargs):
-            self.url = None
-            self.headers = None
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def get(self, url, headers=None):
-            if self.error is not None:
-                raise self.error
-            self.url = url
-            self.headers = headers
-            return self.response
-
-    monkeypatch.setattr(gateway_service_module.httpx, "Client", FakeClient)
-    assert service._fetch_org_from_api_legacy_query("t ok") == "org-2"
-    FakeClient.response = FakeResponse(410)
-    assert service._fetch_org_from_api_legacy_query("tok") is None
-    FakeClient.response = FakeResponse(500)
+    assert service._resolve_auth_api_response(FakeResponse(200, {"org_id": "org-2"})) == "org-2"
+    assert service._resolve_auth_api_response(FakeResponse(404)) is None
     with pytest.raises(DatabaseUnavailable):
-        service._fetch_org_from_api_legacy_query("tok")
-    FakeClient.error = httpx.ConnectError("boom")
+        service._resolve_auth_api_response(FakeResponse(405))
     with pytest.raises(DatabaseUnavailable):
-        service._fetch_org_from_api_legacy_query("tok")
+        service._resolve_auth_api_response(FakeResponse(500))
 
 
 def test_validate_otlp_token_handles_empty_and_unexpected_exceptions(monkeypatch):

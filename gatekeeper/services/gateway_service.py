@@ -14,7 +14,6 @@ import logging
 from dataclasses import dataclass
 from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
 from typing import Optional
-from urllib.parse import quote
 
 import httpx
 from fastapi import HTTPException, Request, status
@@ -181,14 +180,12 @@ class GatewayAuthService:
         org_id = payload.get("org_id")
         return str(org_id).strip() if org_id else None
 
-    def _resolve_auth_api_response(self, response: httpx.Response, token: str) -> Optional[str]:
+    def _resolve_auth_api_response(self, response: httpx.Response) -> Optional[str]:
         status_code = response.status_code
         if status_code == 200:
             return self._extract_org_id(response)
         if status_code == 404:
             return None
-        if status_code == 405:
-            return self._fetch_org_from_api_legacy_query(token)
         raise DatabaseUnavailable(f"unexpected status {status_code}")
 
     def _fetch_org_from_api(self, token: str) -> Optional[str]:
@@ -203,23 +200,7 @@ class GatewayAuthService:
             logger.warning("Auth API HTTP transport failure: %s", type(exc).__name__)
             raise DatabaseUnavailable from exc
 
-        return self._resolve_auth_api_response(resp, token)
-
-    def _fetch_org_from_api_legacy_query(self, token: str) -> Optional[str]:
-        legacy_url = f"{self._auth_api_url}?token={quote(token)}"
-        headers = self._auth_request_headers()
-        try:
-            with httpx.Client(timeout=2.0, verify=self._http_verify) as client:
-                resp = client.get(legacy_url, headers=headers)
-        except httpx.HTTPError as exc:
-            logger.warning("Auth API legacy HTTP failure: %s", type(exc).__name__)
-            raise DatabaseUnavailable from exc
-
-        if resp.status_code == 200:
-            return self._extract_org_id(resp)
-        if resp.status_code in {404, 410}:
-            return None
-        raise DatabaseUnavailable(f"unexpected status {resp.status_code}")
+        return self._resolve_auth_api_response(resp)
 
     def probe_auth_api(self, token: str) -> Optional[str]:
         return self._fetch_org_from_api(token)
