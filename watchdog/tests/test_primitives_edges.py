@@ -156,7 +156,7 @@ async def test_request_size_and_concurrency_extra_branches(monkeypatch):
 
     warnings = []
     monkeypatch.setattr(
-        audit_middleware.logger if False else importlib.import_module("middleware.request_size_limit").logger,
+    importlib.import_module("middleware.request_size_limit").logger,
         "warning",
         lambda message, *args: warnings.append((message, args)),
     )
@@ -196,7 +196,7 @@ def test_rate_limit_primitives_and_ip_edges(monkeypatch):
         def ping(self):
             return self.ping_result
 
-        def pipeline(self, transaction=False):
+        def pipeline(self, *args, **kwargs):
             return types.SimpleNamespace(
                 incr=lambda key: None,
                 expire=lambda key, ttl: None,
@@ -439,7 +439,7 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
     )
 
     class BrokenProc:
-        def cpu_percent(self, interval=None):
+        def cpu_percent(self, *args, **kwargs):
             raise RuntimeError("cpu")
 
         def memory_info(self):
@@ -448,7 +448,7 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
         def io_counters(self):
             raise RuntimeError("io")
 
-        def connections(self, kind="inet"):
+        def connections(self, *args, **kwargs):
             raise RuntimeError("net")
 
     assert system_helpers.cpu_metrics(BrokenProc()) == {
@@ -478,10 +478,10 @@ async def test_system_helpers_cookie_security_secret_provider_and_agent_edges(mo
     assert system_helpers.determine_stress_status(5, 10, 1)["status"] == "healthy"
 
     class PrimingProcess:
-        def cpu_percent(self, interval=None):
+        def cpu_percent(self, *args, **kwargs):
             raise system_service_module.psutil.Error("prime")
 
-    monkeypatch.setattr(system_service_module.psutil, "Process", lambda pid: PrimingProcess())
+    monkeypatch.setattr(system_service_module.psutil, "Process", lambda *args, **kwargs: PrimingProcess())
     service = system_service_module.SystemService()
     assert warnings[0][0].startswith("Unable to prime CPU percent")
     assert system_service_module._float_value(True) == 1.0
@@ -777,7 +777,12 @@ async def test_resilience_edges(monkeypatch):
     assert resilience_module._is_retriable_httpx(httpx.ReadTimeout("slow", request=request)) is True
     assert resilience_module._is_retriable_httpx(ValueError("bad")) is False
 
-    monkeypatch.setattr(resilience_module.random, "uniform", lambda low, high: high)
+    def _uniform(*args, **kwargs):
+        if len(args) >= 2:
+            return args[1]
+        return kwargs["high"]
+
+    monkeypatch.setattr(resilience_module.random, "uniform", _uniform)
     assert resilience_module._backoff_delay(2, 0.5, 1.0, 0.5) == 1.5
     assert resilience_module._backoff_delay(1, -1.0, 2.0, -0.5) == 0.0
 
@@ -789,7 +794,6 @@ async def test_resilience_edges(monkeypatch):
         await original_sleep(0)
 
     monkeypatch.setattr(resilience_module.asyncio, "sleep", fake_sleep)
-
     attempts = {"count": 0}
 
     @resilience_module.with_retry(max_retries=2, backoff=0.25, max_backoff=1.0, jitter=0.0, retriable=lambda exc: True)

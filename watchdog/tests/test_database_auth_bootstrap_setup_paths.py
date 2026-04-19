@@ -179,10 +179,8 @@ def test_ensure_default_setup_logs_and_reraises_sqlalchemy_errors(monkeypatch):
         logger=SimpleNamespace(error=lambda *args, **kwargs: errors.append(args), warning=lambda *args, **kwargs: None)
     )
 
-    @contextmanager
     def fake_session():
         raise SQLAlchemyError("db down")
-        yield  # pragma: no cover
 
     monkeypatch.setattr(mod, "get_db_session", fake_session)
     with pytest.raises(SQLAlchemyError):

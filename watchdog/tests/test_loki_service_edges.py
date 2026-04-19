@@ -279,9 +279,11 @@ async def test_aggregate_volume_search_and_filter_cover_remaining_branches(monke
         return {"status": "success", "data": {"result": [{"values": [["1", "5"]]}]}, "query": params_in.query}
 
     monkeypatch.setattr(service, "aggregate_logs", aggregate_logs)
-    monkeypatch.setattr(
-        _loki_module, "build_volume_fallback_queries", lambda query, max_queries: ["candidate-1", "candidate-2"]
-    )
+
+    def build_volume_fallback_queries(*args, **kwargs):
+        return ["candidate-1", "candidate-2"]
+
+    monkeypatch.setattr(_loki_module, "build_volume_fallback_queries", build_volume_fallback_queries)
     volume = await service.get_log_volume(
         LogVolumeParams(query='{service_name="api"}', start=5, end=5, step=60),
         tenant_id="tenant-a",

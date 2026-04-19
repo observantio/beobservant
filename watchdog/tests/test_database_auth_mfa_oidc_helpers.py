@@ -208,7 +208,7 @@ def test_mfa_helpers_and_flows(monkeypatch):
         def provisioning_uri(self, name, issuer_name):
             return f"otpauth://{name}/{issuer_name}/{self.secret}"
 
-        def verify(self, code, valid_window=1):
+        def verify(self, code, *args, **kwargs):
             return code == "123456"
 
     monkeypatch.setattr(mfa_mod.pyotp, "TOTP", _TOTP)

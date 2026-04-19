@@ -316,10 +316,8 @@ def test_authenticate_update_password_and_validate_otlp(monkeypatch):
     with pytest.raises(SQLAlchemyError):
         auth_mod.validate_otlp_token(_service(), "custom-token", suppress_errors=False)
 
-    @contextmanager
     def _runtime_error_ctx():
         raise RuntimeError("boom")
-        yield
 
     monkeypatch.setattr(auth_mod, "get_db_session", _runtime_error_ctx)
     assert auth_mod.validate_otlp_token(_service(), "custom-token") is None
