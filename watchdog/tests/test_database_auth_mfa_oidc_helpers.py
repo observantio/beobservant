@@ -282,12 +282,12 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     existing = SimpleNamespace(
         id="u1", auth_provider="local", is_active=True, email="a@b.c", full_name="Old", external_subject=None
     )
-    monkeypatch.setattr(oidc_mod, "_resolve_existing_user", lambda service, db, **kwargs: existing)
+    monkeypatch.setattr(oidc_mod, "_resolve_existing_user", lambda service, db, *_args, **_kwargs: existing)
     updated = []
     monkeypatch.setattr(
         oidc_mod,
         "update_oidc_user",
-        lambda service, db, user, email, full_name, subject: updated.append((email, full_name, subject)),
+        lambda service, db, user, profile: updated.append((profile.email, profile.full_name, profile.subject)),
     )
     db = _DB(user=existing)
     monkeypatch.setattr(oidc_mod, "get_db_session", lambda: _ctx(db))
@@ -296,7 +296,7 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     assert db.commits == 1 and db.refreshes == 1
     assert updated == [("a@b.c", "Alice", "sub-1")]
 
-    monkeypatch.setattr(oidc_mod, "_resolve_existing_user", lambda service, db, **kwargs: None)
+    monkeypatch.setattr(oidc_mod, "_resolve_existing_user", lambda service, db, *_args, **_kwargs: None)
     provisioned = SimpleNamespace(id="u2", is_active=True)
     monkeypatch.setattr(oidc_mod, "provision_oidc_user", lambda service, db, profile: provisioned)
     db = _DB(user=provisioned)
@@ -304,7 +304,7 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     assert oidc_mod.sync_user_from_oidc_claims(service, {"email": "b@c.d", "sub": "sub-2"}) is provisioned
 
     inactive = SimpleNamespace(id="u3", is_active=False, email="c@d.e", full_name=None, external_subject=None)
-    monkeypatch.setattr(oidc_mod, "_resolve_existing_user", lambda service, db, **kwargs: inactive)
+    monkeypatch.setattr(oidc_mod, "_resolve_existing_user", lambda service, db, *_args, **_kwargs: inactive)
     db = _DB(user=inactive)
     monkeypatch.setattr(oidc_mod, "get_db_session", lambda: _ctx(db))
     assert oidc_mod.sync_user_from_oidc_claims(service, {"email": "c@d.e", "sub": "sub-3"}) is None
@@ -356,7 +356,12 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     monkeypatch.setattr(oidc_mod.config, "OIDC_REQUIRE_MFA_FOR_MEMBERS", False, raising=False)
     monkeypatch.setattr(oidc_mod.config, "REQUIRE_MFA_FOR_NEW_USERS", False, raising=False)
     monkeypatch.setattr(oidc_mod, "update_oidc_user", real_update_oidc_user)
-    oidc_mod.update_oidc_user(audit_service, db, user, "new@example.com", "New", "subject")
+    oidc_mod.update_oidc_user(
+        audit_service,
+        db,
+        user,
+        oidc_mod.OidcUserUpdateProfile(email="new@example.com", full_name="New", subject="subject"),
+    )
     assert user.auth_provider == "oidc"
     assert user.external_subject == "subject"
     assert user.email == "new@example.com"

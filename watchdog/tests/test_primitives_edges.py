@@ -940,10 +940,12 @@ async def test_tempo_utility_edges(monkeypatch):
             "parentSpanId": "",
             "attributes": [{"key": "service.name", "value": {"stringValue": "kernel.idle"}}],
         },
-        "trace-a",
-        "proc-a",
-        "svc-a",
-        {"resource.attr": "x"},
+        tempo_parsers.SpanParseContext(
+            trace_id="trace-a",
+            process_id="proc-a",
+            service_name="svc-a",
+            resource_attrs={"resource.attr": "x"},
+        ),
     )
     assert span.span_id == ""
     assert span.operation_name == ""
@@ -968,10 +970,12 @@ async def test_tempo_utility_edges(monkeypatch):
                 }
             ],
         },
-        "trace-a",
-        "proc-a",
-        "ojo-systrace",
-        {"host.name": "lubuntu", "service.name": "ojo-systrace"},
+        tempo_parsers.SpanParseContext(
+            trace_id="trace-a",
+            process_id="proc-a",
+            service_name="ojo-systrace",
+            resource_attrs={"host.name": "lubuntu", "service.name": "ojo-systrace"},
+        ),
     )
     assert systrace_span.service_name == "kernel.chrome_childiot"
     assert systrace_span.attributes["service.name"] == "kernel.chrome_childiot"
@@ -989,10 +993,12 @@ async def test_tempo_utility_edges(monkeypatch):
                 }
             ],
         },
-        "trace-a",
-        "proc-a",
-        "ojo-systrace",
-        {"service.name": "ojo-systrace"},
+        tempo_parsers.SpanParseContext(
+            trace_id="trace-a",
+            process_id="proc-a",
+            service_name="ojo-systrace",
+            resource_attrs={"service.name": "ojo-systrace"},
+        ),
     )
     assert short_span.duration == 1
 

@@ -26,13 +26,18 @@ from models.access.auth_models import Role, TokenData
 from routers.observability.grafana_router import proxy as proxy_router
 from services import notification_service as notification_mod
 from services.grafana.grafana_bundles import (
+    FolderAccessibilityRequest,
+    FolderAccessRequest,
+    FolderGetRequest,
+    HiddenToggleParams,
+    HiddenToggleRequest,
     DashboardSearchParams,
     DatasourceListParams,
     FolderAccessCriteria,
     FolderGetParams,
     GrafanaUserScope,
 )
-from services.grafana_proxy_service import GrafanaProxyService
+from services.grafana_proxy_service import GrafanaProxyService, ProxyAuthorizationRequest
 
 
 def _request(headers: list[tuple[bytes, bytes]] | None = None, cookies: dict[str, str] | None = None) -> Request:
@@ -118,13 +123,27 @@ async def test_notification_service_email_flows(monkeypatch):
 
     monkeypatch.setattr(svc, "_dispatch", fake_dispatch)
 
-    assert await svc.send_user_welcome_email("u@example.com", "user", "User") is True
+    assert (
+        await svc.send_user_welcome_email(
+            notification_mod.WelcomeEmailRequest(recipient_email="u@example.com", username="user", full_name="User")
+        )
+        is True
+    )
     assert "Welcome to Watchdog" == sent[-1][1]["Subject"]
     welcome_plain = sent[-1][1].get_body(preferencelist=("plain",))
     assert welcome_plain is not None
     assert "Login URL: https://app/login" in welcome_plain.get_content()
 
-    assert await svc.send_temporary_password_email("u@example.com", "user", "Temp1234") is True
+    assert (
+        await svc.send_temporary_password_email(
+            notification_mod.TemporaryPasswordEmailRequest(
+                recipient_email="u@example.com",
+                username="user",
+                temporary_password="Temp1234",
+            )
+        )
+        is True
+    )
     assert "Temporary Password" in sent[-1][1]["Subject"]
     temp_plain = sent[-1][1].get_body(preferencelist=("plain",))
     assert temp_plain is not None
@@ -137,8 +156,22 @@ async def test_notification_service_disabled_and_dispatch_failure_paths(monkeypa
     monkeypatch.setattr(notification_mod.config, "DEFAULT_ADMIN_EMAIL", "admin@example.com")
 
     monkeypatch.setattr(notification_mod.config, "get_secret", lambda _key: None)
-    assert await svc.send_user_welcome_email("u@example.com", "user") is False
-    assert await svc.send_temporary_password_email("u@example.com", "user", "Temp1234") is False
+    assert (
+        await svc.send_user_welcome_email(
+            notification_mod.WelcomeEmailRequest(recipient_email="u@example.com", username="user")
+        )
+        is False
+    )
+    assert (
+        await svc.send_temporary_password_email(
+            notification_mod.TemporaryPasswordEmailRequest(
+                recipient_email="u@example.com",
+                username="user",
+                temporary_password="Temp1234",
+            )
+        )
+        is False
+    )
 
     monkeypatch.setattr(
         notification_mod.config,
@@ -177,8 +210,8 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
         return ["ds", scope.group_ids]
 
     async def fake_get_folder(*args, **kwargs):
-        scope = args[3]
-        return {"uid": args[2], "groups": scope.group_ids}
+        request = args[2]
+        return {"uid": request.uid, "groups": request.scope.group_ids}
 
     monkeypatch.setitem(svc.search_dashboards.__globals__, "search_dashboards", fake_search)
     monkeypatch.setitem(svc.get_dashboard.__globals__, "get_dashboard", fake_get_dashboard)
@@ -210,30 +243,41 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
     ) == ["ds", ["live"]]
     assert await svc.get_folder(
         "db",
-        "folder-1",
-        GrafanaUserScope("u1", "tenant", ["stale"]),
-        FolderGetParams(),
+        FolderGetRequest(
+            uid="folder-1",
+            scope=GrafanaUserScope("u1", "tenant", ["stale"]),
+            params=FolderGetParams(),
+        ),
     ) == {"uid": "folder-1", "groups": ["live"]}
     assert svc.get_dashboard_metadata("db", "tenant") == {"1": "one"}
     assert svc.get_datasource_metadata("db", "tenant") == {"2": "two"}
-    assert svc.toggle_dashboard_hidden("db", "uid", "u1", "tenant", True) is True
-    assert svc.toggle_datasource_hidden("db", "uid", "u1", "tenant", True) is True
-    assert svc.toggle_folder_hidden("db", "uid", "u1", "tenant", True) is True
+    toggle_request = HiddenToggleRequest(
+        uid="uid",
+        scope=GrafanaUserScope("u1", "tenant", []),
+        params=HiddenToggleParams(hidden=True),
+    )
+    assert svc.toggle_dashboard_hidden("db", toggle_request) is True
+    assert svc.toggle_datasource_hidden("db", toggle_request) is True
+    assert svc.toggle_folder_hidden("db", toggle_request) is True
     assert (
         svc.check_folder_access(
             "db",
-            "uid",
-            GrafanaUserScope("u1", "tenant", ["g1"]),
-            FolderAccessCriteria(),
+            FolderAccessRequest(
+                uid="uid",
+                scope=GrafanaUserScope("u1", "tenant", ["g1"]),
+                criteria=FolderAccessCriteria(),
+            ),
         )
         == "folder"
     )
     assert (
         svc.is_folder_accessible(
             "db",
-            "uid",
-            GrafanaUserScope("u1", "tenant", ["g1"]),
-            FolderAccessCriteria(),
+            FolderAccessibilityRequest(
+                uid="uid",
+                scope=GrafanaUserScope("u1", "tenant", ["g1"]),
+                criteria=FolderAccessCriteria(),
+            ),
         )
         is True
     )
@@ -248,7 +292,8 @@ async def test_grafana_proxy_service_delegates_and_router_branches(monkeypatch):
     )
     monkeypatch.setattr(proxy_router, "enforce_public_endpoint_security", lambda *_args, **_kwargs: None)
 
-    async def fake_authorize_proxy_request(**_kwargs):
+    async def fake_authorize_proxy_request(_request_payload):
+        assert isinstance(_request_payload, ProxyAuthorizationRequest)
         return {"X-Test": "ok"}
 
     monkeypatch.setattr(proxy_router.proxy, "authorize_proxy_request", fake_authorize_proxy_request)

@@ -8,6 +8,8 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
+from __future__ import annotations
+
 import base64
 import logging
 from collections.abc import Mapping, Sequence
@@ -48,6 +50,13 @@ class GrafanaDashboardSearchRequest:
     starred: Optional[bool] = None
 
 
+class GrafanaAPIError(Exception):
+    def __init__(self, status: int, body: JSONValue | None = None):
+        self.status = status
+        self.body = body
+        super().__init__(f"Grafana API error {status}: {body}")
+
+
 def _json_dict(value: object) -> JSONDict:
     return value if isinstance(value, dict) else {}
 
@@ -58,17 +67,28 @@ def _dict_list(value: object) -> list[JSONDict]:
     return [item for item in value if isinstance(item, dict)]
 
 
-class GrafanaAPIError(Exception):
-    def __init__(self, status: int, body: JSONValue | None = None):
-        self.status = status
-        self.body = body
-        super().__init__(f"Grafana API error {status}: {body}")
+def _datasource_update_payload(existing: Datasource, datasource_update: DatasourceUpdate) -> dict[str, object]:
+    data = datasource_update.model_dump(by_alias=True, exclude_none=True)
+    data.setdefault("type", existing.type)
+    data.setdefault("name", existing.name)
+    data.setdefault("url", existing.url)
+    data.setdefault("access", existing.access)
+    data.setdefault("isDefault", getattr(existing, "is_default", None))
+    return data
 
 
-class GrafanaService:
+def _folder_update_payload(folder: Folder, title: str) -> dict[str, object]:
+    payload: dict[str, object] = {"title": title, "overwrite": True}
+    if getattr(folder, "version", None) is not None:
+        payload["version"] = folder.version
+    return payload
+
+
+class _GrafanaServiceCore:
     def __init__(
         self,
         grafana_url: str = config.GRAFANA_URL,
+        *,
         username: str = config.GRAFANA_USERNAME,
         password: str = config.GRAFANA_PASSWORD,
         api_key: Optional[str] = None,
@@ -107,13 +127,18 @@ class GrafanaService:
         method: str,
         path: str,
         *,
-        headers: Mapping[str, str] | None = None,
-        params: QueryParams | None = None,
-        json: object | None = None,
+        opts: GrafanaSafeRequestOpts | None = None,
     ) -> httpx.Response:
         url = f"{self.grafana_url}{path}"
-        request_headers = dict(headers or self._headers())
-        response = await self._client.request(method, url, headers=request_headers, params=params, json=json)
+        request_opts = opts or GrafanaSafeRequestOpts()
+        request_headers = dict(request_opts.headers or self._headers())
+        response = await self._client.request(
+            method,
+            url,
+            headers=request_headers,
+            params=request_opts.params,
+            json=request_opts.json,
+        )
         if (
             response.status_code == 401
             and self._using_api_key
@@ -122,7 +147,13 @@ class GrafanaService:
             logger.warning("Grafana API key rejected (401). Falling back to basic auth.")
             self.auth_header = self._basic_auth_header
             self._using_api_key = False
-            response = await self._client.request(method, url, headers=self._headers(), params=params, json=json)
+            response = await self._client.request(
+                method,
+                url,
+                headers=self._headers(),
+                params=request_opts.params,
+                json=request_opts.json,
+            )
         return response
 
     async def _safe_request(
@@ -133,16 +164,16 @@ class GrafanaService:
         *,
         opts: GrafanaSafeRequestOpts | None = None,
     ) -> JSONValue | None:
-        o = opts or GrafanaSafeRequestOpts()
+        request_opts = opts or GrafanaSafeRequestOpts()
         try:
-            r = await self._request(method, path, headers=o.headers, params=o.params, json=o.json)
-            r.raise_for_status()
-            payload = r.json()
+            response = await self._request(method, path, opts=request_opts)
+            response.raise_for_status()
+            payload = response.json()
             if isinstance(payload, (dict, list, str, int, float, bool)) or payload is None:
                 return payload
             return default
-        except (httpx.HTTPError, ValueError) as e:
-            logger.error("Grafana %s %s failed: %s", method, path, e)
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.error("Grafana %s %s failed: %s", method, path, exc)
             return default
 
     async def _mutating_request(
@@ -152,39 +183,41 @@ class GrafanaService:
         *,
         opts: GrafanaSafeRequestOpts | None = None,
     ) -> JSONValue | None:
-        o = opts or GrafanaSafeRequestOpts()
+        request_opts = opts or GrafanaSafeRequestOpts()
         try:
-            r = await self._request(method, path, headers=o.headers, params=o.params, json=o.json)
-            r.raise_for_status()
-            payload = r.json()
+            response = await self._request(method, path, opts=request_opts)
+            response.raise_for_status()
+            payload = response.json()
             if isinstance(payload, (dict, list, str, int, float, bool)) or payload is None:
                 return payload
             return None
-        except httpx.HTTPStatusError as e:
-            parsed = self._parse_error_body(e)
-            logger.error("Grafana %s %s HTTP %s: %s – %s", method, path, e.response.status_code, e, parsed)
-            raise GrafanaAPIError(e.response.status_code, parsed) from e
+        except httpx.HTTPStatusError as exc:
+            parsed = self._parse_error_body(exc)
+            logger.error("Grafana %s %s HTTP %s: %s - %s", method, path, exc.response.status_code, exc, parsed)
+            raise GrafanaAPIError(exc.response.status_code, parsed) from exc
 
+
+class _GrafanaDashboardAPI(_GrafanaServiceCore):
     @with_retry()
     @with_timeout()
     async def search_dashboards(
         self,
         filters: GrafanaDashboardSearchRequest | None = None,
     ) -> List[DashboardSearchResult]:
-        f = filters or GrafanaDashboardSearchRequest()
+        search = filters or GrafanaDashboardSearchRequest()
         params: dict[str, QueryParamValue] = {"type": "dash-db"}
-        if f.query:
-            params["query"] = f.query
-        if f.tag:
-            params["tag"] = f.tag
-        if f.folder_ids:
-            params["folderIds"] = f.folder_ids
-        if f.folder_uids:
-            params["folderUIDs"] = f.folder_uids
-        if f.dashboard_uids:
-            params["dashboardUID"] = f.dashboard_uids
-        if f.starred is not None:
-            params["starred"] = f.starred
+        if search.query:
+            params["query"] = search.query
+        if search.tag:
+            params["tag"] = search.tag
+        if search.folder_ids:
+            params["folderIds"] = search.folder_ids
+        if search.folder_uids:
+            params["folderUIDs"] = search.folder_uids
+        if search.dashboard_uids:
+            params["dashboardUID"] = search.dashboard_uids
+        if search.starred is not None:
+            params["starred"] = search.starred
         data = await self._safe_request("GET", "/api/search", [], opts=GrafanaSafeRequestOpts(params=params))
         return [DashboardSearchResult.model_validate(item) for item in _dict_list(data)]
 
@@ -220,21 +253,22 @@ class GrafanaService:
     @with_retry()
     @with_timeout()
     async def delete_dashboard(self, uid: str) -> bool:
-        result = await self._safe_request("DELETE", f"/api/dashboards/uid/{uid}", False)
-        return result is not False
+        return await self._safe_request("DELETE", f"/api/dashboards/uid/{uid}", False) is not False
 
+
+class _GrafanaDatasourceAPI(_GrafanaServiceCore):
     @with_retry()
     @with_timeout()
     async def query_datasource(self, payload: JSONDict) -> JSONDict:
         try:
-            r = await self._request("POST", "/api/ds/query", json=payload)
-            r.raise_for_status()
-            payload_json = r.json()
+            response = await self._request("POST", "/api/ds/query", opts=GrafanaSafeRequestOpts(json=payload))
+            response.raise_for_status()
+            payload_json = response.json()
             return payload_json if isinstance(payload_json, dict) else {}
-        except httpx.HTTPStatusError as e:
-            parsed = self._parse_error_body(e)
-            logger.error("Grafana POST /api/ds/query HTTP %s: %s", e.response.status_code, parsed)
-            raise GrafanaAPIError(e.response.status_code, parsed) from e
+        except httpx.HTTPStatusError as exc:
+            parsed = self._parse_error_body(exc)
+            logger.error("Grafana POST /api/ds/query HTTP %s: %s", exc.response.status_code, parsed)
+            raise GrafanaAPIError(exc.response.status_code, parsed) from exc
 
     @with_retry()
     @with_timeout()
@@ -271,32 +305,23 @@ class GrafanaService:
         existing = await self.get_datasource(uid)
         if not existing:
             return None
-        data = datasource_update.model_dump(by_alias=True, exclude_none=True)
-        data.setdefault("type", existing.type)
-        data.setdefault("name", existing.name)
-        data.setdefault("url", existing.url)
-        data.setdefault("access", existing.access)
-        data.setdefault("isDefault", getattr(existing, "is_default", None))
         result = await self._mutating_request(
             "PUT",
             f"/api/datasources/uid/{uid}",
-            opts=GrafanaSafeRequestOpts(
-                json=data,
-            ),
+            opts=GrafanaSafeRequestOpts(json=_datasource_update_payload(existing, datasource_update)),
         )
         datasource_payload = _json_dict(result).get("datasource")
-        return (
-            Datasource.model_validate(datasource_payload)
-            if isinstance(datasource_payload, dict)
-            else await self.get_datasource(uid)
-        )
+        if isinstance(datasource_payload, dict):
+            return Datasource.model_validate(datasource_payload)
+        return await self.get_datasource(uid)
 
     @with_retry()
     @with_timeout()
     async def delete_datasource(self, uid: str) -> bool:
-        result = await self._safe_request("DELETE", f"/api/datasources/uid/{uid}", False)
-        return result is not False
+        return await self._safe_request("DELETE", f"/api/datasources/uid/{uid}", False) is not False
 
+
+class _GrafanaFolderAPI(_GrafanaServiceCore):
     @with_retry()
     @with_timeout()
     async def get_folders(self) -> List[Folder]:
@@ -315,34 +340,31 @@ class GrafanaService:
         data = await self._safe_request("GET", f"/api/folders/{uid}")
         return Folder.model_validate(data) if isinstance(data, dict) else None
 
+    async def _update_folder_once(self, uid: str, payload: dict[str, object]) -> Optional[Folder]:
+        data = await self._mutating_request("PUT", f"/api/folders/{uid}", opts=GrafanaSafeRequestOpts(json=payload))
+        return Folder.model_validate(data) if isinstance(data, dict) else None
+
     @with_retry()
     @with_timeout()
     async def update_folder(self, uid: str, title: str) -> Optional[Folder]:
         existing = await self.get_folder(uid)
         if not existing:
             return None
-        payload = {"title": title, "overwrite": True}
-        if getattr(existing, "version", None) is not None:
-            payload["version"] = existing.version
         try:
-            data = await self._mutating_request("PUT", f"/api/folders/{uid}", opts=GrafanaSafeRequestOpts(json=payload))
-            return Folder.model_validate(data) if isinstance(data, dict) else None
+            return await self._update_folder_once(uid, _folder_update_payload(existing, title))
         except GrafanaAPIError as exc:
             if exc.status != 412:
                 raise
-            refreshed = await self.get_folder(uid)
-            if not refreshed:
-                return None
-            retry_payload = {"title": title, "overwrite": True}
-            if getattr(refreshed, "version", None) is not None:
-                retry_payload["version"] = refreshed.version
-            data = await self._mutating_request(
-                "PUT", f"/api/folders/{uid}", opts=GrafanaSafeRequestOpts(json=retry_payload)
-            )
-            return Folder.model_validate(data) if isinstance(data, dict) else None
+        refreshed = await self.get_folder(uid)
+        if not refreshed:
+            return None
+        return await self._update_folder_once(uid, _folder_update_payload(refreshed, title))
 
     @with_retry()
     @with_timeout()
     async def delete_folder(self, uid: str) -> bool:
-        result = await self._safe_request("DELETE", f"/api/folders/{uid}", False)
-        return result is not False
+        return await self._safe_request("DELETE", f"/api/folders/{uid}", False) is not False
+
+
+class GrafanaService(_GrafanaDashboardAPI, _GrafanaDatasourceAPI, _GrafanaFolderAPI):
+    pass

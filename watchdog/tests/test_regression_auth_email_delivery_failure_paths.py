@@ -152,7 +152,8 @@ async def test_reset_temp_password_uses_target_object_username_when_result_usern
     actor = token_data(role=Role.ADMIN, permissions=[Permission.MANAGE_USERS.value])
     await users_router.reset_user_password_temp("target-1", actor)
 
-    assert captured["username"] == "fallback-target"
+    email_request = captured["email_request"]
+    assert email_request.username == "fallback-target"
 
 
 @pytest.mark.asyncio

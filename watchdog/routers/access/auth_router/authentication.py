@@ -26,6 +26,8 @@ from models.access.auth_models import (
 )
 from models.access.user_models import LoginRequest, RegisterRequest, UserCreate, UserResponse
 from services.auth.helper import clear_auth_cookie, role_permission_strings, set_auth_cookie, rate_limit_func
+from services.database_auth import auth as db_auth
+from services.notification_service import WelcomeEmailRequest
 
 from .shared import logger, notification_service, router, rtp
 
@@ -78,11 +80,13 @@ async def oidc_authorize_url(request: Request, payload: OIDCAuthURLRequest) -> O
     try:
         session = await rtp(
             auth_service.get_oidc_authorization_url,
-            payload.redirect_uri,
-            payload.state,
-            payload.nonce,
-            payload.code_challenge,
-            payload.code_challenge_method,
+            db_auth.OidcAuthorizationUrlRequest(
+                redirect_uri=payload.redirect_uri,
+                state=payload.state,
+                nonce=payload.nonce,
+                code_challenge=payload.code_challenge,
+                code_challenge_method=payload.code_challenge_method,
+            ),
         )
         return OIDCAuthURLResponse(**session)
     except ValueError as exc:
@@ -155,9 +159,11 @@ async def register(request: Request, register_request: RegisterRequest) -> UserR
         tenant_id,
     )
     await notification_service.send_user_welcome_email(
-        recipient_email=user.email,
-        username=user.username,
-        full_name=user.full_name,
-        login_url=None,
+        email_request=WelcomeEmailRequest(
+            recipient_email=user.email,
+            username=user.username,
+            full_name=user.full_name,
+            login_url=None,
+        ),
     )
     return await rtp(auth_service.build_user_response, user, role_permission_strings(user.role))

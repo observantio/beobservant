@@ -25,7 +25,13 @@ async def test_temporary_password_email_disabled_by_default(monkeypatch: pytest.
     svc = notification_mod.NotificationService()
     monkeypatch.setattr(notification_mod.config, "get_secret", lambda _key: None)
 
-    result = await svc.send_temporary_password_email("user@example.com", "user", "Temp1234")
+    result = await svc.send_temporary_password_email(
+        notification_mod.TemporaryPasswordEmailRequest(
+            recipient_email="user@example.com",
+            username="user",
+            temporary_password="Temp1234",
+        )
+    )
 
     assert result is False
 
@@ -49,7 +55,13 @@ async def test_temporary_password_email_can_use_user_welcome_flag_as_fallback(mo
 
     monkeypatch.setattr(svc, "_dispatch", _dispatch)
 
-    result = await svc.send_temporary_password_email("user@example.com", "user", "Temp1234")
+    result = await svc.send_temporary_password_email(
+        notification_mod.TemporaryPasswordEmailRequest(
+            recipient_email="user@example.com",
+            username="user",
+            temporary_password="Temp1234",
+        )
+    )
 
     assert result is True
 
@@ -67,7 +79,13 @@ async def test_temporary_password_email_returns_false_when_smtp_host_missing(mon
         }.get(key),
     )
 
-    result = await svc.send_temporary_password_email("user@example.com", "user", "Temp1234")
+    result = await svc.send_temporary_password_email(
+        notification_mod.TemporaryPasswordEmailRequest(
+            recipient_email="user@example.com",
+            username="user",
+            temporary_password="Temp1234",
+        )
+    )
 
     assert result is False
 
@@ -94,7 +112,13 @@ async def test_temporary_password_email_includes_password_and_login_url(monkeypa
 
     monkeypatch.setattr(svc, "_dispatch", _dispatch)
 
-    result = await svc.send_temporary_password_email("user@example.com", "user", "Temp1234")
+    result = await svc.send_temporary_password_email(
+        notification_mod.TemporaryPasswordEmailRequest(
+            recipient_email="user@example.com",
+            username="user",
+            temporary_password="Temp1234",
+        )
+    )
 
     assert result is True
     plain_body = captured["msg"].get_body(preferencelist=("plain",))
@@ -126,7 +150,13 @@ async def test_temporary_password_email_omits_login_line_when_absent(monkeypatch
 
     monkeypatch.setattr(svc, "_dispatch", _dispatch)
 
-    result = await svc.send_temporary_password_email("user@example.com", "user", "Temp1234")
+    result = await svc.send_temporary_password_email(
+        notification_mod.TemporaryPasswordEmailRequest(
+            recipient_email="user@example.com",
+            username="user",
+            temporary_password="Temp1234",
+        )
+    )
 
     assert result is False
     plain_body = captured["msg"].get_body(preferencelist=("plain",))

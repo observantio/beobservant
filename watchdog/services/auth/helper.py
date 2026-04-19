@@ -28,7 +28,11 @@ from models.access.auth_models import TokenData, Permission, Role, ROLE_PERMISSI
 from custom_types.json import JSONDict
 from services.common.cookies import cookie_secure
 from services.auth.delegation import is_admin_actor as _is_admin_actor, role_to_text as _role_to_text
-from middleware.dependencies import enforce_public_endpoint_security, require_permission_with_scope
+from middleware.dependencies import (
+    PublicEndpointSecurityConfig,
+    enforce_public_endpoint_security,
+    require_permission_with_scope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -248,8 +252,10 @@ def audit_text_like_pattern(text: object) -> str:
 def rate_limit_func(request: Request, scope: str, limit: int, window: int) -> None:
     enforce_public_endpoint_security(
         request,
-        scope=scope,
-        limit=limit,
-        window_seconds=window,
-        allowlist=config.AUTH_PUBLIC_IP_ALLOWLIST,
+        PublicEndpointSecurityConfig(
+            scope=scope,
+            limit=limit,
+            window_seconds=window,
+            allowlist=config.AUTH_PUBLIC_IP_ALLOWLIST,
+        ),
     )

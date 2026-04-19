@@ -25,7 +25,9 @@ async def test_welcome_email_returns_false_when_feature_is_disabled(monkeypatch:
     svc = notification_mod.NotificationService()
     monkeypatch.setattr(notification_mod.config, "get_secret", lambda _key: None)
 
-    result = await svc.send_user_welcome_email("user@example.com", "user")
+    result = await svc.send_user_welcome_email(
+        notification_mod.WelcomeEmailRequest(recipient_email="user@example.com", username="user")
+    )
 
     assert result is False
 
@@ -42,7 +44,9 @@ async def test_welcome_email_returns_false_when_smtp_host_missing(monkeypatch: p
         }.get(key),
     )
 
-    result = await svc.send_user_welcome_email("user@example.com", "user")
+    result = await svc.send_user_welcome_email(
+        notification_mod.WelcomeEmailRequest(recipient_email="user@example.com", username="user")
+    )
 
     assert result is False
 
@@ -71,7 +75,13 @@ async def test_welcome_email_uses_login_url_in_plain_body(monkeypatch: pytest.Mo
 
     monkeypatch.setattr(svc, "_dispatch", _dispatch)
 
-    result = await svc.send_user_welcome_email("user@example.com", "user", "Example User")
+    result = await svc.send_user_welcome_email(
+        notification_mod.WelcomeEmailRequest(
+            recipient_email="user@example.com",
+            username="user",
+            full_name="Example User",
+        )
+    )
 
     assert result is True
     assert captured["recipient"] == "user@example.com"
@@ -101,7 +111,9 @@ async def test_welcome_email_falls_back_to_username_when_full_name_missing(monke
 
     monkeypatch.setattr(svc, "_dispatch", _dispatch)
 
-    result = await svc.send_user_welcome_email("user@example.com", "fallback-user", None)
+    result = await svc.send_user_welcome_email(
+        notification_mod.WelcomeEmailRequest(recipient_email="user@example.com", username="fallback-user")
+    )
 
     assert result is True
     plain_body = captured["msg"].get_body(preferencelist=("plain",))
@@ -128,6 +140,8 @@ async def test_welcome_email_propagates_dispatch_failure_as_false(monkeypatch: p
 
     monkeypatch.setattr(svc, "_dispatch", _dispatch)
 
-    result = await svc.send_user_welcome_email("user@example.com", "user")
+    result = await svc.send_user_welcome_email(
+        notification_mod.WelcomeEmailRequest(recipient_email="user@example.com", username="user")
+    )
 
     assert result is False

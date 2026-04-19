@@ -323,6 +323,7 @@ def update_group(
     group_id: str,
     group_update: GroupUpdate,
     tenant_id: str,
+    *,
     actor: Optional[AuthActorCaps] = None,
 ) -> Optional[GroupSchema]:
     actor = actor or AuthActorCaps()
@@ -397,6 +398,7 @@ def update_group_permissions(
     group_id: str,
     permission_names: List[str],
     tenant_id: str,
+    *,
     actor: Optional[AuthActorCaps] = None,
 ) -> bool:
     caps = actor or AuthActorCaps()
@@ -506,6 +508,7 @@ def update_group_members(
     group_id: str,
     user_ids: List[str],
     tenant_id: str,
+    *,
     actor: Optional[AuthActorCaps] = None,
 ) -> bool:
     caps = actor or AuthActorCaps()

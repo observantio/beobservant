@@ -37,7 +37,7 @@ def test_non_admin_cannot_escalate_user_role():
     )
 
     with pytest.raises(HTTPException) as exc:
-        svc.update_user(target.id, UserUpdate(role=Role.ADMIN), tenant_id, actor.id)
+        svc.update_user(target.id, UserUpdate(role=Role.ADMIN), tenant_id=tenant_id, updater_id=actor.id)
     assert exc.value.status_code == 403
 
 
@@ -97,15 +97,15 @@ def test_admin_can_only_toggle_is_active_for_another_admin():
         db.commit()
 
     with pytest.raises(HTTPException) as exc:
-        svc.update_user(target.id, UserUpdate(role=Role.USER), tenant_id, actor.id)
+        svc.update_user(target.id, UserUpdate(role=Role.USER), tenant_id=tenant_id, updater_id=actor.id)
     assert exc.value.status_code == 403
     assert "only be activated or deactivated" in str(exc.value.detail).lower()
 
     with pytest.raises(HTTPException) as exc:
-        svc.update_user(target.id, UserUpdate(full_name="Renamed Target"), tenant_id, actor.id)
+        svc.update_user(target.id, UserUpdate(full_name="Renamed Target"), tenant_id=tenant_id, updater_id=actor.id)
     assert exc.value.status_code == 403
     assert "only be activated or deactivated" in str(exc.value.detail).lower()
 
-    updated = svc.update_user(target.id, UserUpdate(is_active=False), tenant_id, actor.id)
+    updated = svc.update_user(target.id, UserUpdate(is_active=False), tenant_id=tenant_id, updater_id=actor.id)
     assert updated is not None
     assert updated.is_active is False

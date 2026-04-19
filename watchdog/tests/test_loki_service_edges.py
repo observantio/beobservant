@@ -26,7 +26,11 @@ ensure_test_env()
 
 from models.observability.loki_models import LogDirection, LogQuery
 from services.loki_service import (
+    AggregateLogsParams,
     FilterLogsParams,
+    InstantLogQueryParams,
+    LabelValuesParams,
+    LogVolumeParams,
     LokiService,
     SearchLogsByPatternParams,
     _json_dict,
@@ -160,12 +164,12 @@ async def test_query_logs_instant_get_labels_and_label_values_cover_error_paths(
     async def fallback(*args, **kwargs):
         return {"status": "success", "data": {"result": [{"stream": {"service_name": "api"}}]}}
 
-    async def safe_get_json(_client, endpoint, params=None, headers=None, quiet=False):
-        if endpoint.endswith("/labels"):
+    async def safe_get_json(request):
+        if request.url.endswith("/labels"):
             return {"data": ["app", "env"]}
-        if endpoint.endswith("/label/service_name/values"):
+        if request.url.endswith("/label/service_name/values"):
             return {"data": None}
-        raise AssertionError(endpoint)
+        raise AssertionError(request.url)
 
     async def query_logs(log_query, tenant_id="default"):
         assert log_query.query == '{service_name=~".+"}'
@@ -178,7 +182,10 @@ async def test_query_logs_instant_get_labels_and_label_values_cover_error_paths(
     monkeypatch.setattr(_loki_module, "run_fallback_queries", fallback)
     monkeypatch.setattr(service, "query_logs", query_logs)
 
-    instant = await service.query_logs_instant('{app="web"}', at_time=10, tenant_id="tenant-a", limit=2)
+    instant = await service.query_logs_instant(
+        InstantLogQueryParams(query='{app="web"}', at_time=10, limit=2),
+        tenant_id="tenant-a",
+    )
     assert instant.status == "success"
     assert instant.data["result"][0]["stream"]["service_name"] == "api"
 
@@ -186,7 +193,10 @@ async def test_query_logs_instant_get_labels_and_label_values_cover_error_paths(
     assert labels.status == "success"
     assert labels.data == ["app", "env"]
 
-    values = await service.get_label_values("service_name", query="not-a-selector", tenant_id="tenant-a")
+    values = await service.get_label_values(
+        LabelValuesParams(label="service_name", query="not-a-selector"),
+        tenant_id="tenant-a",
+    )
     assert values.status == "success"
     assert values.data == ["api", "worker"]
     assert service._metrics["loki_query_fallbacks_total"] >= 1
@@ -198,7 +208,7 @@ async def test_query_logs_instant_get_labels_and_label_values_cover_error_paths(
     labels_error = await service.get_labels()
     assert labels_error.status == "error"
     assert labels_error.data == []
-    values_error = await service.get_label_values("service_name")
+    values_error = await service.get_label_values(LabelValuesParams(label="service_name"))
     assert values_error.status == "error"
     assert values_error.data == []
 
@@ -209,20 +219,22 @@ async def test_get_label_values_sanitizes_non_positive_range_and_null_query(monk
     captured: dict[str, object] = {}
     fixed_now = 1_700_000_000
 
-    async def safe_get_json(_client, endpoint, params=None, headers=None, quiet=False):
-        captured["endpoint"] = endpoint
-        captured["params"] = dict(params or {})
-        captured["headers"] = dict(headers or {})
+    async def safe_get_json(request):
+        captured["endpoint"] = request.url
+        captured["params"] = dict(request.params)
+        captured["headers"] = dict(request.headers)
         return {"data": []}
 
     monkeypatch.setattr("services.loki_service.time.time", lambda: fixed_now)
     monkeypatch.setattr(service._http, "safe_get_json", safe_get_json)
 
     response = await service.get_label_values(
-        "service_name",
-        start=-50,
-        end=0,
-        query="null",
+        LabelValuesParams(
+            label="service_name",
+            start=-50,
+            end=0,
+            query="null",
+        ),
         tenant_id="tenant-a",
     )
 
@@ -245,7 +257,10 @@ async def test_aggregate_volume_search_and_filter_cover_remaining_branches(monke
         return {"status": "success", "data": {"result": [{"values": [["1", "2"]]}]}}
 
     monkeypatch.setattr(service._http, "timed_get_json", timed_get_json)
-    aggregated = await service.aggregate_logs("sum(rate({}[5m]))", start=1, end=2, step=60, tenant_id="tenant-a")
+    aggregated = await service.aggregate_logs(
+        AggregateLogsParams(query="sum(rate({}[5m]))", start=1, end=2, step=60),
+        tenant_id="tenant-a",
+    )
     assert aggregated["status"] == "success"
     assert aggregated["query"] == "sum(rate({}[5m]))"
 
@@ -254,20 +269,23 @@ async def test_aggregate_volume_search_and_filter_cover_remaining_branches(monke
         raise httpx.HTTPStatusError("too many", request=response.request, response=response)
 
     monkeypatch.setattr(service._http, "timed_get_json", status_error)
-    aggregated_error = await service.aggregate_logs("sum(rate({}[5m]))")
+    aggregated_error = await service.aggregate_logs(AggregateLogsParams(query="sum(rate({}[5m]))"))
     assert aggregated_error["status"] == "error"
     assert service._metrics["loki_query_errors_total"] >= 1
 
-    async def aggregate_logs(query_str, start=None, end=None, step=300, tenant_id="default"):
-        if "candidate-1" in query_str:
-            return {"status": "success", "data": {"result": []}, "query": query_str}
-        return {"status": "success", "data": {"result": [{"values": [["1", "5"]]}]}, "query": query_str}
+    async def aggregate_logs(params_in, tenant_id="default"):
+        if "candidate-1" in params_in.query:
+            return {"status": "success", "data": {"result": []}, "query": params_in.query}
+        return {"status": "success", "data": {"result": [{"values": [["1", "5"]]}]}, "query": params_in.query}
 
     monkeypatch.setattr(service, "aggregate_logs", aggregate_logs)
     monkeypatch.setattr(
         _loki_module, "build_volume_fallback_queries", lambda query, max_queries: ["candidate-1", "candidate-2"]
     )
-    volume = await service.get_log_volume('{service_name="api"}', start=5, end=5, step=60, tenant_id="tenant-a")
+    volume = await service.get_log_volume(
+        LogVolumeParams(query='{service_name="api"}', start=5, end=5, step=60),
+        tenant_id="tenant-a",
+    )
     assert volume["data"]["result"]
 
     captured: list[tuple[str, int]] = []

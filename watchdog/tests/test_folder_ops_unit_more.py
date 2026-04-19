@@ -17,12 +17,17 @@ from models.grafana.grafana_folder_models import Folder
 from services.grafana import folder_ops
 from services.grafana.grafana_bundles import (
     FolderAccessCriteria,
+    FolderCreateRequest,
     FolderCreateOptions,
+    FolderDeleteRequest,
     FolderDeleteOptions,
+    FolderGetRequest,
     FolderGetParams,
     FolderListParams,
+    FolderUpdateRequest,
     FolderUpdateOptions,
     GrafanaUserScope,
+    HiddenToggleParams,
 )
 from services.grafana.grafana_service import GrafanaAPIError
 
@@ -254,12 +259,29 @@ async def test_get_folder_and_get_folders_cover_missing_branches():
     assert [folder.uid for folder in folders] == ["f-tenant"]
 
     gfs = FolderGetParams()
-    assert await folder_ops.get_folder(service, db, "missing", GrafanaUserScope(viewer.id, "t1", []), gfs) is None
     assert (
-        await folder_ops.get_folder(service, db, "f-private", GrafanaUserScope(viewer.id, "t1", []), gfs) is None
+        await folder_ops.get_folder(
+            service,
+            db,
+            FolderGetRequest(uid="missing", scope=GrafanaUserScope(viewer.id, "t1", []), params=gfs),
+        )
+        is None
     )
     assert (
-        await folder_ops.get_folder(service, db, "f-tenant", GrafanaUserScope(viewer.id, "t1", []), gfs) is None
+        await folder_ops.get_folder(
+            service,
+            db,
+            FolderGetRequest(uid="f-private", scope=GrafanaUserScope(viewer.id, "t1", []), params=gfs),
+        )
+        is None
+    )
+    assert (
+        await folder_ops.get_folder(
+            service,
+            db,
+            FolderGetRequest(uid="f-tenant", scope=GrafanaUserScope(viewer.id, "t1", []), params=gfs),
+        )
+        is None
     )
 
 
@@ -274,13 +296,15 @@ async def test_create_folder_covers_group_and_no_uid_paths():
     created = await folder_ops.create_folder(
         service,
         db,
-        "Created Group",
-        GrafanaUserScope(viewer.id, "t1", [group.id]),
-        FolderCreateOptions(
-            visibility="group",
-            shared_group_ids=[group.id],
-            allow_dashboard_writes=True,
-            is_admin=False,
+        FolderCreateRequest(
+            title="Created Group",
+            scope=GrafanaUserScope(viewer.id, "t1", [group.id]),
+            options=FolderCreateOptions(
+                visibility="group",
+                shared_group_ids=[group.id],
+                allow_dashboard_writes=True,
+                is_admin=False,
+            ),
         ),
     )
     assert created is not None
@@ -295,9 +319,11 @@ async def test_create_folder_covers_group_and_no_uid_paths():
     loose = await folder_ops.create_folder(
         service,
         db,
-        "Loose Folder",
-        GrafanaUserScope(viewer.id, "t1", []),
-        FolderCreateOptions(),
+        FolderCreateRequest(
+            title="Loose Folder",
+            scope=GrafanaUserScope(viewer.id, "t1", []),
+            options=FolderCreateOptions(),
+        ),
     )
     assert loose is not None
     assert loose.title == "Loose Folder"
@@ -308,9 +334,11 @@ async def test_create_folder_covers_group_and_no_uid_paths():
         await folder_ops.create_folder(
             service,
             db,
-            "Nothing",
-            GrafanaUserScope(viewer.id, "t1", []),
-            FolderCreateOptions(),
+            FolderCreateRequest(
+                title="Nothing",
+                scope=GrafanaUserScope(viewer.id, "t1", []),
+                options=FolderCreateOptions(),
+            ),
         )
         is None
     )
@@ -326,10 +354,19 @@ async def test_update_folder_covers_none_error_and_group_visibility_paths():
     o_scope = GrafanaUserScope(owner.id, "t1", [])
     o_g_scope = GrafanaUserScope(owner.id, "t1", [group.id])
     v_g_scope = GrafanaUserScope(viewer.id, "t1", [group.id])
-    assert await folder_ops.update_folder(service, db, "missing", o_scope, FolderUpdateOptions()) is None
     assert (
         await folder_ops.update_folder(
-            service, db, group_folder.grafana_uid, v_g_scope, FolderUpdateOptions()
+            service,
+            db,
+            FolderUpdateRequest(uid="missing", scope=o_scope, options=FolderUpdateOptions()),
+        )
+        is None
+    )
+    assert (
+        await folder_ops.update_folder(
+            service,
+            db,
+            FolderUpdateRequest(uid=group_folder.grafana_uid, scope=v_g_scope, options=FolderUpdateOptions()),
         )
         is None
     )
@@ -337,7 +374,9 @@ async def test_update_folder_covers_none_error_and_group_visibility_paths():
     stub.updated = None
     assert (
         await folder_ops.update_folder(
-            service, db, group_folder.grafana_uid, o_g_scope, FolderUpdateOptions()
+            service,
+            db,
+            FolderUpdateRequest(uid=group_folder.grafana_uid, scope=o_g_scope, options=FolderUpdateOptions()),
         )
         is None
     )
@@ -345,7 +384,9 @@ async def test_update_folder_covers_none_error_and_group_visibility_paths():
     stub.update_error = GrafanaAPIError(500, {"message": "boom"})
     with pytest.raises(HTTPException) as exc:
         await folder_ops.update_folder(
-            service, db, group_folder.grafana_uid, o_g_scope, FolderUpdateOptions()
+            service,
+            db,
+            FolderUpdateRequest(uid=group_folder.grafana_uid, scope=o_g_scope, options=FolderUpdateOptions()),
         )
     assert exc.value.status_code == 500
     stub.update_error = None
@@ -354,14 +395,16 @@ async def test_update_folder_covers_none_error_and_group_visibility_paths():
     updated = await folder_ops.update_folder(
         service,
         db,
-        group_folder.grafana_uid,
-        o_g_scope,
-        FolderUpdateOptions(
-            title="Grouped Updated",
-            visibility="group",
-            shared_group_ids=[group.id],
-            allow_dashboard_writes=False,
-            is_admin=False,
+        FolderUpdateRequest(
+            uid=group_folder.grafana_uid,
+            scope=o_g_scope,
+            options=FolderUpdateOptions(
+                title="Grouped Updated",
+                visibility="group",
+                shared_group_ids=[group.id],
+                allow_dashboard_writes=False,
+                is_admin=False,
+            ),
         ),
     )
     assert updated is not None
@@ -374,9 +417,11 @@ async def test_update_folder_covers_none_error_and_group_visibility_paths():
     updated = await folder_ops.update_folder(
         service,
         db,
-        group_folder.grafana_uid,
-        o_g_scope,
-        FolderUpdateOptions(visibility="tenant"),
+        FolderUpdateRequest(
+            uid=group_folder.grafana_uid,
+            scope=o_g_scope,
+            options=FolderUpdateOptions(visibility="tenant"),
+        ),
     )
     assert updated is not None
     refreshed = db.query(GrafanaFolder).filter_by(grafana_uid=group_folder.grafana_uid).first()
@@ -394,7 +439,9 @@ async def test_delete_and_toggle_folder_cover_remaining_paths():
 
     assert (
         await folder_ops.delete_folder(
-            service, db, "missing", o_scope, FolderDeleteOptions(is_admin=False)
+            service,
+            db,
+            FolderDeleteRequest(uid="missing", scope=o_scope, options=FolderDeleteOptions(is_admin=False)),
         )
         is False
     )
@@ -402,9 +449,11 @@ async def test_delete_and_toggle_folder_cover_remaining_paths():
         await folder_ops.delete_folder(
             service,
             db,
-            tenant_folder.grafana_uid,
-            GrafanaUserScope(viewer.id, "t1", []),
-            FolderDeleteOptions(is_admin=False),
+            FolderDeleteRequest(
+                uid=tenant_folder.grafana_uid,
+                scope=GrafanaUserScope(viewer.id, "t1", []),
+                options=FolderDeleteOptions(is_admin=False),
+            ),
         )
         is False
     )
@@ -414,9 +463,11 @@ async def test_delete_and_toggle_folder_cover_remaining_paths():
         await folder_ops.delete_folder(
             service,
             db,
-            tenant_folder.grafana_uid,
-            o_scope,
-            FolderDeleteOptions(is_admin=False),
+            FolderDeleteRequest(
+                uid=tenant_folder.grafana_uid,
+                scope=o_scope,
+                options=FolderDeleteOptions(is_admin=False),
+            ),
         )
     assert exc.value.status_code == 502
     stub.delete_error = None
@@ -426,9 +477,11 @@ async def test_delete_and_toggle_folder_cover_remaining_paths():
         await folder_ops.delete_folder(
             service,
             db,
-            tenant_folder.grafana_uid,
-            o_scope,
-            FolderDeleteOptions(is_admin=False),
+            FolderDeleteRequest(
+                uid=tenant_folder.grafana_uid,
+                scope=o_scope,
+                options=FolderDeleteOptions(is_admin=False),
+            ),
         )
         is False
     )
@@ -438,16 +491,35 @@ async def test_delete_and_toggle_folder_cover_remaining_paths():
         await folder_ops.delete_folder(
             service,
             db,
-            tenant_folder.grafana_uid,
-            o_scope,
-            FolderDeleteOptions(is_admin=False),
+            FolderDeleteRequest(
+                uid=tenant_folder.grafana_uid,
+                scope=o_scope,
+                options=FolderDeleteOptions(is_admin=False),
+            ),
         )
         is True
     )
     assert db.query(GrafanaFolder).filter_by(grafana_uid=tenant_folder.grafana_uid).first() is None
 
-    assert folder_ops.toggle_folder_hidden(db, "missing", viewer.id, "t1", True) is False
-    assert folder_ops.toggle_folder_hidden(db, group_folder.grafana_uid, viewer.id, "t1", True) is True
+    viewer_scope = GrafanaUserScope(viewer.id, "t1", [])
+    assert folder_ops.toggle_folder_hidden(db, "missing", viewer_scope, HiddenToggleParams(hidden=True)) is False
+    assert (
+        folder_ops.toggle_folder_hidden(
+            db,
+            group_folder.grafana_uid,
+            viewer_scope,
+            HiddenToggleParams(hidden=True),
+        )
+        is True
+    )
     assert viewer.id in db.query(GrafanaFolder).filter_by(grafana_uid=group_folder.grafana_uid).first().hidden_by
-    assert folder_ops.toggle_folder_hidden(db, group_folder.grafana_uid, viewer.id, "t1", False) is True
+    assert (
+        folder_ops.toggle_folder_hidden(
+            db,
+            group_folder.grafana_uid,
+            viewer_scope,
+            HiddenToggleParams(hidden=False),
+        )
+        is True
+    )
     assert viewer.id not in db.query(GrafanaFolder).filter_by(grafana_uid=group_folder.grafana_uid).first().hidden_by

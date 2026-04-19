@@ -425,7 +425,14 @@ class WorkflowState:
             users = [user for user in self.users.values() if user.tenant_id == tenant_id]
             return [user.as_runtime() for user in users[offset : offset + limit]]
 
-    def update_user(self, user_id: str, payload: Any, tenant_id: str, *_args: Any) -> SimpleNamespace | None:
+    def update_user(
+        self,
+        user_id: str,
+        payload: Any,
+        tenant_id: str,
+        *_args: Any,
+        **_kwargs: Any,
+    ) -> SimpleNamespace | None:
         with self._lock:
             user = self.users.get(user_id)
             if user is None or user.tenant_id != tenant_id:
@@ -737,11 +744,11 @@ class WorkflowState:
     def replace_api_key_shares(
         self,
         user_id: str,
-        _tenant_id: str,
-        key_id: str,
-        user_ids: list[str],
-        group_ids: list[str],
+        request: object,
     ) -> list[dict[str, object]]:
+        key_id = str(getattr(request, "key_id"))
+        user_ids = list(getattr(request, "user_ids"))
+        group_ids = list(getattr(request, "group_ids"))
         with self._lock:
             key = self.api_keys[key_id]
             if key.owner_user_id != user_id:
@@ -800,11 +807,18 @@ class WorkflowState:
     async def create_dashboard(
         self,
         db: object,
-        dashboard_create: Any,
-        subject: Any,
-        options: Any,
+        dashboard_create: Any | None = None,
+        subject: Any | None = None,
+        options: Any | None = None,
+        request: Any | None = None,
     ) -> dict[str, Any]:
         del db
+        if request is not None:
+            dashboard_create = request.dashboard_create
+            subject = request.scope
+            options = request.options
+        if dashboard_create is None or subject is None or options is None:
+            raise ValueError("dashboard_create, subject/scope, and options are required")
         user_id = subject.user_id
         tenant_id = subject.tenant_id
         visibility = options.visibility
@@ -842,12 +856,20 @@ class WorkflowState:
     async def update_dashboard(
         self,
         db: object,
-        uid: str,
-        dashboard_update: Any,
-        subject: Any,
-        options: Any,
+        uid: str | None = None,
+        dashboard_update: Any | None = None,
+        subject: Any | None = None,
+        options: Any | None = None,
+        request: Any | None = None,
     ) -> dict[str, Any] | None:
         del db
+        if request is not None:
+            uid = request.uid
+            dashboard_update = request.dashboard_update
+            subject = request.scope
+            options = request.options
+        if uid is None or dashboard_update is None or subject is None or options is None:
+            raise ValueError("uid, dashboard_update, subject/scope, and options are required")
         user_id = subject.user_id
         tenant_id = subject.tenant_id
         is_admin = options.is_admin
@@ -1000,7 +1022,23 @@ class WorkflowState:
             "meta": {"visibility": item.visibility, "sharedGroupIds": list(item.shared_group_ids)},
         }
 
-    def toggle_dashboard_hidden(self, *, uid: str, user_id: str, hidden: bool, **_kwargs: Any) -> bool:
+    def toggle_dashboard_hidden(
+        self,
+        db: object | None = None,
+        request: Any | None = None,
+        *,
+        uid: str | None = None,
+        user_id: str | None = None,
+        hidden: bool | None = None,
+        **_kwargs: Any,
+    ) -> bool:
+        del db
+        if request is not None:
+            uid = request.uid
+            user_id = request.scope.user_id
+            hidden = request.params.hidden
+        if uid is None or user_id is None or hidden is None:
+            return False
         item = self.dashboards.get(uid)
         if item is None:
             return False
@@ -1019,11 +1057,18 @@ class WorkflowState:
     async def create_datasource(
         self,
         db: object,
-        datasource_create: DatasourceCreate,
-        scope: Any,
-        options: Any,
+        datasource_create: DatasourceCreate | None = None,
+        scope: Any | None = None,
+        options: Any | None = None,
+        request: Any | None = None,
     ) -> Datasource:
         del db
+        if request is not None:
+            datasource_create = request.datasource_create
+            scope = request.scope
+            options = request.options
+        if datasource_create is None or scope is None or options is None:
+            raise ValueError("datasource_create, scope, and options are required")
         user_id = scope.user_id
         tenant_id = scope.tenant_id
         visibility = options.visibility
@@ -1160,12 +1205,20 @@ class WorkflowState:
     async def update_datasource(
         self,
         db: object,
-        uid: str,
-        datasource_update: DatasourceUpdate,
-        scope: Any,
-        options: Any,
+        uid: str | None = None,
+        datasource_update: DatasourceUpdate | None = None,
+        scope: Any | None = None,
+        options: Any | None = None,
+        request: Any | None = None,
     ) -> Datasource | None:
         del db
+        if request is not None:
+            uid = request.uid
+            datasource_update = request.datasource_update
+            scope = request.scope
+            options = request.options
+        if uid is None or datasource_update is None or scope is None or options is None:
+            return None
         user_id = scope.user_id
         tenant_id = scope.tenant_id
         visibility = options.visibility
@@ -1193,7 +1246,23 @@ class WorkflowState:
         self.datasources.pop(uid, None)
         return True
 
-    def toggle_datasource_hidden(self, *, uid: str, user_id: str, hidden: bool, **_kwargs: Any) -> bool:
+    def toggle_datasource_hidden(
+        self,
+        db: object | None = None,
+        request: Any | None = None,
+        *,
+        uid: str | None = None,
+        user_id: str | None = None,
+        hidden: bool | None = None,
+        **_kwargs: Any,
+    ) -> bool:
+        del db
+        if request is not None:
+            uid = request.uid
+            user_id = request.scope.user_id
+            hidden = request.params.hidden
+        if uid is None or user_id is None or hidden is None:
+            return False
         item = self.datasources.get(uid)
         if item is None:
             return False
@@ -1213,11 +1282,18 @@ class WorkflowState:
     async def create_folder(
         self,
         db: object,
-        title: str,
-        scope: Any,
-        options: Any,
+        title: str | None = None,
+        scope: Any | None = None,
+        options: Any | None = None,
+        request: Any | None = None,
     ) -> Folder:
         del db
+        if request is not None:
+            title = request.title
+            scope = request.scope
+            options = request.options
+        if title is None or scope is None or options is None:
+            raise ValueError("title, scope, and options are required")
         user_id = scope.user_id
         tenant_id = scope.tenant_id
         visibility = options.visibility
@@ -1287,9 +1363,21 @@ class WorkflowState:
         return results
 
     async def get_folder(
-        self, db: object, uid: str, scope: Any, params: Any, **_kwargs: Any
+        self,
+        db: object,
+        uid: str | None = None,
+        scope: Any | None = None,
+        params: Any | None = None,
+        request: Any | None = None,
+        **_kwargs: Any,
     ) -> Folder | None:
         del db
+        if request is not None:
+            uid = request.uid
+            scope = request.scope
+            params = request.params
+        if uid is None or scope is None or params is None:
+            return None
         user_id = scope.user_id
         tenant_id = scope.tenant_id
         group_ids = list(scope.group_ids)
@@ -1314,11 +1402,18 @@ class WorkflowState:
     async def update_folder(
         self,
         db: object,
-        uid: str,
-        scope: Any,
-        options: Any,
+        uid: str | None = None,
+        scope: Any | None = None,
+        options: Any | None = None,
+        request: Any | None = None,
     ) -> Folder | None:
         del db
+        if request is not None:
+            uid = request.uid
+            scope = request.scope
+            options = request.options
+        if uid is None or scope is None or options is None:
+            return None
         user_id = scope.user_id
         tenant_id = scope.tenant_id
         title = getattr(options, "title", None)
@@ -1339,8 +1434,22 @@ class WorkflowState:
         item.version += 1
         return self._folder_model(item, self.users[user_id])
 
-    async def delete_folder(self, db: object, uid: str, scope: Any, options: Any, **_kwargs: Any) -> bool:
+    async def delete_folder(
+        self,
+        db: object,
+        uid: str | None = None,
+        scope: Any | None = None,
+        options: Any | None = None,
+        request: Any | None = None,
+        **_kwargs: Any,
+    ) -> bool:
         del db
+        if request is not None:
+            uid = request.uid
+            scope = request.scope
+            options = request.options
+        if uid is None or scope is None or options is None:
+            return False
         item = self.folders.get(uid)
         if item is None:
             return False
@@ -1350,7 +1459,23 @@ class WorkflowState:
         self.folders.pop(uid, None)
         return True
 
-    def toggle_folder_hidden(self, *, uid: str, user_id: str, hidden: bool, **_kwargs: Any) -> bool:
+    def toggle_folder_hidden(
+        self,
+        db: object | None = None,
+        request: Any | None = None,
+        *,
+        uid: str | None = None,
+        user_id: str | None = None,
+        hidden: bool | None = None,
+        **_kwargs: Any,
+    ) -> bool:
+        del db
+        if request is not None:
+            uid = request.uid
+            user_id = request.scope.user_id
+            hidden = request.params.hidden
+        if uid is None or user_id is None or hidden is None:
+            return False
         item = self.folders.get(uid)
         if item is None:
             return False

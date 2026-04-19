@@ -153,15 +153,20 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
     monkeypatch.setattr(dependencies, "client_ip", lambda request: "unknown")
     monkeypatch.setattr(dependencies.config, "REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS", True)
     with pytest.raises(HTTPException, match="Access denied"):
-        dependencies.enforce_public_endpoint_security(_request(client=None), scope="public", limit=1, window_seconds=60)
+        dependencies.enforce_public_endpoint_security(
+            _request(client=None),
+            dependencies.PublicEndpointSecurityConfig(scope="public", limit=1, window_seconds=60),
+        )
     monkeypatch.setattr(dependencies, "client_ip", lambda request: "127.0.0.1")
     dependencies.enforce_public_endpoint_security(
-        _request(), scope="public", limit=2, window_seconds=30, fallback_mode="allow"
+        _request(),
+        dependencies.PublicEndpointSecurityConfig(scope="public", limit=2, window_seconds=30, fallback_mode="allow"),
     )
     assert ip_rate_calls == [{"scope": "public", "limit": 2, "window_seconds": 30, "fallback_mode": "allow"}]
     with pytest.raises(ValueError, match="fallback_mode"):
         dependencies.enforce_public_endpoint_security(
-            _request(), scope="public", limit=2, window_seconds=30, fallback_mode="bad"
+            _request(),
+            dependencies.PublicEndpointSecurityConfig(scope="public", limit=2, window_seconds=30, fallback_mode="bad"),
         )
 
     with pytest.raises(HTTPException) as missing_token_config:

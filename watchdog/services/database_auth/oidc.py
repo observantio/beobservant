@@ -39,6 +39,21 @@ class OidcProvisionProfile:
     default_tenant: Optional[Tenant] = None
 
 
+@dataclass(frozen=True, slots=True)
+class ExistingUserLookupContext:
+    email: str
+    subject: str
+    tenant_id: Optional[str]
+    claims: JSONDict
+
+
+@dataclass(frozen=True, slots=True)
+class OidcUserUpdateProfile:
+    email: str
+    full_name: Optional[str]
+    subject: str
+
+
 MAX_OIDC_CLAIM_LIST_ITEMS = 256
 MAX_OIDC_CLAIM_ITEM_LENGTH = 200
 MAX_USERNAME_COLLISION_PROBES = 5000
@@ -135,47 +150,43 @@ def _subject_is_owned_by_other(db: Session, subject: str, user_id: str) -> bool:
 def _resolve_existing_user(
     service: DatabaseAuthService,
     db: Session,
-    *,
-    email: str,
-    subject: str,
-    tenant_id: Optional[str],
-    claims: JSONDict,
+    context: ExistingUserLookupContext,
 ) -> Optional[User]:
-    by_subject = _get_user_by_subject(db, subject, tenant_id)
-    if by_subject:
-        return by_subject
-
-    candidate = _get_user_by_email(db, email, tenant_id)
-    if not candidate:
-        return None
-
-    if candidate.auth_provider == config.AUTH_PROVIDER:
-        existing_subject = str(getattr(candidate, "external_subject", "") or "").strip()
-        if existing_subject and subject and existing_subject != subject:
-            service.logger.warning(
-                "OIDC subject mismatch for existing external account %s; refusing login",
-                candidate.id,
-            )
-            return None
-        return candidate
-
-    if not _can_auto_link_by_email(claims):
-        service.logger.warning(
-            "OIDC email %s matches existing account with auth_provider=%s; refusing link",
-            email,
-            candidate.auth_provider,
-        )
-        return None
-
-    if subject and _subject_is_owned_by_other(db, subject, candidate.id):
-        service.logger.warning(
-            "OIDC subject %s is already linked to another account; refusing link for email %s",
-            subject,
-            email,
-        )
-        return None
-
-    return candidate
+    resolved = _get_user_by_subject(db, context.subject, context.tenant_id)
+    if resolved is None:
+        candidate = _get_user_by_email(db, context.email, context.tenant_id)
+        if candidate is not None:
+            if candidate.auth_provider == config.AUTH_PROVIDER:
+                existing_subject = str(getattr(candidate, "external_subject", "") or "").strip()
+                if existing_subject and context.subject and existing_subject != context.subject:
+                    service.logger.warning(
+                        "OIDC subject mismatch for existing external account %s; refusing login",
+                        candidate.id,
+                    )
+                else:
+                    resolved = candidate
+            else:
+                auto_link_allowed = _can_auto_link_by_email(context.claims)
+                subject_available = not context.subject or not _subject_is_owned_by_other(
+                    db,
+                    context.subject,
+                    candidate.id,
+                )
+                if not auto_link_allowed:
+                    service.logger.warning(
+                        "OIDC email %s matches existing account with auth_provider=%s; refusing link",
+                        context.email,
+                        candidate.auth_provider,
+                    )
+                elif not subject_available:
+                    service.logger.warning(
+                        "OIDC subject %s is already linked to another account; refusing link for email %s",
+                        context.subject,
+                        context.email,
+                    )
+                else:
+                    resolved = candidate
+    return resolved
 
 
 def sync_user_from_oidc_claims(service: DatabaseAuthService, claims: JSONDict) -> Optional[User]:
@@ -183,59 +194,61 @@ def sync_user_from_oidc_claims(service: DatabaseAuthService, claims: JSONDict) -
 
     email = _normalize_email(claims)
     subject = _normalize_subject(claims)
+    user: Optional[User] = None
+
     if not email:
         service.logger.warning("OIDC token missing email claim")
-        return None
+    else:
+        preferred_username = _preferred_username(claims, email)
+        full_name = _full_name(claims)
 
-    preferred_username = _preferred_username(claims, email)
-    full_name = _full_name(claims)
+        with get_db_session() as db:
+            default_tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+            if default_tenant is None and config.OIDC_AUTO_PROVISION_USERS:
+                default_tenant = _ensure_default_tenant(db)
+            tenant_id = getattr(default_tenant, "id", None)
 
-    with get_db_session() as db:
-        default_tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
-        if default_tenant is None and config.OIDC_AUTO_PROVISION_USERS:
-            default_tenant = _ensure_default_tenant(db)
-        tenant_id = getattr(default_tenant, "id", None)
+            if tenant_id is None and not config.OIDC_AUTO_PROVISION_USERS:
+                service.logger.warning(
+                    "OIDC login denied because no default tenant exists and auto-provisioning is disabled"
+                )
+            else:
+                user = _resolve_existing_user(
+                    service,
+                    db,
+                    ExistingUserLookupContext(email=email, subject=subject, tenant_id=tenant_id, claims=claims),
+                )
 
-        if tenant_id is None and not config.OIDC_AUTO_PROVISION_USERS:
-            service.logger.warning(
-                "OIDC login denied because no default tenant exists and auto-provisioning is disabled"
-            )
-            return None
+                if user is None and config.OIDC_AUTO_PROVISION_USERS:
+                    profile = OidcProvisionProfile(
+                        email=email,
+                        preferred_username=preferred_username,
+                        full_name=full_name,
+                        subject=subject,
+                        default_tenant=default_tenant,
+                    )
+                    try:
+                        user = provision_oidc_user(service, db, profile)
+                    except ValueError as exc:
+                        service.logger.warning("OIDC provisioning failed for email=%s: %s", email, exc)
+                        user = None
+                elif user is not None:
+                    if user.is_active:
+                        update_oidc_user(
+                            service,
+                            db,
+                            user,
+                            OidcUserUpdateProfile(email=email, full_name=full_name, subject=subject),
+                        )
+                    else:
+                        service.logger.warning("OIDC login attempted for inactive user %s", user.id)
+                        user = None
 
-        user = _resolve_existing_user(
-            service,
-            db,
-            email=email,
-            subject=subject,
-            tenant_id=tenant_id,
-            claims=claims,
-        )
-
-        if user is None:
-            if not config.OIDC_AUTO_PROVISION_USERS:
-                return None
-            profile = OidcProvisionProfile(
-                email=email,
-                preferred_username=preferred_username,
-                full_name=full_name,
-                subject=subject,
-                default_tenant=default_tenant,
-            )
-            try:
-                user = provision_oidc_user(service, db, profile)
-            except ValueError as exc:
-                service.logger.warning("OIDC provisioning failed for email=%s: %s", email, exc)
-                return None
-        else:
-            if not user.is_active:
-                service.logger.warning("OIDC login attempted for inactive user %s", user.id)
-                return None
-            update_oidc_user(service, db, user, email, full_name, subject)
-
-        user.last_login = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(user)
-        return user
+                if user is not None:
+                    user.last_login = datetime.now(timezone.utc)
+                    db.commit()
+                    db.refresh(user)
+    return user
 
 
 def _ensure_default_tenant(db: Session) -> Tenant:
@@ -329,9 +342,7 @@ def update_oidc_user(
     service: DatabaseAuthService,
     db: Session,
     user: User,
-    email: str,
-    full_name: Optional[str],
-    subject: str,
+    profile: OidcUserUpdateProfile,
 ) -> None:
     user.auth_provider = config.AUTH_PROVIDER
 
@@ -341,18 +352,18 @@ def update_oidc_user(
     if not require_oidc_mfa and getattr(user, "must_setup_mfa", False) and not getattr(user, "mfa_enabled", False):
         user.must_setup_mfa = False
 
-    if subject and user.external_subject != subject:
+    if profile.subject and user.external_subject != profile.subject:
         conflict = (
             db.query(User)
             .filter(
-                User.external_subject == subject,
+                User.external_subject == profile.subject,
                 User.id != user.id,
             )
             .first()
         )
         if not conflict:
             previous_subject = str(user.external_subject or "")
-            user.external_subject = subject
+            user.external_subject = profile.subject
             service.log_audit(
                 db,
                 AuditLogRecord(
@@ -368,18 +379,18 @@ def update_oidc_user(
                 ),
             )
 
-    if email and user.email.lower() != email:
+    if profile.email and user.email.lower() != profile.email:
         conflict = (
             db.query(User)
             .filter(
-                func.lower(User.email) == email,
+                func.lower(User.email) == profile.email,
                 User.id != user.id,
             )
             .first()
         )
         if not conflict:
             previous_email = str(user.email)
-            user.email = email
+            user.email = profile.email
             service.log_audit(
                 db,
                 AuditLogRecord(
@@ -390,10 +401,10 @@ def update_oidc_user(
                     resource_id=user.id,
                     details={
                         "previous_email": previous_email,
-                        "new_email": email,
+                        "new_email": profile.email,
                     },
                 ),
             )
 
-    if full_name is not None and user.full_name != full_name:
-        user.full_name = full_name
+    if profile.full_name is not None and user.full_name != profile.full_name:
+        user.full_name = profile.full_name

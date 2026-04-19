@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from hmac import compare_digest
 from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
@@ -42,6 +43,15 @@ SCOPE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,199}$")
 MAX_TOKEN_GROUP_IDS = 256
 MAX_GROUP_ID_LENGTH = 200
 MAX_SCOPE_ROWS_PER_QUERY = 1000
+
+
+@dataclass(frozen=True)
+class PublicEndpointSecurityConfig:
+    scope: str
+    limit: int
+    window_seconds: int
+    allowlist: str | None = None
+    fallback_mode: str | None = None
 
 
 def _is_safe_token_subject(value: object) -> bool:
@@ -363,8 +373,6 @@ def _enforce_session_revocation(user: object, token_data: TokenData) -> None:
     invalid_before = getattr(user, "session_invalid_before", None)
     if invalid_before is None:
         return
-    # Legacy rows may still store naive UTC timestamps. Treat them as UTC
-    # consistently so revocation checks remain monotonic.
     if getattr(invalid_before, "tzinfo", None) is None:
         invalid_before = invalid_before.replace(tzinfo=timezone.utc)
     token_iat = getattr(token_data, "iat", None)
@@ -454,29 +462,28 @@ def enforce_ip_allowlist(request: Request, allowlist: str | None, *, scope: str)
 
 def enforce_public_endpoint_security(
     request: Request,
-    *,
-    scope: str,
-    limit: int,
-    window_seconds: int,
-    allowlist: str | None = None,
-    fallback_mode: str | None = None,
+    security_config: PublicEndpointSecurityConfig,
 ) -> None:
-    resolved_fallback_mode = _validate_rate_limit_fallback_mode(fallback_mode)
+    resolved_fallback_mode = _validate_rate_limit_fallback_mode(security_config.fallback_mode)
     resolved_ip = client_ip(request)
+    scope = security_config.scope
     if config.REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS and resolved_ip == "unknown":
-        logger.warning("Rejected public request for scope=%s because client IP resolution failed", scope)
+        logger.warning(
+            "Rejected public request for scope=%s because client IP resolution failed",
+            security_config.scope,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=GENERIC_ACCESS_DENIED_DETAIL,
         )
     enforce_ip_rate_limit(
         request,
-        scope=scope,
-        limit=limit,
-        window_seconds=window_seconds,
+        scope=security_config.scope,
+        limit=security_config.limit,
+        window_seconds=security_config.window_seconds,
         fallback_mode=resolved_fallback_mode,
     )
-    enforce_ip_allowlist(request, allowlist, scope=scope)
+    enforce_ip_allowlist(request, security_config.allowlist, scope=scope)
 
 
 def enforce_header_token(

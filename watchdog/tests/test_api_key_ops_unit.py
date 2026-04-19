@@ -128,13 +128,22 @@ def test_api_key_db_helpers_and_schema_mapping():
     assert shares[0].username == other.username
 
     owner_schema = api_key_ops.api_key_to_schema(
-        key, is_shared=False, can_use=True, viewer_enabled=True, is_hidden=True
+        key,
+        api_key_ops.ApiKeySchemaContext(
+            is_shared=False,
+            can_use=True,
+            viewer_enabled=True,
+            is_hidden=True,
+        ),
     )
     assert owner_schema.otlp_token == "secret"
     assert owner_schema.is_hidden is True
     assert owner_schema.shared_with[0].user_id == other.id
 
-    shared_schema = api_key_ops.api_key_to_schema(key, is_shared=True, can_use=True, viewer_enabled=False)
+    shared_schema = api_key_ops.api_key_to_schema(
+        key,
+        api_key_ops.ApiKeySchemaContext(is_shared=True, can_use=True, viewer_enabled=False),
+    )
     assert shared_schema.otlp_token is None
     assert shared_schema.is_shared is True
     assert shared_schema.owner_username == owner.username
@@ -193,10 +202,10 @@ def test_set_api_key_hidden_and_delete_share_paths(monkeypatch):
     assert api_key_ops.set_api_key_hidden(service, other.id, key.id, False) is True
     assert db.query(HiddenApiKey).filter_by(user_id=other.id, api_key_id=key.id).first() is None
 
-    assert api_key_ops.delete_api_key_share(service, owner.id, "t1", key.id, "missing") is False
-    assert api_key_ops.delete_api_key_share(service, owner.id, "t1", key.id, other.id) is True
+    assert api_key_ops.delete_api_key_share(service, owner.id, "t1", key.id, shared_user_id="missing") is False
+    assert api_key_ops.delete_api_key_share(service, owner.id, "t1", key.id, shared_user_id=other.id) is True
     with pytest.raises(ValueError, match="API key not found"):
-        api_key_ops.delete_api_key_share(service, owner.id, "t1", "missing", other.id)
+        api_key_ops.delete_api_key_share(service, owner.id, "t1", "missing", shared_user_id=other.id)
 
 
 def test_create_update_delete_and_backfill_api_keys(monkeypatch):

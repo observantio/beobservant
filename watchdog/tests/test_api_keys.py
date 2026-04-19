@@ -17,7 +17,7 @@ import uuid
 import database
 from database import get_db_session
 from config import config
-from services.database_auth_service import DatabaseAuthService
+from services.database_auth_service import ApiKeyShareReplaceRequest, DatabaseAuthService
 from models.access.user_models import UserCreate
 from models.access.api_key_models import ApiKeyCreate, ApiKeyUpdate
 from db_models import Tenant, User
@@ -42,7 +42,10 @@ def test_list_api_keys_hides_otlp_token_for_shared_user():
     created = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="owner-key", key="org-owner"))
     assert created.otlp_token
 
-    svc.replace_api_key_shares(owner.id, tenant_id, created.id, [other.id], group_ids=[])
+    svc.replace_api_key_shares(
+        owner.id,
+        ApiKeyShareReplaceRequest(tenant_id=tenant_id, key_id=created.id, user_ids=[other.id], group_ids=[]),
+    )
 
     keys_for_other = svc.list_api_keys(other.id)
     shared_entry = next((k for k in keys_for_other if k.id == created.id), None)
@@ -91,7 +94,10 @@ def test_delete_api_key_by_non_owner_returns_403():
     )
 
     created = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="del-key", key="org-del"))
-    svc.replace_api_key_shares(owner.id, tenant_id, created.id, [other.id], group_ids=[])
+    svc.replace_api_key_shares(
+        owner.id,
+        ApiKeyShareReplaceRequest(tenant_id=tenant_id, key_id=created.id, user_ids=[other.id], group_ids=[]),
+    )
 
     with pytest.raises(HTTPException) as exc:
         svc.delete_api_key(other.id, created.id)
@@ -134,7 +140,10 @@ def test_enabling_owned_key_updates_user_org_and_keeps_single_active_view():
 
     shared_key = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="shared-key", key="org-shared-1"))
     mine = svc.create_api_key(other.id, tenant_id, ApiKeyCreate(name="mine", key="org-mine-1"))
-    svc.replace_api_key_shares(owner.id, tenant_id, shared_key.id, [other.id], group_ids=[])
+    svc.replace_api_key_shares(
+        owner.id,
+        ApiKeyShareReplaceRequest(tenant_id=tenant_id, key_id=shared_key.id, user_ids=[other.id], group_ids=[]),
+    )
 
     svc.update_api_key(other.id, shared_key.id, ApiKeyUpdate(is_enabled=True))
     keys_after_shared = svc.list_api_keys(other.id)
@@ -176,7 +185,10 @@ def test_default_api_key_cannot_be_shared():
     assert default_key.is_default is True
 
     with pytest.raises(ValueError, match="Default key cannot be shared"):
-        svc.replace_api_key_shares(owner.id, tenant_id, default_key.id, [other.id], group_ids=[])
+        svc.replace_api_key_shares(
+            owner.id,
+            ApiKeyShareReplaceRequest(tenant_id=tenant_id, key_id=default_key.id, user_ids=[other.id], group_ids=[]),
+        )
 
 
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
@@ -225,7 +237,10 @@ def test_shared_key_cannot_be_set_as_default():
     shared_candidate = svc.create_api_key(
         owner.id, tenant_id, ApiKeyCreate(name="shared-candidate", key="org-shared-candidate-1")
     )
-    svc.replace_api_key_shares(owner.id, tenant_id, shared_candidate.id, [other.id], group_ids=[])
+    svc.replace_api_key_shares(
+        owner.id,
+        ApiKeyShareReplaceRequest(tenant_id=tenant_id, key_id=shared_candidate.id, user_ids=[other.id], group_ids=[]),
+    )
 
     with pytest.raises(ValueError, match="Shared keys cannot be set as default"):
         svc.update_api_key(owner.id, shared_candidate.id, ApiKeyUpdate(is_default=True))

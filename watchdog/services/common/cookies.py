@@ -47,29 +47,19 @@ def is_secure_cookie_request(
     if request.url.scheme == "https":
         return True
 
-    if not trust_proxy_headers:
-        return False
-
-    if not trusted_proxy_cidrs:
-        return False
-
-    client = request.client
-    if not client:
-        return False
-
-    try:
-        peer_ip = ip_address(client.host.strip())
-    except ValueError:
-        return False
-
-    networks = _parse_networks(trusted_proxy_cidrs)
-    if not networks:
-        return False
-
-    if not any(peer_ip in net for net in networks):
-        return False
-
-    return _forwarded_proto(request) == "https"
+    is_secure = False
+    if trust_proxy_headers and trusted_proxy_cidrs:
+        client = request.client
+        if client:
+            try:
+                peer_ip = ip_address(client.host.strip())
+            except ValueError:
+                peer_ip = None
+            if peer_ip is not None:
+                networks = _parse_networks(trusted_proxy_cidrs)
+                if networks and any(peer_ip in net for net in networks):
+                    is_secure = _forwarded_proto(request) == "https"
+    return is_secure
 
 
 def cookie_secure(request: Request) -> bool:

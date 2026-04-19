@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Annotated, AsyncGenerator, List, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query, Request, status
@@ -33,39 +34,50 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 router = APIRouter(prefix="/api/tempo", tags=["tempo"])
 
 
+@dataclass(frozen=True, slots=True)
 class SearchTracesShapeParams:
-    def __init__(
-        self,
-        service: Optional[str] = Query(None),
-        operation: Optional[str] = Query(None),
-        min_duration: Optional[str] = Query(None, alias="minDuration"),
-        max_duration: Optional[str] = Query(None, alias="maxDuration"),
-    ) -> None:
-        self.service = service
-        self.operation = operation
-        self.min_duration = min_duration
-        self.max_duration = max_duration
+    service: Optional[str]
+    operation: Optional[str]
+    min_duration: Optional[str]
+    max_duration: Optional[str]
 
 
+@dataclass(frozen=True, slots=True)
 class SearchTracesWindowParams:
-    def __init__(
-        self,
-        start: Optional[int] = Query(None, description="Start time in microseconds"),
-        end: Optional[int] = Query(None, description="End time in microseconds"),
-        limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
-        fetch_full: bool = Query(False, alias="fetchFull"),
-    ) -> None:
-        self.start = start
-        self.end = end
-        self.limit = limit
-        self.fetch_full = fetch_full
+    start: Optional[int]
+    end: Optional[int]
+    limit: int
+    fetch_full: bool
+
+
+def _search_shape_dep(
+    service: Optional[str] = Query(None),
+    operation: Optional[str] = Query(None),
+    min_duration: Optional[str] = Query(None, alias="minDuration"),
+    max_duration: Optional[str] = Query(None, alias="maxDuration"),
+) -> SearchTracesShapeParams:
+    return SearchTracesShapeParams(
+        service=service,
+        operation=operation,
+        min_duration=min_duration,
+        max_duration=max_duration,
+    )
+
+
+def _search_window_dep(
+    start: Optional[int] = Query(None, description="Start time in microseconds"),
+    end: Optional[int] = Query(None, description="End time in microseconds"),
+    limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
+    fetch_full: bool = Query(False, alias="fetchFull"),
+) -> SearchTracesWindowParams:
+    return SearchTracesWindowParams(start=start, end=end, limit=limit, fetch_full=fetch_full)
 
 
 @router.get("/traces/search", response_model=TraceResponse)
 async def search_traces(
     request: Request,
-    search_shape: Annotated[SearchTracesShapeParams, Depends()],
-    search_window: Annotated[SearchTracesWindowParams, Depends()],
+    search_shape: Annotated[SearchTracesShapeParams, Depends(_search_shape_dep)],
+    search_window: Annotated[SearchTracesWindowParams, Depends(_search_window_dep)],
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_TRACES, "tempo")),
 ) -> TraceResponse:
     query = TraceQuery(
@@ -80,9 +92,7 @@ async def search_traces(
     )
     tenant_id = await resolve_tenant_id(request, current_user)
     try:
-        return await tempo_service.search_traces(
-            query, tenant_id=tenant_id, fetch_full_traces=search_window.fetch_full
-        )
+        return await tempo_service.search_traces(query, tenant_id, search_window.fetch_full)
     except asyncio.TimeoutError as exc:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,

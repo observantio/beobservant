@@ -27,6 +27,7 @@ from services.grafana.grafana_bundles import (
     DashboardCreateOptions,
     DashboardSearchParams,
     DashboardUpdateOptions,
+    DashboardUpdateRequest,
     GrafanaUserScope,
 )
 
@@ -121,8 +122,8 @@ async def test_create_dashboard_none_no_uid_and_folder_resolution_error(monkeypa
             service,
             db,
             _create_payload(),
-            GrafanaUserScope("u1", "t1", []),
-            DashboardCreateOptions(),
+            scope=GrafanaUserScope("u1", "t1", []),
+            options=DashboardCreateOptions(),
         )
         is None
     )
@@ -132,8 +133,8 @@ async def test_create_dashboard_none_no_uid_and_folder_resolution_error(monkeypa
         service,
         db,
         _create_payload(uid=None),
-        GrafanaUserScope("u1", "t1", []),
-        DashboardCreateOptions(),
+        scope=GrafanaUserScope("u1", "t1", []),
+        options=DashboardCreateOptions(),
     )
     assert out == {"status": "ok", "dashboard": {"title": "CPU"}}
 
@@ -146,8 +147,8 @@ async def test_create_dashboard_none_no_uid_and_folder_resolution_error(monkeypa
         service,
         db,
         _create_payload(folder_id=7),
-        GrafanaUserScope("u1", "t1", []),
-        DashboardCreateOptions(),
+        scope=GrafanaUserScope("u1", "t1", []),
+        options=DashboardCreateOptions(),
     )
     assert out2 and out2.get("uid") == "d1"
 
@@ -209,16 +210,18 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
         await dashboard_ops.update_dashboard(
             service,
             db,
-            "d1",
-            DashboardUpdate(
-                dashboard=Dashboard(
-                    title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                DashboardUpdateRequest(
+                    uid="d1",
+                    dashboard_update=DashboardUpdate(
+                        dashboard=Dashboard(
+                            title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                        ),
+                        folderId=11,
+                        overwrite=True,
                 ),
-                folderId=11,
-                overwrite=True,
+                    scope=GrafanaUserScope(owner.id, "t1", ["g1"]),
+                    options=DashboardUpdateOptions(),
             ),
-            GrafanaUserScope(owner.id, "t1", ["g1"]),
-            DashboardUpdateOptions(),
         )
 
     # normal update with visibility change to group and then tenant clear branch
@@ -226,32 +229,36 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
     out = await dashboard_ops.update_dashboard(
         service,
         db,
-        "d1",
-        DashboardUpdate(
-            dashboard=Dashboard(
-                title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+            DashboardUpdateRequest(
+                uid="d1",
+                dashboard_update=DashboardUpdate(
+                    dashboard=Dashboard(
+                        title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                    ),
+                    folderId=11,
+                    overwrite=True,
             ),
-            folderId=11,
-            overwrite=True,
+                scope=GrafanaUserScope(owner.id, "t1", ["g1"]),
+                options=DashboardUpdateOptions(visibility="group", shared_group_ids=["g1"]),
         ),
-        GrafanaUserScope(owner.id, "t1", ["g1"]),
-        DashboardUpdateOptions(visibility="group", shared_group_ids=["g1"]),
     )
     assert out and out.get("visibility") == "group"
 
     out2 = await dashboard_ops.update_dashboard(
         service,
         db,
-        "d1",
-        DashboardUpdate(
-            dashboard=Dashboard(
-                title="U2", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+            DashboardUpdateRequest(
+                uid="d1",
+                dashboard_update=DashboardUpdate(
+                    dashboard=Dashboard(
+                        title="U2", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                    ),
+                    folderId=0,
+                    overwrite=True,
             ),
-            folderId=0,
-            overwrite=True,
+                scope=GrafanaUserScope(owner.id, "t1", ["g1"]),
+                options=DashboardUpdateOptions(visibility="tenant"),
         ),
-        GrafanaUserScope(owner.id, "t1", ["g1"]),
-        DashboardUpdateOptions(visibility="tenant"),
     )
     assert out2 and out2.get("visibility") == "tenant"
 
@@ -264,15 +271,17 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
         await dashboard_ops.update_dashboard(
             service,
             db,
-            "d1",
-            DashboardUpdate(
-                dashboard=Dashboard(
-                    title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+            DashboardUpdateRequest(
+                uid="d1",
+                dashboard_update=DashboardUpdate(
+                    dashboard=Dashboard(
+                        title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                    ),
+                    overwrite=True,
                 ),
-                overwrite=True,
+                scope=GrafanaUserScope(owner.id, "t1", ["g1"]),
+                options=DashboardUpdateOptions(),
             ),
-            GrafanaUserScope(owner.id, "t1", ["g1"]),
-            DashboardUpdateOptions(),
         )
 
     async def update_none(_uid, _payload):
@@ -283,15 +292,17 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
         await dashboard_ops.update_dashboard(
             service,
             db,
-            "d1",
-            DashboardUpdate(
-                dashboard=Dashboard(
-                    title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+            DashboardUpdateRequest(
+                uid="d1",
+                dashboard_update=DashboardUpdate(
+                    dashboard=Dashboard(
+                        title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                    ),
+                    overwrite=True,
                 ),
-                overwrite=True,
+                scope=GrafanaUserScope(owner.id, "t1", ["g1"]),
+                options=DashboardUpdateOptions(),
             ),
-            GrafanaUserScope(owner.id, "t1", ["g1"]),
-            DashboardUpdateOptions(),
         )
         is None
     )

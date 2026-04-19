@@ -172,7 +172,7 @@ def test_proxy_small_helper_branches(monkeypatch):
 
     proxy_auth_ops.clear_proxy_auth_cache()
     monkeypatch.setattr(time, "monotonic", lambda: 10.0)
-    proxy_auth_ops._cache_set("tok", "GET", "/grafana/api/search", "tenant-a", {"x": "1"})
+    proxy_auth_ops._cache_set("tok", "GET", "/grafana/api/search", "tenant-a", headers={"x": "1"})
     assert proxy_auth_ops._cache_get("tok", "GET", "/grafana/api/search", "tenant-a") == {"x": "1"}
     monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
     assert proxy_auth_ops._cache_get("tok", "GET", "/grafana/api/search", "tenant-a") is None
@@ -181,7 +181,7 @@ def test_proxy_small_helper_branches(monkeypatch):
     proxy_auth_ops.PROXY_AUTH_CACHE["stale"] = {"expires": 0.0, "headers": {"stale": "1"}}
     monkeypatch.setattr(proxy_auth_ops, "PROXY_AUTH_CACHE_OPS", proxy_auth_ops.PROXY_AUTH_CACHE_GC_EVERY - 1)
     monkeypatch.setattr(time, "monotonic", lambda: 5.0)
-    proxy_auth_ops._cache_set("tok-2", "GET", "/grafana/api/search", "tenant-a", {"fresh": "1"})
+    proxy_auth_ops._cache_set("tok-2", "GET", "/grafana/api/search", "tenant-a", headers={"fresh": "1"})
     assert "stale" not in proxy_auth_ops.PROXY_AUTH_CACHE
 
     assert proxy_auth_ops._has_any_permission(_token_data(), set()) is True
@@ -449,7 +449,7 @@ def test_proxy_db_helpers_cover_loader_and_update_paths(monkeypatch):
         "get_db_session",
         session_factory([orm_user, dash, folder]),
     )
-    _, context = proxy_auth_ops._db_load_context(AuthStub(), _token_data(), "dash-1", None, None, None)
+    _, context = proxy_auth_ops._db_load_context(AuthStub(), _token_data(), "dash-1")
     assert context.org_id == "scope-a"
     assert context.permissions == [Permission.READ_DASHBOARDS.value]
     assert context.group_ids == ["g1"]
@@ -458,10 +458,10 @@ def test_proxy_db_helpers_cover_loader_and_update_paths(monkeypatch):
 
     monkeypatch.setattr(proxy_auth_ops, "get_db_session", session_factory([None]))
     with pytest.raises(HTTPException, match="User access denied"):
-        proxy_auth_ops._db_load_context(AuthStub(), _token_data(), None, None, None, None)
+        proxy_auth_ops._db_load_context(AuthStub(), _token_data(), None)
 
     monkeypatch.setattr(proxy_auth_ops, "get_db_session", session_factory([orm_user]))
-    _, context = proxy_auth_ops._db_load_context(AuthStub(), _token_data(), None, None, None, None)
+    _, context = proxy_auth_ops._db_load_context(AuthStub(), _token_data(), None)
     assert context.dashboard is None
     assert context.folder is None
 

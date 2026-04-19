@@ -10,6 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -17,6 +18,15 @@ from sqlalchemy.orm import Session, joinedload
 
 from db_models import ApiKeyShare, UserApiKey
 from models.access.api_key_models import ApiKey, ApiKeyShareUser
+
+
+@dataclass(frozen=True, slots=True)
+class ApiKeySchemaContext:
+    is_shared: bool
+    can_use: bool
+    viewer_enabled: bool
+    is_hidden: bool = False
+    revealed_otlp_token: Optional[str] = None
 
 
 def share_created_at(share: ApiKeyShare) -> datetime:
@@ -46,14 +56,10 @@ def list_api_key_shares_in_session(db: Session, *, tenant_id: str, key_id: str) 
 
 def api_key_to_schema(
     api_key: UserApiKey,
-    is_shared: bool,
-    can_use: bool,
-    viewer_enabled: bool,
-    is_hidden: bool = False,
-    revealed_otlp_token: Optional[str] = None,
+    context: ApiKeySchemaContext,
 ) -> ApiKey:
     shared_with: List[ApiKeyShareUser] = []
-    if not is_shared:
+    if not context.is_shared:
         for share in getattr(api_key, "shares", None) or []:
             shared_user = getattr(share, "shared_user", None)
             shared_with.append(
@@ -68,11 +74,13 @@ def api_key_to_schema(
 
     owner_username = getattr(getattr(api_key, "user", None), "username", None)
 
-    if is_shared:
+    if context.is_shared:
         otlp_token_value = None
     else:
         otlp_token_value = (
-            revealed_otlp_token if revealed_otlp_token is not None else getattr(api_key, "otlp_token", None)
+            context.revealed_otlp_token
+            if context.revealed_otlp_token is not None
+            else getattr(api_key, "otlp_token", None)
         )
 
     payload = {
@@ -82,12 +90,12 @@ def api_key_to_schema(
         "otlp_token": otlp_token_value,
         "owner_user_id": getattr(api_key, "user_id", None),
         "owner_username": owner_username,
-        "is_shared": is_shared,
-        "can_use": can_use,
+        "is_shared": context.is_shared,
+        "can_use": context.can_use,
         "shared_with": [s.model_dump() if hasattr(s, "model_dump") else s for s in shared_with],
         "is_default": bool(getattr(api_key, "is_default", False)),
-        "is_enabled": bool(viewer_enabled),
-        "is_hidden": bool(is_hidden),
+        "is_enabled": bool(context.viewer_enabled),
+        "is_hidden": bool(context.is_hidden),
         "created_at": getattr(api_key, "created_at", None),
         "updated_at": getattr(api_key, "updated_at", None),
     }

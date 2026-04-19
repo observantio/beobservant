@@ -171,12 +171,26 @@ def test_replace_api_key_shares_missing_key_and_empty_combined(monkeypatch):
 
     with pytest.raises(ValueError, match="API key not found"):
         api_key_ops.replace_api_key_shares(
-            service, owner_user_id=owner.id, tenant_id="t1", key_id="missing", user_ids=[], group_ids=[]
+            service,
+            owner.id,
+            api_key_ops.ApiKeyShareReplaceRequest(
+                tenant_id="t1",
+                key_id="missing",
+                user_ids=[],
+                group_ids=[],
+            ),
         )
 
     # empty normalized users/groups path -> clear shares and return []
     out = api_key_ops.replace_api_key_shares(
-        service, owner_user_id=owner.id, tenant_id="t1", key_id=key.id, user_ids=[" "], group_ids=[" "]
+        service,
+        owner.id,
+        api_key_ops.ApiKeyShareReplaceRequest(
+            tenant_id="t1",
+            key_id=key.id,
+            user_ids=[" "],
+            group_ids=[" "],
+        ),
     )
     assert out == []
 

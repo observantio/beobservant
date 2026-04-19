@@ -13,6 +13,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional, TypeAlias
 
@@ -49,18 +50,21 @@ class ListAuditLogsTimeParams:
         self.end = end
 
 
+@dataclass(frozen=True, slots=True)
 class ListAuditLogsFilterParams:
-    def __init__(
-        self,
-        user_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-        action: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-        resource_type: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-        q: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-    ) -> None:
-        self.user_id = user_id
-        self.action = action
-        self.resource_type = resource_type
-        self.q = q
+    user_id: Optional[str]
+    action: Optional[str]
+    resource_type: Optional[str]
+    q: Optional[str]
+
+
+def _list_audit_filters_dep(
+    user_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    action: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    resource_type: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    q: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+) -> ListAuditLogsFilterParams:
+    return ListAuditLogsFilterParams(user_id=user_id, action=action, resource_type=resource_type, q=q)
 
 
 class ListAuditLogsPageParams:
@@ -78,7 +82,7 @@ class ListAuditLogsPageParams:
 @router.get("/audit-logs")
 async def list_audit_logs(
     audit_time: Annotated[ListAuditLogsTimeParams, Depends()],
-    audit_filters: Annotated[ListAuditLogsFilterParams, Depends()],
+    audit_filters: Annotated[ListAuditLogsFilterParams, Depends(_list_audit_filters_dep)],
     audit_page: Annotated[ListAuditLogsPageParams, Depends()],
     current_user: TokenData = Depends(require_admin_with_audit_permission),
 ) -> list[AuditLogItem]:
@@ -162,18 +166,26 @@ class ExportAuditLogsTimeParams:
         self.end = end
 
 
+@dataclass(frozen=True, slots=True)
 class ExportAuditLogsFilterParams:
-    def __init__(
-        self,
-        user_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-        action: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-        resource_type: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-        tenant_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-    ) -> None:
-        self.user_id = user_id
-        self.action = action
-        self.resource_type = resource_type
-        self.tenant_id = tenant_id
+    user_id: Optional[str]
+    action: Optional[str]
+    resource_type: Optional[str]
+    tenant_id: Optional[str]
+
+
+def _export_audit_filters_dep(
+    user_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    action: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    resource_type: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    tenant_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+) -> ExportAuditLogsFilterParams:
+    return ExportAuditLogsFilterParams(
+        user_id=user_id,
+        action=action,
+        resource_type=resource_type,
+        tenant_id=tenant_id,
+    )
 
 
 @router.get(
@@ -189,7 +201,7 @@ class ExportAuditLogsFilterParams:
 )
 async def export_audit_logs_csv(
     export_time: Annotated[ExportAuditLogsTimeParams, Depends()],
-    export_filters: Annotated[ExportAuditLogsFilterParams, Depends()],
+    export_filters: Annotated[ExportAuditLogsFilterParams, Depends(_export_audit_filters_dep)],
     current_user: TokenData = Depends(require_admin_with_audit_permission),
 ) -> StreamingResponse:
     actor = aliased(User)

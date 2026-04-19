@@ -21,6 +21,7 @@ ensure_test_env()
 from db_models import Base, GrafanaDashboard, Group, Tenant, User
 from services.grafana import dashboard_ops
 from services.grafana import dashboard_helpers
+from services.grafana.grafana_bundles import DashboardAccessCriteria, GrafanaUserScope, HiddenToggleParams
 
 
 def _session():
@@ -117,9 +118,15 @@ def test_dashboard_access_and_metadata_helpers():
     db.add(dash)
     db.commit()
 
-    assert dashboard_ops.check_dashboard_access(db, "d1", owner.id, "t1", [], require_write=True) is not None
-    assert dashboard_ops.check_dashboard_access(db, "d1", viewer.id, "t1", [], require_write=False) is None
-    assert dashboard_ops.check_dashboard_access(db, "d1", viewer.id, "t1", ["g1"], require_write=False) is not None
+    owner_scope = GrafanaUserScope(owner.id, "t1", [])
+    viewer_scope = GrafanaUserScope(viewer.id, "t1", [])
+    viewer_group_scope = GrafanaUserScope(viewer.id, "t1", ["g1"])
+    assert (
+        dashboard_ops.check_dashboard_access(db, "d1", owner_scope, DashboardAccessCriteria(require_write=True))
+        is not None
+    )
+    assert dashboard_ops.check_dashboard_access(db, "d1", viewer_scope, DashboardAccessCriteria()) is None
+    assert dashboard_ops.check_dashboard_access(db, "d1", viewer_group_scope, DashboardAccessCriteria()) is not None
 
     uids, allow_system = dashboard_ops.get_accessible_dashboard_uids(db, viewer.id, "t1", ["g1"])
     assert "d1" in uids
@@ -130,7 +137,7 @@ def test_dashboard_access_and_metadata_helpers():
     ctx_all = dashboard_ops.build_dashboard_search_context(db, tenant_id="t1")
     assert "d1" in ctx_all.get("all_registered_uids", set())
 
-    assert dashboard_ops.toggle_dashboard_hidden(db, "d1", viewer.id, "t1", True) is True
+    assert dashboard_ops.toggle_dashboard_hidden(db, "d1", viewer_scope, HiddenToggleParams(hidden=True)) is True
     assert viewer.id in (db.query(GrafanaDashboard).filter_by(grafana_uid="d1").first().hidden_by or [])
 
     metadata = dashboard_ops.get_dashboard_metadata(db, "t1")

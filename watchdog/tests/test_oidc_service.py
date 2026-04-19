@@ -16,7 +16,7 @@ ensure_test_env()
 
 import pytest
 
-from services.auth.oidc_service import OIDCService
+from services.auth.oidc_service import OIDCService, OidcAuthorizationUrlBuildRequest, OidcTransactionStartRequest
 
 _oidc_module = importlib.import_module(OIDCService.__module__)
 
@@ -38,7 +38,13 @@ class OidcServiceTests(unittest.TestCase):
             patch.object(_oidc_module.config, "OIDC_CLIENT_ID", "client-1"),
             patch.object(_oidc_module.config, "OIDC_SCOPES", "openid profile"),
         ):
-            url = service.build_authorization_url("http://localhost/callback", "state123", "nonce456")
+            url = service.build_authorization_url(
+                OidcAuthorizationUrlBuildRequest(
+                    redirect_uri="http://localhost/callback",
+                    state="state123",
+                    nonce="nonce456",
+                )
+            )
 
         self.assertIn("https://idp.example/auth?", url)
         self.assertIn("client_id=client-1", url)
@@ -55,9 +61,11 @@ class OidcServiceTests(unittest.TestCase):
             patch.object(_oidc_module.config, "OIDC_SCOPES", "openid profile"),
         ):
             session = service.start_authorization_transaction(
-                redirect_uri="http://localhost/callback",
-                state="state123",
-                nonce="nonce456",
+                OidcTransactionStartRequest(
+                    redirect_uri="http://localhost/callback",
+                    state="state123",
+                    nonce="nonce456",
+                )
             )
             first = service.consume_authorization_transaction(
                 transaction_id=session["transaction_id"],
@@ -83,11 +91,13 @@ def test_oidc_pkce_mismatch_is_rejected():
         verifier = "correct-verifier"
         challenge = service._pkce_s256(verifier)
         session = service.start_authorization_transaction(
-            redirect_uri="http://localhost/callback",
-            state="state123",
-            nonce="nonce456",
-            code_challenge=challenge,
-            code_challenge_method="S256",
+            OidcTransactionStartRequest(
+                redirect_uri="http://localhost/callback",
+                state="state123",
+                nonce="nonce456",
+                code_challenge=challenge,
+                code_challenge_method="S256",
+            )
         )
         with pytest.raises(ValueError):
             service.consume_authorization_transaction(

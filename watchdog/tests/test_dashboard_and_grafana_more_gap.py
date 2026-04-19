@@ -22,7 +22,7 @@ ensure_test_env()
 from db_models import Base, GrafanaDashboard, Tenant, User
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
 from services.grafana import dashboard_ops
-from services.grafana.grafana_bundles import DashboardSearchParams, GrafanaUserScope
+from services.grafana.grafana_bundles import DashboardSearchParams, GrafanaUserScope, HiddenToggleParams
 from services.grafana.grafana_service import GrafanaService
 
 
@@ -105,7 +105,12 @@ async def test_dashboard_ops_get_delete_toggle_and_uid_search_paths():
 
     assert await dashboard_ops.delete_dashboard(service, db, "missing", GrafanaUserScope("u1", "t1", [])) is False
     assert await dashboard_ops.delete_dashboard(service, db, "d1", GrafanaUserScope("u1", "t1", [])) is True
-    assert dashboard_ops.toggle_dashboard_hidden(db, "missing", "u1", "t1", True) is False
+    assert dashboard_ops.toggle_dashboard_hidden(
+        db,
+        "missing",
+        GrafanaUserScope("u1", "t1", []),
+        HiddenToggleParams(hidden=True),
+    ) is False
 
 
 @pytest.mark.asyncio

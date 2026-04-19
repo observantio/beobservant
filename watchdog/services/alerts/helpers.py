@@ -15,7 +15,11 @@ from fastapi import HTTPException, Request, status
 
 from config import config
 from custom_types.json import JSONDict, JSONValue
-from middleware.dependencies import enforce_header_token, enforce_public_endpoint_security
+from middleware.dependencies import (
+    PublicEndpointSecurityConfig,
+    enforce_header_token,
+    enforce_public_endpoint_security,
+)
 from models.access.auth_models import Permission, TokenData
 from services.notifier_proxy_service import NotifierForwardRequest, notifier_proxy_service
 
@@ -41,15 +45,13 @@ def _perms_incidents(p: str, m: str) -> Optional[Set[str]]:
 def _perms_silences(p: str, m: str) -> Optional[Set[str]]:
     if not p.startswith("/silences"):
         return None
-    if m == "GET":
-        return {Permission.READ_SILENCES.value}
-    if m == "POST":
-        return {Permission.CREATE_SILENCES.value, Permission.WRITE_ALERTS.value}
-    if m == "PUT":
-        return {Permission.UPDATE_SILENCES.value, Permission.WRITE_ALERTS.value}
-    if m == "DELETE":
-        return {Permission.DELETE_SILENCES.value}
-    return None
+    mapping: dict[str, Set[str]] = {
+        "GET": {Permission.READ_SILENCES.value},
+        "POST": {Permission.CREATE_SILENCES.value, Permission.WRITE_ALERTS.value},
+        "PUT": {Permission.UPDATE_SILENCES.value, Permission.WRITE_ALERTS.value},
+        "DELETE": {Permission.DELETE_SILENCES.value},
+    }
+    return mapping.get(m)
 
 
 def _perms_rules(p: str, m: str) -> Optional[Set[str]]:
@@ -57,29 +59,25 @@ def _perms_rules(p: str, m: str) -> Optional[Set[str]]:
         return {Permission.CREATE_RULES.value, Permission.WRITE_ALERTS.value}
     if not p.startswith("/rules"):
         return None
-    if m == "GET":
-        return {Permission.READ_RULES.value}
-    if m == "POST":
-        return {Permission.CREATE_RULES.value, Permission.WRITE_ALERTS.value, Permission.TEST_RULES.value}
-    if m == "PUT":
-        return {Permission.UPDATE_RULES.value, Permission.WRITE_ALERTS.value}
-    if m == "DELETE":
-        return {Permission.DELETE_RULES.value}
-    return None
+    mapping: dict[str, Set[str]] = {
+        "GET": {Permission.READ_RULES.value},
+        "POST": {Permission.CREATE_RULES.value, Permission.WRITE_ALERTS.value, Permission.TEST_RULES.value},
+        "PUT": {Permission.UPDATE_RULES.value, Permission.WRITE_ALERTS.value},
+        "DELETE": {Permission.DELETE_RULES.value},
+    }
+    return mapping.get(m)
 
 
 def _perms_channels(p: str, m: str) -> Optional[Set[str]]:
     if not p.startswith("/channels"):
         return None
-    if m == "GET":
-        return {Permission.READ_CHANNELS.value}
-    if m == "POST":
-        return {Permission.CREATE_CHANNELS.value, Permission.WRITE_CHANNELS.value, Permission.TEST_CHANNELS.value}
-    if m == "PUT":
-        return {Permission.UPDATE_CHANNELS.value, Permission.WRITE_CHANNELS.value}
-    if m == "DELETE":
-        return {Permission.DELETE_CHANNELS.value}
-    return None
+    mapping: dict[str, Set[str]] = {
+        "GET": {Permission.READ_CHANNELS.value},
+        "POST": {Permission.CREATE_CHANNELS.value, Permission.WRITE_CHANNELS.value, Permission.TEST_CHANNELS.value},
+        "PUT": {Permission.UPDATE_CHANNELS.value, Permission.WRITE_CHANNELS.value},
+        "DELETE": {Permission.DELETE_CHANNELS.value},
+    }
+    return mapping.get(m)
 
 
 def _perms_jira_integrations(p: str, m: str) -> Optional[Set[str]]:
@@ -325,10 +323,12 @@ def webhook_route(upstream_suffix: str, audit_action: str, scope: str) -> Callab
     async def handler(request: Request) -> object:
         enforce_public_endpoint_security(
             request,
-            scope=scope,
-            limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
-            window_seconds=60,
-            allowlist=config.WEBHOOK_IP_ALLOWLIST,
+            PublicEndpointSecurityConfig(
+                scope=scope,
+                limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
+                window_seconds=60,
+                allowlist=config.WEBHOOK_IP_ALLOWLIST,
+            ),
         )
         enforce_header_token(
             request,

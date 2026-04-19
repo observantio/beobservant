@@ -108,7 +108,7 @@ async def test_save_dashboard_from_grafana_ui_falls_back_to_create_when_update_r
 
     async def _create_dashboard(**kwargs):
         calls["create"] += 1
-        assert kwargs["options"].visibility == "private"
+        assert kwargs["request"].options.visibility == "private"
         return {"uid": "created-from-fallback", "status": "created"}
 
     monkeypatch.setattr(dashboards.proxy, "update_dashboard", _update_dashboard)

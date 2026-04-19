@@ -19,7 +19,13 @@ os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 
 from db_models import Base, GrafanaFolder, Tenant, User
 from services.grafana import folder_ops
-from services.grafana.grafana_bundles import FolderCreateOptions, FolderUpdateOptions, GrafanaUserScope
+from services.grafana.grafana_bundles import (
+    FolderCreateOptions,
+    FolderCreateRequest,
+    FolderUpdateOptions,
+    FolderUpdateRequest,
+    GrafanaUserScope,
+)
 from services.grafana.grafana_service import GrafanaAPIError
 
 
@@ -92,13 +98,15 @@ async def test_update_folder_maps_412_to_409():
         await folder_ops.update_folder(
             service,
             db,
-            "f1",
-            GrafanaUserScope("u1", "t1", []),
-            FolderUpdateOptions(
-                title="Ops",
-                visibility="private",
-                shared_group_ids=[],
-                is_admin=False,
+            FolderUpdateRequest(
+                uid="f1",
+                scope=GrafanaUserScope("u1", "t1", []),
+                options=FolderUpdateOptions(
+                    title="Ops",
+                    visibility="private",
+                    shared_group_ids=[],
+                    is_admin=False,
+                ),
             ),
         )
 
@@ -131,12 +139,14 @@ async def test_create_folder_maps_grafana_400_to_http_400_with_message():
         await folder_ops.create_folder(
             service,
             db,
-            "Duplicate title",
-            GrafanaUserScope("u1", "t1", []),
-            FolderCreateOptions(
-                visibility="private",
-                shared_group_ids=[],
-                is_admin=False,
+            FolderCreateRequest(
+                title="Duplicate title",
+                scope=GrafanaUserScope("u1", "t1", []),
+                options=FolderCreateOptions(
+                    visibility="private",
+                    shared_group_ids=[],
+                    is_admin=False,
+                ),
             ),
         )
 

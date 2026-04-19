@@ -104,6 +104,14 @@ class ProxyAuthorizationContext:
     folder: GrafanaFolder | None
 
 
+@dataclass(frozen=True, slots=True)
+class ProxyResourceLookup:
+    dashboard_uid: str | None
+    datasource_uid: str | None
+    datasource_id: int | None
+    folder_uid: str | None
+
+
 def _normalize_cache_path(path: str) -> str:
     p = (path or "").strip().lower()
     if not p:
@@ -148,7 +156,7 @@ def _cache_get(token: str, method: str, path: str, tenant_id: str) -> Optional[D
     return None
 
 
-def _cache_set(token: str, method: str, path: str, tenant_id: str, headers: Dict[str, str]) -> None:
+def _cache_set(token: str, method: str, path: str, tenant_id: str, *, headers: Dict[str, str]) -> None:
     key = _cache_key(token, method, path, tenant_id)
     now = time.monotonic()
     with PROXY_AUTH_CACHE_LOCK:
@@ -223,29 +231,30 @@ def is_resource_accessible(
     *,
     require_write: bool = False,
 ) -> bool:
-    if not resource:
-        return False
-    if resource.tenant_id != token_data.tenant_id:
-        return False
-    hidden_by = getattr(resource, "hidden_by", None) or []
-    if token_data.user_id in hidden_by:
+    if (
+        not resource
+        or resource.tenant_id != token_data.tenant_id
+        or token_data.user_id in (getattr(resource, "hidden_by", None) or [])
+    ):
         return False
     if resource.created_by == token_data.user_id:
         return True
-    if not require_write and (
-        bool(getattr(resource, "is_default", False)) or bool(getattr(resource, "read_only", False))
-    ):
-        return True
+
     if require_write:
         return False
-    visibility = getattr(resource, "visibility", "private") or "private"
-    if visibility == "tenant":
+
+    is_system_resource = bool(getattr(resource, "is_default", False)) or bool(getattr(resource, "read_only", False))
+    if is_system_resource:
         return True
+
+    visibility = getattr(resource, "visibility", "private") or "private"
     if visibility == "group":
         user_group_ids = set(token_data.group_ids or [])
         resource_group_ids = {g.id for g in (resource.shared_groups or [])}
-        return bool(user_group_ids & resource_group_ids)
-    return False
+        accessible = bool(user_group_ids & resource_group_ids)
+    else:
+        accessible = visibility == "tenant"
+    return accessible
 
 
 def extract_dashboard_uid(path: str) -> Optional[str]:
@@ -333,11 +342,25 @@ def _headers_for(token_data: TokenData) -> Dict[str, str]:
 def _db_load_context(
     auth_service: DatabaseAuthService,
     token_data: TokenData,
-    dashboard_uid: Optional[str],
-    datasource_uid: Optional[str],
-    datasource_id: Optional[int],
-    folder_uid: Optional[str],
+    lookup: ProxyResourceLookup | str | None,
 ) -> tuple[User, ProxyAuthorizationContext]:
+    if isinstance(lookup, ProxyResourceLookup):
+        effective_lookup = lookup
+    elif isinstance(lookup, str):
+        effective_lookup = ProxyResourceLookup(
+            dashboard_uid=lookup,
+            datasource_uid=None,
+            datasource_id=None,
+            folder_uid=None,
+        )
+    else:
+        effective_lookup = ProxyResourceLookup(
+            dashboard_uid=None,
+            datasource_uid=None,
+            datasource_id=None,
+            folder_uid=None,
+        )
+
     with get_db_session() as s:
         orm_user = (
             s.query(User)
@@ -358,7 +381,12 @@ def _db_load_context(
         permissions = [str(permission) for permission in auth_service.collect_permissions(orm_user)]
         group_ids = [str(group.id) for group in (orm_user.groups or []) if str(getattr(group, "id", "")).strip()]
 
-        if not (dashboard_uid or datasource_uid or datasource_id is not None or folder_uid):
+        if not (
+            effective_lookup.dashboard_uid
+            or effective_lookup.datasource_uid
+            or effective_lookup.datasource_id is not None
+            or effective_lookup.folder_uid
+        ):
             return orm_user, ProxyAuthorizationContext(
                 org_id=org_id,
                 permissions=permissions,
@@ -374,12 +402,12 @@ def _db_load_context(
                 s.query(GrafanaDashboard)
                 .options(joinedload(GrafanaDashboard.shared_groups))
                 .filter(
-                    GrafanaDashboard.grafana_uid == dashboard_uid,
+                    GrafanaDashboard.grafana_uid == effective_lookup.dashboard_uid,
                     GrafanaDashboard.tenant_id == token_data.tenant_id,
                 )
                 .first()
             )
-            if dashboard_uid
+            if effective_lookup.dashboard_uid
             else None
         )
 
@@ -388,12 +416,12 @@ def _db_load_context(
                 s.query(GrafanaDatasource)
                 .options(joinedload(GrafanaDatasource.shared_groups))
                 .filter(
-                    GrafanaDatasource.grafana_uid == datasource_uid,
+                    GrafanaDatasource.grafana_uid == effective_lookup.datasource_uid,
                     GrafanaDatasource.tenant_id == token_data.tenant_id,
                 )
                 .first()
             )
-            if datasource_uid
+            if effective_lookup.datasource_uid
             else None
         )
 
@@ -402,16 +430,16 @@ def _db_load_context(
                 s.query(GrafanaDatasource)
                 .options(joinedload(GrafanaDatasource.shared_groups))
                 .filter(
-                    GrafanaDatasource.grafana_id == datasource_id,
+                    GrafanaDatasource.grafana_id == effective_lookup.datasource_id,
                     GrafanaDatasource.tenant_id == token_data.tenant_id,
                 )
                 .first()
             )
-            if datasource_id is not None
+            if effective_lookup.datasource_id is not None
             else None
         )
 
-        effective_folder_uid = folder_uid or (getattr(dash, "folder_uid", None) if dash else None)
+        effective_folder_uid = effective_lookup.folder_uid or (getattr(dash, "folder_uid", None) if dash else None)
         folder = (
             (
                 s.query(GrafanaFolder)
@@ -667,6 +695,7 @@ async def authorize_proxy_request(
     service: GrafanaProxyClient,
     request: Request,
     auth_service: DatabaseAuthService,
+    *,
     token: Optional[str] = None,
     orig: Optional[str] = None,
 ) -> Dict[str, str]:
@@ -692,7 +721,7 @@ async def authorize_proxy_request(
 
     if _is_static_path(original_path):
         headers = _headers_for(token_data)
-        _cache_set(token_to_verify, original_method, original_path, str(token_data.tenant_id), headers)
+        _cache_set(token_to_verify, original_method, original_path, str(token_data.tenant_id), headers=headers)
         return headers
 
     dashboard_uid = extract_dashboard_uid(original_path)
@@ -704,10 +733,12 @@ async def authorize_proxy_request(
         _db_load_context,
         auth_service,
         token_data,
-        dashboard_uid,
-        datasource_uid,
-        datasource_id,
-        folder_uid,
+        ProxyResourceLookup(
+            dashboard_uid=dashboard_uid,
+            datasource_uid=datasource_uid,
+            datasource_id=datasource_id,
+            folder_uid=folder_uid,
+        ),
     )
 
     _apply_proxy_user_context(token_data, context)
@@ -739,5 +770,5 @@ async def authorize_proxy_request(
     _authorize_folder_access(token_data, folder_uid=folder_uid, folder_obj=folder_obj or context.folder)
 
     headers = _headers_for(token_data)
-    _cache_set(token_to_verify, original_method, original_path, str(token_data.tenant_id), headers)
+    _cache_set(token_to_verify, original_method, original_path, str(token_data.tenant_id), headers=headers)
     return headers

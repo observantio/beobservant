@@ -13,6 +13,7 @@ from db_models import User
 from models.access.auth_models import Token
 from custom_types.json import JSONDict
 from services.database_auth.shared import sync_active_user_from_claims
+from services.auth.oidc_service import OidcTransactionStartRequest
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -304,18 +305,16 @@ def exchange_oidc_authorization_code(
 
 def get_oidc_authorization_url(
     service: DatabaseAuthService,
-    redirect_uri: str,
-    state: Optional[str] = None,
-    nonce: Optional[str] = None,
-    code_challenge: Optional[str] = None,
-    code_challenge_method: Optional[str] = None,
+    request: "OidcAuthorizationUrlRequest",
 ) -> Dict[str, str]:
     result = service.oidc_service.start_authorization_transaction(
-        redirect_uri=redirect_uri,
-        state=state,
-        nonce=nonce,
-        code_challenge=code_challenge,
-        code_challenge_method=code_challenge_method,
+        request=OidcTransactionStartRequest(
+            redirect_uri=request.redirect_uri,
+            state=request.state,
+            nonce=request.nonce,
+            code_challenge=request.code_challenge,
+            code_challenge_method=request.code_challenge_method,
+        )
     )
     if not isinstance(result, dict):
         raise ValueError("OIDC authorization transaction did not return a mapping")
@@ -325,6 +324,15 @@ def get_oidc_authorization_url(
         raise ValueError("OIDC authorization transaction did not return an authorization_url")
 
     return {str(key): str(value) for key, value in result.items()}
+
+
+@dataclass(frozen=True, slots=True)
+class OidcAuthorizationUrlRequest:
+    redirect_uri: str
+    state: Optional[str] = None
+    nonce: Optional[str] = None
+    code_challenge: Optional[str] = None
+    code_challenge_method: Optional[str] = None
 
 
 def provision_external_user(

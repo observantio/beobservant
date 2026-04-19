@@ -89,14 +89,25 @@ async def test_loki_router_endpoints_and_timeout_wrapper(monkeypatch):
     async def fake_query_logs(log_query, tenant_id=None):
         return {"status": "success", "data": {"query": log_query.query, "tenant": tenant_id}}
 
-    async def fake_query_logs_instant(query, time, tenant_id=None, limit=None):
-        return {"status": "success", "data": {"query": query, "time": time, "tenant": tenant_id, "limit": limit}}
+    async def fake_query_logs_instant(params, tenant_id=None):
+        return {
+            "status": "success",
+            "data": {
+                "query": params.query,
+                "time": params.at_time,
+                "tenant": tenant_id,
+                "limit": params.limit,
+            },
+        }
 
     async def fake_get_labels(start, end, tenant_id=None):
         return {"status": "success", "data": [str(start), str(end), tenant_id]}
 
-    async def fake_get_label_values(label, start, end, query, tenant_id=None):
-        return {"status": "success", "data": [label, str(start), str(end), query or "", tenant_id]}
+    async def fake_get_label_values(params, tenant_id=None):
+        return {
+            "status": "success",
+            "data": [params.label, str(params.start), str(params.end), params.query or "", tenant_id],
+        }
 
     async def fake_search_logs_by_pattern(params):
         return {"status": "success", "data": asdict(params)}
@@ -104,11 +115,11 @@ async def test_loki_router_endpoints_and_timeout_wrapper(monkeypatch):
     async def fake_filter_logs(params):
         return {"status": "success", "data": asdict(params)}
 
-    async def fake_aggregate_logs(query, start, end, step, tenant_id=None):
-        return {"query": query, "step": step, "tenant": tenant_id}
+    async def fake_aggregate_logs(params, tenant_id=None):
+        return {"query": params.query, "step": params.step, "tenant": tenant_id}
 
-    async def fake_get_log_volume(query, start, end, step, tenant_id=None):
-        return {"query": query, "step": step, "tenant": tenant_id}
+    async def fake_get_log_volume(params, tenant_id=None):
+        return {"query": params.query, "step": params.step, "tenant": tenant_id}
 
     monkeypatch.setattr(loki_router.loki_service, "query_logs", fake_query_logs)
     monkeypatch.setattr(loki_router.loki_service, "query_logs_instant", fake_query_logs_instant)
@@ -121,43 +132,48 @@ async def test_loki_router_endpoints_and_timeout_wrapper(monkeypatch):
 
     assert (
         await loki_router.query_logs(
-            _request(),
+            "tenant",
             loki_router.QueryLogsCoreParams('{app="api"}', 5, LogDirection.FORWARD),
             loki_router.QueryLogsRangeParams(1, 2, 15),
-            current_user=current_user,
         )
     )["data"]["tenant"] == "tenant"
-    assert (await loki_router.query_logs_instant(_request(), query="rate", time=1, limit=2, current_user=current_user))[
-        "data"
-    ]["limit"] == 2
-    assert (await loki_router.get_labels(_request(), start=1, end=2, current_user=current_user))["data"][2] == "tenant"
+    assert (
+        await loki_router.query_logs_instant("tenant", loki_router.InstantQueryParams(query="rate", time=1, limit=2))
+    )["data"]["limit"] == 2
+    assert (await loki_router.get_labels("tenant", start=1, end=2))["data"][2] == "tenant"
     assert (
         await loki_router.get_label_values(
-            _request(), label="service", start=1, end=2, query='{job="api"}', current_user=current_user
+            "tenant",
+            label="service",
+            label_values_params=loki_router.LabelValuesParams(start=1, end=2, query='{job="api"}'),
         )
     )["data"][0] == "service"
     assert (
         await loki_router.search_logs(
-            _request(),
+            "tenant",
             LogSearchRequest(pattern="error", labels={"job": "api"}, start=1, end=2, limit=5),
-            current_user=current_user,
         )
     )["data"]["pattern"] == "error"
     assert (
         await loki_router.filter_logs(
-            _request(),
+            "tenant",
             LogFilterRequest(labels={"job": "api"}, filters=["error"], start=1, end=2, limit=5),
-            current_user=current_user,
         )
     )["data"]["filters"] == ["error"]
     assert (
         await loki_router.aggregate_logs(
-            _request(), query="sum(rate())", start=1, end=2, step=60, current_user=current_user
+            "tenant",
+            query_params=loki_router.AggregateQueryParams(query="sum(rate())", step=60),
+            start=1,
+            end=2,
         )
     )["step"] == 60
     assert (
         await loki_router.get_log_volume(
-            _request(), query='{job="api"}', start=1, end=2, step=300, current_user=current_user
+            "tenant",
+            query_params=loki_router.VolumeQueryParams(query='{job="api"}', step=300),
+            start=1,
+            end=2,
         )
     )["tenant"] == "tenant"
 
@@ -247,9 +263,11 @@ async def test_resolver_router_remaining_wrappers_and_helpers(monkeypatch):
 
     listed = await resolver_router.list_analyze_jobs(
         _request("/api/resolver/analyze/jobs"),
-        status_filter=AnalyzeJobStatus.RUNNING,
-        limit=10,
-        cursor="next",
+        params_in=resolver_router.AnalyzeJobQueryParams(
+            status_filter=AnalyzeJobStatus.RUNNING,
+            limit=10,
+            cursor="next",
+        ),
         current_user=current_user,
     )
     assert listed.next_cursor == "cursor-1"

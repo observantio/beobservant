@@ -53,16 +53,11 @@ def _ensure_dict(payload: object) -> JSONDict:
 def _coerce_int(value: object, default: int = 0) -> int:
     if value is None or value == "":
         return default
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if not isinstance(value, str):
+    raw = value.strip() if isinstance(value, str) else value
+    if not isinstance(raw, (bool, int, float, str)):
         return default
     try:
-        return int(value)
+        return int(raw)
     except (TypeError, ValueError):
         return default
 
@@ -78,13 +73,14 @@ def _coerce_bool(value: object, default: bool = False) -> bool:
         return value
     if isinstance(value, (int, float)):
         return bool(value)
+    parsed = default
     if isinstance(value, str):
         v = value.strip().lower()
         if v in {"1", "true", "t", "yes", "y", "on"}:
-            return True
-        if v in {"0", "false", "f", "no", "n", "off"}:
-            return False
-    return default
+            parsed = True
+        elif v in {"0", "false", "f", "no", "n", "off"}:
+            parsed = False
+    return parsed
 
 
 def _dashboard_from_payload(payload: JSONDict) -> Dashboard:

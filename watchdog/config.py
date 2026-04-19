@@ -107,7 +107,7 @@ def _slug_token(value: str | None, default: str) -> str:
     return collapsed or default
 
 
-def _populate_config_services_and_http(cfg: "Config") -> None:
+def _populate_runtime_basics(cfg: "Config") -> None:
     cfg.APP_ENV = _env_name()
     cfg.IS_PRODUCTION = _is_production_env()
 
@@ -116,7 +116,11 @@ def _populate_config_services_and_http(cfg: "Config") -> None:
     cfg.LOG_LEVEL = os.getenv("LOG_LEVEL", "info")
     cfg.ENABLE_API_DOCS = _to_bool(os.getenv("ENABLE_API_DOCS"), default=not cfg.IS_PRODUCTION)
     cfg.SKIP_STARTUP_DB_INIT = _to_bool(os.getenv("SKIP_STARTUP_DB_INIT"), default=False)
+    cfg.DATA_ENCRYPTION_KEY = os.getenv("DATA_ENCRYPTION_KEY")
+    cfg.DATABASE_URL = os.getenv("DATABASE_URL", cfg.EXAMPLE_DATABASE_URL)
 
+
+def _populate_service_endpoints(cfg: "Config") -> None:
     cfg.TEMPO_URL = os.getenv("TEMPO_URL", "http://tempo:3200")
     cfg.LOKI_URL = os.getenv("LOKI_URL", "http://loki:3100")
     cfg.ALERTMANAGER_URL = os.getenv("ALERTMANAGER_URL", "http://alertmanager:9093")
@@ -124,15 +128,12 @@ def _populate_config_services_and_http(cfg: "Config") -> None:
     cfg.RESOLVER_URL = os.getenv("RESOLVER_URL", "http://resolver:4322")
     cfg.GRAFANA_URL = os.getenv("GRAFANA_URL", "http://grafana:3000")
     cfg.MIMIR_URL = os.getenv("MIMIR_URL", "http://mimir:9009")
-
     cfg.GRAFANA_USERNAME = os.getenv("GRAFANA_USERNAME", "admin")
     cfg.GRAFANA_PASSWORD = os.getenv("GRAFANA_PASSWORD", "admin")
     cfg.GRAFANA_API_KEY = os.getenv("GRAFANA_API_KEY")
 
-    cfg.DATA_ENCRYPTION_KEY = os.getenv("DATA_ENCRYPTION_KEY")
 
-    cfg.DATABASE_URL = os.getenv("DATABASE_URL", cfg.EXAMPLE_DATABASE_URL)
-
+def _populate_http_client_settings(cfg: "Config") -> None:
     cfg.DEFAULT_TIMEOUT = float(os.getenv("DEFAULT_TIMEOUT", "30.0"))
     cfg.NOTIFIER_TIMEOUT_SECONDS = float(os.getenv("NOTIFIER_TIMEOUT_SECONDS", "15.0"))
     cfg.RESOLVER_TIMEOUT_SECONDS = float(os.getenv("RESOLVER_TIMEOUT_SECONDS", "20.0"))
@@ -140,11 +141,12 @@ def _populate_config_services_and_http(cfg: "Config") -> None:
     cfg.RETRY_BACKOFF = float(os.getenv("RETRY_BACKOFF", "1.0"))
     cfg.RETRY_MAX_BACKOFF = float(os.getenv("RETRY_MAX_BACKOFF", "8.0"))
     cfg.RETRY_JITTER = float(os.getenv("RETRY_JITTER", "0.1"))
-
     cfg.HTTP_CLIENT_MAX_CONNECTIONS = int(os.getenv("HTTP_CLIENT_MAX_CONNECTIONS", "100"))
     cfg.HTTP_CLIENT_MAX_KEEPALIVE_CONNECTIONS = int(os.getenv("HTTP_CLIENT_MAX_KEEPALIVE_CONNECTIONS", "40"))
     cfg.HTTP_CLIENT_KEEPALIVE_EXPIRY = float(os.getenv("HTTP_CLIENT_KEEPALIVE_EXPIRY", "30"))
 
+
+def _populate_observability_query_settings(cfg: "Config") -> None:
     cfg.LOKI_FALLBACK_CONCURRENCY = int(os.getenv("LOKI_FALLBACK_CONCURRENCY", "4"))
     cfg.LOKI_MAX_FALLBACK_QUERIES = int(os.getenv("LOKI_MAX_FALLBACK_QUERIES", "4"))
     cfg.LOKI_VOLUME_CACHE_TTL_SECONDS = int(os.getenv("LOKI_VOLUME_CACHE_TTL_SECONDS", "30"))
@@ -153,14 +155,14 @@ def _populate_config_services_and_http(cfg: "Config") -> None:
     cfg.TEMPO_COUNT_QUERY_CONCURRENCY = int(os.getenv("TEMPO_COUNT_QUERY_CONCURRENCY", "4"))
     cfg.TEMPO_USE_METRICS_FOR_COUNT = _to_bool(os.getenv("TEMPO_USE_METRICS_FOR_COUNT"), default=True)
     cfg.SERVICE_CACHE_TTL_SECONDS = int(os.getenv("SERVICE_CACHE_TTL_SECONDS", "30"))
-
     cfg.CORS_ORIGINS = _to_list(os.getenv("CORS_ORIGINS"), default=["*"])
     cfg.CORS_ALLOW_CREDENTIALS = _to_bool(os.getenv("CORS_ALLOW_CREDENTIALS"), default=True)
-
     cfg.MAX_QUERY_LIMIT = int(os.getenv("MAX_QUERY_LIMIT", "1000"))
     cfg.DEFAULT_QUERY_LIMIT = int(os.getenv("DEFAULT_QUERY_LIMIT", "20"))
     cfg.MAX_API_KEYS_PER_USER = int(os.getenv("MAX_API_KEYS_PER_USER", "10"))
 
+
+def _populate_quota_settings(cfg: "Config") -> None:
     cfg.QUOTA_NATIVE_ENABLED = _to_bool(os.getenv("QUOTA_NATIVE_ENABLED") or None, default=True)
     cfg.QUOTA_NATIVE_TIMEOUT_SECONDS = float(os.getenv("QUOTA_NATIVE_TIMEOUT_SECONDS", "5.0"))
     cfg.LOKI_QUOTA_NATIVE_PATH = (os.getenv("LOKI_QUOTA_NATIVE_PATH") or "/loki/api/v1/status/limits").strip()
@@ -170,7 +172,6 @@ def _populate_config_services_and_http(cfg: "Config") -> None:
     cfg.TEMPO_QUOTA_NATIVE_LIMIT_FIELD = (os.getenv("TEMPO_QUOTA_NATIVE_LIMIT_FIELD") or "max_traces_per_user").strip()
     cfg.TEMPO_QUOTA_NATIVE_USED_FIELD = (os.getenv("TEMPO_QUOTA_NATIVE_USED_FIELD") or "").strip()
     cfg.QUOTA_USAGE_WINDOW_SECONDS = int(os.getenv("QUOTA_USAGE_WINDOW_SECONDS", "3600"))
-
     cfg.QUOTA_PROMETHEUS_ENABLED = _to_bool(os.getenv("QUOTA_PROMETHEUS_ENABLED") or None, default=True)
     cfg.QUOTA_PROMETHEUS_TIMEOUT_SECONDS = float(os.getenv("QUOTA_PROMETHEUS_TIMEOUT_SECONDS", "5.0"))
     cfg.QUOTA_PROMETHEUS_BASE_URL = (os.getenv("QUOTA_PROMETHEUS_BASE_URL") or cfg.MIMIR_URL).strip()
@@ -179,10 +180,11 @@ def _populate_config_services_and_http(cfg: "Config") -> None:
     cfg.TEMPO_QUOTA_PROM_LIMIT_QUERY = (os.getenv("TEMPO_QUOTA_PROM_LIMIT_QUERY") or "").strip()
     cfg.TEMPO_QUOTA_PROM_USED_QUERY = (os.getenv("TEMPO_QUOTA_PROM_USED_QUERY") or "").strip()
 
+
+def _populate_gateway_limits(cfg: "Config") -> None:
     cfg.MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", "1048576"))
     cfg.MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "200"))
     cfg.CONCURRENCY_ACQUIRE_TIMEOUT = float(os.getenv("CONCURRENCY_ACQUIRE_TIMEOUT", "1.0"))
-
     cfg.RATE_LIMIT_USER_PER_MINUTE = int(os.getenv("RATE_LIMIT_USER_PER_MINUTE", "600"))
     cfg.RATE_LIMIT_PUBLIC_PER_MINUTE = int(os.getenv("RATE_LIMIT_PUBLIC_PER_MINUTE", "120"))
     cfg.RATE_LIMIT_LOGIN_PER_MINUTE = int(os.getenv("RATE_LIMIT_LOGIN_PER_MINUTE", "10"))
@@ -192,6 +194,15 @@ def _populate_config_services_and_http(cfg: "Config") -> None:
     cfg.RATE_LIMIT_REDIS_URL = os.getenv("RATE_LIMIT_REDIS_URL", "").strip()
     cfg.TTL_CACHE_REDIS_URL = os.getenv("TTL_CACHE_REDIS_URL", "").strip()
     cfg.TTL_CACHE_KEY_PREFIX = os.getenv("TTL_CACHE_KEY_PREFIX", "watchdog:ttl").strip()
+
+
+def _populate_config_services_and_http(cfg: "Config") -> None:
+    _populate_runtime_basics(cfg)
+    _populate_service_endpoints(cfg)
+    _populate_http_client_settings(cfg)
+    _populate_observability_query_settings(cfg)
+    _populate_quota_settings(cfg)
+    _populate_gateway_limits(cfg)
 
 
 def _populate_config_network_auth_and_limits(cfg: "Config") -> None:
@@ -635,7 +646,7 @@ class Config:
                     self.JWT_ALGORITHM,
                 )
 
-    def validate(self) -> None:
+    def _validate_identity_and_security(self) -> None:
         if self.DATABASE_URL == self.EXAMPLE_DATABASE_URL or "changeme123" in self.DATABASE_URL:
             raise ValueError(
                 "Unsafe DATABASE_URL detected. Set DATABASE_URL to a non-example credentialed connection string."
@@ -682,6 +693,7 @@ class Config:
         if wildcard_enabled and self.CORS_ALLOW_CREDENTIALS:
             raise ValueError("CORS_ORIGINS cannot contain '*' when CORS_ALLOW_CREDENTIALS is enabled.")
 
+    def _validate_context_and_prod_secrets(self) -> None:
         if self.NOTIFIER_CONTEXT_ALGORITHM not in self.ALLOWED_CONTEXT_ALGORITHMS:
             raise ValueError(
                 f"Unsupported NOTIFIER_CONTEXT_ALGORITHM '{self.NOTIFIER_CONTEXT_ALGORITHM}'. "
@@ -712,6 +724,7 @@ class Config:
             if self.ALLOWLIST_FAIL_OPEN:
                 raise ValueError("ALLOWLIST_FAIL_OPEN must be false in production")
 
+    def _validate_operational_limits(self) -> None:
         if self.MAX_QUERY_LIMIT <= 0:
             raise ValueError("MAX_QUERY_LIMIT must be greater than 0")
         if self.DEFAULT_QUERY_LIMIT <= 0:
@@ -756,6 +769,11 @@ class Config:
             raise ValueError("PASSWORD_RESET_INTERVAL_DAYS must be >= 0")
         if self.TEMP_PASSWORD_LENGTH < 12:
             raise ValueError("TEMP_PASSWORD_LENGTH must be >= 12")
+
+    def validate(self) -> None:
+        self._validate_identity_and_security()
+        self._validate_context_and_prod_secrets()
+        self._validate_operational_limits()
 
 
 class Constants:

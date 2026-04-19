@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from config import config
 from middleware.dependencies import (
+    PublicEndpointSecurityConfig,
     apply_scoped_rate_limit,
     enforce_public_endpoint_security,
     get_current_user_or_mfa_setup,
@@ -68,10 +69,12 @@ webhook_router.add_api_route(
 async def public_rules_proxy(request: Request) -> Any:
     enforce_public_endpoint_security(
         request,
-        scope="alertmanager_public_rules",
-        limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
-        window_seconds=60,
-        allowlist=config.AUTH_PUBLIC_IP_ALLOWLIST,
+        PublicEndpointSecurityConfig(
+            scope="alertmanager_public_rules",
+            limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
+            window_seconds=60,
+            allowlist=config.AUTH_PUBLIC_IP_ALLOWLIST,
+        ),
     )
     return await notifier_proxy_service.forward(
         NotifierForwardRequest(

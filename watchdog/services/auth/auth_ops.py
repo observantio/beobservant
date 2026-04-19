@@ -305,52 +305,45 @@ def update_password(
 
 
 def validate_otlp_token(service: DatabaseAuthService, token: str, *, suppress_errors: bool = True) -> Optional[str]:
-    if not token:
-        return None
+    resolved_key: Optional[str] = None
+    token_str = str(token or "").strip()
 
-    token_str = str(token).strip()
-    if not token_str:
-        return None
-    if len(token_str) > 4096:
-        return None
+    if token_str and len(token_str) <= 4096:
+        default_token = getattr(config, "DEFAULT_OTLP_TOKEN", None)
+        try:
+            if default_token and secrets.compare_digest(token_str, str(default_token)):
+                resolved_key = config.DEFAULT_ORG_ID
+        except TypeError as exc:
+            # compare_digest rejects non-ASCII strings for str inputs.
+            if not suppress_errors:
+                raise ValueError("Invalid token") from exc
 
-    default_token = getattr(config, "DEFAULT_OTLP_TOKEN", None)
-    try:
-        if default_token and secrets.compare_digest(token_str, str(default_token)):
-            return config.DEFAULT_ORG_ID
-    except TypeError as exc:
-        # compare_digest rejects non-ASCII strings for str inputs.
-        if not suppress_errors:
-            raise ValueError("Invalid token") from exc
-        return None
+        if resolved_key is None:
+            token_hash = service.hash_otlp_token(token_str)
+            try:
+                with get_db_session() as db:
+                    api_key = (
+                        db.query(UserApiKey)
+                        .join(User, User.id == UserApiKey.user_id)
+                        .join(Tenant, Tenant.id == User.tenant_id)
+                        .filter(
+                            UserApiKey.otlp_token_hash == token_hash,
+                            User.is_active.is_(True),
+                            Tenant.is_active.is_(True),
+                        )
+                        .first()
+                    )
+                    if api_key:
+                        resolved_key = api_key.key
+            except SQLAlchemyError as exc:
+                if not suppress_errors:
+                    raise
+                service.logger.warning("OTLP token validation failed due to database error")
+                service.logger.debug("OTLP validation error detail: %s", exc)
+            except RuntimeError as exc:
+                if not suppress_errors:
+                    raise
+                service.logger.warning("OTLP token validation failed due to internal error")
+                service.logger.debug("OTLP validation error detail: %s", exc)
 
-    token_hash = service.hash_otlp_token(token_str)
-
-    try:
-        with get_db_session() as db:
-            api_key = (
-                db.query(UserApiKey)
-                .join(User, User.id == UserApiKey.user_id)
-                .join(Tenant, Tenant.id == User.tenant_id)
-                .filter(
-                    UserApiKey.otlp_token_hash == token_hash,
-                    User.is_active.is_(True),
-                    Tenant.is_active.is_(True),
-                )
-                .first()
-            )
-            if not api_key:
-                return None
-            return api_key.key
-    except SQLAlchemyError as exc:
-        if not suppress_errors:
-            raise
-        service.logger.warning("OTLP token validation failed due to database error")
-        service.logger.debug("OTLP validation error detail: %s", exc)
-        return None
-    except RuntimeError as exc:
-        if not suppress_errors:
-            raise
-        service.logger.warning("OTLP token validation failed due to internal error")
-        service.logger.debug("OTLP validation error detail: %s", exc)
-        return None
+    return resolved_key

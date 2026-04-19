@@ -20,7 +20,13 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
-from services.auth.oidc_service import OIDCService, _json_dict, _looks_like_jwt
+from services.auth.oidc_service import (
+    OIDCService,
+    OidcAuthorizationUrlBuildRequest,
+    OidcTransactionStartRequest,
+    _json_dict,
+    _looks_like_jwt,
+)
 
 _oidc_module = importlib.import_module(OIDCService.__module__)
 
@@ -51,14 +57,22 @@ def test_oidc_small_helpers_and_authorization_validation(monkeypatch):
     monkeypatch.setattr(service, "_get_well_known", lambda: {"authorization_endpoint": "https://issuer/auth"})
     with pytest.raises(ValueError, match="Unsupported PKCE"):
         service.build_authorization_url(
-            "https://app/cb", "state", "nonce", code_challenge="x", code_challenge_method="bad"
+            OidcAuthorizationUrlBuildRequest(
+                redirect_uri="https://app/cb",
+                state="state",
+                nonce="nonce",
+                code_challenge="x",
+                code_challenge_method="bad",
+            )
         )
 
     with pytest.raises(ValueError, match="code_challenge_method requires code_challenge"):
         asyncio.run(
             service.start_authorization_transaction_async(
-                redirect_uri="https://app/cb",
-                code_challenge_method="S256",
+                OidcTransactionStartRequest(
+                    redirect_uri="https://app/cb",
+                    code_challenge_method="S256",
+                )
             )
         )
 
@@ -109,7 +123,13 @@ def test_oidc_well_known_jwks_and_exchange_paths(monkeypatch):
     assert service.fetch_userinfo("access") == {"sub": "1"}
     assert service.exchange_password("user", "pass")["access_token"] == "tok"
     assert service.exchange_authorization_code("code", "https://app/cb", code_verifier="verifier")["id_token"] == "id"
-    assert service.build_authorization_url("https://app/cb", "state", "nonce").startswith("https://issuer/auth?")
+    assert service.build_authorization_url(
+        OidcAuthorizationUrlBuildRequest(
+            redirect_uri="https://app/cb",
+            state="state",
+            nonce="nonce",
+        )
+    ).startswith("https://issuer/auth?")
     assert len(get_calls) >= 3
     assert len(post_calls) == 2
 
@@ -122,7 +142,13 @@ def test_oidc_exchange_and_fetch_error_paths(monkeypatch):
     with pytest.raises(ValueError, match="token endpoint"):
         service.exchange_authorization_code("code", "https://cb")
     with pytest.raises(ValueError, match="authorization endpoint"):
-        service.build_authorization_url("https://cb", "state", "nonce")
+        service.build_authorization_url(
+            OidcAuthorizationUrlBuildRequest(
+                redirect_uri="https://cb",
+                state="state",
+                nonce="nonce",
+            )
+        )
 
     monkeypatch.setattr(service, "_get_well_known", lambda: {"userinfo_endpoint": None})
     assert service.fetch_userinfo("access") is None
@@ -139,11 +165,13 @@ def test_oidc_transaction_error_paths(monkeypatch):
 
     created = asyncio.run(
         service.start_authorization_transaction_async(
-            redirect_uri="https://app/cb",
-            state="state1",
-            nonce="nonce1",
-            code_challenge="verifier",
-            code_challenge_method="plain",
+            OidcTransactionStartRequest(
+                redirect_uri="https://app/cb",
+                state="state1",
+                nonce="nonce1",
+                code_challenge="verifier",
+                code_challenge_method="plain",
+            )
         )
     )
     record = asyncio.run(
@@ -165,11 +193,13 @@ def test_oidc_transaction_error_paths(monkeypatch):
 
     created2 = asyncio.run(
         service.start_authorization_transaction_async(
-            redirect_uri="https://app/cb",
-            state="state2",
-            nonce="nonce2",
-            code_challenge="challenge",
-            code_challenge_method="plain",
+            OidcTransactionStartRequest(
+                redirect_uri="https://app/cb",
+                state="state2",
+                nonce="nonce2",
+                code_challenge="challenge",
+                code_challenge_method="plain",
+            )
         )
     )
     with pytest.raises(ValueError, match="Missing PKCE"):

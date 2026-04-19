@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Protocol
 import httpx
 
 from custom_types.json import JSONDict
-from services.loki.http_client import QueryParams
+from services.loki.http_client import LokiGetJsonRequest, QueryParams
 
 SERVICE_NAME_LABEL = "service.name"
 SERVICE_NAME_ALIAS = "service_name"
@@ -80,15 +80,7 @@ def build_volume_fallback_queries(query: str, max_candidates: int = 6) -> List[s
 
 
 class _LokiHttpClientLike(Protocol):
-    async def safe_get_json(
-        self,
-        client: httpx.AsyncClient,
-        url: str,
-        *,
-        params: QueryParams,
-        headers: Dict[str, str],
-        quiet: bool = False,
-    ) -> Optional[JSONDict]: ...
+    async def safe_get_json(self, request: LokiGetJsonRequest) -> Optional[JSONDict]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,11 +105,13 @@ async def run_fallback_queries(run: LokiFallbackQueryRun) -> Optional[JSONDict]:
     async def _query(candidate: str) -> Optional[JSONDict]:
         async with semaphore:
             payload = await run.http_client.safe_get_json(
-                run.client,
-                run.endpoint,
-                params={**run.base_params, "query": candidate},
-                headers=run.headers,
-                quiet=True,
+                LokiGetJsonRequest(
+                    client=run.client,
+                    url=run.endpoint,
+                    params={**run.base_params, "query": candidate},
+                    headers=run.headers,
+                    quiet=True,
+                )
             )
             return payload if isinstance(payload, dict) or payload is None else None
 

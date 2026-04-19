@@ -143,7 +143,15 @@ def test_role_permission_admin_and_rate_limit_delegate(monkeypatch):
     )
 
     calls = []
-    monkeypatch.setattr(auth_helper, "enforce_public_endpoint_security", lambda request, **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(
+        auth_helper,
+        "enforce_public_endpoint_security",
+        lambda _request, security_config: calls.append(security_config),
+    )
     monkeypatch.setattr(auth_helper.config, "AUTH_PUBLIC_IP_ALLOWLIST", ["127.0.0.1"])
     auth_helper.rate_limit_func(_request(), "scope-a", 5, 60)
-    assert calls == [{"scope": "scope-a", "limit": 5, "window_seconds": 60, "allowlist": ["127.0.0.1"]}]
+    assert len(calls) == 1
+    assert calls[0].scope == "scope-a"
+    assert calls[0].limit == 5
+    assert calls[0].window_seconds == 60
+    assert calls[0].allowlist == ["127.0.0.1"]

@@ -21,6 +21,7 @@ ensure_test_env()
 from config import config
 from services import database_auth_service as das
 from services.auth.actor_caps import AuthActorCaps
+from services.database_auth import auth as db_auth
 
 
 def _patch_sync(monkeypatch, obj, name, result, calls):
@@ -108,7 +109,10 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
     )
 
     assert svc.list_api_key_shares("owner", "tenant", "key") == [{"user_id": "u1"}]
-    assert svc.replace_api_key_shares("owner", "tenant", "key", ["u2"], group_ids=["g1"]) == [
+    assert svc.replace_api_key_shares(
+        "owner",
+        das.ApiKeyShareReplaceRequest(tenant_id="tenant", key_id="key", user_ids=["u2"], group_ids=["g1"]),
+    ) == [
         {"user_id": "u2"},
         {"user_id": "u3"},
     ]
@@ -165,13 +169,16 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "db_auth",
             "get_oidc_authorization_url",
             "get_oidc_authorization_url",
-            ("https://cb",),
-            {
-                "state": "st",
-                "nonce": "no",
-                "code_challenge": "cc",
-                "code_challenge_method": "S256",
-            },
+            (
+                db_auth.OidcAuthorizationUrlRequest(
+                    redirect_uri="https://cb",
+                    state="st",
+                    nonce="no",
+                    code_challenge="cc",
+                    code_challenge_method="S256",
+                ),
+            ),
+            {},
             {"authorization_url": "https://idp"},
         ),
         (
@@ -195,7 +202,15 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "db_oidc",
             "provision_oidc_user",
             "_provision_oidc_user",
-            ("db", "u@example.com", "user", "User", "sub"),
+            (
+                "db",
+                das.db_oidc.OidcProvisionProfile(
+                    email="u@example.com",
+                    preferred_username="user",
+                    full_name="User",
+                    subject="sub",
+                ),
+            ),
             {},
             "db-user",
         ),
@@ -203,7 +218,15 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "db_oidc",
             "update_oidc_user",
             "_update_oidc_user",
-            ("db", "user", "u@example.com", "User", "sub"),
+            (
+                "db",
+                "user",
+                das.OidcUserUpdateProfile(
+                    email="u@example.com",
+                    full_name="User",
+                    subject="sub",
+                ),
+            ),
             {},
             None,
         ),
@@ -234,15 +257,23 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "created-user",
         ),
         ("das", "list_users_op", "list_users", ("tenant",), {"limit": 10, "offset": 2}, ["user"]),
-        ("das", "update_user_op", "update_user", ("user-1", "update", "tenant", "updater"), {}, "updated-user"),
+        (
+            "das",
+            "update_user_op",
+            "update_user",
+            ("user-1", "update"),
+            {"tenant_id": "tenant", "updater_id": "updater"},
+            "updated-user",
+        ),
         ("das", "set_grafana_user_id_op", "set_grafana_user_id", ("user-1", 42, "tenant"), {}, True),
         ("das", "delete_user_op", "delete_user", ("user-1", "tenant", "deleter"), {}, True),
         (
             "das",
             "update_user_permissions_op",
             "update_user_permissions",
-            ("user-1", ["perm"], "tenant"),
+            ("user-1", ["perm"]),
             {
+                "tenant_id": "tenant",
                 "actor": AuthActorCaps(
                     user_id="actor",
                     role="admin",
@@ -259,7 +290,14 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
         ("das", "set_api_key_hidden_op", "set_api_key_hidden", ("user-1", "key", False), {}, True),
         ("das", "regenerate_api_key_otlp_token_op", "regenerate_api_key_otlp_token", ("user-1", "key"), {}, "key"),
         ("das", "delete_api_key_op", "delete_api_key", ("user-1", "key"), {}, True),
-        ("das", "delete_api_key_share_op", "delete_api_key_share", ("owner", "tenant", "key", "shared"), {}, True),
+        (
+            "das",
+            "delete_api_key_share_op",
+            "delete_api_key_share",
+            ("owner", "tenant", "key"),
+            {"shared_user_id": "shared"},
+            True,
+        ),
         ("das", "validate_otlp_token_op", "validate_otlp_token", ("token",), {"suppress_errors": False}, "tenant"),
         ("das", "backfill_otlp_tokens_op", "backfill_otlp_tokens", (), {}, None),
         ("das", "create_group_op", "create_group", ("group-create", "tenant", "creator"), {}, "group"),
@@ -291,16 +329,17 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "das",
             "update_group_op",
             "update_group",
-            ("group-1", "update", "tenant"),
-            {"actor": AuthActorCaps(user_id="updater", role="admin", is_superuser=True)},
+            ("group-1", "update"),
+            {"tenant_id": "tenant", "actor": AuthActorCaps(user_id="updater", role="admin", is_superuser=True)},
             "group",
         ),
         (
             "das",
             "update_group_permissions_op",
             "update_group_permissions",
-            ("group-1", ["perm"], "tenant"),
+            ("group-1", ["perm"]),
             {
+                "tenant_id": "tenant",
                 "actor": AuthActorCaps(
                     user_id="actor",
                     role="admin",
@@ -314,8 +353,9 @@ def test_list_and_replace_api_key_shares_dump_models(monkeypatch):
             "das",
             "update_group_members_op",
             "update_group_members",
-            ("group-1", ["u1"], "tenant"),
+            ("group-1", ["u1"]),
             {
+                "tenant_id": "tenant",
                 "actor": AuthActorCaps(
                     user_id="actor",
                     role="admin",

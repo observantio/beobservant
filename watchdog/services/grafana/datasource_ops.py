@@ -23,20 +23,41 @@ from db_models import ApiKeyShare, GrafanaDatasource, Group, User, UserApiKey
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from custom_types.json import JSONDict
 from services.grafana.proxy_client import GrafanaProxyClient
+from services.grafana.datasource_payloads import (
+    enrich_datasource_payload,
+    is_safe_system_datasource,
+    merge_json_payload,
+    normalize_datasource_name,
+    sanitize_datasource_payload,
+)
+from services.grafana.datasource_workflows import (
+    DatasourceLookupContext,
+    DatasourceScopeDefaultsContext,
+    DatasourceVisibilityContext,
+    apply_scoped_datasource_defaults,
+    matches_datasource_query,
+    matches_datasource_team_filter,
+    persist_datasource_create,
+    persist_datasource_update,
+    resolve_visibility_groups,
+    validate_datasource_lookup,
+)
 from services.grafana.grafana_bundles import (
     AccessibleDsNameConflictParams,
+    DatasourceAccessCriteria,
+    DatasourceCreateRequest,
     DatasourceCreateOptions,
     DatasourceListParams,
     DatasourceQueryEnforcement,
     DatasourceUpdateOptions,
+    DatasourceUpdateRequest,
     GrafanaUserScope,
+    HiddenToggleParams,
 )
-from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
 from services.grafana.visibility import (
     group_share_change_for_scope,
     resolve_group_share_on_visibility_change,
-    resolve_visibility_groups_for_scope,
 )
 
 DS_PROXY_ID_RE = re.compile(r"/api/datasources/proxy/(\d+)")
@@ -55,26 +76,11 @@ def _cap(limit: Optional[int], offset: int) -> tuple[int, int]:
 
 
 def _sanitize_datasource_payload(payload: JSONDict, *, is_owner: bool) -> JSONDict:
-    if is_owner:
-        return payload
-    sanitized = dict(payload)
-    for key in ("password", "basicAuthPassword", "secureJsonData"):
-        if key in sanitized:
-            sanitized[key] = None
-    return sanitized
-
-
-def _is_safe_system_datasource(datasource: object) -> bool:
-    return bool(
-        getattr(datasource, "is_default", False)
-        or getattr(datasource, "isDefault", False)
-        or getattr(datasource, "read_only", False)
-        or getattr(datasource, "readOnly", False)
-    )
+    return sanitize_datasource_payload(payload, is_owner=is_owner)
 
 
 def _normalize_name(name: Optional[str]) -> str:
-    return str(name or "").strip().lower()
+    return normalize_datasource_name(name)
 
 
 def _build_internal_name(display_name: str, user_id: str) -> str:
@@ -83,9 +89,11 @@ def _build_internal_name(display_name: str, user_id: str) -> str:
 
 
 def _merge_json_payload(existing: Optional[JSONDict], incoming: Optional[JSONDict]) -> JSONDict:
-    base = dict(existing or {})
-    base.update(dict(incoming or {}))
-    return base
+    return merge_json_payload(existing, incoming)
+
+
+def _is_safe_system_datasource(datasource: object) -> bool:
+    return is_safe_system_datasource(datasource)
 
 
 def _db_datasource_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[GrafanaDatasource]:
@@ -94,27 +102,6 @@ def _db_datasource_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[Gra
         .filter(GrafanaDatasource.grafana_uid == uid, GrafanaDatasource.tenant_id == tenant_id)
         .first()
     )
-
-
-def _enrich_datasource_payload(
-    payload: JSONDict,
-    *,
-    db_ds: Optional[GrafanaDatasource],
-    user_id: str,
-    is_unregistered_safe_system: bool = False,
-) -> JSONDict:
-    is_owner = bool(db_ds and db_ds.created_by == user_id)
-    if db_ds and db_ds.name:
-        payload["name"] = db_ds.name
-    payload = _sanitize_datasource_payload(payload, is_owner=is_owner)
-    payload["created_by"] = db_ds.created_by if db_ds else None
-    payload["is_hidden"] = bool(db_ds and user_id in (db_ds.hidden_by or []))
-    payload["is_owned"] = is_owner
-    payload["visibility"] = db_ds.visibility if db_ds else ("system" if is_unregistered_safe_system else "private")
-    sgids = [g.id for g in (db_ds.shared_groups or [])] if db_ds else []
-    payload["shared_group_ids"] = sgids
-    payload["sharedGroupIds"] = sgids
-    return payload
 
 
 def _load_allowed_scope_org_ids(db: Session, *, user_id: str, tenant_id: str) -> tuple[str, Set[str]]:
@@ -177,7 +164,7 @@ async def _has_accessible_name_conflict(
     db: Session,
     params: AccessibleDsNameConflictParams,
 ) -> bool:
-    target = _normalize_name(params.name)
+    target = normalize_datasource_name(params.name)
     if not target:
         return False
 
@@ -191,7 +178,9 @@ async def _has_accessible_name_conflict(
     db_map = {d.grafana_uid: d for d in db_entries}
     all_registered_uids = set(db_map.keys())
     accessible_uids, allow_system = get_accessible_datasource_uids(
-        service, db, params.user_id, params.tenant_id, params.group_ids
+        service,
+        db,
+        GrafanaUserScope(user_id=params.user_id, tenant_id=params.tenant_id, group_ids=params.group_ids),
     )
     accessible = set(accessible_uids)
 
@@ -202,7 +191,7 @@ async def _has_accessible_name_conflict(
         if params.exclude_uid and uid == str(params.exclude_uid):
             continue
         is_unregistered_safe = (
-            allow_system and uid not in all_registered_uids and _is_safe_system_datasource(datasource)
+            allow_system and uid not in all_registered_uids and is_safe_system_datasource(datasource)
         )
         if uid not in accessible and not is_unregistered_safe:
             continue
@@ -210,7 +199,7 @@ async def _has_accessible_name_conflict(
         if db_ds and params.user_id in (db_ds.hidden_by or []):
             continue
         visible_name = db_ds.name if (db_ds and db_ds.name) else getattr(datasource, "name", "")
-        if _normalize_name(visible_name) == target:
+        if normalize_datasource_name(visible_name) == target:
             return True
 
     return False
@@ -219,77 +208,77 @@ async def _has_accessible_name_conflict(
 def check_datasource_access(
     db: Session,
     datasource_uid: str,
-    user_id: str,
-    tenant_id: str,
-    group_ids: List[str],
-    require_write: bool = False,
+    scope: GrafanaUserScope,
+    criteria: DatasourceAccessCriteria | None = None,
 ) -> Optional[GrafanaDatasource]:
+    effective_criteria = criteria or DatasourceAccessCriteria(require_write=False)
     datasource = (
         db.query(GrafanaDatasource)
-        .filter(GrafanaDatasource.grafana_uid == datasource_uid, GrafanaDatasource.tenant_id == tenant_id)
+        .filter(
+            GrafanaDatasource.grafana_uid == datasource_uid,
+            GrafanaDatasource.tenant_id == scope.tenant_id,
+        )
         .first()
     )
-    if not datasource:
-        return None
-    if datasource.created_by == user_id:
-        return datasource
-    if require_write:
-        return None
-    if datasource.visibility == "tenant":
-        return datasource
-    if datasource.visibility == "group":
-        allowed = set(group_id_strs(group_ids))
-        shared = {str(g.id) for g in (datasource.shared_groups or [])}
-        return datasource if allowed.intersection(shared) else None
-    return None
+    has_access = False
+    if datasource is not None:
+        if datasource.created_by == scope.user_id:
+            has_access = True
+        elif not effective_criteria.require_write:
+            if datasource.visibility == "tenant":
+                has_access = True
+            elif datasource.visibility == "group":
+                allowed = set(group_id_strs(scope.group_ids))
+                shared = {str(g.id) for g in (datasource.shared_groups or [])}
+                has_access = bool(allowed.intersection(shared))
+    return datasource if has_access else None
 
 
 def check_datasource_access_by_id(
     db: Session,
     datasource_id: int,
-    user_id: str,
-    tenant_id: str,
-    group_ids: List[str],
-    require_write: bool = False,
+    scope: GrafanaUserScope,
+    criteria: DatasourceAccessCriteria | None = None,
 ) -> Optional[GrafanaDatasource]:
+    effective_criteria = criteria or DatasourceAccessCriteria(require_write=False)
     datasource = (
         db.query(GrafanaDatasource)
-        .filter(GrafanaDatasource.grafana_id == datasource_id, GrafanaDatasource.tenant_id == tenant_id)
+        .filter(
+            GrafanaDatasource.grafana_id == datasource_id,
+            GrafanaDatasource.tenant_id == scope.tenant_id,
+        )
         .first()
     )
-    if not datasource:
-        return None
-    if datasource.created_by == user_id:
-        return datasource
-    if require_write:
-        return None
-    if datasource.visibility == "tenant":
-        return datasource
-    if datasource.visibility == "group":
-        allowed = set(group_id_strs(group_ids))
-        shared = {str(g.id) for g in (datasource.shared_groups or [])}
-        return datasource if allowed.intersection(shared) else None
-    return None
+    has_access = False
+    if datasource is not None:
+        if datasource.created_by == scope.user_id:
+            has_access = True
+        elif not effective_criteria.require_write:
+            if datasource.visibility == "tenant":
+                has_access = True
+            elif datasource.visibility == "group":
+                allowed = set(group_id_strs(scope.group_ids))
+                shared = {str(g.id) for g in (datasource.shared_groups or [])}
+                has_access = bool(allowed.intersection(shared))
+    return datasource if has_access else None
 
 
 def get_accessible_datasource_uids(
     _service: GrafanaProxyClient,
     db: Session,
-    user_id: str,
-    tenant_id: str,
-    group_ids: List[str],
+    scope: GrafanaUserScope,
 ) -> tuple[List[str], bool]:
-    conditions = [GrafanaDatasource.created_by == user_id, GrafanaDatasource.visibility == "tenant"]
-    if group_ids:
+    conditions = [GrafanaDatasource.created_by == scope.user_id, GrafanaDatasource.visibility == "tenant"]
+    if scope.group_ids:
         conditions.append(
             and_(
                 GrafanaDatasource.visibility == "group",
-                GrafanaDatasource.shared_groups.any(Group.id.in_(group_ids)),
+                GrafanaDatasource.shared_groups.any(Group.id.in_(scope.group_ids)),
             )
         )
     rows = (
         db.query(GrafanaDatasource.grafana_uid)
-        .filter(GrafanaDatasource.tenant_id == tenant_id)
+        .filter(GrafanaDatasource.tenant_id == scope.tenant_id)
         .filter(or_(*conditions))
         .limit(int(config.MAX_QUERY_LIMIT))
         .all()
@@ -361,7 +350,12 @@ async def enforce_datasource_query_access(
     id_match = DS_PROXY_ID_RE.search(path)
     if id_match:
         ds_id = int(id_match.group(1))
-        ds = check_datasource_access_by_id(db, ds_id, user_id, tenant_id, group_ids)
+        ds = check_datasource_access_by_id(
+            db,
+            ds_id,
+            GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            DatasourceAccessCriteria(),
+        )
         if not ds:
             maybe = (
                 db.query(GrafanaDatasource)
@@ -372,7 +366,12 @@ async def enforce_datasource_query_access(
                 raise HTTPException(status_code=403, detail="Datasource access denied")
 
     for datasource_uid in referenced_uids:
-        ds = check_datasource_access(db, datasource_uid, user_id, tenant_id, group_ids)
+        ds = check_datasource_access(
+            db,
+            datasource_uid,
+            GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            DatasourceAccessCriteria(),
+        )
         if ds:
             continue
         maybe = (
@@ -383,7 +382,7 @@ async def enforce_datasource_query_access(
         if maybe is not None:
             raise HTTPException(status_code=403, detail="Datasource access denied")
         grafana_ds = await service.grafana_service.get_datasource(datasource_uid)
-        if grafana_ds and _is_safe_system_datasource(grafana_ds):
+        if grafana_ds and is_safe_system_datasource(grafana_ds):
             continue
         raise HTTPException(status_code=403, detail="Datasource access denied")
 
@@ -407,28 +406,37 @@ async def get_datasources(
     capped_limit, capped_offset = _cap(limit, offset)
     query_lc = str(query or "").strip().lower()
 
+    effective_scope = GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids)
     if uid:
         datasource = await service.grafana_service.get_datasource(uid)
         if not datasource:
             return []
         effective_context = cast(
             DatasourceListContext,
-            datasource_context
-            or build_datasource_list_context(service, db, tenant_id=tenant_id, uid=uid),
+            datasource_context or build_datasource_list_context(service, db, tenant_id=tenant_id, uid=uid),
         )
         db_ds = effective_context.get("uid_db_datasource")
-        if db_ds:
-            if check_datasource_access(db, uid, user_id, tenant_id, group_ids) is None:
-                return []
-            if not show_hidden and user_id in (db_ds.hidden_by or []):
-                return []
-        elif not _is_safe_system_datasource(datasource):
+        if not validate_datasource_lookup(
+            db,
+            DatasourceLookupContext(
+                uid=uid,
+                scope=effective_scope,
+                datasource=datasource,
+                db_ds=db_ds,
+                show_hidden=show_hidden,
+            ),
+            access_check=check_datasource_access,
+        ):
             return []
-        payload = _enrich_datasource_payload(datasource.model_dump(), db_ds=db_ds, user_id=user_id)
+        payload = enrich_datasource_payload(datasource.model_dump(), db_ds=db_ds, user_id=user_id)
         return [Datasource.model_validate(payload)]
 
     all_datasources = await service.grafana_service.get_datasources()
-    accessible_uids, allow_system = get_accessible_datasource_uids(service, db, user_id, tenant_id, group_ids)
+    accessible_uids, allow_system = get_accessible_datasource_uids(
+        service,
+        db,
+        effective_scope,
+    )
     accessible = set(accessible_uids)
 
     effective_context = cast(
@@ -443,32 +451,17 @@ async def get_datasources(
         uid_val = str(getattr(d, "uid", "") or "")
         if not uid_val:
             continue
-        is_unregistered_safe = allow_system and uid_val not in all_registered_uids and _is_safe_system_datasource(d)
+        is_unregistered_safe = allow_system and uid_val not in all_registered_uids and is_safe_system_datasource(d)
         if uid_val not in accessible and not is_unregistered_safe:
             continue
         db_ds = db_entries.get(uid_val)
         if db_ds and not show_hidden and user_id in (db_ds.hidden_by or []):
             continue
-        if team_id is not None:
-            if not db_ds:
-                continue
-            if str(team_id) not in {str(g.id) for g in (db_ds.shared_groups or [])}:
-                continue
-        if query_lc:
-            name_value = str(
-                (db_ds.name if db_ds and db_ds.name else getattr(d, "name", "")) or "",
-            ).lower()
-            type_value = str(getattr(d, "type", "") or "").lower()
-            url_value = str(getattr(d, "url", "") or "").lower()
-            uid_value = uid_val.lower()
-            if (
-                query_lc not in name_value
-                and query_lc not in type_value
-                and query_lc not in url_value
-                and query_lc not in uid_value
-            ):
-                continue
-        payload = _enrich_datasource_payload(
+        if not matches_datasource_team_filter(db_ds=db_ds, team_id=team_id):
+            continue
+        if not matches_datasource_query(d, db_ds=db_ds, uid=uid_val, query_lc=query_lc):
+            continue
+        payload = enrich_datasource_payload(
             d.model_dump(), db_ds=db_ds, user_id=user_id, is_unregistered_safe_system=is_unregistered_safe
         )
         out.append(Datasource.model_validate(payload))
@@ -490,11 +483,16 @@ async def get_datasource(
     if not ds:
         return None
     if db_ds:
-        if check_datasource_access(db, uid, user_id, tenant_id, group_ids) is None:
+        if check_datasource_access(
+            db,
+            uid,
+            GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            DatasourceAccessCriteria(),
+        ) is None:
             return None
-    elif not _is_safe_system_datasource(ds):
+    elif not is_safe_system_datasource(ds):
         return None
-    payload = _enrich_datasource_payload(ds.model_dump(), db_ds=db_ds, user_id=user_id)
+    payload = enrich_datasource_payload(ds.model_dump(), db_ds=db_ds, user_id=user_id)
     return Datasource.model_validate(payload)
 
 
@@ -513,21 +511,36 @@ async def get_datasource_by_name(
     uid = str(getattr(ds, "uid", "") or "")
     db_ds = _db_datasource_by_uid(db, tenant_id, uid) if uid else None
     if db_ds:
-        if check_datasource_access(db, uid, user_id, tenant_id, group_ids) is None:
+        if check_datasource_access(
+            db,
+            uid,
+            GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            DatasourceAccessCriteria(),
+        ) is None:
             return None
-    elif not _is_safe_system_datasource(ds):
+    elif not is_safe_system_datasource(ds):
         return None
-    payload = _enrich_datasource_payload(ds.model_dump(), db_ds=db_ds, user_id=user_id)
+    payload = enrich_datasource_payload(ds.model_dump(), db_ds=db_ds, user_id=user_id)
     return Datasource.model_validate(payload)
 
 
 async def create_datasource(
     service: GrafanaProxyClient,
     db: Session,
-    datasource_create: DatasourceCreate,
-    scope: GrafanaUserScope,
-    options: DatasourceCreateOptions,
+    datasource_create: DatasourceCreate | DatasourceCreateRequest,
+    *,
+    scope: Optional[GrafanaUserScope] = None,
+    options: Optional[DatasourceCreateOptions] = None,
 ) -> Optional[Datasource]:
+    if isinstance(datasource_create, DatasourceCreateRequest):
+        request = datasource_create
+        datasource_create = request.datasource_create
+        scope = request.scope
+        options = request.options
+    if scope is None:
+        raise TypeError("scope is required")
+    options = options or DatasourceCreateOptions()
+
     user_id = scope.user_id
     tenant_id = scope.tenant_id
     group_ids = scope.group_ids
@@ -547,47 +560,34 @@ async def create_datasource(
     ):
         raise HTTPException(status_code=409, detail="Datasource name already exists in your visible scope")
 
-    if datasource_create.type in {"prometheus", "loki", "tempo"}:
-        org_id = _resolve_datasource_org_scope(
+    datasource_create = cast(
+        DatasourceCreate,
+        apply_scoped_datasource_defaults(
             db,
-            requested_org_id=getattr(datasource_create, "org_id", None),
-            user_id=user_id,
-            tenant_id=tenant_id,
-        )
-        json_data = dict(getattr(datasource_create, "json_data", None) or {})
-        secure_json_data = dict(getattr(datasource_create, "secure_json_data", None) or {})
-        json_data.setdefault("httpHeaderName1", "X-Scope-OrgID")
-        json_data["watchdogScopeKey"] = org_id
-        json_data.setdefault("watchdogApiKeyName", str(json_data.get("watchdogApiKeyName") or "").strip())
-        secure_json_data.setdefault("httpHeaderValue1", org_id)
-        datasource_create = datasource_create.model_copy(
-            update={"org_id": org_id, "json_data": json_data, "secure_json_data": secure_json_data}
-        )
-
-    groups = resolve_visibility_groups_for_scope(
+            DatasourceScopeDefaultsContext(
+                datasource=datasource_create,
+                user_id=user_id,
+                tenant_id=tenant_id,
+            ),
+            resolve_org_scope=_resolve_datasource_org_scope,
+        ),
+    )
+    groups = resolve_visibility_groups(
         service,
         db,
-        GrafanaUserScope(user_id, tenant_id, group_ids),
-        visibility=visibility,
-        shared_group_ids=shared_group_ids,
-        is_admin=is_admin,
+        DatasourceVisibilityContext(
+            scope=GrafanaUserScope(user_id, tenant_id, group_ids),
+            visibility=visibility,
+            shared_group_ids=shared_group_ids,
+            is_admin=is_admin,
+        ),
     )
-
-    try:
-        result = await service.grafana_service.create_datasource(datasource_create)
-    except GrafanaAPIError as exc:
-        if exc.status in {409, 412}:
-            internal_name = _build_internal_name(requested_name or datasource_create.name, user_id)
-            try:
-                result = await service.grafana_service.create_datasource(
-                    datasource_create.model_copy(update={"name": internal_name})
-                )
-            except GrafanaAPIError as retry_exc:
-                service.raise_http_from_grafana_error(retry_exc)
-                return None
-        else:
-            service.raise_http_from_grafana_error(exc)
-            return None
+    result = await persist_datasource_create(
+        service,
+        datasource_create,
+        requested_name=requested_name,
+        user_id=user_id,
+    )
 
     if not result:
         return None
@@ -611,64 +611,69 @@ async def create_datasource(
         db.rollback()
         raise
 
-    payload = result.model_dump()
-    payload["name"] = db_ds.name
-    payload = _sanitize_datasource_payload(payload, is_owner=True)
-    payload["created_by"] = db_ds.created_by
-    payload["is_hidden"] = False
-    payload["is_owned"] = True
-    payload["visibility"] = db_ds.visibility or "private"
-    sgids = [g.id for g in (db_ds.shared_groups or [])]
-    payload["shared_group_ids"] = sgids
-    payload["sharedGroupIds"] = sgids
+    payload = enrich_datasource_payload(result.model_dump(), db_ds=db_ds, user_id=user_id)
+    requested_json_data = dict(getattr(datasource_create, "json_data", None) or {})
+    if requested_json_data and not payload.get("jsonData"):
+        payload["jsonData"] = requested_json_data
     return Datasource.model_validate(payload)
 
 
 async def update_datasource(
     service: GrafanaProxyClient,
     db: Session,
-    uid: str,
-    datasource_update: DatasourceUpdate,
-    scope: GrafanaUserScope,
-    options: DatasourceUpdateOptions,
+    request: DatasourceUpdateRequest | str,
+    *,
+    datasource_update: Optional[DatasourceUpdate] = None,
+    scope: Optional[GrafanaUserScope] = None,
 ) -> Optional[Datasource]:
+    options: Optional[DatasourceUpdateOptions] = None
+    if isinstance(request, DatasourceUpdateRequest):
+        uid = request.uid
+        datasource_update = request.datasource_update
+        scope = request.scope
+        options = request.options
+    else:
+        uid = request
+    if datasource_update is None or scope is None:
+        raise TypeError("datasource_update and scope are required")
+    options = options or DatasourceUpdateOptions()
+
     user_id = scope.user_id
     tenant_id = scope.tenant_id
     group_ids = scope.group_ids
     visibility = options.visibility
     shared_group_ids = options.shared_group_ids
     is_admin = options.is_admin
-    db_ds = check_datasource_access(db, uid, user_id, tenant_id, group_ids, require_write=True)
+    db_ds = check_datasource_access(
+        db,
+        uid,
+        GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+        DatasourceAccessCriteria(require_write=True),
+    )
     if not db_ds:
         return None
 
     existing = await service.grafana_service.get_datasource(uid)
-    if existing and _is_safe_system_datasource(existing):
+    if existing and is_safe_system_datasource(existing):
         raise HTTPException(status_code=403, detail="Default/read-only datasources cannot be modified")
 
-    if db_ds.type in {"prometheus", "loki", "tempo"}:
-        requested_org_id = getattr(datasource_update, "org_id", None)
-        incoming_json = dict(getattr(datasource_update, "json_data", None) or {})
-        existing_json = dict(getattr(existing, "json_data", None) or {})
-        scoped_org_candidate = (
-            requested_org_id or incoming_json.get("watchdogScopeKey") or existing_json.get("watchdogScopeKey") or None
-        )
-        validated_org_id = _resolve_datasource_org_scope(
+    datasource_update = cast(
+        DatasourceUpdate,
+        apply_scoped_datasource_defaults(
             db,
-            requested_org_id=scoped_org_candidate,
-            user_id=user_id,
-            tenant_id=tenant_id,
-        )
-        json_data = _merge_json_payload(existing_json, incoming_json)
-        secure_json_data = dict(getattr(datasource_update, "secure_json_data", None) or {})
-        json_data.setdefault("httpHeaderName1", "X-Scope-OrgID")
-        json_data["watchdogScopeKey"] = validated_org_id
-        if "watchdogApiKeyName" in json_data:
-            json_data["watchdogApiKeyName"] = str(json_data.get("watchdogApiKeyName") or "").strip()
-        secure_json_data["httpHeaderValue1"] = validated_org_id
-        datasource_update = datasource_update.model_copy(
-            update={"org_id": validated_org_id, "json_data": json_data, "secure_json_data": secure_json_data}
-        )
+            DatasourceScopeDefaultsContext(
+                datasource=datasource_update,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                existing_json=dict(
+                    getattr(existing, "json_data", None)
+                    or getattr(existing, "jsonData", None)
+                    or {}
+                ),
+            ),
+            resolve_org_scope=_resolve_datasource_org_scope,
+        ),
+    )
 
     requested_name: Optional[str] = None
     if getattr(datasource_update, "name", None) is not None:
@@ -686,21 +691,13 @@ async def update_datasource(
         ):
             raise HTTPException(status_code=409, detail="Datasource name already exists in your visible scope")
 
-    try:
-        result = await service.grafana_service.update_datasource(uid, datasource_update)
-    except GrafanaAPIError as exc:
-        if exc.status in {409, 412} and requested_name:
-            internal_name = _build_internal_name(requested_name, user_id)
-            try:
-                result = await service.grafana_service.update_datasource(
-                    uid, datasource_update.model_copy(update={"name": internal_name})
-                )
-            except GrafanaAPIError as retry_exc:
-                service.raise_http_from_grafana_error(retry_exc)
-                return None
-        else:
-            service.raise_http_from_grafana_error(exc)
-            return None
+    result = await persist_datasource_update(
+        service,
+        uid,
+        datasource_update,
+        requested_name=requested_name,
+        user_id=user_id,
+    )
 
     if not result:
         return None
@@ -728,16 +725,10 @@ async def update_datasource(
 
     commit_session(db)
 
-    payload = result.model_dump()
-    payload["name"] = db_ds.name
-    payload = _sanitize_datasource_payload(payload, is_owner=bool(db_ds.created_by == user_id))
-    payload["created_by"] = db_ds.created_by
-    payload["is_hidden"] = bool(user_id in (db_ds.hidden_by or []))
-    payload["is_owned"] = bool(db_ds.created_by == user_id)
-    payload["visibility"] = db_ds.visibility or "private"
-    sgids = [g.id for g in (db_ds.shared_groups or [])]
-    payload["shared_group_ids"] = sgids
-    payload["sharedGroupIds"] = sgids
+    payload = enrich_datasource_payload(result.model_dump(), db_ds=db_ds, user_id=user_id)
+    requested_json_data = dict(getattr(datasource_update, "json_data", None) or {})
+    if requested_json_data and not payload.get("jsonData"):
+        payload["jsonData"] = requested_json_data
     return Datasource.model_validate(payload)
 
 
@@ -750,11 +741,16 @@ async def delete_datasource(
     user_id = scope.user_id
     tenant_id = scope.tenant_id
     group_ids = scope.group_ids
-    db_ds = check_datasource_access(db, uid, user_id, tenant_id, group_ids, require_write=True)
+    db_ds = check_datasource_access(
+        db,
+        uid,
+        GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+        DatasourceAccessCriteria(require_write=True),
+    )
     if not db_ds:
         return False
     existing = await service.grafana_service.get_datasource(uid)
-    if existing and _is_safe_system_datasource(existing):
+    if existing and is_safe_system_datasource(existing):
         raise HTTPException(status_code=403, detail="Default/read-only datasources cannot be deleted")
     ok = await service.grafana_service.delete_datasource(uid)
     if not ok:
@@ -769,11 +765,16 @@ async def query_datasource(service: GrafanaProxyClient, payload: JSONDict) -> JS
     return result if isinstance(result, dict) else {}
 
 
-def toggle_datasource_hidden(db: Session, uid: str, user_id: str, tenant_id: str, hidden: bool) -> bool:
-    db_ds = _db_datasource_by_uid(db, tenant_id, uid)
+def toggle_datasource_hidden(
+    db: Session,
+    uid: str,
+    scope: GrafanaUserScope,
+    params: HiddenToggleParams,
+) -> bool:
+    db_ds = _db_datasource_by_uid(db, scope.tenant_id, uid)
     if not db_ds:
         return False
-    db_ds.hidden_by = update_hidden_members(db_ds.hidden_by, user_id, hidden)
+    db_ds.hidden_by = update_hidden_members(db_ds.hidden_by, scope.user_id, params.hidden)
     commit_session(db)
     return True
 

@@ -42,6 +42,38 @@ class ResolverProxyJsonRequest:
     cache_ttl_seconds: Optional[int] = None
 
 
+@dataclass(frozen=True)
+class ResolverUpstreamRequestContext:
+    method_upper: str
+    target: str
+    headers: dict[str, str]
+    params: QueryParams | None
+    payload: JSONValue | None
+    correlation_id: str
+    current_user: TokenData
+    audit_action: str
+    upstream_path: str
+
+
+@dataclass(frozen=True)
+class ResolverReadCacheContext:
+    method_upper: str
+    upstream_path: str
+    tenant_id: str
+    params: QueryParams | None
+    payload: JSONDict | None
+    effective_cache_ttl: int
+
+
+@dataclass(frozen=True)
+class ResolverFinalizeContext:
+    corr: str
+    cache_key: str | None
+    effective_cache_ttl: int
+    owner: bool
+    inflight_future: asyncio.Future[JSONValue] | None
+
+
 class ResolverProxyService(BaseProxyService):
     _resource_type = "resolver_proxy"
 
@@ -124,6 +156,123 @@ class ResolverProxyService(BaseProxyService):
             future.set_exception(exc)
             _ = future.exception()
 
+    async def _prepare_read_cache(
+        self,
+        context: ResolverReadCacheContext,
+    ) -> tuple[Optional[str], Optional[asyncio.Future[JSONValue]], bool, Optional[JSONValue]]:
+        cache_key: Optional[str] = None
+        inflight_future: Optional[asyncio.Future[JSONValue]] = None
+        owner = False
+        cached: Optional[JSONValue] = None
+        if context.method_upper == "GET" and context.effective_cache_ttl > 0:
+            cache_key = self._cache_key(
+                method=context.method_upper,
+                upstream_path=context.upstream_path,
+                tenant_id=context.tenant_id,
+                params=context.params,
+                payload=context.payload,
+            )
+            cached = await self._read_cache.get(cache_key)
+            if cached is None:
+                async with self._read_inflight_lock:
+                    cached = await self._read_cache.get(cache_key)
+                    if cached is None:
+                        inflight_future = self._read_inflight.get(cache_key)
+                        if inflight_future is None:
+                            inflight_future = asyncio.get_running_loop().create_future()
+                            self._read_inflight[cache_key] = inflight_future
+                            owner = True
+        return cache_key, inflight_future, owner, cached
+
+    async def _finalize_success_response(
+        self,
+        response: httpx.Response,
+        context: ResolverFinalizeContext,
+    ) -> JSONValue:
+        try:
+            result = response.json()
+            if not is_json_value(result):
+                raise ValueError("Resolver returned non-JSON data")
+            if context.cache_key:
+                await self._read_cache.set(context.cache_key, result, context.effective_cache_ttl)
+            if context.owner and context.inflight_future is not None and not context.inflight_future.done():
+                context.inflight_future.set_result(result)
+            return result
+        except ValueError as exc:
+            err = HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Resolver returned invalid JSON",
+                headers={"X-Request-ID": context.corr},
+            )
+            self._resolve_inflight_error(context.owner, context.inflight_future, err)
+            raise err from exc
+
+    async def _request_upstream(
+        self,
+        context: ResolverUpstreamRequestContext,
+        owner: bool,
+        inflight_future: Optional[asyncio.Future[JSONValue]],
+    ) -> httpx.Response:
+        started = time.time()
+        try:
+            response = await self._client.request(
+                method=context.method_upper,
+                url=context.target,
+                headers=context.headers,
+                params=context.params or None,
+                json=context.payload if context.payload is not None else None,
+            )
+        except httpx.TimeoutException as exc:
+            err = HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Resolver request timed out",
+                headers={"X-Request-ID": context.correlation_id},
+            )
+            self._resolve_inflight_error(owner, inflight_future, err)
+            self.write_audit(
+                current_user=context.current_user,
+                action=f"{context.audit_action}.timeout",
+                resource_id=context.upstream_path,
+                details={
+                    "correlation_id": context.correlation_id,
+                    "timeout": self.timeout,
+                    "method": context.method_upper,
+                },
+            )
+            raise err from exc
+        except Exception as exc:
+            err = HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to contact Resolver",
+                headers={"X-Request-ID": context.correlation_id},
+            )
+            self._resolve_inflight_error(owner, inflight_future, err)
+            self.write_audit(
+                current_user=context.current_user,
+                action=f"{context.audit_action}.error",
+                resource_id=context.upstream_path,
+                details={
+                    "correlation_id": context.correlation_id,
+                    "error": type(exc).__name__,
+                    "method": context.method_upper,
+                },
+            )
+            raise err from exc
+
+        elapsed_ms = int((time.time() - started) * 1000)
+        self.write_audit(
+            current_user=context.current_user,
+            action=f"{context.audit_action}.complete",
+            resource_id=context.upstream_path,
+            details={
+                "correlation_id": context.correlation_id,
+                "status_code": response.status_code,
+                "latency_ms": elapsed_ms,
+                "method": context.method_upper,
+            },
+        )
+        return response
+
     @with_retry()
     @with_timeout()
     async def request_json(self, req: ResolverProxyJsonRequest) -> JSONValue:
@@ -150,32 +299,20 @@ class ResolverProxyService(BaseProxyService):
             upstream_path=upstream_path,
             cache_ttl_seconds=cache_ttl_seconds,
         )
-        cache_key: Optional[str] = None
-        inflight_future: Optional[asyncio.Future[JSONValue]] = None
-        owner = False
-
-        if method_upper == "GET" and effective_cache_ttl > 0:
-            cache_key = self._cache_key(
-                method=method_upper,
+        cache_key, inflight_future, owner, cached = await self._prepare_read_cache(
+            ResolverReadCacheContext(
+                method_upper=method_upper,
                 upstream_path=upstream_path,
                 tenant_id=tenant_id,
                 params=params,
                 payload=payload,
-            )
-            cached = await self._read_cache.get(cache_key)
-            if cached is not None:
-                return cached
-            async with self._read_inflight_lock:
-                cached = await self._read_cache.get(cache_key)
-                if cached is not None:
-                    return cached
-                inflight_future = self._read_inflight.get(cache_key)
-                if inflight_future is None:
-                    inflight_future = asyncio.get_running_loop().create_future()
-                    self._read_inflight[cache_key] = inflight_future
-                    owner = True
-            if not owner:
-                return await inflight_future
+                effective_cache_ttl=effective_cache_ttl,
+            ),
+        )
+        if cached is not None:
+            return cached
+        if inflight_future is not None and not owner:
+            return await inflight_future
 
         context_token = self._sign_context_token(current_user=current_user, tenant_id=tenant_id)
         corr = correlation_id or str(uuid.uuid4())
@@ -186,64 +323,20 @@ class ResolverProxyService(BaseProxyService):
             "X-Correlation-ID": corr,
             "Content-Type": "application/json",
         }
-
-        started = time.time()
-        try:
-            response = await self._client.request(
-                method=method_upper,
-                url=target,
+        response = await self._request_upstream(
+            ResolverUpstreamRequestContext(
+                method_upper=method_upper,
+                target=target,
                 headers=headers,
-                params=params or None,
-                json=payload if payload is not None else None,
-            )
-        except httpx.TimeoutException as exc:
-            err = HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="Resolver request timed out",
-                headers={"X-Request-ID": corr},
-            )
-            self._resolve_inflight_error(owner, inflight_future, err)
-            self.write_audit(
+                params=params,
+                payload=payload,
+                correlation_id=corr,
                 current_user=current_user,
-                action=f"{audit_action}.timeout",
-                resource_id=upstream_path,
-                details={
-                    "correlation_id": corr,
-                    "timeout": self.timeout,
-                    "method": method_upper,
-                },
-            )
-            raise err from exc
-        except Exception as exc:
-            err = HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to contact Resolver",
-                headers={"X-Request-ID": corr},
-            )
-            self._resolve_inflight_error(owner, inflight_future, err)
-            self.write_audit(
-                current_user=current_user,
-                action=f"{audit_action}.error",
-                resource_id=upstream_path,
-                details={
-                    "correlation_id": corr,
-                    "error": type(exc).__name__,
-                    "method": method_upper,
-                },
-            )
-            raise err from exc
-
-        elapsed_ms = int((time.time() - started) * 1000)
-        self.write_audit(
-            current_user=current_user,
-            action=f"{audit_action}.complete",
-            resource_id=upstream_path,
-            details={
-                "correlation_id": corr,
-                "status_code": response.status_code,
-                "latency_ms": elapsed_ms,
-                "method": method_upper,
-            },
+                audit_action=audit_action,
+                upstream_path=upstream_path,
+            ),
+            owner=owner,
+            inflight_future=inflight_future,
         )
 
         if response.status_code >= 400:
@@ -257,22 +350,16 @@ class ResolverProxyService(BaseProxyService):
             raise err
 
         try:
-            result = response.json()
-            if not is_json_value(result):
-                raise ValueError("Resolver returned non-JSON data")
-            if cache_key:
-                await self._read_cache.set(cache_key, result, effective_cache_ttl)
-            if owner and inflight_future is not None and not inflight_future.done():
-                inflight_future.set_result(result)
-            return result
-        except ValueError as exc:
-            err = HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Resolver returned invalid JSON",
-                headers={"X-Request-ID": corr},
+            return await self._finalize_success_response(
+                response=response,
+                context=ResolverFinalizeContext(
+                    corr=corr,
+                    cache_key=cache_key,
+                    effective_cache_ttl=effective_cache_ttl,
+                    owner=owner,
+                    inflight_future=inflight_future,
+                ),
             )
-            self._resolve_inflight_error(owner, inflight_future, err)
-            raise err from exc
         finally:
             if owner and cache_key:
                 async with self._read_inflight_lock:

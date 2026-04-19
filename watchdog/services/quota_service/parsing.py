@@ -34,16 +34,19 @@ def extract_path(payload: object, path: str) -> Optional[float]:
         if not isinstance(current, dict) or part not in current:
             return None
         current = current[part]
+
     if isinstance(current, bool):
-        return float(int(current))
-    if isinstance(current, (int, float)):
-        return float(current)
-    if isinstance(current, str):
+        normalized: Optional[float] = float(int(current))
+    elif isinstance(current, (int, float)):
+        normalized = float(current)
+    elif isinstance(current, str):
         try:
-            return float(current.strip())
+            normalized = float(current.strip())
         except ValueError:
-            return None
-    return None
+            normalized = None
+    else:
+        normalized = None
+    return normalized
 
 
 def extract_from_text(text: str, key: str) -> Optional[float]:
@@ -137,9 +140,10 @@ def extract_prom_result(payload: object) -> Optional[float]:
     if not isinstance(first, dict):
         return None
     value = first.get("value")
-    if not isinstance(value, (list, tuple)) or len(value) < 2:
-        return None
-    try:
-        return float(value[1])
-    except (TypeError, ValueError):
-        return None
+    parsed: Optional[float] = None
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        try:
+            parsed = float(value[1])
+        except (TypeError, ValueError):
+            parsed = None
+    return parsed

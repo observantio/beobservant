@@ -80,9 +80,10 @@ async def test_create_user_scheduled_task_contains_expected_kwargs(monkeypatch: 
     await users_router.create_user(_user_create_payload(), tasks, _admin_user())
 
     task_kwargs = tasks.tasks[0][1]
-    assert task_kwargs["recipient_email"] == "new@example.com"
-    assert task_kwargs["username"] == "new-user"
-    assert task_kwargs["full_name"] == "New User"
+    email_request = task_kwargs["email_request"]
+    assert email_request.recipient_email == "new@example.com"
+    assert email_request.username == "new-user"
+    assert email_request.full_name == "New User"
 
 
 @pytest.mark.asyncio

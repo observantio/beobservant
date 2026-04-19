@@ -35,7 +35,7 @@ from services.loki.fallback import (
     build_volume_fallback_queries,
     run_fallback_queries,
 )
-from services.loki.http_client import LokiHttpClient
+from services.loki.http_client import LokiGetJsonRequest, LokiHttpClient
 from services.loki.label_utils import normalize_label_value, normalize_label_values
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,37 @@ class FilterLogsParams:
     end: int | None = None
     limit: int = 100
     tenant_id: str = config.DEFAULT_ORG_ID
+
+
+@dataclass(frozen=True, slots=True)
+class InstantLogQueryParams:
+    query: str
+    at_time: int | None = None
+    limit: int = config.DEFAULT_QUERY_LIMIT
+
+
+@dataclass(frozen=True, slots=True)
+class LabelValuesParams:
+    label: str
+    start: int | None = None
+    end: int | None = None
+    query: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AggregateLogsParams:
+    query: str
+    start: int | None = None
+    end: int | None = None
+    step: int = 60
+
+
+@dataclass(frozen=True, slots=True)
+class LogVolumeParams:
+    query: str
+    start: int | None = None
+    end: int | None = None
+    step: int = 300
 
 
 def _json_dict(value: object) -> JSONDict:
@@ -256,14 +287,12 @@ class LokiService:
     @with_timeout()
     async def query_logs_instant(
         self,
-        query_str: str,
-        at_time: int | None = None,
+        params_in: InstantLogQueryParams,
         tenant_id: str = config.DEFAULT_ORG_ID,
-        limit: int = config.DEFAULT_QUERY_LIMIT,
     ) -> LogResponse:
-        params: RequestQueryParams = {"query": query_str, "limit": limit}
-        if at_time is not None:
-            params["time"] = at_time
+        params: RequestQueryParams = {"query": params_in.query, "limit": params_in.limit}
+        if params_in.at_time is not None:
+            params["time"] = params_in.at_time
 
         headers = self._headers(tenant_id)
         endpoint = f"{self.loki_url}/loki/api/v1/query"
@@ -271,13 +300,13 @@ class LokiService:
         try:
             data = await self._http.timed_get_json(self._client, endpoint, params=params, headers=headers)
             payload = _json_dict(data.get("data"))
-            if query_str and not _object_list(payload.get("result")):
+            if params_in.query and not _object_list(payload.get("result")):
                 fallback = await run_fallback_queries(
                     LokiFallbackQueryRun(
                         endpoint=endpoint,
                         base_params=params,
                         headers=headers,
-                        query_str=query_str,
+                        query_str=params_in.query,
                         client=self._client,
                         http_client=self._http,
                         max_fallbacks=config.LOKI_MAX_FALLBACK_QUERIES,
@@ -311,10 +340,12 @@ class LokiService:
             if end:
                 params["end"] = end
             payload = await self._http.safe_get_json(
-                self._client,
-                f"{self.loki_url}/loki/api/v1/labels",
-                params=params,
-                headers=self._headers(tenant_id),
+                LokiGetJsonRequest(
+                    client=self._client,
+                    url=f"{self.loki_url}/loki/api/v1/labels",
+                    params=params,
+                    headers=self._headers(tenant_id),
+                )
             )
             if isinstance(payload, dict):
                 values = _string_list(payload.get("data"))
@@ -335,12 +366,13 @@ class LokiService:
     @with_timeout()
     async def get_label_values(
         self,
-        label: str,
-        start: int | None = None,
-        end: int | None = None,
-        query: str | None = None,
+        params_in: LabelValuesParams,
         tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> LogLabelValuesResponse:
+        label = params_in.label
+        start = params_in.start
+        end = params_in.end
+        query = params_in.query
         now_ns = int(time.time() * 1_000_000_000)
         safe_end = end if isinstance(end, int) and end > 0 else None
         safe_start = start if isinstance(start, int) and start > 0 else None
@@ -371,11 +403,13 @@ class LokiService:
 
         async def _fetch() -> list[str]:
             payload = await self._http.safe_get_json(
-                self._client,
-                f"{self.loki_url}/loki/api/v1/label/{label}/values",
-                params=params,
-                headers=self._headers(tenant_id),
-                quiet=True,
+                LokiGetJsonRequest(
+                    client=self._client,
+                    url=f"{self.loki_url}/loki/api/v1/label/{label}/values",
+                    params=params,
+                    headers=self._headers(tenant_id),
+                    quiet=True,
+                )
             )
             if isinstance(payload, dict) and payload.get("data") is not None:
                 values = _string_list(payload.get("data"))
@@ -423,12 +457,13 @@ class LokiService:
     @with_timeout()
     async def aggregate_logs(
         self,
-        query_str: str,
-        start: int | None = None,
-        end: int | None = None,
-        step: int = 60,
+        params_in: AggregateLogsParams,
         tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> JSONDict:
+        query_str = params_in.query
+        start = params_in.start
+        end = params_in.end
+        step = params_in.step
         now = datetime.now()
         params: RequestQueryParams = {
             "query": query_str,
@@ -464,12 +499,13 @@ class LokiService:
     @with_timeout()
     async def get_log_volume(
         self,
-        query_str: str,
-        start: int | None = None,
-        end: int | None = None,
-        step: int = 300,
+        params_in: LogVolumeParams,
         tenant_id: str = config.DEFAULT_ORG_ID,
     ) -> JSONDict:
+        query_str = params_in.query
+        start = params_in.start
+        end = params_in.end
+        step = params_in.step
         step = max(1, int(step))
         start_ns, end_ns = self._normalize_range_for_step(start, end, step)
         query_str = str(query_str or "").strip() or '{service_name=~".+"}'
@@ -483,10 +519,12 @@ class LokiService:
             async def _run(candidate: str) -> JSONDict:
                 async with semaphore:
                     return await self.aggregate_logs(
-                        f"sum(count_over_time({candidate}[{step}s]))",
-                        start_ns,
-                        end_ns,
-                        step,
+                        AggregateLogsParams(
+                            query=f"sum(count_over_time({candidate}[{step}s]))",
+                            start=start_ns,
+                            end=end_ns,
+                            step=step,
+                        ),
                         tenant_id=tenant_id,
                     )
 

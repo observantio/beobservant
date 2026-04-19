@@ -43,8 +43,15 @@ class FakeHttpClient:
         self.responses = list(responses)
         self.calls = []
 
-    async def safe_get_json(self, client, url, *, params, headers, quiet=False):
-        self.calls.append({"url": url, "params": dict(params), "headers": dict(headers), "quiet": quiet})
+    async def safe_get_json(self, request):
+        self.calls.append(
+            {
+                "url": request.url,
+                "params": dict(request.params),
+                "headers": dict(request.headers),
+                "quiet": request.quiet,
+            }
+        )
         response = self.responses.pop(0)
         if asyncio.iscoroutine(response):
             return await response

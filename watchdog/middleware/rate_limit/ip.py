@@ -30,6 +30,21 @@ def _valid_ip(value: str) -> Optional[str]:
 
 
 def client_ip(request: Request) -> str:
+    def _peer_in_trusted_cidrs(peer: object, cidrs: list[str]) -> bool:
+        try:
+            peer_ip = ip_address(str(peer))
+        except ValueError:
+            return False
+        if peer_ip.is_loopback:
+            return True
+        for cidr in cidrs:
+            try:
+                if peer_ip in ip_network(cidr, strict=False):
+                    return True
+            except ValueError:
+                continue
+        return False
+
     def _trusted_proxy_peer() -> bool:
         if not config.TRUST_PROXY_HEADERS:
             return False
@@ -39,35 +54,24 @@ def client_ip(request: Request) -> str:
 
         direct = (request.client.host if request.client else "").strip()
         validated = _valid_ip(direct)
-        if not validated:
-            return False
+        return _peer_in_trusted_cidrs(validated, trusted_cidrs) if validated else False
 
-        try:
-            peer_ip = ip_address(validated)
-            if peer_ip.is_loopback:
-                return True
-            for cidr in trusted_cidrs:
-                try:
-                    if peer_ip in ip_network(cidr, strict=False):
-                        return True
-                except ValueError:
-                    continue
-        except ValueError:
-            return False
-        return False
-
+    resolved_ip: str | None = None
     if _trusted_proxy_peer():
         forwarded_for = (request.headers.get("x-forwarded-for") or "").strip()
         if forwarded_for:
             first = forwarded_for.split(",", 1)[0].strip()
             valid_first = _valid_ip(first)
             if valid_first:
-                return valid_first
+                resolved_ip = valid_first
 
-        real_ip = (request.headers.get("x-real-ip") or "").strip()
-        valid_real_ip = _valid_ip(real_ip)
-        if valid_real_ip:
-            return valid_real_ip
+        if resolved_ip is None:
+            real_ip = (request.headers.get("x-real-ip") or "").strip()
+            valid_real_ip = _valid_ip(real_ip)
+            if valid_real_ip:
+                resolved_ip = valid_real_ip
 
-    direct = (request.client.host if request.client else "unknown").strip()
-    return _valid_ip(direct) or "unknown"
+    if resolved_ip is None:
+        direct = (request.client.host if request.client else "unknown").strip()
+        resolved_ip = _valid_ip(direct)
+    return resolved_ip or "unknown"

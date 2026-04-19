@@ -94,13 +94,14 @@ def extract_metrics_count(payload: JSONDict) -> int:
     if not isinstance(first, dict):
         return 0
     value = first.get("value")
-    if not isinstance(value, list) or len(value) < 2:
-        return 0
-    count = value[1]
-    try:
-        return int(float(str(count)))
-    except (TypeError, ValueError):
-        return 0
+    parsed = 0
+    if isinstance(value, list) and len(value) >= 2:
+        count = value[1]
+        try:
+            parsed = int(float(str(count)))
+        except (TypeError, ValueError):
+            parsed = 0
+    return parsed
 
 
 def extract_label_values(payload: JSONDict) -> list[str]:

@@ -129,8 +129,8 @@ async def test_create_dashboard_allows_non_owner_in_tenant_folder():
         service,
         db,
         _payload(11),
-        GrafanaUserScope("u2", "t1", []),
-        DashboardCreateOptions(
+        scope=GrafanaUserScope("u2", "t1", []),
+        options=DashboardCreateOptions(
             visibility="private",
             shared_group_ids=[],
             is_admin=False,
@@ -182,8 +182,8 @@ async def test_create_dashboard_allows_non_owner_in_shared_group_folder():
         service,
         db,
         _payload(12),
-        GrafanaUserScope("u2", "t1", ["g1"]),
-        DashboardCreateOptions(
+        scope=GrafanaUserScope("u2", "t1", ["g1"]),
+        options=DashboardCreateOptions(
             visibility="private",
             shared_group_ids=[],
             is_admin=False,
@@ -232,8 +232,8 @@ async def test_create_dashboard_still_denies_non_owner_in_private_folder():
             service,
             db,
             _payload(13),
-            GrafanaUserScope("u2", "t1", []),
-            DashboardCreateOptions(
+            scope=GrafanaUserScope("u2", "t1", []),
+            options=DashboardCreateOptions(
                 visibility="private",
                 shared_group_ids=[],
                 is_admin=False,
@@ -283,8 +283,8 @@ async def test_create_dashboard_denies_non_owner_in_tenant_folder_when_owner_onl
             service,
             db,
             _payload(11),
-            GrafanaUserScope("u2", "t1", []),
-            DashboardCreateOptions(
+            scope=GrafanaUserScope("u2", "t1", []),
+            options=DashboardCreateOptions(
                 visibility="private",
                 shared_group_ids=[],
                 is_admin=False,
@@ -333,8 +333,8 @@ async def test_create_dashboard_allows_delegated_folder_create_without_create_pe
         service,
         db,
         _payload(11),
-        GrafanaUserScope("u2", "t1", []),
-        DashboardCreateOptions(
+        scope=GrafanaUserScope("u2", "t1", []),
+        options=DashboardCreateOptions(
             visibility="private",
             shared_group_ids=[],
             is_admin=False,
@@ -385,8 +385,8 @@ async def test_create_dashboard_denies_without_create_permission_when_not_delega
             service,
             db,
             _payload(11),
-            GrafanaUserScope("u2", "t1", []),
-            DashboardCreateOptions(
+            scope=GrafanaUserScope("u2", "t1", []),
+            options=DashboardCreateOptions(
                 visibility="private",
                 shared_group_ids=[],
                 is_admin=False,

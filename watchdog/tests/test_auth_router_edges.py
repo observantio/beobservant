@@ -243,7 +243,8 @@ async def test_register_uses_default_tenant_and_sends_welcome_email(monkeypatch)
         RegisterRequest(username="new-user", email="u@example.com", password="password123", full_name="User"),
     )
     assert result is response_obj
-    assert sent[0]["recipient_email"] == "u@example.com"
+    email_request = sent[0]["email_request"]
+    assert email_request.recipient_email == "u@example.com"
 
 
 @pytest.mark.asyncio
@@ -337,12 +338,12 @@ async def test_api_key_routes_cover_not_found_and_transformations(monkeypatch):
     )
     assert shares[0].email == "u2@example.com"
 
-    monkeypatch.setattr(api_keys_router.auth_service, "delete_api_key_share", lambda *_args: False)
+    monkeypatch.setattr(api_keys_router.auth_service, "delete_api_key_share", lambda *_args, **_kwargs: False)
     with pytest.raises(HTTPException) as exc:
         await api_keys_router.remove_api_key_share("k1", "u2", current_user)
     assert exc.value.status_code == 404
 
-    monkeypatch.setattr(api_keys_router.auth_service, "delete_api_key_share", lambda *_args: True)
+    monkeypatch.setattr(api_keys_router.auth_service, "delete_api_key_share", lambda *_args, **_kwargs: True)
     assert await api_keys_router.remove_api_key_share("k1", "u2", current_user) == {"message": "API key share removed"}
 
 
@@ -366,7 +367,7 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     result = await users_router.get_current_user_info(admin_user)
     assert result.api_keys == []
 
-    monkeypatch.setattr(users_router.auth_service, "update_user", lambda *_args: user_obj)
+    monkeypatch.setattr(users_router.auth_service, "update_user", lambda *_args, **_kwargs: user_obj)
     result = await users_router.update_current_user_info(UserUpdate(role=Role.ADMIN, is_active=False), admin_user)
     assert result.api_keys == []
 
@@ -403,7 +404,7 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
         admin_user,
     )
     assert created is response_obj
-    assert any("recipient_email" in kwargs for _fn, kwargs in scheduled)
+    assert any("email_request" in kwargs for _fn, kwargs in scheduled)
 
     limited_user = _current_user(is_superuser=False, permissions=[Permission.MANAGE_TENANTS.value], role=Role.USER)
     with pytest.raises(HTTPException) as exc:
@@ -415,12 +416,12 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
         await users_router.update_user("u2", UserUpdate(role=Role.ADMIN), non_admin)
     assert exc.value.status_code == 403
 
-    monkeypatch.setattr(users_router.auth_service, "update_user", lambda *_args: None)
+    monkeypatch.setattr(users_router.auth_service, "update_user", lambda *_args, **_kwargs: None)
     with pytest.raises(HTTPException) as exc:
         await users_router.update_user("u2", UserUpdate(full_name="Renamed"), admin_user)
     assert exc.value.status_code == 404
 
-    monkeypatch.setattr(users_router.auth_service, "update_user", lambda *_args: user_obj)
+    monkeypatch.setattr(users_router.auth_service, "update_user", lambda *_args, **_kwargs: user_obj)
     assert await users_router.update_user("u2", UserUpdate(group_ids=["g1"]), admin_user) is response_obj
 
     members = GroupMembersUpdate.model_validate({"": None})
@@ -429,7 +430,7 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     monkeypatch.setattr(
         users_router.auth_service,
         "update_user",
-        lambda *_args: (_ for _ in ()).throw(
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
             HTTPException(
                 status_code=403, detail="Users cannot change their own role, tenant scope, or group memberships"
             )
@@ -492,7 +493,8 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     )
 
     async def fake_temp_email(**kwargs):
-        return kwargs["recipient_email"] == "t@example.com"
+        email_request = kwargs["email_request"]
+        return email_request.recipient_email == "t@example.com"
 
     monkeypatch.setattr(users_router.notification_service, "send_temporary_password_email", fake_temp_email)
     reset = await users_router.reset_user_password_temp("u2", admin_user)
@@ -525,12 +527,12 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     monkeypatch.setattr(users_router.auth_service, "delete_user", lambda *_args: True)
     assert await users_router.delete_user("u2", admin_user) == {"message": "User deleted successfully"}
 
-    monkeypatch.setattr(users_router.auth_service, "update_user_permissions", lambda *_args: False)
+    monkeypatch.setattr(users_router.auth_service, "update_user_permissions", lambda *_args, **_kwargs: False)
     with pytest.raises(HTTPException) as exc:
         await users_router.update_user_permissions("u2", ["read:users"], admin_user)
     assert exc.value.status_code == 404
 
-    monkeypatch.setattr(users_router.auth_service, "update_user_permissions", lambda *_args: True)
+    monkeypatch.setattr(users_router.auth_service, "update_user_permissions", lambda *_args, **_kwargs: True)
     assert await users_router.update_user_permissions("u2", ["read:users"], admin_user) == {
         "success": True,
         "permissions": ["read:users"],
@@ -539,7 +541,7 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     monkeypatch.setattr(
         users_router.auth_service,
         "update_user_permissions",
-        lambda *_args: (_ for _ in ()).throw(
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
             HTTPException(status_code=403, detail="Users cannot change their own permissions")
         ),
     )
@@ -583,12 +585,12 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     monkeypatch.setattr(groups_router.auth_service, "get_group", lambda *_args: group_obj)
     assert await groups_router.get_group("g1", admin_user) is group_obj
 
-    monkeypatch.setattr(groups_router.auth_service, "update_group", lambda *_args: None)
+    monkeypatch.setattr(groups_router.auth_service, "update_group", lambda *_args, **_kwargs: None)
     with pytest.raises(HTTPException) as exc:
         await groups_router.update_group("g1", GroupUpdate(name="new"), admin_user)
     assert exc.value.status_code == 404
 
-    monkeypatch.setattr(groups_router.auth_service, "update_group", lambda *_args: group_obj)
+    monkeypatch.setattr(groups_router.auth_service, "update_group", lambda *_args, **_kwargs: group_obj)
     assert await groups_router.update_group("g1", GroupUpdate(name="new"), admin_user) is group_obj
 
     monkeypatch.setattr(groups_router.auth_service, "delete_group", lambda *_args: False)
@@ -600,23 +602,23 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     delete_response = await groups_router.delete_group("g1", admin_user)
     assert delete_response.status_code == 204
 
-    monkeypatch.setattr(groups_router.auth_service, "update_group_permissions", lambda *_args: False)
+    monkeypatch.setattr(groups_router.auth_service, "update_group_permissions", lambda *_args, **_kwargs: False)
     with pytest.raises(HTTPException) as exc:
         await groups_router.update_group_permissions("g1", ["read:users"], admin_user)
     assert exc.value.status_code == 404
 
-    monkeypatch.setattr(groups_router.auth_service, "update_group_permissions", lambda *_args: True)
+    monkeypatch.setattr(groups_router.auth_service, "update_group_permissions", lambda *_args, **_kwargs: True)
     assert await groups_router.update_group_permissions("g1", ["read:users"], admin_user) == {
         "success": True,
         "permissions": ["read:users"],
     }
 
-    monkeypatch.setattr(groups_router.auth_service, "update_group_members", lambda *_args: False)
+    monkeypatch.setattr(groups_router.auth_service, "update_group_members", lambda *_args, **_kwargs: False)
     with pytest.raises(HTTPException) as exc:
         await groups_router.update_group_members("g1", GroupMembersUpdate(user_ids=["u1"]), admin_user)
     assert exc.value.status_code == 404
 
-    monkeypatch.setattr(groups_router.auth_service, "update_group_members", lambda *_args: True)
+    monkeypatch.setattr(groups_router.auth_service, "update_group_members", lambda *_args, **_kwargs: True)
     assert await groups_router.update_group_members("g1", GroupMembersUpdate(user_ids=["u1"]), admin_user) == {
         "success": True,
         "user_ids": ["u1"],

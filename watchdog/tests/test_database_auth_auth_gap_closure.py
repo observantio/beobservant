@@ -66,11 +66,11 @@ def test_exchange_authorization_code_and_helpers_failure_paths():
 
     service.oidc_service.start_authorization_transaction = lambda **_kwargs: "not-a-dict"
     with pytest.raises(ValueError, match="did not return a mapping"):
-        mod.get_oidc_authorization_url(service, "https://cb")
+        mod.get_oidc_authorization_url(service, mod.OidcAuthorizationUrlRequest(redirect_uri="https://cb"))
 
     service.oidc_service.start_authorization_transaction = lambda **_kwargs: {"state": "s"}
     with pytest.raises(ValueError, match="authorization_url"):
-        mod.get_oidc_authorization_url(service, "https://cb")
+        mod.get_oidc_authorization_url(service, mod.OidcAuthorizationUrlRequest(redirect_uri="https://cb"))
 
     service.oidc_service.create_keycloak_user = lambda **_kwargs: (_ for _ in ()).throw(ValueError("bad"))
     assert mod.provision_external_user(service, email="u@example.com", username="u", full_name=None) is None
