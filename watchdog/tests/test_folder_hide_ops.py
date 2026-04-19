@@ -20,7 +20,7 @@ os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 
 from db_models import Base, GrafanaFolder, Tenant, User
 from services.grafana import folder_ops
-from services.grafana.grafana_bundles import FolderListParams, GrafanaUserScope
+from services.grafana.grafana_bundles import FolderListParams, GrafanaUserScope, HiddenToggleParams
 
 
 class _GrafanaServiceStub:
@@ -162,6 +162,11 @@ def test_toggle_folder_hidden_rejects_hiding_own_folder():
     db.commit()
 
     with pytest.raises(HTTPException) as exc:
-        folder_ops.toggle_folder_hidden(db, "f1", "u1", "t1", True)
+        folder_ops.toggle_folder_hidden(
+            db,
+            "f1",
+            GrafanaUserScope("u1", "t1", []),
+            HiddenToggleParams(hidden=True),
+        )
     assert exc.value.status_code == 400
     assert "cannot hide folders you own" in str(exc.value.detail).lower()

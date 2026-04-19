@@ -9,6 +9,9 @@ All notable changes to this project are documented here.
 * The copy button for quick API key now shows a success acknowledgement when the token is copied.
 * The RCA page polling now refreshes only active queued jobs when a completed job is selected, preventing unnecessary full queue refreshes.
 * Expanded mutation testing coverage and test tooling for resolver and notifier, and fixed related script/config issues.
+* Tightened pylint design limits in root/resolver/notifier configs and completed resolver+notifier type/test hardening so `mypy` and `pytest` run cleanly at 100% coverage.
+* Refactored notifier alerting, incident, Jira, notification transport/email, and access/storage service APIs to typed request/context models with compatibility adapters, restoring strict `pylint`, `mypy`, and `pytest` (100% coverage) under the tightened design limits.
+* Refactored gatekeeper gateway auth configuration and proxy trust/rate-limit handling to satisfy strict lint design thresholds while keeping full test/type gates green.
 
 
 ## [v0.0.4] - 2026-04-14

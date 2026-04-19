@@ -15,7 +15,7 @@ from custom_types.json import JSONDict
 from db_models import GrafanaDashboard, Group
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
 from services.grafana.proxy_client import GrafanaProxyClient
-from services.grafana.grafana_bundles import AccessibleTitleConflictParams
+from services.grafana.grafana_bundles import AccessibleTitleConflictParams, DashboardAccessCriteria, GrafanaUserScope
 from services.grafana.shared_ops import group_id_strs
 
 def _json_dict(value: object) -> JSONDict:
@@ -137,10 +137,12 @@ async def _has_accessible_title_conflict(
     for dash in q.all():
         if params.exclude_uid and dash.grafana_uid == str(params.exclude_uid):
             continue
-        if (
-            check_dashboard_access(db, dash.grafana_uid, params.user_id, params.tenant_id, params.group_ids)
-            is not None
-        ):
+        if check_dashboard_access(
+            db,
+            dash.grafana_uid,
+            GrafanaUserScope(user_id=params.user_id, tenant_id=params.tenant_id, group_ids=params.group_ids),
+            DashboardAccessCriteria(),
+        ) is not None:
             return True
     return False
 
@@ -171,25 +173,23 @@ def _purge_stale_dashboards(
 def check_dashboard_access(
     db: Session,
     dashboard_uid: str,
-    user_id: str,
-    tenant_id: str,
-    group_ids: List[str],
-    require_write: bool = False,
+    scope: GrafanaUserScope,
+    criteria: DashboardAccessCriteria | None = None,
 ) -> Optional[GrafanaDashboard]:
-    dashboard = _db_dashboard_by_uid(db, tenant_id, dashboard_uid)
-    if not dashboard:
-        return None
-    if dashboard.created_by == user_id:
-        return dashboard
-    if require_write:
-        return None
-    if dashboard.visibility == "tenant":
-        return dashboard
-    if dashboard.visibility == "group":
-        allowed = set(group_id_strs(group_ids))
-        shared = {str(g.id) for g in (dashboard.shared_groups or [])}
-        return dashboard if allowed.intersection(shared) else None
-    return None
+    effective_criteria = criteria or DashboardAccessCriteria(require_write=False)
+    dashboard = _db_dashboard_by_uid(db, scope.tenant_id, dashboard_uid)
+    has_access = False
+    if dashboard is not None:
+        if dashboard.created_by == scope.user_id:
+            has_access = True
+        elif not effective_criteria.require_write:
+            if dashboard.visibility == "tenant":
+                has_access = True
+            elif dashboard.visibility == "group":
+                allowed = set(group_id_strs(scope.group_ids))
+                shared = {str(g.id) for g in (dashboard.shared_groups or [])}
+                has_access = bool(allowed.intersection(shared))
+    return dashboard if has_access else None
 
 
 def get_accessible_dashboard_uids(
@@ -268,39 +268,21 @@ def _dashboard_has_datasource(dashboard_obj: object) -> bool:
 
 
 def _is_general_folder_id(folder_id: object) -> bool:
-    if folder_id in ("", 0, "0"):
-        return True
     if folder_id is None:
         return False
-    if isinstance(folder_id, bool):
-        return int(folder_id) <= 0
-    if isinstance(folder_id, int):
-        return folder_id <= 0
-    if isinstance(folder_id, float):
-        return int(folder_id) <= 0
-    if not isinstance(folder_id, str):
+    if folder_id in ("", 0, "0"):
+        return True
+    parsed = _to_safe_int32(folder_id)
+    if parsed is None:
         return False
-    try:
-        return int(folder_id) <= 0
-    except (TypeError, ValueError):
-        return False
+    return parsed <= 0
 
 
 def _is_non_general_folder_id(folder_id: object) -> bool:
-    if folder_id in (None, "", 0, "0"):
+    parsed = _to_safe_int32(folder_id)
+    if parsed is None:
         return False
-    if isinstance(folder_id, bool):
-        return int(folder_id) > 0
-    if isinstance(folder_id, int):
-        return folder_id > 0
-    if isinstance(folder_id, float):
-        return int(folder_id) > 0
-    if not isinstance(folder_id, str):
-        return False
-    try:
-        return int(folder_id) > 0
-    except (TypeError, ValueError):
-        return False
+    return parsed > 0
 
 
 async def _resolve_folder_uid_by_id(service: GrafanaProxyClient, folder_id: Optional[int]) -> Optional[str]:

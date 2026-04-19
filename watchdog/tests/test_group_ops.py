@@ -37,7 +37,7 @@ def test_update_group_permissions_logs_actor_user_id():
     ok = svc.update_group_permissions(
         group.id,
         ["read:agents"],
-        tenant_id,
+        tenant_id=tenant_id,
         actor=AuthActorCaps(user_id=creator.id, role="user"),
     )
     assert ok is True
@@ -70,7 +70,7 @@ def test_non_admin_cannot_grant_manage_permissions_to_group():
         svc.update_group_permissions(
             group.id,
             ["manage:users"],
-            tenant_id,
+            tenant_id=tenant_id,
             actor=AuthActorCaps(user_id=creator.id, role="user"),
         )
     assert exc.value.status_code == 403
@@ -102,7 +102,7 @@ def test_update_group_members_prunes_removed_member_grafana_group_shares():
     svc.update_group_members(
         group.id,
         [owner.id, member.id],
-        tenant_id,
+        tenant_id=tenant_id,
         actor=AuthActorCaps(user_id=admin.id, role="admin"),
     )
 
@@ -139,7 +139,7 @@ def test_update_group_members_prunes_removed_member_grafana_group_shares():
     svc.update_group_members(
         group.id,
         [member.id],
-        tenant_id,
+        tenant_id=tenant_id,
         actor=AuthActorCaps(user_id=admin.id, role="admin"),
     )
 

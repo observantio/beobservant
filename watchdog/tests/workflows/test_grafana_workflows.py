@@ -36,8 +36,8 @@ def test_grafana_proxy_folder_and_dashboard_workflows(client, monkeypatch: pytes
     monkeypatch.setattr(folders.proxy, "delete_folder", state.delete_folder)
     monkeypatch.setattr(folders.proxy, "toggle_folder_hidden", state.toggle_folder_hidden)
 
-    async def fake_authorize_proxy_request(**kwargs):
-        return {"X-WEBAUTH-USER": kwargs["token"] or "cookie-user"}
+    async def fake_authorize_proxy_request(auth_request):
+        return {"X-WEBAUTH-USER": auth_request.token or "cookie-user"}
 
     monkeypatch.setattr(grafana_proxy_router.proxy, "authorize_proxy_request", fake_authorize_proxy_request)
 

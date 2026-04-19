@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
 from typing import Optional
 from urllib.parse import quote
@@ -47,26 +48,53 @@ def _http_verify_setting() -> str | bool:
     return bool(settings.SSL_VERIFY)
 
 
+@dataclass(frozen=True)
+class GatewayAuthConfig:
+    rate_limit_per_minute: int
+    ip_allowlist: str
+    token_cache_ttl: int
+    rate_limit_backend: str
+    rate_limit_redis_url: str
+
+
+def _default_gateway_auth_config() -> GatewayAuthConfig:
+    return GatewayAuthConfig(
+        rate_limit_per_minute=settings.RATE_LIMIT_PER_MINUTE,
+        ip_allowlist=settings.IP_ALLOWLIST,
+        token_cache_ttl=settings.TOKEN_CACHE_TTL,
+        rate_limit_backend=settings.RATE_LIMIT_BACKEND,
+        rate_limit_redis_url=settings.RATE_LIMIT_REDIS_URL,
+    )
+
+
 class GatewayAuthService:
     __slots__ = ("_rate_limiter", "_networks", "_token_cache", "_http_verify", "_auth_api_url")
 
     def __init__(
         self,
-        *,
-        rate_limit_per_minute: Optional[int] = None,
-        ip_allowlist: Optional[str] = None,
-        token_cache_ttl: Optional[int] = None,
-        rate_limit_backend: Optional[str] = None,
-        rate_limit_redis_url: Optional[str] = None,
+        config: GatewayAuthConfig | None = None,
+        rate_limit_per_minute: int | None = None,
+        ip_allowlist: str | None = None,
     ) -> None:
+        current = config or _default_gateway_auth_config()
+        if rate_limit_per_minute is not None or ip_allowlist is not None:
+            current = GatewayAuthConfig(
+                rate_limit_per_minute=(
+                    rate_limit_per_minute if rate_limit_per_minute is not None else current.rate_limit_per_minute
+                ),
+                ip_allowlist=ip_allowlist if ip_allowlist is not None else current.ip_allowlist,
+                token_cache_ttl=current.token_cache_ttl,
+                rate_limit_backend=current.rate_limit_backend,
+                rate_limit_redis_url=current.rate_limit_redis_url,
+            )
         self._rate_limiter = make_default_rate_limiter(
-            rate_limit_per_minute if rate_limit_per_minute is not None else settings.RATE_LIMIT_PER_MINUTE,
-            rate_limit_backend if rate_limit_backend is not None else settings.RATE_LIMIT_BACKEND,
-            rate_limit_redis_url if rate_limit_redis_url is not None else settings.RATE_LIMIT_REDIS_URL,
+            current.rate_limit_per_minute,
+            current.rate_limit_backend,
+            current.rate_limit_redis_url,
         )
-        self._networks = _parse_networks(ip_allowlist if ip_allowlist is not None else settings.IP_ALLOWLIST)
+        self._networks = _parse_networks(current.ip_allowlist)
         self._token_cache = make_token_cache(
-            token_cache_ttl if token_cache_ttl is not None else settings.TOKEN_CACHE_TTL,
+            current.token_cache_ttl,
             settings.TOKEN_CACHE_REDIS_URL or None,
         )
         self._http_verify = _http_verify_setting()
@@ -74,24 +102,28 @@ class GatewayAuthService:
 
     @staticmethod
     def _trusted_proxy_peer(request: Request) -> bool:
-        if not settings.TRUST_PROXY_HEADERS:
-            return False
+        is_trusted = settings.TRUST_PROXY_HEADERS
         peer = request.client.host if request.client else ""
         if not peer:
-            return False
+            is_trusted = False
         try:
             peer_ip = ip_address(peer)
         except ValueError:
-            return False
-        if not settings.TRUSTED_PROXY_CIDRS:
-            return True
-        for cidr in settings.TRUSTED_PROXY_CIDRS:
-            try:
-                if peer_ip in ip_network(cidr, strict=False):
-                    return True
-            except ValueError:
-                continue
-        return False
+            is_trusted = False
+            peer_ip = None
+        if is_trusted and peer_ip is not None:
+            allowed_cidrs = settings.TRUSTED_PROXY_CIDRS
+            if not allowed_cidrs:
+                return True
+            is_trusted = False
+            for cidr in allowed_cidrs:
+                try:
+                    if peer_ip in ip_network(cidr, strict=False):
+                        is_trusted = True
+                        break
+                except ValueError:
+                    continue
+        return is_trusted
 
     @classmethod
     def _client_ip(cls, request: Request) -> str:
@@ -149,6 +181,16 @@ class GatewayAuthService:
         org_id = payload.get("org_id")
         return str(org_id).strip() if org_id else None
 
+    def _resolve_auth_api_response(self, response: httpx.Response, token: str) -> Optional[str]:
+        status_code = response.status_code
+        if status_code == 200:
+            return self._extract_org_id(response)
+        if status_code == 404:
+            return None
+        if status_code == 405:
+            return self._fetch_org_from_api_legacy_query(token)
+        raise DatabaseUnavailable(f"unexpected status {status_code}")
+
     def _fetch_org_from_api(self, token: str) -> Optional[str]:
         if not token:
             return None
@@ -161,13 +203,7 @@ class GatewayAuthService:
             logger.warning("Auth API HTTP transport failure: %s", type(exc).__name__)
             raise DatabaseUnavailable from exc
 
-        if resp.status_code == 200:
-            return self._extract_org_id(resp)
-        if resp.status_code == 404:
-            return None
-        if resp.status_code in {405}:
-            return self._fetch_org_from_api_legacy_query(token)
-        raise DatabaseUnavailable(f"unexpected status {resp.status_code}")
+        return self._resolve_auth_api_response(resp, token)
 
     def _fetch_org_from_api_legacy_query(self, token: str) -> Optional[str]:
         legacy_url = f"{self._auth_api_url}?token={quote(token)}"

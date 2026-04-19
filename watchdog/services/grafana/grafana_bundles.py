@@ -16,6 +16,8 @@ from typing import Dict, List, Optional, Set
 from sqlalchemy.orm import Session
 
 from db_models import GrafanaDashboard
+from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate
+from models.grafana.grafana_datasource_models import DatasourceCreate, DatasourceUpdate
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
 
 
@@ -109,6 +111,21 @@ class DashboardUpdateOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class DashboardCreateRequest:
+    dashboard_create: DashboardCreate
+    scope: GrafanaUserScope
+    options: DashboardCreateOptions
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardUpdateRequest:
+    uid: str
+    dashboard_update: DashboardUpdate
+    scope: GrafanaUserScope
+    options: DashboardUpdateOptions
+
+
+@dataclass(frozen=True, slots=True)
 class DatasourceListParams:
     uid: Optional[str] = None
     query: Optional[str] = None
@@ -131,6 +148,26 @@ class DatasourceUpdateOptions:
     visibility: Optional[str] = None
     shared_group_ids: Optional[List[str]] = None
     is_admin: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class DatasourceCreateRequest:
+    datasource_create: DatasourceCreate
+    scope: GrafanaUserScope
+    options: DatasourceCreateOptions
+
+
+@dataclass(frozen=True, slots=True)
+class DatasourceUpdateRequest:
+    uid: str
+    datasource_update: DatasourceUpdate
+    scope: GrafanaUserScope
+    options: DatasourceUpdateOptions
+
+
+@dataclass(frozen=True, slots=True)
+class DatasourceAccessCriteria:
+    require_write: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +224,65 @@ class FolderAccessCriteria:
 @dataclass(frozen=True, slots=True)
 class FolderGetParams:
     is_admin: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class FolderGetRequest:
+    uid: str
+    scope: GrafanaUserScope
+    params: FolderGetParams
+
+
+@dataclass(frozen=True, slots=True)
+class FolderCreateRequest:
+    title: str
+    scope: GrafanaUserScope
+    options: FolderCreateOptions
+
+
+@dataclass(frozen=True, slots=True)
+class FolderDeleteRequest:
+    uid: str
+    scope: GrafanaUserScope
+    options: FolderDeleteOptions
+
+
+@dataclass(frozen=True, slots=True)
+class FolderUpdateRequest:
+    uid: str
+    scope: GrafanaUserScope
+    options: FolderUpdateOptions
+
+
+@dataclass(frozen=True, slots=True)
+class FolderAccessRequest:
+    uid: str
+    scope: GrafanaUserScope
+    criteria: FolderAccessCriteria
+
+
+@dataclass(frozen=True, slots=True)
+class FolderAccessibilityRequest:
+    uid: Optional[str]
+    scope: GrafanaUserScope
+    criteria: FolderAccessCriteria
+
+
+@dataclass(frozen=True, slots=True)
+class HiddenToggleParams:
+    hidden: bool
+
+
+@dataclass(frozen=True, slots=True)
+class HiddenToggleRequest:
+    uid: str
+    scope: GrafanaUserScope
+    params: HiddenToggleParams
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardAccessCriteria:
+    require_write: bool = False
 
 
 @dataclass(frozen=True, slots=True)

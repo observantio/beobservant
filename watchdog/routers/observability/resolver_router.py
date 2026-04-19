@@ -56,6 +56,18 @@ def _job_result_response_from_summary(summary: AnalyzeJobSummary) -> AnalyzeJobR
 router = APIRouter(prefix="/api/resolver", tags=["resolver"])
 
 
+class AnalyzeJobQueryParams:
+    def __init__(
+        self,
+        status_filter: Optional[AnalyzeJobStatus] = Query(default=None, alias="status"),
+        limit: int = Query(default=20, ge=1, le=100),
+        cursor: Optional[str] = Query(default=None),
+    ) -> None:
+        self.status_filter = status_filter
+        self.limit = limit
+        self.cursor = cursor
+
+
 @router.get("/analyze/config-template", response_model=AnalyzeConfigTemplateResponse)
 async def get_analyze_config_template(
     request: Request,
@@ -99,17 +111,15 @@ async def create_analyze_job(
 @router.get("/analyze/jobs", response_model=AnalyzeJobListResponse)
 async def list_analyze_jobs(
     request: Request,
-    status_filter: Optional[AnalyzeJobStatus] = Query(default=None, alias="status"),
-    limit: int = Query(default=20, ge=1, le=100),
-    cursor: Optional[str] = Query(default=None),
+    params_in: Annotated[AnalyzeJobQueryParams, Depends()],
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_RCA, "resolver")),
 ) -> AnalyzeJobListResponse:
     tenant_id = await resolve_tenant_id(request, current_user)
-    params: QueryParams = {"limit": limit}
-    if status_filter:
-        params["status"] = status_filter.value
-    if cursor:
-        params["cursor"] = cursor
+    params: QueryParams = {"limit": params_in.limit}
+    if params_in.status_filter:
+        params["status"] = params_in.status_filter.value
+    if params_in.cursor:
+        params["cursor"] = params_in.cursor
     upstream = await resolver_proxy_service.request_json(
         ResolverProxyJsonRequest(
             method="GET",

@@ -167,21 +167,31 @@ def test_tempo_and_loki_advanced_filter_workflow(client, monkeypatch: pytest.Mon
         )
         return {"status": "success", "data": {"result": []}}
 
-    async def fake_query_logs_instant(
-        query: str, time: int | None, tenant_id: str | None = None, limit: int | None = None
-    ) -> dict[str, Any]:
-        loki_calls.append(("query_instant", {"query": query, "time": time, "tenant_id": tenant_id, "limit": limit}))
+    async def fake_query_logs_instant(params: Any, tenant_id: str | None = None) -> dict[str, Any]:
+        loki_calls.append(
+            (
+                "query_instant",
+                {"query": params.query, "time": params.at_time, "tenant_id": tenant_id, "limit": params.limit},
+            )
+        )
         return {"status": "success", "data": {"result": []}}
 
     async def fake_get_labels(start: int | None, end: int | None, tenant_id: str | None = None) -> dict[str, Any]:
         loki_calls.append(("labels", {"start": start, "end": end, "tenant_id": tenant_id}))
         return {"status": "success", "data": ["service", "level"]}
 
-    async def fake_get_label_values(
-        label: str, start: int | None, end: int | None, query: str | None, tenant_id: str | None = None
-    ) -> dict[str, Any]:
+    async def fake_get_label_values(params: Any, tenant_id: str | None = None) -> dict[str, Any]:
         loki_calls.append(
-            ("label_values", {"label": label, "start": start, "end": end, "query": query, "tenant_id": tenant_id})
+            (
+                "label_values",
+                {
+                    "label": params.label,
+                    "start": params.start,
+                    "end": params.end,
+                    "query": params.query,
+                    "tenant_id": tenant_id,
+                },
+            )
         )
         return {"status": "success", "data": ["checkout"]}
 
@@ -193,21 +203,35 @@ def test_tempo_and_loki_advanced_filter_workflow(client, monkeypatch: pytest.Mon
         loki_calls.append(("filter", asdict(params)))
         return {"status": "success", "data": {"result": []}}
 
-    async def fake_aggregate_logs(
-        query: str, start: int | None, end: int | None, step: int, tenant_id: str | None = None
-    ) -> dict[str, Any]:
+    async def fake_aggregate_logs(params: Any, tenant_id: str | None = None) -> dict[str, Any]:
         loki_calls.append(
-            ("aggregate", {"query": query, "start": start, "end": end, "step": step, "tenant_id": tenant_id})
+            (
+                "aggregate",
+                {
+                    "query": params.query,
+                    "start": params.start,
+                    "end": params.end,
+                    "step": params.step,
+                    "tenant_id": tenant_id,
+                },
+            )
         )
-        return {"query": query, "step": step, "tenant_id": tenant_id}
+        return {"query": params.query, "step": params.step, "tenant_id": tenant_id}
 
-    async def fake_get_log_volume(
-        query: str, start: int | None, end: int | None, step: int, tenant_id: str | None = None
-    ) -> dict[str, Any]:
+    async def fake_get_log_volume(params: Any, tenant_id: str | None = None) -> dict[str, Any]:
         loki_calls.append(
-            ("volume", {"query": query, "start": start, "end": end, "step": step, "tenant_id": tenant_id})
+            (
+                "volume",
+                {
+                    "query": params.query,
+                    "start": params.start,
+                    "end": params.end,
+                    "step": params.step,
+                    "tenant_id": tenant_id,
+                },
+            )
         )
-        return {"query": query, "step": step, "tenant_id": tenant_id}
+        return {"query": params.query, "step": params.step, "tenant_id": tenant_id}
 
     monkeypatch.setattr(tempo_router.tempo_service, "search_traces", fake_search_traces)
     monkeypatch.setattr(tempo_router.tempo_service, "get_trace", fake_get_trace)

@@ -22,7 +22,12 @@ ensure_test_env()
 from db_models import Base, GrafanaDashboard, Tenant, User
 from models.grafana.grafana_dashboard_models import Dashboard, DashboardCreate, DashboardUpdate
 from services.grafana import dashboard_ops
-from services.grafana.grafana_bundles import DashboardCreateOptions, DashboardUpdateOptions, GrafanaUserScope
+from services.grafana.grafana_bundles import (
+    DashboardCreateOptions,
+    DashboardUpdateOptions,
+    DashboardUpdateRequest,
+    GrafanaUserScope,
+)
 from services.grafana.grafana_service import GrafanaAPIError
 
 
@@ -106,8 +111,8 @@ async def test_create_dashboard_retries_uid_on_conflict_and_then_succeeds(monkey
         service,
         db,
         _dashboard_create(),
-        GrafanaUserScope("u1", "t1", []),
-        DashboardCreateOptions(),
+        scope=GrafanaUserScope("u1", "t1", []),
+        options=DashboardCreateOptions(),
     )
     assert out is not None
     assert len(calls) == 2
@@ -148,8 +153,8 @@ async def test_create_dashboard_maps_grafana_error_after_failed_retry(monkeypatc
             service,
             db,
             _dashboard_create(uid="dash-existing"),
-            GrafanaUserScope("u1", "t1", []),
-            DashboardCreateOptions(),
+            scope=GrafanaUserScope("u1", "t1", []),
+            options=DashboardCreateOptions(),
         )
     assert created["mapped"] is True
 
@@ -191,9 +196,11 @@ async def test_update_dashboard_maps_upstream_errors(monkeypatch):
         await dashboard_ops.update_dashboard(
             service,
             db,
-            "d1",
-            DashboardUpdate(dashboard=Dashboard(title="x", tags=[]), overwrite=True),
-            GrafanaUserScope("u1", "t1", []),
-            DashboardUpdateOptions(),
+            DashboardUpdateRequest(
+                uid="d1",
+                dashboard_update=DashboardUpdate(dashboard=Dashboard(title="x", tags=[]), overwrite=True),
+                scope=GrafanaUserScope("u1", "t1", []),
+                options=DashboardUpdateOptions(),
+            ),
         )
     assert mapped["value"] is True

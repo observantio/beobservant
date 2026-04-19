@@ -23,8 +23,11 @@ from services.grafana import dashboard_ops, folder_ops
 from services.grafana.grafana_bundles import (
     DashboardSearchParams,
     FolderAccessCriteria,
+    FolderCreateRequest,
+    FolderGetRequest,
     FolderCreateOptions,
     FolderListParams,
+    FolderUpdateRequest,
     FolderUpdateOptions,
     GrafanaUserScope,
     GroupVisibilityValidation,
@@ -98,12 +101,14 @@ async def test_create_folder_persists_visibility_scope(db_session):
     result = await folder_ops.create_folder(
         service,
         db_session,
-        "Private Folder",
-        GrafanaUserScope("u1", "t1", []),
-        FolderCreateOptions(
-            visibility="private",
-            shared_group_ids=[],
-            is_admin=False,
+        FolderCreateRequest(
+            title="Private Folder",
+            scope=GrafanaUserScope("u1", "t1", []),
+            options=FolderCreateOptions(
+                visibility="private",
+                shared_group_ids=[],
+                is_admin=False,
+            ),
         ),
     )
 
@@ -123,13 +128,15 @@ async def test_create_folder_persists_allow_dashboard_writes_flag(db_session):
     result = await folder_ops.create_folder(
         service,
         db_session,
-        "Collaborative Folder",
-        GrafanaUserScope("u1", "t1", []),
-        FolderCreateOptions(
-            visibility="tenant",
-            shared_group_ids=[],
-            allow_dashboard_writes=True,
-            is_admin=False,
+        FolderCreateRequest(
+            title="Collaborative Folder",
+            scope=GrafanaUserScope("u1", "t1", []),
+            options=FolderCreateOptions(
+                visibility="tenant",
+                shared_group_ids=[],
+                allow_dashboard_writes=True,
+                is_admin=False,
+            ),
         ),
     )
 
@@ -261,14 +268,16 @@ async def test_update_folder_visibility_and_scope(db_session):
     result = await folder_ops.update_folder(
         service,
         db_session,
-        "f-tenant",
-        GrafanaUserScope("u1", "t1", []),
-        FolderUpdateOptions(
-            title="Team Folder",
-            visibility="private",
-            shared_group_ids=[],
-            allow_dashboard_writes=True,
-            is_admin=False,
+        FolderUpdateRequest(
+            uid="f-tenant",
+            scope=GrafanaUserScope("u1", "t1", []),
+            options=FolderUpdateOptions(
+                title="Team Folder",
+                visibility="private",
+                shared_group_ids=[],
+                allow_dashboard_writes=True,
+                is_admin=False,
+            ),
         ),
     )
 

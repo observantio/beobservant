@@ -27,7 +27,15 @@ from models.observability.loki_models import (
     LogResponse,
     LogSearchRequest,
 )
-from services.loki_service import FilterLogsParams, LokiService, SearchLogsByPatternParams
+from services.loki_service import (
+    AggregateLogsParams,
+    FilterLogsParams,
+    InstantLogQueryParams,
+    LabelValuesParams as ServiceLabelValuesParams,
+    LokiService,
+    LogVolumeParams,
+    SearchLogsByPatternParams,
+)
 
 START_TIME_DESC = "Start time in nanoseconds"
 END_TIME_DESC = "End time in nanoseconds"
@@ -47,6 +55,13 @@ async def _handle_timeout(coro: Awaitable[ResponseT], detail: str) -> ResponseT:
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=detail,
         ) from exc
+
+
+async def _read_logs_tenant_id(
+    request: Request,
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki")),
+) -> str:
+    return await resolve_tenant_id(request, current_user)
 
 
 class QueryLogsCoreParams:
@@ -75,12 +90,60 @@ class QueryLogsRangeParams:
         self.step = step
 
 
+class InstantQueryParams:
+    def __init__(
+        self,
+        query: str = Query(..., description="LogQL query string"),
+        time: Optional[int] = Query(None, description="Query time in nanoseconds"),
+        limit: int = Query(
+            config.DEFAULT_QUERY_LIMIT,
+            ge=1,
+            le=config.MAX_QUERY_LIMIT,
+            description="Maximum log lines to return",
+        ),
+    ) -> None:
+        self.query = query
+        self.time = time
+        self.limit = limit
+
+
+class LabelValuesParams:
+    def __init__(
+        self,
+        start: Optional[int] = Query(None, description=START_TIME_DESC),
+        end: Optional[int] = Query(None, description=END_TIME_DESC),
+        query: Optional[str] = Query(None, description="Optional LogQL query filter"),
+    ) -> None:
+        self.start = start
+        self.end = end
+        self.query = query
+
+
+class AggregateQueryParams:
+    def __init__(
+        self,
+        query: str = Query(..., description="LogQL aggregation query"),
+        step: int = Query(60, ge=1, description="Query resolution step in seconds"),
+    ) -> None:
+        self.query = query
+        self.step = step
+
+
+class VolumeQueryParams:
+    def __init__(
+        self,
+        query: str = Query(..., description="LogQL selector query"),
+        step: int = Query(300, ge=1, description="Time step in seconds"),
+    ) -> None:
+        self.query = query
+        self.step = step
+
+
 @router.get("/query", response_model=LogResponse)
 async def query_logs(
-    request: Request,
+    tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
     log_core: Annotated[QueryLogsCoreParams, Depends()],
     log_range: Annotated[QueryLogsRangeParams, Depends()],
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki")),
 ) -> LogResponse:
     log_query = LogQuery(
         query=log_core.query,
@@ -90,7 +153,6 @@ async def query_logs(
         direction=log_core.direction,
         step=log_range.step,
     )
-    tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
         loki_service.query_logs(log_query, tenant_id=tenant_id),
         "Loki query timed out",
@@ -99,29 +161,28 @@ async def query_logs(
 
 @router.get("/query_instant", response_model=LogResponse)
 async def query_logs_instant(
-    request: Request,
-    query: str = Query(..., description="LogQL query string"),
-    time: Optional[int] = Query(None, description="Query time in nanoseconds"),
-    limit: int = Query(
-        config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT, description="Maximum log lines to return"
-    ),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki")),
+    tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
+    query_params: Annotated[InstantQueryParams, Depends()],
 ) -> LogResponse:
-    tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
-        loki_service.query_logs_instant(query, time, tenant_id=tenant_id, limit=limit),
+        loki_service.query_logs_instant(
+            InstantLogQueryParams(
+                query=query_params.query,
+                at_time=query_params.time,
+                limit=query_params.limit,
+            ),
+            tenant_id=tenant_id,
+        ),
         "Loki instant query timed out",
     )
 
 
 @router.get("/labels", response_model=LogLabelsResponse)
 async def get_labels(
-    request: Request,
+    tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
     start: Optional[int] = Query(None, description=START_TIME_DESC),
     end: Optional[int] = Query(None, description=END_TIME_DESC),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki")),
 ) -> LogLabelsResponse:
-    tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
         loki_service.get_labels(start, end, tenant_id=tenant_id),
         "Loki labels lookup timed out",
@@ -130,27 +191,29 @@ async def get_labels(
 
 @router.get("/label/{label}/values", response_model=LogLabelValuesResponse)
 async def get_label_values(
-    request: Request,
+    tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
+    label_values_params: Annotated[LabelValuesParams, Depends()],
     label: str = Path(..., min_length=1, max_length=128, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$"),
-    start: Optional[int] = Query(None, description=START_TIME_DESC),
-    end: Optional[int] = Query(None, description=END_TIME_DESC),
-    query: Optional[str] = Query(None, description="Optional LogQL query filter"),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki")),
 ) -> LogLabelValuesResponse:
-    tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
-        loki_service.get_label_values(label, start, end, query, tenant_id=tenant_id),
+        loki_service.get_label_values(
+            ServiceLabelValuesParams(
+                label=label,
+                start=label_values_params.start,
+                end=label_values_params.end,
+                query=label_values_params.query,
+            ),
+            tenant_id=tenant_id,
+        ),
         f"Loki label values lookup timed out for {label}",
     )
 
 
 @router.post("/search")
 async def search_logs(
-    request: Request,
+    tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
     payload: LogSearchRequest = Body(..., description="Log search request"),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki")),
 ) -> LogResponse:
-    tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
         loki_service.search_logs_by_pattern(
             SearchLogsByPatternParams(
@@ -168,11 +231,9 @@ async def search_logs(
 
 @router.post("/filter")
 async def filter_logs(
-    request: Request,
+    tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
     payload: LogFilterRequest = Body(..., description="Log filtering request"),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki")),
 ) -> LogResponse:
-    tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
         loki_service.filter_logs(
             FilterLogsParams(
@@ -190,31 +251,41 @@ async def filter_logs(
 
 @router.get("/aggregate")
 async def aggregate_logs(
-    request: Request,
-    query: str = Query(..., description="LogQL aggregation query"),
+    tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
+    query_params: Annotated[AggregateQueryParams, Depends()],
     start: Optional[int] = Query(None, description=START_TIME_DESC),
     end: Optional[int] = Query(None, description=END_TIME_DESC),
-    step: int = Query(60, ge=1, description="Query resolution step in seconds"),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki")),
 ) -> JSONDict:
-    tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
-        loki_service.aggregate_logs(query, start, end, step, tenant_id=tenant_id),
+        loki_service.aggregate_logs(
+            AggregateLogsParams(
+                query=query_params.query,
+                start=start,
+                end=end,
+                step=query_params.step,
+            ),
+            tenant_id=tenant_id,
+        ),
         "Loki aggregation timed out",
     )
 
 
 @router.get("/volume")
 async def get_log_volume(
-    request: Request,
-    query: str = Query(..., description="LogQL selector query"),
+    tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
+    query_params: Annotated[VolumeQueryParams, Depends()],
     start: Optional[int] = Query(None, description=START_TIME_DESC),
     end: Optional[int] = Query(None, description=END_TIME_DESC),
-    step: int = Query(300, ge=1, description="Time step in seconds"),
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_LOGS, "loki")),
 ) -> JSONDict:
-    tenant_id = await resolve_tenant_id(request, current_user)
     return await _handle_timeout(
-        loki_service.get_log_volume(query, start, end, step, tenant_id=tenant_id),
+        loki_service.get_log_volume(
+            LogVolumeParams(
+                query=query_params.query,
+                start=start,
+                end=end,
+                step=query_params.step,
+            ),
+            tenant_id=tenant_id,
+        ),
         "Loki volume query timed out",
     )

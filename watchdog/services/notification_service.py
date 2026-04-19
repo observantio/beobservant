@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from email.message import EmailMessage
@@ -44,6 +45,22 @@ class SMTPConfig(TypedDict):
     envelope_from: str
     start_tls: bool
     use_tls: bool
+
+
+@dataclass(frozen=True, slots=True)
+class WelcomeEmailRequest:
+    recipient_email: str
+    username: str
+    full_name: Optional[str] = None
+    login_url: Optional[str] = None
+
+
+@dataclass(frozen=True, slots=True)
+class TemporaryPasswordEmailRequest:
+    recipient_email: str
+    username: str
+    temporary_password: str
+    login_url: Optional[str] = None
 
 
 def _as_bool(value: object) -> bool:
@@ -156,27 +173,25 @@ class NotificationService:
 
     async def send_user_welcome_email(
         self,
-        recipient_email: str,
-        username: str,
-        full_name: Optional[str] = None,
-        login_url: Optional[str] = None,
+        email_request: WelcomeEmailRequest,
     ) -> bool:
+        request = email_request
         if not _is_enabled("USER_WELCOME_EMAIL_ENABLED"):
             return False
         cfg = _smtp_config("USER_WELCOME")
         if not cfg["hostname"]:
             logger.info("User welcome email skipped: SMTP host not set")
             return False
-        app_login_url = (login_url or config.get_secret("APP_LOGIN_URL") or "").strip()
+        app_login_url = (request.login_url or config.get_secret("APP_LOGIN_URL") or "").strip()
         login_line = f"Login URL: {app_login_url}\n" if app_login_url else ""
         msg = self._build_message(
             subject="Welcome to Watchdog",
             cfg=cfg,
-            recipient=recipient_email,
+            recipient=request.recipient_email,
             body=(
-                f"Hello {full_name or username},\n\n"
+                f"Hello {request.full_name or request.username},\n\n"
                 "Your account was created in Watchdog.\n"
-                f"Username: {username}\n"
+                f"Username: {request.username}\n"
                 f"{login_line}"
                 "If this is your first login, follow your administrator's instructions "
                 "for credentials and MFA setup. If OIDC is enabled, please just login "
@@ -192,42 +207,40 @@ class NotificationService:
         html_body = _render_html_template(
             "welcome_user.html",
             {
-                "display_name": full_name or username,
-                "username": username,
+                "display_name": request.full_name or request.username,
+                "username": request.username,
                 "login_row_html": login_row_html,
             },
         )
         if html_body:
             msg.add_alternative(html_body, subtype="html")
-        result = await self._dispatch(cfg, msg, recipient_email)
+        result = await self._dispatch(cfg, msg, request.recipient_email)
         if result:
-            logger.info("User welcome email sent to %s", recipient_email)
+            logger.info("User welcome email sent to %s", request.recipient_email)
         return result
 
     async def send_temporary_password_email(
         self,
-        recipient_email: str,
-        username: str,
-        temporary_password: str,
-        login_url: Optional[str] = None,
+        email_request: TemporaryPasswordEmailRequest,
     ) -> bool:
+        request = email_request
         if not _is_enabled("PASSWORD_RESET_EMAIL_ENABLED", "USER_WELCOME_EMAIL_ENABLED"):
             return False
         cfg = _smtp_config("PASSWORD_RESET", "USER_WELCOME")
         if not cfg["hostname"]:
             logger.info("Temporary password email skipped: SMTP host not set")
             return False
-        app_login_url = (login_url or config.get_secret("APP_LOGIN_URL") or "").strip()
+        app_login_url = (request.login_url or config.get_secret("APP_LOGIN_URL") or "").strip()
         login_line = f"Login URL: {app_login_url}\n" if app_login_url else ""
         msg = self._build_message(
             subject="Temporary Password for Watchdog",
             cfg=cfg,
-            recipient=recipient_email,
+            recipient=request.recipient_email,
             body=(
-                f"Hello {username},\n\n"
+                f"Hello {request.username},\n\n"
                 "Your password has been reset by an administrator.\n\n"
                 "Temporary password\n"
-                f"{temporary_password}\n\n"
+                f"{request.temporary_password}\n\n"
                 f"{login_line}"
                 "Please change this password immediately after login.\n"
                 "This applies only to local/password authentication.\n\n"
@@ -243,14 +256,14 @@ class NotificationService:
         html_body = _render_html_template(
             "temporary_password.html",
             {
-                "username": username,
-                "temporary_password": temporary_password,
+                "username": request.username,
+                "temporary_password": request.temporary_password,
                 "login_row_html": login_row_html,
             },
         )
         if html_body:
             msg.add_alternative(html_body, subtype="html")
-        result = await self._dispatch(cfg, msg, recipient_email)
+        result = await self._dispatch(cfg, msg, request.recipient_email)
         if result:
-            logger.info("Temporary password email sent to %s", recipient_email)
+            logger.info("Temporary password email sent to %s", request.recipient_email)
         return result

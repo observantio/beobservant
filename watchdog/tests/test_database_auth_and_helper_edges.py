@@ -193,7 +193,13 @@ def test_database_auth_auth_helpers_and_login_flows(monkeypatch):
     service.is_external_auth_enabled = lambda: False
     assert auth_mod.exchange_oidc_authorization_code(service, "code", "https://cb") is None
     service.is_external_auth_enabled = lambda: True
-    assert auth_mod.get_oidc_authorization_url(service, "https://cb")["authorization_url"] == "https://idp"
+    assert (
+        auth_mod.get_oidc_authorization_url(
+            service,
+            auth_mod.OidcAuthorizationUrlRequest(redirect_uri="https://cb"),
+        )["authorization_url"]
+        == "https://idp"
+    )
     assert auth_mod.provision_external_user(service, email="a@b.c", username="user", full_name="User") == "external-id"
 
 

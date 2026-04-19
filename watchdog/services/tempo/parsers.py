@@ -10,6 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from itertools import pairwise
+from dataclasses import dataclass
 
 from custom_types.json import JSONDict
 from models.observability.tempo_models import Span, SpanAttribute, Trace
@@ -32,17 +33,19 @@ def _json_dict_list(value: object) -> list[JSONDict]:
 
 def _int_value(value: object) -> int:
     if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
+        parsed = int(value)
+    elif isinstance(value, int):
+        parsed = value
+    elif isinstance(value, float):
+        parsed = int(value)
+    elif isinstance(value, str):
         try:
-            return int(value)
+            parsed = int(value)
         except ValueError:
-            return 0
-    return 0
+            parsed = 0
+    else:
+        parsed = 0
+    return parsed
 
 
 def _optional_positive_int(value: object) -> int | None:
@@ -57,29 +60,27 @@ def _derive_systrace_component_from_line(line: object) -> str | None:
     if not text:
         return None
 
+    stem: str | None = None
     if text.startswith("=>"):
         rest = text[2:].strip()
         symbol = (rest.split()[0] if rest.split() else "").strip()
-        if not symbol:
-            return None
-        stem = "userstack" if symbol.startswith("<") and symbol.endswith(">") else symbol
-        return _normalize_component_stem(stem)
-
-    token = text.split()[0] if text.split() else ""
-    if not token:
-        return None
-    prefix = token.split(":", 1)[0]
-
-    stem = prefix
-    if "-" in prefix:
-        maybe_name, maybe_pid = prefix.rsplit("-", 1)
-        if maybe_name and maybe_pid.isdigit():
-            stem = maybe_name
-
+        if symbol:
+            stem = "userstack" if symbol.startswith("<") and symbol.endswith(">") else symbol
+    else:
+        token = text.split()[0] if text.split() else ""
+        if token:
+            prefix = token.split(":", 1)[0]
+            stem = prefix
+            if "-" in prefix:
+                maybe_name, maybe_pid = prefix.rsplit("-", 1)
+                if maybe_name and maybe_pid.isdigit():
+                    stem = maybe_name
     return _normalize_component_stem(stem)
 
 
-def _normalize_component_stem(stem: str) -> str | None:
+def _normalize_component_stem(stem: str | None) -> str | None:
+    if not stem:
+        return None
     normalized_chars: list[str] = []
     prev_dot = False
     for ch in stem:
@@ -178,17 +179,22 @@ def parse_attributes(attrs: list[JSONDict]) -> JSONDict:
     return parsed
 
 
+@dataclass(frozen=True, slots=True)
+class SpanParseContext:
+    trace_id: str
+    process_id: str
+    service_name: str | None
+    resource_attrs: JSONDict | None = None
+
+
 def parse_span(
     span_data: JSONDict,
-    trace_id: str,
-    process_id: str,
-    service_name: str | None,
-    resource_attrs: JSONDict | None = None,
+    parse_context: SpanParseContext,
 ) -> Span:
     attr_map = parse_attributes(_json_dict_list(span_data.get("attributes", [])))
 
-    if resource_attrs:
-        for k, v in resource_attrs.items():
+    if parse_context.resource_attrs:
+        for k, v in parse_context.resource_attrs.items():
             attr_map.setdefault(k, v)
 
     operation_name = span_data.get("name")
@@ -204,7 +210,7 @@ def parse_span(
         or attr_map.get(SERVICE_NAME_KEY)
         or attr_map.get(SERVICE_ALIAS_KEY)
         or attr_map.get("service_name")
-        or service_name
+        or parse_context.service_name
         or "unknown"
     )
     span_service_name = (
@@ -239,7 +245,7 @@ def parse_span(
     return Span.model_validate(
         {
             "spanID": span_id if isinstance(span_id, str) else "",
-            "traceID": trace_id,
+            "traceID": parse_context.trace_id,
             "parentSpanID": parent_span_id,
             "operationName": operation_name if isinstance(operation_name, str) else "",
             "startTime": start_time,
@@ -247,7 +253,7 @@ def parse_span(
             "tags": [{"key": t.key, "value": t.value} for t in tags],
             "serviceName": span_service_name,
             "attributes": attr_map,
-            "processID": str(span_service_name or process_id),
+            "processID": str(span_service_name or parse_context.process_id),
             "warnings": None,
         }
     )
@@ -275,7 +281,15 @@ def parse_tempo_trace(trace_id: str, data: JSONDict) -> Trace:
         }
         for scope in _json_dict_list(batch.get("scopeSpans")):
             spans.extend(
-                parse_span(s, trace_id, process_id, service_name, resource_attrs)
+                parse_span(
+                    s,
+                    SpanParseContext(
+                        trace_id=trace_id,
+                        process_id=process_id,
+                        service_name=service_name,
+                        resource_attrs=resource_attrs,
+                    ),
+                )
                 for s in _json_dict_list(scope.get("spans"))
             )
 

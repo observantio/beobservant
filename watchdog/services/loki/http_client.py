@@ -10,6 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 import logging
 import time
+from dataclasses import dataclass
 from typing import Dict, Mapping, Optional, Sequence
 import httpx
 
@@ -20,6 +21,15 @@ logger = logging.getLogger(__name__)
 QueryParamScalar = str | int | float | bool
 QueryParamValue = QueryParamScalar | Sequence[QueryParamScalar]
 QueryParams = Mapping[str, QueryParamValue]
+
+
+@dataclass(frozen=True, slots=True)
+class LokiGetJsonRequest:
+    client: httpx.AsyncClient
+    url: str
+    params: QueryParams
+    headers: Dict[str, str]
+    quiet: bool = False
 
 
 class LokiHttpClient:
@@ -49,25 +59,25 @@ class LokiHttpClient:
 
     async def safe_get_json(
         self,
-        client: httpx.AsyncClient,
-        url: str,
-        *,
-        params: QueryParams,
-        headers: Dict[str, str],
-        quiet: bool = False,
+        request: LokiGetJsonRequest,
     ) -> Optional[JSONDict]:
         try:
-            return await self.timed_get_json(client, url, params=params, headers=headers)
+            return await self.timed_get_json(
+                request.client,
+                request.url,
+                params=request.params,
+                headers=request.headers,
+            )
         except httpx.HTTPStatusError as e:
             status = e.response.status_code
             self._observe("loki_query_errors_total")
             is_client_error = 400 <= status < 500
-            if quiet or is_client_error:
-                logger.debug("Loki %s error for %s", status, url)
+            if request.quiet or is_client_error:
+                logger.debug("Loki %s error for %s", status, request.url)
             else:
-                logger.warning("Loki server error %s for %s", status, url)
+                logger.warning("Loki server error %s for %s", status, request.url)
         except httpx.HTTPError as e:
             self._observe("loki_query_errors_total")
-            log = logger.debug if quiet else logger.warning
-            log("Loki request failed for %s: %s", url, e)
+            log = logger.debug if request.quiet else logger.warning
+            log("Loki request failed for %s: %s", request.url, e)
         return None

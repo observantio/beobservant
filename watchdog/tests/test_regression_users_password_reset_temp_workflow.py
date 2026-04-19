@@ -98,8 +98,9 @@ async def test_reset_temp_password_sends_email_when_target_email_exists(monkeypa
 
     assert result.email_sent is True
     assert "delivered by email" in result.message
-    assert sent[0]["recipient_email"] == "target@example.com"
-    assert sent[0]["temporary_password"] == "Temp1234"
+    email_request = sent[0]["email_request"]
+    assert email_request.recipient_email == "target@example.com"
+    assert email_request.temporary_password == "Temp1234"
 
 
 @pytest.mark.asyncio

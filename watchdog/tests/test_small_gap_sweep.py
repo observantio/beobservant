@@ -19,15 +19,19 @@ from services.common import cookies as cookie_helpers
 from services.database_auth import audit as db_audit
 from services.grafana import folder_ops
 from services.grafana.grafana_bundles import (
+    FolderCreateRequest,
     FolderCreateOptions,
+    FolderDeleteRequest,
     FolderDeleteOptions,
+    FolderGetRequest,
     FolderGetParams,
+    FolderUpdateRequest,
     FolderUpdateOptions,
     GrafanaUserScope,
     GroupVisibilityValidation,
 )
 from services.grafana.grafana_service import GrafanaAPIError
-from services.loki.http_client import LokiHttpClient
+from services.loki.http_client import LokiGetJsonRequest, LokiHttpClient
 
 
 def _request(*, scheme="http", headers=None, client=("127.0.0.1", 1)):
@@ -173,11 +177,13 @@ def test_auth_helper_database_audit_cookie_and_loki_small_gaps(monkeypatch):
     monkeypatch.setattr("services.loki.http_client.logger.warning", lambda *args, **kwargs: warnings.append(args))
     result = asyncio.run(
         client.safe_get_json(
-            _ClientStub(_ResponseStub(500)),
-            "https://loki.test",
-            params={"q": "x"},
-            headers={},
-            quiet=False,
+            LokiGetJsonRequest(
+                client=_ClientStub(_ResponseStub(500)),
+                url="https://loki.test",
+                params={"q": "x"},
+                headers={},
+                quiet=False,
+            )
         )
     )
     assert result is None
@@ -219,9 +225,11 @@ def test_folder_ops_remaining_success_and_nonraising_error_paths():
         folder_ops.get_folder(
             service,
             db,
-            "f1",
-            GrafanaUserScope("u1", "t1", []),
-            FolderGetParams(),
+            FolderGetRequest(
+                uid="f1",
+                scope=GrafanaUserScope("u1", "t1", []),
+                params=FolderGetParams(),
+            ),
         )
     )
     assert folder is not None
@@ -244,7 +252,11 @@ def test_folder_ops_remaining_success_and_nonraising_error_paths():
     u1_scope = GrafanaUserScope("u1", "t1", [])
     assert (
         asyncio.run(
-            folder_ops.create_folder(service, db, "New", u1_scope, FolderCreateOptions())
+            folder_ops.create_folder(
+                service,
+                db,
+                FolderCreateRequest(title="New", scope=u1_scope, options=FolderCreateOptions()),
+            )
         )
         is None
     )
@@ -252,7 +264,13 @@ def test_folder_ops_remaining_success_and_nonraising_error_paths():
     grafana.create_error = None
     grafana.update_error = GrafanaAPIError(500, {"message": "bad"})
     assert (
-        asyncio.run(folder_ops.update_folder(service, db, "f1", u1_scope, FolderUpdateOptions()))
+        asyncio.run(
+            folder_ops.update_folder(
+                service,
+                db,
+                FolderUpdateRequest(uid="f1", scope=u1_scope, options=FolderUpdateOptions()),
+            )
+        )
         is None
     )
 
@@ -260,7 +278,11 @@ def test_folder_ops_remaining_success_and_nonraising_error_paths():
     grafana.delete_error = httpx.ConnectError("down")
     assert (
         asyncio.run(
-            folder_ops.delete_folder(service, db, "f1", u1_scope, FolderDeleteOptions(is_admin=False))
+            folder_ops.delete_folder(
+                service,
+                db,
+                FolderDeleteRequest(uid="f1", scope=u1_scope, options=FolderDeleteOptions(is_admin=False)),
+            )
         )
         is False
     )
@@ -268,17 +290,29 @@ def test_folder_ops_remaining_success_and_nonraising_error_paths():
     grafana.delete_error = None
     grafana.folder = SimpleNamespace(id=12, uid="f-created", title="Created")
     created = asyncio.run(
-        folder_ops.create_folder(service, db, "Created", u1_scope, FolderCreateOptions())
+        folder_ops.create_folder(
+            service,
+            db,
+            FolderCreateRequest(title="Created", scope=u1_scope, options=FolderCreateOptions()),
+        )
     )
     assert created is not None
     grafana.folder = SimpleNamespace(id=11, uid="f1", title="Folder 1")
     updated = asyncio.run(
-        folder_ops.update_folder(service, db, "f1", u1_scope, FolderUpdateOptions())
+        folder_ops.update_folder(
+            service,
+            db,
+            FolderUpdateRequest(uid="f1", scope=u1_scope, options=FolderUpdateOptions()),
+        )
     )
     assert updated is not None
     assert (
         asyncio.run(
-            folder_ops.delete_folder(service, db, "f1", u1_scope, FolderDeleteOptions(is_admin=False))
+            folder_ops.delete_folder(
+                service,
+                db,
+                FolderDeleteRequest(uid="f1", scope=u1_scope, options=FolderDeleteOptions(is_admin=False)),
+            )
         )
         is True
     )

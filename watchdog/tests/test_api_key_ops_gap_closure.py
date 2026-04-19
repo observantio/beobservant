@@ -174,51 +174,61 @@ def test_replace_api_key_shares_group_user_validation_and_success_paths(monkeypa
     with pytest.raises(ValueError, match="Invalid share groups"):
         api_key_ops.replace_api_key_shares(
             service,
-            owner_user_id=owner.id,
-            tenant_id="t1",
-            key_id=key.id,
-            user_ids=[],
-            group_ids=["g-missing"],
+                owner.id,
+                api_key_ops.ApiKeyShareReplaceRequest(
+                    tenant_id="t1",
+                    key_id=key.id,
+                    user_ids=[],
+                    group_ids=["g-missing"],
+                ),
         )
 
     with pytest.raises(ValueError, match="only share with groups you are in"):
         api_key_ops.replace_api_key_shares(
             service,
-            owner_user_id=owner.id,
-            tenant_id="t1",
-            key_id=key.id,
-            user_ids=[],
-            group_ids=["g-no-owner"],
+                owner.id,
+                api_key_ops.ApiKeyShareReplaceRequest(
+                    tenant_id="t1",
+                    key_id=key.id,
+                    user_ids=[],
+                    group_ids=["g-no-owner"],
+                ),
         )
 
     with pytest.raises(ValueError, match="Default key cannot be shared"):
         api_key_ops.replace_api_key_shares(
             service,
-            owner_user_id=owner.id,
-            tenant_id="t1",
-            key_id=default_key.id,
-            user_ids=[user_a.id],
-            group_ids=[],
+                owner.id,
+                api_key_ops.ApiKeyShareReplaceRequest(
+                    tenant_id="t1",
+                    key_id=default_key.id,
+                    user_ids=[user_a.id],
+                    group_ids=[],
+                ),
         )
 
     with pytest.raises(ValueError, match="Invalid share users"):
         api_key_ops.replace_api_key_shares(
             service,
-            owner_user_id=owner.id,
-            tenant_id="t1",
-            key_id=key.id,
-            user_ids=["u-missing"],
-            group_ids=[],
+                owner.id,
+                api_key_ops.ApiKeyShareReplaceRequest(
+                    tenant_id="t1",
+                    key_id=key.id,
+                    user_ids=["u-missing"],
+                    group_ids=[],
+                ),
         )
 
     result = api_key_ops.replace_api_key_shares(
         service,
-        owner_user_id=owner.id,
-        tenant_id="t1",
-        key_id=key.id,
+            owner.id,
+            api_key_ops.ApiKeyShareReplaceRequest(
+                tenant_id="t1",
+                key_id=key.id,
         # include owner + duplicates on purpose; owner must be stripped and duplicates deduped
-        user_ids=[owner.id, user_a.id, user_a.id],
-        group_ids=["g-ok"],
+                user_ids=[owner.id, user_a.id, user_a.id],
+                group_ids=["g-ok"],
+            ),
     )
     shared_user_ids = sorted(item.user_id for item in result)
     assert shared_user_ids == sorted([user_a.id, user_b.id])

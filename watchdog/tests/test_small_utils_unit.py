@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import httpx
 
 from services.grafana.normalize import normalize_grafana_next_path
-from services.loki.http_client import LokiHttpClient
+from services.loki.http_client import LokiGetJsonRequest, LokiHttpClient
 
 
 class ResponseStub:
@@ -87,11 +87,13 @@ def test_loki_http_client_success_and_error_paths():
 
     status_result = asyncio.run(
         client.safe_get_json(
-            ClientStub(response=ResponseStub({}, status_code=404)),
-            "https://loki",
-            params={"q": "x"},
-            headers={},
-            quiet=True,
+            LokiGetJsonRequest(
+                client=ClientStub(response=ResponseStub({}, status_code=404)),
+                url="https://loki",
+                params={"q": "x"},
+                headers={},
+                quiet=True,
+            )
         )
     )
     assert status_result is None
@@ -100,10 +102,12 @@ def test_loki_http_client_success_and_error_paths():
     http_error = httpx.ConnectError("boom", request=request)
     error_result = asyncio.run(
         client.safe_get_json(
-            ClientStub(exc=http_error),
-            "https://loki",
-            params={"q": "x"},
-            headers={},
+            LokiGetJsonRequest(
+                client=ClientStub(exc=http_error),
+                url="https://loki",
+                params={"q": "x"},
+                headers={},
+            )
         )
     )
     assert error_result is None

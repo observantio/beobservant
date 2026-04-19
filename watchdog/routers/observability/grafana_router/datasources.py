@@ -10,7 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import List, Optional
 
 from fastapi import Body, Depends, HTTPException, Path, Query
@@ -26,11 +26,15 @@ from models.access.auth_models import Permission, TokenData
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from models.observability.grafana_request_models import GrafanaDatasourceQueryRequest, GrafanaHiddenToggleRequest
 from services.grafana.grafana_bundles import (
+    DatasourceCreateRequest as DatasourceCreateBundle,
     DatasourceCreateOptions,
     DatasourceListParams,
     DatasourceQueryEnforcement,
+    DatasourceUpdateRequest as DatasourceUpdateBundle,
     DatasourceUpdateOptions,
     GrafanaUserScope,
+    HiddenToggleParams,
+    HiddenToggleRequest,
 )
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.route_payloads import validate_visibility
@@ -38,22 +42,61 @@ from services.grafana.route_payloads import validate_visibility
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
 
 
-def _datasource_list_params_dep(
+@dataclass(frozen=True, slots=True)
+class DatasourceListFilterParams:
+    uid: str | None = None
+    query: str | None = None
+    team_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DatasourceListPagingParams:
+    show_hidden: bool = False
+    limit: int = config.DEFAULT_QUERY_LIMIT
+    offset: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class DatasourceUpdateRequest:
+    uid: str
+    datasource: DatasourceUpdate
+
+
+def _datasource_list_filter_dep(
     uid: str | None = Query(None, min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
     query: str | None = Query(None),
     team_id: str | None = Query(None),
+) -> DatasourceListFilterParams:
+    return DatasourceListFilterParams(uid=uid, query=query, team_id=team_id)
+
+
+def _datasource_list_paging_dep(
     show_hidden: StrictBool = Query(False),
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
     offset: int = Query(0, ge=0),
+) -> DatasourceListPagingParams:
+    return DatasourceListPagingParams(show_hidden=show_hidden, limit=limit, offset=offset)
+
+
+def _datasource_list_params_dep(
+    filter_params: DatasourceListFilterParams = Depends(_datasource_list_filter_dep),
+    paging_params: DatasourceListPagingParams = Depends(_datasource_list_paging_dep),
 ) -> DatasourceListParams:
     return DatasourceListParams(
-        uid=uid,
-        query=query,
-        team_id=team_id,
-        show_hidden=show_hidden,
-        limit=limit,
-        offset=offset,
+        uid=filter_params.uid,
+        query=filter_params.query,
+        team_id=filter_params.team_id,
+        show_hidden=paging_params.show_hidden,
+        limit=paging_params.limit,
+        offset=paging_params.offset,
     )
+
+
+def _datasource_update_request_dep(
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
+    datasource: DatasourceUpdate = Body(...),
+) -> DatasourceUpdateRequest:
+    return DatasourceUpdateRequest(uid=uid, datasource=datasource)
 
 
 @router.post("/ds/query")
@@ -146,6 +189,7 @@ async def create_datasource(
     datasource: DatasourceCreate = Body(...),
     visibility: str = Query("private"),
     shared_group_ids: Optional[List[str]] = Query(None),
+    *,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),
 ) -> Datasource:
@@ -153,12 +197,14 @@ async def create_datasource(
     user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     result = await proxy.create_datasource(
         db=db,
-        datasource_create=datasource,
-        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-        options=DatasourceCreateOptions(
-            visibility=visibility,
-            shared_group_ids=shared_group_ids or [],
-            is_admin=is_admin,
+        request=DatasourceCreateBundle(
+            datasource_create=datasource,
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            options=DatasourceCreateOptions(
+                visibility=visibility,
+                shared_group_ids=shared_group_ids or [],
+                is_admin=is_admin,
+            ),
         ),
     )
     if not result:
@@ -169,10 +215,10 @@ async def create_datasource(
 @router.put("/datasources/{uid}", response_model=Datasource)
 @handle_route_errors()
 async def update_datasource(
-    uid: str,
-    datasource: DatasourceUpdate = Body(...),
+    request: DatasourceUpdateRequest = Depends(_datasource_update_request_dep),
     visibility: Optional[str] = Query(None),
     shared_group_ids: Optional[List[str]] = Query(None),
+    *,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),
 ) -> Datasource:
@@ -180,17 +226,22 @@ async def update_datasource(
     user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     result = await proxy.update_datasource(
         db=db,
-        uid=uid,
-        datasource_update=datasource,
-        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-        options=DatasourceUpdateOptions(
-            visibility=visibility,
-            shared_group_ids=shared_group_ids,
-            is_admin=is_admin,
+        request=DatasourceUpdateBundle(
+            uid=request.uid,
+            datasource_update=request.datasource,
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            options=DatasourceUpdateOptions(
+                visibility=visibility,
+                shared_group_ids=shared_group_ids,
+                is_admin=is_admin,
+            ),
         ),
     )
     if not result:
-        raise HTTPException(status_code=404, detail=f"Datasource {uid} not found, access denied, or update failed")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Datasource {request.uid} not found, access denied, or update failed",
+        )
     return result
 
 
@@ -226,10 +277,11 @@ async def hide_datasource(
     ok = await rtp(
         proxy.toggle_datasource_hidden,
         db=db,
-        uid=uid,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        hidden=payload.hidden,
+        request=HiddenToggleRequest(
+            uid=uid,
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=[]),
+            params=HiddenToggleParams(hidden=payload.hidden),
+        ),
     )
     if not ok:
         raise HTTPException(status_code=404, detail=f"Datasource {uid} not found")

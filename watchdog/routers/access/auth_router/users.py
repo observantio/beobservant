@@ -39,7 +39,7 @@ from services.auth.helper import (
     perms_check,
     role_permission_strings,
 )
-
+from services.notification_service import TemporaryPasswordEmailRequest, WelcomeEmailRequest
 from .shared import USER_NOT_FOUND, notification_service, router, rtp
 from .shared import SAFE_PATH_ID_PATTERN
 
@@ -80,8 +80,8 @@ async def update_current_user_info(
         auth_service.update_user,
         current_user.user_id,
         UserUpdate(**data),
-        current_user.tenant_id,
-        current_user.user_id,
+        tenant_id=current_user.tenant_id,
+        updater_id=current_user.user_id,
     )
     if not updated:
         raise HTTPException(status.HTTP_404_NOT_FOUND, USER_NOT_FOUND)
@@ -142,10 +142,12 @@ async def create_user(
     )
     background_tasks.add_task(
         notification_service.send_user_welcome_email,
-        recipient_email=user.email,
-        username=user.username,
-        full_name=user.full_name,
-        login_url=None,
+        email_request=WelcomeEmailRequest(
+            recipient_email=user.email,
+            username=user.username,
+            full_name=user.full_name,
+            login_url=None,
+        ),
     )
     invalidate_grafana_proxy_auth_cache()
     return await rtp(auth_service.build_user_response, user, role_permission_strings(user.role))
@@ -179,7 +181,13 @@ async def update_user(
             "Only administrators can modify role, tenant scope, or group memberships",
         )
 
-    user = await rtp(auth_service.update_user, user_id, user_update, current_user.tenant_id, current_user.user_id)
+    user = await rtp(
+        auth_service.update_user,
+        user_id,
+        user_update,
+        tenant_id=current_user.tenant_id,
+        updater_id=current_user.user_id,
+    )
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, USER_NOT_FOUND)
     if update_fields & {"role", "group_ids", "org_id", "is_active"}:
@@ -228,10 +236,12 @@ async def reset_user_password_temp(
     target_username = _string_value(result.get("target_username"))
     if target_email:
         email_sent = await notification_service.send_temporary_password_email(
-            recipient_email=target_email,
-            username=target_username or target.username,
-            temporary_password=temp_pw,
-            login_url=None,
+            email_request=TemporaryPasswordEmailRequest(
+                recipient_email=target_email,
+                username=target_username or target.username,
+                temporary_password=temp_pw,
+                login_url=None,
+            )
         )
     return TempPasswordResetResponse(
         email_sent=bool(email_sent),
@@ -273,8 +283,8 @@ async def update_user_permissions(
         auth_service.update_user_permissions,
         user_id,
         permission_names,
-        current_user.tenant_id,
-        AuthActorCaps(
+        tenant_id=current_user.tenant_id,
+        actor=AuthActorCaps(
             user_id=current_user.user_id,
             role=current_user.role,
             permissions=list(perms_check(current_user)),

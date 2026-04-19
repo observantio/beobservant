@@ -29,7 +29,15 @@ def test_parse_attributes_and_span_and_trace():
         "endTimeUnixNano": "2000000",
         "attributes": [{"key": "k1", "value": {"stringValue": "v1"}}],
     }
-    span = tempo_parsers.parse_span(span_data, "t1", "proc", "svc", {"res": "x"})
+    span = tempo_parsers.parse_span(
+        span_data,
+        tempo_parsers.SpanParseContext(
+            trace_id="t1",
+            process_id="proc",
+            service_name="svc",
+            resource_attrs={"res": "x"},
+        ),
+    )
     assert isinstance(span, Span)
     assert span.span_id == "s1"
     assert span.trace_id == "t1"
@@ -84,7 +92,15 @@ def test_systrace_stack_component_and_duration_floor():
         "endTimeUnixNano": "1000",
         "attributes": [{"key": "systrace.trace.line", "value": {"stringValue": "=> do_syscall_64"}}],
     }
-    span = tempo_parsers.parse_span(span_data, "t2", "proc", "svc", {"service.name": "ojo-systrace"})
+    span = tempo_parsers.parse_span(
+        span_data,
+        tempo_parsers.SpanParseContext(
+            trace_id="t2",
+            process_id="proc",
+            service_name="svc",
+            resource_attrs={"service.name": "ojo-systrace"},
+        ),
+    )
     assert span.duration == 1
     assert span.parent_span_id == "p1"
     assert span.service_name == "kernel.do_syscall_64"

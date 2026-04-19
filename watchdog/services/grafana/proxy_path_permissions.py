@@ -16,22 +16,28 @@ from models.access.auth_models import Permission
 
 
 def _proxy_perms_static_prefixes(p: str, m: str) -> Optional[Set[str]]:
-    if p.startswith("/grafana/d/") or p.startswith("/grafana/d-solo/"):
-        return {Permission.READ_DASHBOARDS.value}
-    if p.startswith("/grafana/connections/datasources/edit/"):
-        return {Permission.UPDATE_DATASOURCES.value, Permission.CREATE_DATASOURCES.value}
-    if p.startswith("/grafana/api/search"):
-        return {Permission.READ_DASHBOARDS.value}
-    if p.startswith("/grafana/api/ds/query"):
-        return {Permission.QUERY_DATASOURCES.value}
+    path_rules: tuple[tuple[str, Set[str]], ...] = (
+        ("/grafana/d/", {Permission.READ_DASHBOARDS.value}),
+        ("/grafana/d-solo/", {Permission.READ_DASHBOARDS.value}),
+        (
+            "/grafana/connections/datasources/edit/",
+            {Permission.UPDATE_DATASOURCES.value, Permission.CREATE_DATASOURCES.value},
+        ),
+        ("/grafana/api/search", {Permission.READ_DASHBOARDS.value}),
+        ("/grafana/api/ds/query", {Permission.QUERY_DATASOURCES.value}),
+        ("/grafana/api/frontend-metrics", {Permission.READ_DASHBOARDS.value}),
+        ("/grafana/api/datasources/proxy/", {Permission.QUERY_DATASOURCES.value}),
+    )
+    for prefix, permissions in path_rules:
+        if p.startswith(prefix):
+            return permissions
+
     if p.startswith("/grafana/api/query-history"):
-        if m in {"POST", "PUT", "PATCH", "DELETE"}:
-            return {Permission.QUERY_DATASOURCES.value}
-        return {Permission.QUERY_DATASOURCES.value, Permission.READ_DASHBOARDS.value}
-    if p.startswith("/grafana/api/frontend-metrics"):
-        return {Permission.READ_DASHBOARDS.value}
-    if p.startswith("/grafana/api/datasources/proxy/"):
-        return {Permission.QUERY_DATASOURCES.value}
+        return (
+            {Permission.QUERY_DATASOURCES.value}
+            if m in {"POST", "PUT", "PATCH", "DELETE"}
+            else {Permission.QUERY_DATASOURCES.value, Permission.READ_DASHBOARDS.value}
+        )
     return None
 
 
@@ -54,16 +60,17 @@ def _proxy_perms_datasource_uid(p: str, m: str) -> Optional[Set[str]]:
     if not p.startswith("/grafana/api/datasources/uid/"):
         return None
     if "/resources/" in p or "/health" in p or p.endswith("/resources"):
-        if m in {"GET", "HEAD", "OPTIONS"}:
-            return {Permission.READ_DATASOURCES.value}
-        return {Permission.QUERY_DATASOURCES.value}
-    if m == "GET":
-        return {Permission.READ_DATASOURCES.value}
-    if m == "PUT":
-        return {Permission.UPDATE_DATASOURCES.value}
-    if m == "DELETE":
-        return {Permission.DELETE_DATASOURCES.value}
-    return None
+        return (
+            {Permission.READ_DATASOURCES.value}
+            if m in {"GET", "HEAD", "OPTIONS"}
+            else {Permission.QUERY_DATASOURCES.value}
+        )
+    mapping: dict[str, Set[str]] = {
+        "GET": {Permission.READ_DATASOURCES.value},
+        "PUT": {Permission.UPDATE_DATASOURCES.value},
+        "DELETE": {Permission.DELETE_DATASOURCES.value},
+    }
+    return mapping.get(m)
 
 
 def _proxy_perms_datasource_collection(p: str, m: str) -> Optional[Set[str]]:
@@ -78,22 +85,23 @@ def _proxy_perms_datasource_collection(p: str, m: str) -> Optional[Set[str]]:
 
 def _proxy_perms_f_api(p: str, m: str) -> Optional[Set[str]]:
     if p.startswith("/grafana/api/folders"):
-        if m == "GET":
-            return {Permission.READ_FOLDERS.value}
-        if m == "POST":
-            return {Permission.CREATE_FOLDERS.value}
-        if m == "DELETE":
-            return {Permission.DELETE_FOLDERS.value}
-        return None
+        mapping: dict[str, Set[str]] = {
+            "GET": {Permission.READ_FOLDERS.value},
+            "POST": {Permission.CREATE_FOLDERS.value},
+            "DELETE": {Permission.DELETE_FOLDERS.value},
+        }
+        return mapping.get(m)
     if p.startswith("/grafana/api/live"):
         return {Permission.READ_DASHBOARDS.value}
-    if m in {"GET", "HEAD", "OPTIONS"}:
-        return {
+    return (
+        {
             Permission.READ_DASHBOARDS.value,
             Permission.READ_DATASOURCES.value,
             Permission.READ_FOLDERS.value,
         }
-    return set()
+        if m in {"GET", "HEAD", "OPTIONS"}
+        else set()
+    )
 
 
 def required_permissions_for_path(path: str, method: str) -> Set[str]:

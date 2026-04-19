@@ -22,18 +22,19 @@ from models.grafana.grafana_folder_models import Folder
 from custom_types.json import JSONDict
 from services.grafana.grafana_bundles import (
     FolderAccessCriteria,
-    FolderCreateOptions,
-    FolderDeleteOptions,
-    FolderGetParams,
+    FolderCreateRequest,
+    FolderDeleteRequest,
+    FolderGetRequest,
     FolderListParams,
-    FolderUpdateOptions,
+    FolderUpdateRequest,
     GrafanaUserScope,
     GroupVisibilityValidation,
+    HiddenToggleParams,
 )
 from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
-from services.grafana.visibility import resolve_visibility_groups_for_scope
+from services.grafana.visibility import resolve_visibility_groups_for_scope, visibility_group_resolve_context
 
 def _db_folder_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[GrafanaFolder]:
     return (
@@ -48,21 +49,20 @@ def check_folder_access(
     criteria: FolderAccessCriteria,
 ) -> Optional[GrafanaFolder]:
     folder = _db_folder_by_uid(db, scope.tenant_id, uid)
-    if not folder:
-        return None
-    if not criteria.include_hidden and scope.user_id in (folder.hidden_by or []):
-        return None
-    if folder.created_by == scope.user_id:
-        return folder
-    if criteria.require_write:
-        return None
-    if folder.visibility == "tenant":
-        return folder
-    if folder.visibility == "group":
-        allowed = set(group_id_strs(scope.group_ids))
-        shared = {str(g.id) for g in (folder.shared_groups or [])}
-        return folder if allowed.intersection(shared) else None
-    return None
+    has_access = False
+    if folder is not None:
+        is_hidden = scope.user_id in (folder.hidden_by or [])
+        if not (is_hidden and not criteria.include_hidden):
+            if folder.created_by == scope.user_id:
+                has_access = True
+            elif not criteria.require_write:
+                if folder.visibility == "tenant":
+                    has_access = True
+                elif folder.visibility == "group":
+                    allowed = set(group_id_strs(scope.group_ids))
+                    shared = {str(g.id) for g in (folder.shared_groups or [])}
+                    has_access = bool(allowed.intersection(shared))
+    return folder if has_access else None
 
 
 def is_folder_accessible(
@@ -137,27 +137,25 @@ async def get_folders(
 async def get_folder(
     service: GrafanaProxyClient,
     db: Session,
-    uid: str,
-    scope: GrafanaUserScope,
-    params: FolderGetParams,
+    request: FolderGetRequest,
 ) -> Optional[Folder]:
-    user_id = scope.user_id
-    tenant_id = scope.tenant_id
-    db_folder = _db_folder_by_uid(db, tenant_id, uid)
+    user_id = request.scope.user_id
+    tenant_id = request.scope.tenant_id
+    db_folder = _db_folder_by_uid(db, tenant_id, request.uid)
     if not db_folder:
         return None
     if not check_folder_access(
         db,
-        uid,
-        scope,
+        request.uid,
+        request.scope,
         FolderAccessCriteria(
             require_write=False,
-            is_admin=params.is_admin,
+            is_admin=request.params.is_admin,
             include_hidden=False,
         ),
     ):
         return None
-    folder = await service.grafana_service.get_folder(uid)
+    folder = await service.grafana_service.get_folder(request.uid)
     if not folder:
         return None
     return Folder.model_validate(_folder_payload(folder, db_folder=db_folder, user_id=user_id))
@@ -166,27 +164,27 @@ async def get_folder(
 async def create_folder(
     service: GrafanaProxyClient,
     db: Session,
-    title: str,
-    scope: GrafanaUserScope,
-    options: FolderCreateOptions,
+    request: FolderCreateRequest,
 ) -> Optional[Folder]:
-    user_id = scope.user_id
-    tenant_id = scope.tenant_id
-    visibility = options.visibility
-    shared_group_ids = options.shared_group_ids
-    allow_dashboard_writes = options.allow_dashboard_writes
-    is_admin = options.is_admin
+    user_id = request.scope.user_id
+    tenant_id = request.scope.tenant_id
+    visibility = request.options.visibility
+    shared_group_ids = request.options.shared_group_ids
+    allow_dashboard_writes = request.options.allow_dashboard_writes
+    is_admin = request.options.is_admin
     groups = resolve_visibility_groups_for_scope(
         service,
         db,
-        scope,
-        visibility=visibility,
-        shared_group_ids=shared_group_ids,
-        is_admin=is_admin,
+        visibility_group_resolve_context(
+            request.scope,
+            visibility=visibility,
+            shared_group_ids=shared_group_ids,
+            is_admin=is_admin,
+        ),
     )
 
     try:
-        created = await service.grafana_service.create_folder(title)
+        created = await service.grafana_service.create_folder(request.title)
     except (GrafanaAPIError, httpx.HTTPError) as exc:
         service.raise_http_from_grafana_error(exc)
         return None
@@ -206,7 +204,7 @@ async def create_folder(
         created_by=user_id,
         grafana_uid=uid,
         grafana_id=getattr(created, "id", None),
-        title=str(getattr(created, "title", title) or title),
+        title=str(getattr(created, "title", request.title) or request.title),
         visibility=visibility or "private",
         allow_dashboard_writes=bool(allow_dashboard_writes),
         hidden_by=[],
@@ -223,32 +221,30 @@ async def create_folder(
 async def update_folder(
     service: GrafanaProxyClient,
     db: Session,
-    uid: str,
-    scope: GrafanaUserScope,
-    options: FolderUpdateOptions,
+    request: FolderUpdateRequest,
 ) -> Optional[Folder]:
-    user_id = scope.user_id
-    tenant_id = scope.tenant_id
-    group_ids = scope.group_ids
-    title = options.title
-    visibility = options.visibility
-    shared_group_ids = options.shared_group_ids
-    allow_dashboard_writes = options.allow_dashboard_writes
-    is_admin = options.is_admin
-    db_folder = _db_folder_by_uid(db, tenant_id, uid)
+    user_id = request.scope.user_id
+    tenant_id = request.scope.tenant_id
+    group_ids = request.scope.group_ids
+    title = request.options.title
+    visibility = request.options.visibility
+    shared_group_ids = request.options.shared_group_ids
+    allow_dashboard_writes = request.options.allow_dashboard_writes
+    is_admin = request.options.is_admin
+    db_folder = _db_folder_by_uid(db, tenant_id, request.uid)
     if not db_folder:
         return None
     if not check_folder_access(
         db,
-        uid,
-        scope,
+        request.uid,
+        request.scope,
         FolderAccessCriteria(require_write=True, is_admin=is_admin, include_hidden=False),
     ):
         return None
 
     new_title = str(title or db_folder.title).strip()
     try:
-        updated = await service.grafana_service.update_folder(uid, new_title)
+        updated = await service.grafana_service.update_folder(request.uid, new_title)
     except GrafanaAPIError as exc:
         if exc.status == 412:
             raise HTTPException(
@@ -289,25 +285,23 @@ async def update_folder(
 async def delete_folder(
     service: GrafanaProxyClient,
     db: Session,
-    uid: str,
-    scope: GrafanaUserScope,
-    options: FolderDeleteOptions,
+    request: FolderDeleteRequest,
 ) -> bool:
-    tenant_id = scope.tenant_id
-    is_admin = options.is_admin
-    db_folder = _db_folder_by_uid(db, tenant_id, uid)
+    tenant_id = request.scope.tenant_id
+    is_admin = request.options.is_admin
+    db_folder = _db_folder_by_uid(db, tenant_id, request.uid)
     if not db_folder:
         return False
     if not check_folder_access(
         db,
-        uid,
-        scope,
+        request.uid,
+        request.scope,
         FolderAccessCriteria(require_write=True, is_admin=is_admin, include_hidden=False),
     ):
         return False
 
     try:
-        ok = await service.grafana_service.delete_folder(uid)
+        ok = await service.grafana_service.delete_folder(request.uid)
     except (GrafanaAPIError, httpx.HTTPError) as exc:
         service.raise_http_from_grafana_error(exc)
         return False
@@ -320,12 +314,17 @@ async def delete_folder(
     return True
 
 
-def toggle_folder_hidden(db: Session, uid: str, user_id: str, tenant_id: str, hidden: bool) -> bool:
-    db_folder = _db_folder_by_uid(db, tenant_id, uid)
+def toggle_folder_hidden(
+    db: Session,
+    uid: str,
+    scope: GrafanaUserScope,
+    params: HiddenToggleParams,
+) -> bool:
+    db_folder = _db_folder_by_uid(db, scope.tenant_id, uid)
     if not db_folder:
         return False
-    if hidden and str(getattr(db_folder, "created_by", "")) == str(user_id):
+    if params.hidden and str(getattr(db_folder, "created_by", "")) == str(scope.user_id):
         raise HTTPException(status_code=400, detail="You cannot hide folders you own")
-    db_folder.hidden_by = update_hidden_members(db_folder.hidden_by, user_id, hidden)
+    db_folder.hidden_by = update_hidden_members(db_folder.hidden_by, scope.user_id, params.hidden)
     commit_session(db)
     return True

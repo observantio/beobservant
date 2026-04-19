@@ -30,21 +30,12 @@ class _GroupVisibilityService(Protocol):
 def resolve_visibility_groups_for_scope(
     service: _GroupVisibilityService,
     db: Session,
-    scope: GrafanaUserScope,
-    *,
-    visibility: str,
-    shared_group_ids: Optional[List[str]],
-    is_admin: bool,
+    ctx: VisibilityGroupResolveContext,
 ) -> List[Group]:
     return resolve_visibility_groups(
         service,
         db,
-        visibility_group_resolve_context(
-            scope,
-            visibility=visibility,
-            shared_group_ids=shared_group_ids,
-            is_admin=is_admin,
-        ),
+        ctx,
     )
 
 

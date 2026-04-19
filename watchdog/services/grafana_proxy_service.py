@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Dict, List, Optional, TYPE_CHECKING
 
 from fastapi import HTTPException, Request
@@ -18,28 +19,30 @@ from sqlalchemy.orm import Session
 
 from db_models import GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, User, user_groups
 from models.access.auth_models import TokenData
-from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardSearchResult, DashboardUpdate
-from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
+from models.grafana.grafana_dashboard_models import DashboardSearchResult
+from models.grafana.grafana_datasource_models import Datasource
 from models.grafana.grafana_folder_models import Folder
 from custom_types.json import JSONDict
 from services.grafana import proxy_auth_ops as _proxy_auth_ops
 from services.grafana.dashboard_helpers import DashboardSearchContext, build_dashboard_search_context
 from services.grafana.grafana_bundles import (
-    DashboardCreateOptions,
+    DashboardCreateRequest,
     DashboardSearchParams,
-    DashboardUpdateOptions,
-    DatasourceCreateOptions,
+    DashboardUpdateRequest,
+    DatasourceCreateRequest,
     DatasourceListParams,
     DatasourceQueryEnforcement,
-    DatasourceUpdateOptions,
-    FolderAccessCriteria,
-    FolderCreateOptions,
-    FolderDeleteOptions,
-    FolderGetParams,
+    DatasourceUpdateRequest,
+    FolderAccessibilityRequest,
+    FolderAccessRequest,
+    FolderCreateRequest,
+    FolderDeleteRequest,
+    FolderGetRequest,
     FolderListParams,
-    FolderUpdateOptions,
+    FolderUpdateRequest,
     GrafanaUserScope,
     GroupVisibilityValidation,
+    HiddenToggleRequest,
 )
 from services.grafana.grafana_service import GrafanaService
 from services.grafana.dashboard_ops import (
@@ -89,6 +92,14 @@ extract_datasource_id = _proxy_auth_ops.extract_datasource_id
 extract_proxy_token = _proxy_auth_ops.extract_proxy_token
 authorize_proxy_request = _proxy_auth_ops.authorize_proxy_request
 clear_proxy_auth_cache = getattr(_proxy_auth_ops, "clear_proxy_auth_cache", lambda: None)
+
+
+@dataclass(frozen=True, slots=True)
+class ProxyAuthorizationRequest:
+    request: Request
+    auth_service: DatabaseAuthService
+    token: Optional[str] = None
+    orig: Optional[str] = None
 
 
 class _GrafanaProxyCore:
@@ -202,12 +213,15 @@ class _GrafanaProxyCore:
 
     async def authorize_proxy_request(
         self,
-        request: Request,
-        auth_service: DatabaseAuthService,
-        token: Optional[str] = None,
-        orig: Optional[str] = None,
+        auth_request: ProxyAuthorizationRequest,
     ) -> Dict[str, str]:
-        return await authorize_proxy_request(self, request, auth_service, token, orig)
+        return await authorize_proxy_request(
+            self,
+            auth_request.request,
+            auth_request.auth_service,
+            token=auth_request.token,
+            orig=auth_request.orig,
+        )
 
     def clear_proxy_auth_cache(self) -> None:
         clear_proxy_auth_cache()
@@ -267,35 +281,45 @@ class _GrafanaProxyDashboardMixin(_GrafanaProxyCore):
     async def create_dashboard(
         self,
         db: Session,
-        dashboard_create: DashboardCreate,
-        subject: GrafanaUserScope,
-        options: DashboardCreateOptions,
+        request: DashboardCreateRequest,
     ) -> Optional[JSONDict]:
         effective_group_ids = self._effective_group_ids(
             db,
-            user_id=subject.user_id,
-            tenant_id=subject.tenant_id,
-            group_ids=subject.group_ids,
+            user_id=request.scope.user_id,
+            tenant_id=request.scope.tenant_id,
+            group_ids=request.scope.group_ids,
         )
-        scope = GrafanaUserScope(subject.user_id, subject.tenant_id, effective_group_ids)
-        return await create_dashboard(self, db, dashboard_create, scope, options)
+        scope = GrafanaUserScope(request.scope.user_id, request.scope.tenant_id, effective_group_ids)
+        return await create_dashboard(
+            self,
+            db,
+            request.dashboard_create,
+            scope=scope,
+            options=request.options,
+        )
 
     async def update_dashboard(
         self,
         db: Session,
-        uid: str,
-        dashboard_update: DashboardUpdate,
-        subject: GrafanaUserScope,
-        options: DashboardUpdateOptions,
+        request: DashboardUpdateRequest,
     ) -> Optional[JSONDict]:
         effective_group_ids = self._effective_group_ids(
             db,
-            user_id=subject.user_id,
-            tenant_id=subject.tenant_id,
-            group_ids=subject.group_ids,
+            user_id=request.scope.user_id,
+            tenant_id=request.scope.tenant_id,
+            group_ids=request.scope.group_ids,
         )
-        scope = GrafanaUserScope(subject.user_id, subject.tenant_id, effective_group_ids)
-        return await update_dashboard(self, db, uid, dashboard_update, scope, options)
+        scope = GrafanaUserScope(request.scope.user_id, request.scope.tenant_id, effective_group_ids)
+        return await update_dashboard(
+            self,
+            db,
+            DashboardUpdateRequest(
+                uid=request.uid,
+                dashboard_update=request.dashboard_update,
+                scope=scope,
+                options=request.options,
+            ),
+        )
 
     async def delete_dashboard(
         self,
@@ -315,12 +339,9 @@ class _GrafanaProxyDashboardMixin(_GrafanaProxyCore):
     def toggle_dashboard_hidden(
         self,
         db: Session,
-        uid: str,
-        user_id: str,
-        tenant_id: str,
-        hidden: bool,
+        request: HiddenToggleRequest,
     ) -> bool:
-        return toggle_dashboard_hidden(db, uid, user_id, tenant_id, hidden)
+        return toggle_dashboard_hidden(db, request.uid, request.scope, request.params)
 
     def get_dashboard_metadata(self, db: Session, tenant_id: str) -> JSONDict:
         metadata = get_dashboard_metadata(db, tenant_id)
@@ -368,35 +389,45 @@ class _GrafanaProxyDatasourceMixin(_GrafanaProxyCore):
     async def create_datasource(
         self,
         db: Session,
-        datasource_create: DatasourceCreate,
-        scope: GrafanaUserScope,
-        options: DatasourceCreateOptions,
+        request: DatasourceCreateRequest,
     ) -> Optional[Datasource]:
         effective_group_ids = self._effective_group_ids(
             db,
-            user_id=scope.user_id,
-            tenant_id=scope.tenant_id,
-            group_ids=scope.group_ids,
+            user_id=request.scope.user_id,
+            tenant_id=request.scope.tenant_id,
+            group_ids=request.scope.group_ids,
         )
-        scoped = GrafanaUserScope(scope.user_id, scope.tenant_id, effective_group_ids)
-        return await create_datasource(self, db, datasource_create, scoped, options)
+        scoped = GrafanaUserScope(request.scope.user_id, request.scope.tenant_id, effective_group_ids)
+        return await create_datasource(
+            self,
+            db,
+            request.datasource_create,
+            scope=scoped,
+            options=request.options,
+        )
 
     async def update_datasource(
         self,
         db: Session,
-        uid: str,
-        datasource_update: DatasourceUpdate,
-        scope: GrafanaUserScope,
-        options: DatasourceUpdateOptions,
+        request: DatasourceUpdateRequest,
     ) -> Optional[Datasource]:
         effective_group_ids = self._effective_group_ids(
             db,
-            user_id=scope.user_id,
-            tenant_id=scope.tenant_id,
-            group_ids=scope.group_ids,
+            user_id=request.scope.user_id,
+            tenant_id=request.scope.tenant_id,
+            group_ids=request.scope.group_ids,
         )
-        scoped = GrafanaUserScope(scope.user_id, scope.tenant_id, effective_group_ids)
-        return await update_datasource(self, db, uid, datasource_update, scoped, options)
+        scoped = GrafanaUserScope(request.scope.user_id, request.scope.tenant_id, effective_group_ids)
+        return await update_datasource(
+            self,
+            db,
+            DatasourceUpdateRequest(
+                uid=request.uid,
+                datasource_update=request.datasource_update,
+                scope=scoped,
+                options=request.options,
+            ),
+        )
 
     async def delete_datasource(self, db: Session, uid: str, scope: GrafanaUserScope) -> bool:
         effective_group_ids = self._effective_group_ids(
@@ -411,12 +442,9 @@ class _GrafanaProxyDatasourceMixin(_GrafanaProxyCore):
     def toggle_datasource_hidden(
         self,
         db: Session,
-        uid: str,
-        user_id: str,
-        tenant_id: str,
-        hidden: bool,
+        request: HiddenToggleRequest,
     ) -> bool:
-        return toggle_datasource_hidden(db, uid, user_id, tenant_id, hidden)
+        return toggle_datasource_hidden(db, request.uid, request.scope, request.params)
 
     def get_datasource_metadata(self, db: Session, tenant_id: str) -> JSONDict:
         metadata = get_datasource_metadata(db, tenant_id)
@@ -460,108 +488,125 @@ class _GrafanaProxyFolderMixin(_GrafanaProxyCore):
     async def get_folder(
         self,
         db: Session,
-        uid: str,
-        scope: GrafanaUserScope,
-        params: FolderGetParams,
+        request: FolderGetRequest,
     ) -> Optional[Folder]:
         effective_group_ids = self._effective_group_ids(
             db,
-            user_id=scope.user_id,
-            tenant_id=scope.tenant_id,
-            group_ids=scope.group_ids,
+            user_id=request.scope.user_id,
+            tenant_id=request.scope.tenant_id,
+            group_ids=request.scope.group_ids,
         )
-        scoped = GrafanaUserScope(scope.user_id, scope.tenant_id, effective_group_ids)
-        return await get_folder(self, db, uid, scoped, params)
+        scoped = GrafanaUserScope(
+            request.scope.user_id,
+            request.scope.tenant_id,
+            effective_group_ids,
+        )
+        return await get_folder(
+            self,
+            db,
+            FolderGetRequest(uid=request.uid, scope=scoped, params=request.params),
+        )
 
     async def create_folder(
         self,
         db: Session,
-        title: str,
-        scope: GrafanaUserScope,
-        options: FolderCreateOptions,
+        request: FolderCreateRequest,
     ) -> Optional[Folder]:
         effective_group_ids = self._effective_group_ids(
             db,
-            user_id=scope.user_id,
-            tenant_id=scope.tenant_id,
-            group_ids=scope.group_ids,
+            user_id=request.scope.user_id,
+            tenant_id=request.scope.tenant_id,
+            group_ids=request.scope.group_ids,
         )
-        scoped = GrafanaUserScope(scope.user_id, scope.tenant_id, effective_group_ids)
-        return await create_folder(self, db, title, scoped, options)
+        scoped = GrafanaUserScope(
+            request.scope.user_id,
+            request.scope.tenant_id,
+            effective_group_ids,
+        )
+        return await create_folder(
+            self,
+            db,
+            FolderCreateRequest(title=request.title, scope=scoped, options=request.options),
+        )
 
     async def delete_folder(
         self,
         db: Session,
-        uid: str,
-        scope: GrafanaUserScope,
-        options: FolderDeleteOptions,
+        request: FolderDeleteRequest,
     ) -> bool:
         effective_group_ids = self._effective_group_ids(
             db,
-            user_id=scope.user_id,
-            tenant_id=scope.tenant_id,
-            group_ids=scope.group_ids,
+            user_id=request.scope.user_id,
+            tenant_id=request.scope.tenant_id,
+            group_ids=request.scope.group_ids,
         )
-        scoped = GrafanaUserScope(scope.user_id, scope.tenant_id, effective_group_ids)
-        return await delete_folder(self, db, uid, scoped, options)
+        scoped = GrafanaUserScope(
+            request.scope.user_id,
+            request.scope.tenant_id,
+            effective_group_ids,
+        )
+        return await delete_folder(
+            self,
+            db,
+            FolderDeleteRequest(uid=request.uid, scope=scoped, options=request.options),
+        )
 
     async def update_folder(
         self,
         db: Session,
-        uid: str,
-        scope: GrafanaUserScope,
-        options: FolderUpdateOptions,
+        request: FolderUpdateRequest,
     ) -> Optional[Folder]:
         effective_group_ids = self._effective_group_ids(
             db,
-            user_id=scope.user_id,
-            tenant_id=scope.tenant_id,
-            group_ids=scope.group_ids,
+            user_id=request.scope.user_id,
+            tenant_id=request.scope.tenant_id,
+            group_ids=request.scope.group_ids,
         )
-        scoped = GrafanaUserScope(scope.user_id, scope.tenant_id, effective_group_ids)
-        return await update_folder(self, db, uid, scoped, options)
+        scoped = GrafanaUserScope(
+            request.scope.user_id,
+            request.scope.tenant_id,
+            effective_group_ids,
+        )
+        return await update_folder(
+            self,
+            db,
+            FolderUpdateRequest(uid=request.uid, scope=scoped, options=request.options),
+        )
 
     def check_folder_access(
         self,
         db: Session,
-        uid: str,
-        scope: GrafanaUserScope,
-        criteria: FolderAccessCriteria,
+        request: FolderAccessRequest,
     ) -> Optional[GrafanaFolder]:
         effective_group_ids = self._effective_group_ids(
             db,
-            user_id=scope.user_id,
-            tenant_id=scope.tenant_id,
-            group_ids=scope.group_ids,
+            user_id=request.scope.user_id,
+            tenant_id=request.scope.tenant_id,
+            group_ids=request.scope.group_ids,
         )
-        scoped = GrafanaUserScope(scope.user_id, scope.tenant_id, effective_group_ids)
-        return check_folder_access(db, uid, scoped, criteria)
+        scoped = GrafanaUserScope(request.scope.user_id, request.scope.tenant_id, effective_group_ids)
+        return check_folder_access(db, request.uid, scoped, request.criteria)
 
     def is_folder_accessible(
         self,
         db: Session,
-        uid: Optional[str],
-        scope: GrafanaUserScope,
-        criteria: FolderAccessCriteria,
+        request: FolderAccessibilityRequest,
     ) -> bool:
         effective_group_ids = self._effective_group_ids(
             db,
-            user_id=scope.user_id,
-            tenant_id=scope.tenant_id,
-            group_ids=scope.group_ids,
+            user_id=request.scope.user_id,
+            tenant_id=request.scope.tenant_id,
+            group_ids=request.scope.group_ids,
         )
-        scoped = GrafanaUserScope(scope.user_id, scope.tenant_id, effective_group_ids)
-        return is_folder_accessible(db, uid, scoped, criteria)
+        scoped = GrafanaUserScope(request.scope.user_id, request.scope.tenant_id, effective_group_ids)
+        return is_folder_accessible(db, request.uid, scoped, request.criteria)
 
     def toggle_folder_hidden(
         self,
         db: Session,
-        uid: str,
-        user_id: str,
-        tenant_id: str,
-        hidden: bool,
+        request: HiddenToggleRequest,
     ) -> bool:
-        return toggle_folder_hidden(db, uid, user_id, tenant_id, hidden)
+        return toggle_folder_hidden(db, request.uid, request.scope, request.params)
 
 
 class GrafanaProxyService(

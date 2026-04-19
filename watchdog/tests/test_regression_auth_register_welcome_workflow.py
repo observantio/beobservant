@@ -137,9 +137,10 @@ async def test_register_calls_welcome_email_with_user_identity(monkeypatch: pyte
 
     await auth_router.register(request_obj(), _register_payload())
 
-    assert welcome_calls[0]["recipient_email"] == "new@example.com"
-    assert welcome_calls[0]["username"] == "new-user"
-    assert welcome_calls[0]["full_name"] == "New User"
+    email_request = welcome_calls[0]["email_request"]
+    assert email_request.recipient_email == "new@example.com"
+    assert email_request.username == "new-user"
+    assert email_request.full_name == "New User"
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from config import config
 from middleware.dependencies import (
+    PublicEndpointSecurityConfig,
     auth_service,
     require_permission_with_scope,
     enforce_public_endpoint_security,
@@ -169,10 +170,12 @@ async def agent_metric_volume(
 async def heartbeat(request: Request, payload: AgentHeartbeat) -> dict[str, str]:
     enforce_public_endpoint_security(
         request,
-        scope="agents_heartbeat",
-        limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
-        window_seconds=60,
-        allowlist=config.AGENT_INGEST_IP_ALLOWLIST,
+        PublicEndpointSecurityConfig(
+            scope="agents_heartbeat",
+            limit=config.RATE_LIMIT_PUBLIC_PER_MINUTE,
+            window_seconds=60,
+            allowlist=config.AGENT_INGEST_IP_ALLOWLIST,
+        ),
     )
     enforce_header_token(
         request,

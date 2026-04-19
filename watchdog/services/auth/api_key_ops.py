@@ -1,43 +1,54 @@
 """
 Api key management operations for creating, updating, deleting, rotating, and sharing API keys, as well as backfilling
 missing OTLP tokens for existing keys.
-
 Copyright (c) 2026 Stefan Kumarasinghe
-
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
 License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
-
+from dataclasses import dataclass
 import re
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, TYPE_CHECKING
-
 from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
-
 from config import config
 from database import get_db_session
 from db_models import ApiKeyShare, Group, HiddenApiKey, User, UserApiKey
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUser, ApiKeyUpdate
-from services.auth.api_key_schema import api_key_to_schema, list_api_key_shares_in_session
+from services.auth.api_key_schema import ApiKeySchemaContext, api_key_to_schema, list_api_key_shares_in_session
 from services.database_auth.audit import AuditLogRecord
-
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
 
 BACKFILL_BATCH_SIZE = 500
 ORG_SCOPE_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,199}$")
 
+@dataclass(frozen=True, slots=True)
+class ApiKeyShareReplaceRequest:
+    tenant_id: str
+    key_id: str
+    user_ids: List[str]
+    group_ids: Optional[List[str]] = None
+
+
+@dataclass(frozen=True, slots=True)
+class ApiKeyUpdateContext:
+    db: Session
+    viewer: User
+    user_id: str
+    key_id: str
+    api_key: UserApiKey
+    key_update: ApiKeyUpdate
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
 
 def _normalize_scope_key(raw: Optional[str]) -> Optional[str]:
     if raw is None:
@@ -51,13 +62,11 @@ def _normalize_scope_key(raw: Optional[str]) -> Optional[str]:
         )
     return value
 
-
 def _require_user(db: Session, user_id: str) -> User:
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         raise ValueError("User not found")
     return user
-
 
 def _require_user_in_tenant(db: Session, user_id: str, tenant_id: str) -> User:
     user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
@@ -65,16 +74,14 @@ def _require_user_in_tenant(db: Session, user_id: str, tenant_id: str) -> User:
         raise ValueError("User not found")
     return user
 
-
 def _require_api_key_in_tenant(db: Session, key_id: str, tenant_id: str) -> UserApiKey:
     api_key = db.query(UserApiKey).filter_by(id=key_id, tenant_id=tenant_id).first()
     if not api_key:
         raise ValueError("API key not found")
     return api_key
 
-
 def _disable_other_enabled_keys(
-    db: Session, user_id: str, tenant_id: str, now: datetime, exclude_key_id: Optional[str] = None
+    db: Session, user_id: str, tenant_id: str, now: datetime, *, exclude_key_id: Optional[str] = None
 ) -> None:
     q = db.query(UserApiKey).filter(
         UserApiKey.user_id == user_id,
@@ -85,7 +92,6 @@ def _disable_other_enabled_keys(
         q = q.filter(UserApiKey.id != exclude_key_id)
     q.update({"is_enabled": False, "updated_at": now})
 
-
 def _set_org_id(user: User, new_org_id: Optional[str], now: datetime) -> None:
     if new_org_id is None:
         return
@@ -93,13 +99,11 @@ def _set_org_id(user: User, new_org_id: Optional[str], now: datetime) -> None:
         user.org_id = new_org_id
         user.updated_at = now
 
-
 def _normalize_api_key_name(name: Optional[str]) -> str:
     normalized = str(name or "").strip()
     if not normalized:
         raise ValueError("API key name is required")
     return normalized
-
 
 def _assert_unique_api_key_name(
     db: Session,
@@ -118,7 +122,6 @@ def _assert_unique_api_key_name(
         query = query.filter(UserApiKey.id != exclude_key_id)
     if query.first():
         raise ValueError("API key name already exists")
-
 
 def list_api_keys(service: DatabaseAuthService, user_id: str, show_hidden: bool = False) -> List[ApiKey]:
     service.ensure_initialized()
@@ -167,10 +170,7 @@ def list_api_keys(service: DatabaseAuthService, user_id: str, show_hidden: bool 
             output.append(
                 api_key_to_schema(
                     owned_key,
-                    is_shared=False,
-                    can_use=True,
-                    viewer_enabled=bool(getattr(owned_key, "is_enabled", False)),
-                    is_hidden=is_hidden,
+                    ApiKeySchemaContext(False, True, bool(getattr(owned_key, "is_enabled", False)), is_hidden),
                 )
             )
             seen_ids.add(getattr(owned_key, "id", None))
@@ -193,19 +193,12 @@ def list_api_keys(service: DatabaseAuthService, user_id: str, show_hidden: bool 
             if is_hidden and not show_hidden:
                 continue
             output.append(
-                api_key_to_schema(
-                    shared_key,
-                    is_shared=True,
-                    can_use=can_use,
-                    viewer_enabled=viewer_enabled,
-                    is_hidden=is_hidden,
-                )
+                api_key_to_schema(shared_key, ApiKeySchemaContext(True, can_use, viewer_enabled, is_hidden))
             )
             seen_ids.add(key_id)
 
         output.sort(key=lambda item: item.created_at)
         return output
-
 
 def set_api_key_hidden(service: DatabaseAuthService, user_id: str, key_id: str, hidden: bool) -> bool:
     service.ensure_initialized()
@@ -340,11 +333,129 @@ def create_api_key(service: DatabaseAuthService, user_id: str, tenant_id: str, k
 
         return api_key_to_schema(
             api_key,
-            is_shared=False,
-            can_use=True,
-            viewer_enabled=True,
-            revealed_otlp_token=raw_otlp_token,
+            ApiKeySchemaContext(False, True, True, revealed_otlp_token=raw_otlp_token),
         )
+
+
+def _update_shared_api_key_selection(service: DatabaseAuthService, ctx: ApiKeyUpdateContext) -> ApiKey:
+    db = ctx.db
+    share_link = (
+        db.query(ApiKeyShare)
+        .filter_by(
+            api_key_id=ctx.key_id,
+            shared_user_id=ctx.user_id,
+            can_use=True,
+            tenant_id=ctx.viewer.tenant_id,
+        )
+        .first()
+    )
+    if not share_link:
+        raise ValueError("API key not found")
+
+    requested_fields = ctx.key_update.model_dump(exclude_unset=True)
+    if set(requested_fields.keys()) - {"is_enabled"}:
+        raise ValueError("Shared API keys can only be selected as active")
+    if ctx.key_update.is_enabled is not True:
+        raise ValueError("Shared API key selection requires is_enabled=true")
+
+    now = _utcnow()
+    _disable_other_enabled_keys(db, user_id=ctx.user_id, tenant_id=ctx.viewer.tenant_id, now=now)
+    _set_org_id(ctx.viewer, getattr(ctx.api_key, "key", None), now)
+    db.flush()
+
+    service.log_audit(
+        db,
+        AuditLogRecord(
+            tenant_id=ctx.viewer.tenant_id,
+            user_id=ctx.user_id,
+            action="api_key.use_shared",
+            resource_type="api_keys",
+            resource_id=ctx.api_key.id,
+            details={"owner_user_id": ctx.api_key.user_id, "name": ctx.api_key.name},
+        ),
+    )
+    db.commit()
+    db.refresh(ctx.api_key)
+    return api_key_to_schema(ctx.api_key, ApiKeySchemaContext(True, True, True))
+
+
+def _update_owned_api_key_fields(ctx: ApiKeyUpdateContext, *, now: datetime) -> None:
+    db = ctx.db
+    if ctx.key_update.name is not None:
+        normalized_name = _normalize_api_key_name(ctx.key_update.name)
+        _assert_unique_api_key_name(
+            db,
+            tenant_id=ctx.viewer.tenant_id,
+            owner_user_id=ctx.user_id,
+            name=normalized_name,
+            exclude_key_id=ctx.key_id,
+        )
+        ctx.api_key.name = normalized_name
+
+    if ctx.key_update.is_default is not None and ctx.key_update.is_default:
+        has_shares = (
+            db.query(ApiKeyShare)
+            .filter(ApiKeyShare.api_key_id == ctx.key_id, ApiKeyShare.tenant_id == ctx.viewer.tenant_id)
+            .first()
+            is not None
+        )
+        if has_shares:
+            raise ValueError("Shared keys cannot be set as default. Remove shares first")
+        db.query(UserApiKey).filter(
+            UserApiKey.user_id == ctx.user_id,
+            UserApiKey.tenant_id == ctx.viewer.tenant_id,
+            UserApiKey.id != ctx.key_id,
+            UserApiKey.is_default.is_(True),
+        ).update({"is_default": False, "updated_at": now})
+        _disable_other_enabled_keys(
+            db,
+            user_id=ctx.user_id,
+            tenant_id=ctx.viewer.tenant_id,
+            now=now,
+            exclude_key_id=ctx.key_id,
+        )
+        ctx.api_key.is_default = True
+        ctx.api_key.is_enabled = True
+        owner = db.query(User).filter_by(id=ctx.user_id).first()
+        if owner:
+            _set_org_id(owner, getattr(ctx.api_key, "key", None), now)
+        db.flush()
+
+    if ctx.key_update.is_enabled is not None:
+        if bool(getattr(ctx.api_key, "is_default", False)) and not ctx.key_update.is_enabled:
+            raise ValueError("Default key cannot be disabled")
+        if ctx.key_update.is_enabled:
+            _disable_other_enabled_keys(
+                db,
+                user_id=ctx.user_id,
+                tenant_id=ctx.viewer.tenant_id,
+                now=now,
+                exclude_key_id=ctx.key_id,
+            )
+            ctx.api_key.is_enabled = True
+            _set_org_id(ctx.viewer, getattr(ctx.api_key, "key", None), now)
+        else:
+            replacement_key = (
+                db.query(UserApiKey)
+                .filter(
+                    UserApiKey.user_id == ctx.user_id,
+                    UserApiKey.tenant_id == ctx.viewer.tenant_id,
+                    UserApiKey.id != ctx.key_id,
+                )
+                .order_by(
+                    UserApiKey.is_default.desc(),
+                    UserApiKey.is_enabled.desc(),
+                    UserApiKey.updated_at.desc(),
+                    UserApiKey.created_at.asc(),
+                )
+                .first()
+            )
+            if replacement_key is None:
+                raise ValueError("At least one API key must be enabled")
+            ctx.api_key.is_enabled = False
+            replacement_key.is_enabled = True
+            replacement_key.updated_at = now
+            _set_org_id(ctx.viewer, getattr(replacement_key, "key", None), now)
 
 
 def update_api_key(service: DatabaseAuthService, user_id: str, key_id: str, key_update: ApiKeyUpdate) -> ApiKey:
@@ -352,131 +463,22 @@ def update_api_key(service: DatabaseAuthService, user_id: str, key_id: str, key_
     with get_db_session() as db:
         viewer = _require_user(db, user_id)
         api_key = _require_api_key_in_tenant(db, key_id, viewer.tenant_id)
+        update_ctx = ApiKeyUpdateContext(
+            db=db,
+            viewer=viewer,
+            user_id=user_id,
+            key_id=key_id,
+            api_key=api_key,
+            key_update=key_update,
+        )
 
         is_owner = str(getattr(api_key, "user_id", "")) == str(user_id)
 
         if not is_owner:
-            share_link = (
-                db.query(ApiKeyShare)
-                .filter_by(
-                    api_key_id=key_id,
-                    shared_user_id=user_id,
-                    can_use=True,
-                    tenant_id=viewer.tenant_id,
-                )
-                .first()
-            )
-            if not share_link:
-                raise ValueError("API key not found")
-
-            requested_fields = key_update.model_dump(exclude_unset=True)
-            if set(requested_fields.keys()) - {"is_enabled"}:
-                raise ValueError("Shared API keys can only be selected as active")
-            if key_update.is_enabled is not True:
-                raise ValueError("Shared API key selection requires is_enabled=true")
-
-            now = _utcnow()
-            _disable_other_enabled_keys(db, user_id=user_id, tenant_id=viewer.tenant_id, now=now)
-
-            _set_org_id(viewer, getattr(api_key, "key", None), now)
-            db.flush()
-
-            service.log_audit(
-                db,
-                AuditLogRecord(
-                    tenant_id=viewer.tenant_id,
-                    user_id=user_id,
-                    action="api_key.use_shared",
-                    resource_type="api_keys",
-                    resource_id=api_key.id,
-                    details={"owner_user_id": api_key.user_id, "name": api_key.name},
-                ),
-            )
-            db.commit()
-            db.refresh(api_key)
-            return api_key_to_schema(api_key, is_shared=True, can_use=True, viewer_enabled=True)
+            return _update_shared_api_key_selection(service, update_ctx)
 
         now = _utcnow()
-
-        if key_update.name is not None:
-            normalized_name = _normalize_api_key_name(key_update.name)
-            _assert_unique_api_key_name(
-                db,
-                tenant_id=viewer.tenant_id,
-                owner_user_id=user_id,
-                name=normalized_name,
-                exclude_key_id=key_id,
-            )
-            api_key.name = normalized_name
-
-        if key_update.is_default is not None and key_update.is_default:
-            has_shares = (
-                db.query(ApiKeyShare)
-                .filter(ApiKeyShare.api_key_id == key_id, ApiKeyShare.tenant_id == viewer.tenant_id)
-                .first()
-                is not None
-            )
-            if has_shares:
-                raise ValueError("Shared keys cannot be set as default. Remove shares first")
-
-            db.query(UserApiKey).filter(
-                UserApiKey.user_id == user_id,
-                UserApiKey.tenant_id == viewer.tenant_id,
-                UserApiKey.id != key_id,
-                UserApiKey.is_default.is_(True),
-            ).update({"is_default": False, "updated_at": now})
-
-            _disable_other_enabled_keys(
-                db,
-                user_id=user_id,
-                tenant_id=viewer.tenant_id,
-                now=now,
-                exclude_key_id=key_id,
-            )
-
-            api_key.is_default = True
-            api_key.is_enabled = True
-
-            owner = db.query(User).filter_by(id=user_id).first()
-            if owner:
-                _set_org_id(owner, getattr(api_key, "key", None), now)
-            db.flush()
-
-        if key_update.is_enabled is not None:
-            if bool(getattr(api_key, "is_default", False)) and not key_update.is_enabled:
-                raise ValueError("Default key cannot be disabled")
-            if key_update.is_enabled:
-                _disable_other_enabled_keys(
-                    db,
-                    user_id=user_id,
-                    tenant_id=viewer.tenant_id,
-                    now=now,
-                    exclude_key_id=key_id,
-                )
-                api_key.is_enabled = True
-                _set_org_id(viewer, getattr(api_key, "key", None), now)
-            else:
-                replacement_key = (
-                    db.query(UserApiKey)
-                    .filter(
-                        UserApiKey.user_id == user_id,
-                        UserApiKey.tenant_id == viewer.tenant_id,
-                        UserApiKey.id != key_id,
-                    )
-                    .order_by(
-                        UserApiKey.is_default.desc(),
-                        UserApiKey.is_enabled.desc(),
-                        UserApiKey.updated_at.desc(),
-                        UserApiKey.created_at.asc(),
-                    )
-                    .first()
-                )
-                if replacement_key is None:
-                    raise ValueError("At least one API key must be enabled")
-                api_key.is_enabled = False
-                replacement_key.is_enabled = True
-                replacement_key.updated_at = now
-                _set_org_id(viewer, getattr(replacement_key, "key", None), now)
+        _update_owned_api_key_fields(update_ctx, now=now)
 
         api_key.updated_at = now
 
@@ -494,7 +496,10 @@ def update_api_key(service: DatabaseAuthService, user_id: str, key_id: str, key_
         db.commit()
         db.refresh(api_key)
 
-        return api_key_to_schema(api_key, is_shared=False, can_use=True, viewer_enabled=bool(api_key.is_enabled))
+        return api_key_to_schema(
+            api_key,
+            ApiKeySchemaContext(False, True, bool(api_key.is_enabled)),
+        )
 
 
 def regenerate_api_key_otlp_token(service: DatabaseAuthService, user_id: str, key_id: str) -> ApiKey:
@@ -533,10 +538,7 @@ def regenerate_api_key_otlp_token(service: DatabaseAuthService, user_id: str, ke
 
         return api_key_to_schema(
             api_key,
-            is_shared=False,
-            can_use=True,
-            viewer_enabled=bool(api_key.is_enabled),
-            revealed_otlp_token=raw_otlp_token,
+            ApiKeySchemaContext(False, True, bool(api_key.is_enabled), revealed_otlp_token=raw_otlp_token),
         )
 
 
@@ -619,11 +621,12 @@ def list_api_key_shares(
 def replace_api_key_shares(
     service: DatabaseAuthService,
     owner_user_id: str,
-    tenant_id: str,
-    key_id: str,
-    user_ids: List[str],
-    group_ids: Optional[List[str]] = None,
+    request: ApiKeyShareReplaceRequest,
 ) -> List[ApiKeyShareUser]:
+    tenant_id = request.tenant_id
+    key_id = request.key_id
+    user_ids = request.user_ids
+    group_ids = request.group_ids
     service.ensure_initialized()
     with get_db_session() as db:
         api_key = db.query(UserApiKey).filter_by(id=key_id, user_id=owner_user_id, tenant_id=tenant_id).first()
@@ -722,8 +725,14 @@ def replace_api_key_shares(
 
 
 def delete_api_key_share(
-    service: DatabaseAuthService, owner_user_id: str, tenant_id: str, key_id: str, shared_user_id: str
-) -> bool:
+    service: DatabaseAuthService,
+    owner_user_id: str,
+    tenant_id: str,
+    key_id: str,
+    *,
+    shared_user_id: str,
+
+ ) -> bool:
     service.ensure_initialized()
     with get_db_session() as db:
         api_key = db.query(UserApiKey).filter_by(id=key_id, user_id=owner_user_id, tenant_id=tenant_id).first()

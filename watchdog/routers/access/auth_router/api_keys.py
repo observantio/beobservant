@@ -22,6 +22,7 @@ from middleware.dependencies import (
 from middleware.error_handlers import handle_route_errors
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUpdateRequest, ApiKeyShareUser, ApiKeyUpdate
 from models.access.auth_models import Permission, TokenData
+from services.database_auth_service import ApiKeyShareReplaceRequest
 
 from .shared import SAFE_PATH_ID_PATTERN, router, rtp
 
@@ -111,13 +112,16 @@ async def put_api_key_shares(
     payload: ApiKeyShareUpdateRequest = Body(...),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_API_KEYS, "auth")),
 ) -> list[ApiKeyShareUser]:
+    share_request = ApiKeyShareReplaceRequest(
+        tenant_id=current_user.tenant_id,
+        key_id=key_id,
+        user_ids=payload.user_ids,
+        group_ids=payload.group_ids,
+    )
     result = await rtp(
         auth_service.replace_api_key_shares,
         current_user.user_id,
-        current_user.tenant_id,
-        key_id,
-        payload.user_ids,
-        payload.group_ids,
+        share_request,
     )
     return [ApiKeyShareUser.model_validate(item) if isinstance(item, dict) else item for item in result]
 
@@ -134,7 +138,7 @@ async def remove_api_key_share(
         current_user.user_id,
         current_user.tenant_id,
         key_id,
-        shared_user_id,
+        shared_user_id=shared_user_id,
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Share not found")
     return {"message": "API key share removed"}

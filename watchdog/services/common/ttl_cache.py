@@ -101,6 +101,7 @@ class TTLCache:
 
         async with self._redis_init_lock:
             loop = asyncio.get_running_loop()
+            connected = False
 
             if self._redis_client is None or self._redis_loop is not loop:
                 await self._close_redis_client()
@@ -115,27 +116,22 @@ class TTLCache:
                 except (AttributeError, OSError, RuntimeError, ValueError) as exc:
                     logger.warning("Failed to initialize Redis client for TTLCache; using in-memory fallback: %s", exc)
                     self._redis_client = None
-                    return False
-
             client = self._redis_client
             if self._redis_connected and client is not None:
-                return True
+                connected = True
+            elif client is not None:
+                try:
+                    ok = await client.ping()
+                    if ok:
+                        self._redis_connected = True
+                        logger.info("Connected to Redis for TTL cache: %s", self._redis_url)
+                        await self._flush_memory_to_redis()
+                        connected = True
+                except (OSError, RuntimeError, ValueError) as exc:
+                    logger.warning("Redis TTL cache unreachable; falling back to in-memory cache: %s", exc)
+                    await self._close_redis_client()
 
-            try:
-                if client is None:
-                    return False
-                ok = await client.ping()
-                if ok:
-                    self._redis_connected = True
-                    logger.info("Connected to Redis for TTL cache: %s", self._redis_url)
-                    await self._flush_memory_to_redis()
-                    return True
-            except (OSError, RuntimeError, ValueError) as exc:
-                logger.warning("Redis TTL cache unreachable; falling back to in-memory cache: %s", exc)
-                await self._close_redis_client()
-                return False
-
-            return False
+            return connected
 
     async def _flush_memory_to_redis(self) -> None:
         client = self._redis_client

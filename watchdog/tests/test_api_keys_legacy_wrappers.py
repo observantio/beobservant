@@ -130,7 +130,10 @@ class FakeApiKeyService:
             id=record.id, key=record.key, name=record.name, otlp_token=token, is_default=record.is_default
         )
 
-    def replace_api_key_shares(self, owner_id, tenant_id, key_id, user_ids, group_ids=None):
+    def replace_api_key_shares(self, owner_id, request):
+        del owner_id
+        key_id = request.key_id
+        user_ids = request.user_ids
         record = self._keys[key_id]
         if record.is_default:
             raise ValueError("Default key cannot be shared")

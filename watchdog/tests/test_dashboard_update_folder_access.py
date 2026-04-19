@@ -21,7 +21,12 @@ os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 from db_models import Base, GrafanaDashboard, GrafanaFolder, Tenant, User
 from models.grafana.grafana_dashboard_models import Dashboard, DashboardUpdate
 from services.grafana import dashboard_ops
-from services.grafana.grafana_bundles import DashboardUpdateOptions, GrafanaUserScope, GroupVisibilityValidation
+from services.grafana.grafana_bundles import (
+    DashboardUpdateOptions,
+    DashboardUpdateRequest,
+    GrafanaUserScope,
+    GroupVisibilityValidation,
+)
 
 
 class _GrafanaServiceStub:
@@ -130,14 +135,16 @@ async def test_non_owner_can_update_dashboard_when_folder_allows_dashboard_write
     result = await dashboard_ops.update_dashboard(
         service,
         db,
-        "d1",
-        _update_payload(),
-        GrafanaUserScope("u2", "t1", []),
-        DashboardUpdateOptions(
-            visibility=None,
-            shared_group_ids=None,
-            is_admin=False,
-            actor_permissions=["read:dashboards"],
+            DashboardUpdateRequest(
+                uid="d1",
+                dashboard_update=_update_payload(),
+                scope=GrafanaUserScope("u2", "t1", []),
+                options=DashboardUpdateOptions(
+                    visibility=None,
+                    shared_group_ids=None,
+                    is_admin=False,
+                    actor_permissions=["read:dashboards"],
+                ),
         ),
     )
     assert result is not None
@@ -197,14 +204,16 @@ async def test_non_owner_cannot_change_visibility_when_delegated_update_enabled(
         await dashboard_ops.update_dashboard(
             service,
             db,
-            "d1",
-            _update_payload(),
-            GrafanaUserScope("u2", "t1", []),
-            DashboardUpdateOptions(
-                visibility="tenant",
-                shared_group_ids=[],
-                is_admin=False,
-                actor_permissions=["read:dashboards"],
+                DashboardUpdateRequest(
+                    uid="d1",
+                    dashboard_update=_update_payload(),
+                    scope=GrafanaUserScope("u2", "t1", []),
+                    options=DashboardUpdateOptions(
+                        visibility="tenant",
+                        shared_group_ids=[],
+                        is_admin=False,
+                        actor_permissions=["read:dashboards"],
+                    ),
             ),
         )
     assert exc.value.status_code == 403
@@ -271,14 +280,16 @@ async def test_non_owner_cannot_move_dashboard_to_other_folder_when_delegated_up
         await dashboard_ops.update_dashboard(
             service,
             db,
-            "d1",
-            _update_payload(folder_id=12),
-            GrafanaUserScope("u2", "t1", []),
-            DashboardUpdateOptions(
-                visibility=None,
-                shared_group_ids=None,
-                is_admin=False,
-                actor_permissions=["read:dashboards"],
+            DashboardUpdateRequest(
+                uid="d1",
+                dashboard_update=_update_payload(folder_id=12),
+                scope=GrafanaUserScope("u2", "t1", []),
+                options=DashboardUpdateOptions(
+                    visibility=None,
+                    shared_group_ids=None,
+                    is_admin=False,
+                    actor_permissions=["read:dashboards"],
+                ),
             ),
         )
     assert exc.value.status_code == 403
@@ -335,14 +346,16 @@ async def test_dashboard_owner_can_update_in_shared_folder_when_writes_enabled()
     result = await dashboard_ops.update_dashboard(
         service,
         db,
-        "d1",
-        _update_payload(title="Owner edits own dashboard"),
-        GrafanaUserScope("u2", "t1", []),
-        DashboardUpdateOptions(
-            visibility="private",
-            shared_group_ids=[],
-            is_admin=False,
-            actor_permissions=["update:dashboards"],
+            DashboardUpdateRequest(
+                uid="d1",
+                dashboard_update=_update_payload(title="Owner edits own dashboard"),
+                scope=GrafanaUserScope("u2", "t1", []),
+                options=DashboardUpdateOptions(
+                    visibility="private",
+                    shared_group_ids=[],
+                    is_admin=False,
+                    actor_permissions=["update:dashboards"],
+                ),
         ),
     )
     assert result is not None
@@ -401,14 +414,16 @@ async def test_non_owner_update_accepts_unchanged_visibility_query_params():
     result = await dashboard_ops.update_dashboard(
         service,
         db,
-        "d1",
-        _update_payload(title="Member edit with default visibility"),
-        GrafanaUserScope("u2", "t1", []),
-        DashboardUpdateOptions(
-            visibility="private",
-            shared_group_ids=[],
-            is_admin=False,
-            actor_permissions=["read:dashboards"],
+            DashboardUpdateRequest(
+                uid="d1",
+                dashboard_update=_update_payload(title="Member edit with default visibility"),
+                scope=GrafanaUserScope("u2", "t1", []),
+                options=DashboardUpdateOptions(
+                    visibility="private",
+                    shared_group_ids=[],
+                    is_admin=False,
+                    actor_permissions=["read:dashboards"],
+                ),
         ),
     )
     assert result is not None

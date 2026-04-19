@@ -118,11 +118,12 @@ async def test_dashboard_routes_cover_success_and_failure_paths(monkeypatch):
         return {"uid": kwargs["uid"]} if kwargs["uid"] == "dash-1" else None
 
     async def fake_create_dashboard(**kwargs):
-        opts = kwargs["options"]
+        opts = kwargs["request"].options
         return {"uid": "created", "visibility": opts.visibility} if opts.visibility != "broken" else None
 
     async def fake_update_dashboard(**kwargs):
-        return {"uid": kwargs["uid"], "updated": True} if kwargs["uid"] != "missing" else None
+        request = kwargs["request"]
+        return {"uid": request.uid, "updated": True} if request.uid != "missing" else None
 
     async def fake_delete_dashboard(**kwargs):
         return kwargs["uid"] == "dash-1"
@@ -169,11 +170,19 @@ async def test_dashboard_routes_cover_success_and_failure_paths(monkeypatch):
 
     assert (
         await dashboards.update_dashboard(
-            "dash-1", payload, visibility="group", shared_group_ids=["g1"], current_user=current_user, db="db"
+            dashboards.DashboardUpdateRequest(uid="dash-1", payload=payload),
+            visibility="group",
+            shared_group_ids=["g1"],
+            current_user=current_user,
+            db="db",
         )
     )["updated"] is True
     with pytest.raises(HTTPException) as exc:
-        await dashboards.update_dashboard("missing", payload, current_user=current_user, db="db")
+        await dashboards.update_dashboard(
+            dashboards.DashboardUpdateRequest(uid="missing", payload=payload),
+            current_user=current_user,
+            db="db",
+        )
     assert exc.value.status_code == 404
 
     assert await dashboards.delete_dashboard("dash-1", current_user=current_user, db="db") == {
@@ -223,11 +232,12 @@ async def test_datasource_routes_cover_success_and_failure_paths(monkeypatch):
         return {"uid": kwargs["uid"]} if kwargs["uid"] == "ds-1" else None
 
     async def fake_create_datasource(**kwargs):
-        vis = kwargs["options"].visibility
+        vis = kwargs["request"].options.visibility
         return {"uid": "created", "visibility": vis} if vis else None
 
     async def fake_update_datasource(**kwargs):
-        return {"uid": kwargs["uid"], "updated": True} if kwargs["uid"] == "ds-1" else None
+        request = kwargs["request"]
+        return {"uid": request.uid, "updated": True} if request.uid == "ds-1" else None
 
     async def fake_delete_datasource(**kwargs):
         return kwargs["uid"] == "ds-1"
@@ -268,11 +278,19 @@ async def test_datasource_routes_cover_success_and_failure_paths(monkeypatch):
     )["uid"] == "created"
     assert (
         await datasources.update_datasource(
-            "ds-1", update_payload, visibility="group", shared_group_ids=["g1"], current_user=current_user, db="db"
+            datasources.DatasourceUpdateRequest(uid="ds-1", datasource=update_payload),
+            visibility="group",
+            shared_group_ids=["g1"],
+            current_user=current_user,
+            db="db",
         )
     )["updated"] is True
     with pytest.raises(HTTPException) as exc:
-        await datasources.update_datasource("missing", update_payload, current_user=current_user, db="db")
+        await datasources.update_datasource(
+            datasources.DatasourceUpdateRequest(uid="missing", datasource=update_payload),
+            current_user=current_user,
+            db="db",
+        )
     assert exc.value.status_code == 404
 
     assert await datasources.delete_datasource("ds-1", current_user=current_user, db="db") == {
@@ -304,17 +322,19 @@ async def test_folder_routes_cover_success_and_failure_paths(monkeypatch):
         return [{"uid": "folder-1", "show_hidden": params.show_hidden}]
 
     async def fake_get_folder(**kwargs):
-        return {"uid": kwargs["uid"]} if kwargs["uid"] == "folder-1" else None
+        request = kwargs["request"]
+        return {"uid": request.uid} if request.uid == "folder-1" else None
 
     async def fake_create_folder(**kwargs):
-        vis = kwargs["options"].visibility
+        vis = kwargs["request"].options.visibility
         return {"uid": "created-folder", "visibility": vis} if vis else None
 
     async def fake_delete_folder(**kwargs):
-        return kwargs["uid"] == "folder-1"
+        return kwargs["request"].uid == "folder-1"
 
     async def fake_update_folder(**kwargs):
-        return {"uid": kwargs["uid"], "updated": True} if kwargs["uid"] == "folder-1" else None
+        request = kwargs["request"]
+        return {"uid": request.uid, "updated": True} if request.uid == "folder-1" else None
 
     monkeypatch.setattr(folders.proxy, "get_folders", fake_get_folders)
     monkeypatch.setattr(folders.proxy, "get_folder", fake_get_folder)
@@ -348,8 +368,7 @@ async def test_folder_routes_cover_success_and_failure_paths(monkeypatch):
 
     assert (
         await folders.update_folder(
-            "folder-1",
-            update_payload,
+            folders.FolderUpdateRequest(uid="folder-1", payload=update_payload),
             visibility="private",
             shared_group_ids=["g1"],
             current_user=current_user,
@@ -357,7 +376,11 @@ async def test_folder_routes_cover_success_and_failure_paths(monkeypatch):
         )
     )["updated"] is True
     with pytest.raises(HTTPException) as exc:
-        await folders.update_folder("missing", update_payload, current_user=current_user, db="db")
+        await folders.update_folder(
+            folders.FolderUpdateRequest(uid="missing", payload=update_payload),
+            current_user=current_user,
+            db="db",
+        )
     assert exc.value.status_code == 404
 
     assert await folders.hide_folder(

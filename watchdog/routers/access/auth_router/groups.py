@@ -92,8 +92,8 @@ async def update_group(
         auth_service.update_group,
         group_id,
         group_update,
-        current_user.tenant_id,
-        AuthActorCaps(
+        tenant_id=current_user.tenant_id,
+        actor=AuthActorCaps(
             user_id=current_user.user_id,
             role=current_user.role,
             is_superuser=bool(getattr(current_user, "is_superuser", False)),
@@ -143,8 +143,8 @@ async def update_group_permissions(
         auth_service.update_group_permissions,
         group_id,
         permission_values,
-        current_user.tenant_id,
-        AuthActorCaps(
+        tenant_id=current_user.tenant_id,
+        actor=AuthActorCaps(
             user_id=current_user.user_id,
             role=current_user.role,
             permissions=list(perms_check(current_user)),
@@ -169,8 +169,8 @@ async def update_group_members(
         auth_service.update_group_members,
         group_id,
         members.user_ids,
-        current_user.tenant_id,
-        AuthActorCaps(
+        tenant_id=current_user.tenant_id,
+        actor=AuthActorCaps(
             user_id=current_user.user_id,
             role=current_user.role,
             permissions=list(perms_check(current_user)),

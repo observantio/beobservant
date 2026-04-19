@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import secrets
 from typing import List, Optional, Set, TYPE_CHECKING
@@ -65,6 +66,13 @@ ROLE_RANK = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class UserLoadOptions:
+    with_groups: bool = False
+    with_permissions: bool = False
+    with_api_keys: bool = False
+
+
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -78,16 +86,15 @@ def _get_user(
     *,
     user_id: str,
     tenant_id: str,
-    with_groups: bool = False,
-    with_permissions: bool = False,
-    with_api_keys: bool = False,
+    load: Optional[UserLoadOptions] = None,
 ) -> Optional[User]:
+    options = load or UserLoadOptions()
     opts = []
-    if with_groups:
+    if options.with_groups:
         opts.append(joinedload(User.groups))
-    if with_permissions:
+    if options.with_permissions:
         opts.append(joinedload(User.permissions))
-    if with_api_keys:
+    if options.with_api_keys:
         opts.append(joinedload(User.api_keys))
     q = db.query(User).filter_by(id=user_id, tenant_id=tenant_id)
     if opts:
@@ -136,6 +143,101 @@ def _role_default_permissions(role_value: str) -> Set[str]:
         for perm in (ROLE_PERMISSIONS.get(role_enum) or [])
         if str(getattr(perm, "value", perm)).strip()
     }
+
+
+def _resolve_create_user_actor_context(
+    service: DatabaseAuthService,
+    db: Session,
+    *,
+    user_create: UserCreate,
+    tenant_id: str,
+    actor: AuthActorCaps,
+) -> tuple[str, str, bool, Set[str]]:
+    creator_id = actor.user_id
+    actor_role = actor.role
+    actor_permissions = actor.permissions
+    actor_is_superuser = actor.is_superuser
+    requested_role = _role_to_text(getattr(user_create, "role", None) or Role.USER.value)
+    actor_role_text = _role_to_text(actor_role)
+
+    if creator_id:
+        creator = _get_user(db, user_id=creator_id, tenant_id=tenant_id)
+        if not creator:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Creator account is not valid for this tenant",
+            )
+        if not actor_role_text:
+            actor_role_text = _role_to_text(getattr(creator, "role", None))
+        actor_is_superuser = bool(actor_is_superuser or getattr(creator, "is_superuser", False))
+        actor_perm_set = _resolve_actor_permissions(
+            service,
+            db=db,
+            actor_user_id=creator_id,
+            tenant_id=tenant_id,
+            actor_permissions=actor_permissions,
+        )
+    else:
+        requested_role = Role.USER.value
+        actor_role_text = Role.USER.value
+        actor_perm_set = set()
+
+    return requested_role, actor_role_text, actor_is_superuser, actor_perm_set
+
+
+def _enforce_create_user_policy(
+    *,
+    user_create: UserCreate,
+    requested_role: str,
+    actor_role_text: str,
+    actor_perm_set: Set[str],
+    actor_is_superuser: bool,
+) -> None:
+    actor_is_admin = _is_admin_actor(actor_role=actor_role_text, actor_is_superuser=actor_is_superuser)
+    if actor_is_admin:
+        return
+
+    if _role_rank(requested_role) > _role_rank(actor_role_text):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot assign a role higher than your own",
+        )
+    if requested_role == Role.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can assign admin role",
+        )
+    if getattr(user_create, "group_ids", None):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can assign initial group memberships",
+        )
+    requested_org = str(getattr(user_create, "org_id", "") or "").strip()
+    if requested_org and requested_org != config.DEFAULT_ORG_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can assign tenant scope during user creation",
+        )
+
+    requested_role_defaults = _role_default_permissions(requested_role)
+    _enforce_permission_delegation(
+        requested_permissions=requested_role_defaults,
+        actor_permissions=actor_perm_set,
+        actor_role=actor_role_text,
+        actor_is_superuser=actor_is_superuser,
+    )
+
+
+def _normalize_unique_user_identity(db: Session, user_create: UserCreate) -> tuple[str, str]:
+    normalized_username = (user_create.username or "").strip().lower()
+    if db.query(User).filter(func.lower(User.username) == normalized_username).first():
+        raise ValueError("Username already exists")
+
+    normalized_email = (user_create.email or "").strip().lower()
+    if db.query(User).filter(func.lower(User.email) == normalized_email).first():
+        raise ValueError("Email already exists")
+
+    return normalized_username, normalized_email
 
 
 def get_user_by_id(
@@ -187,80 +289,24 @@ def create_user(
 ) -> UserSchema:
     actor = actor or AuthActorCaps()
     creator_id = actor.user_id
-    actor_role = actor.role
-    actor_permissions = actor.permissions
-    actor_is_superuser = actor.is_superuser
 
     service.ensure_initialized()
     with get_db_session() as db:
-        requested_role = _role_to_text(getattr(user_create, "role", None) or Role.USER.value)
-        actor_role_text = _role_to_text(actor_role)
-
-        creator = None
-        if creator_id:
-            creator = _get_user(db, user_id=creator_id, tenant_id=tenant_id)
-            if not creator:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Creator account is not valid for this tenant",
-                )
-            if not actor_role_text:
-                actor_role_text = _role_to_text(getattr(creator, "role", None))
-            actor_is_superuser = bool(actor_is_superuser or getattr(creator, "is_superuser", False))
-        else:
-            requested_role = Role.USER.value
-            actor_role_text = Role.USER.value
-
-        actor_is_admin = _is_admin_actor(actor_role=actor_role_text, actor_is_superuser=actor_is_superuser)
-        actor_perm_set = (
-            _resolve_actor_permissions(
-                service,
-                db=db,
-                actor_user_id=creator_id,
-                tenant_id=tenant_id,
-                actor_permissions=actor_permissions,
-            )
-            if creator_id
-            else set()
+        requested_role, actor_role_text, actor_is_superuser, actor_perm_set = _resolve_create_user_actor_context(
+            service,
+            db,
+            user_create=user_create,
+            tenant_id=tenant_id,
+            actor=actor,
         )
-
-        if not actor_is_admin:
-            if _role_rank(requested_role) > _role_rank(actor_role_text):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Cannot assign a role higher than your own",
-                )
-            if requested_role == Role.ADMIN.value:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only administrators can assign admin role",
-                )
-            if getattr(user_create, "group_ids", None):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only administrators can assign initial group memberships",
-                )
-            requested_org = str(getattr(user_create, "org_id", "") or "").strip()
-            if requested_org and requested_org != config.DEFAULT_ORG_ID:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only administrators can assign tenant scope during user creation",
-                )
-            requested_role_defaults = _role_default_permissions(requested_role)
-            _enforce_permission_delegation(
-                requested_permissions=requested_role_defaults,
-                actor_permissions=actor_perm_set,
-                actor_role=actor_role_text,
-                actor_is_superuser=actor_is_superuser,
-            )
-
-        normalized_username = (user_create.username or "").strip().lower()
-        if db.query(User).filter(func.lower(User.username) == normalized_username).first():
-            raise ValueError("Username already exists")
-
-        normalized_email = (user_create.email or "").strip().lower()
-        if db.query(User).filter(func.lower(User.email) == normalized_email).first():
-            raise ValueError("Email already exists")
+        _enforce_create_user_policy(
+            user_create=user_create,
+            requested_role=requested_role,
+            actor_role_text=actor_role_text,
+            actor_perm_set=actor_perm_set,
+            actor_is_superuser=actor_is_superuser,
+        )
+        normalized_username, normalized_email = _normalize_unique_user_identity(db, user_create)
 
         is_external = service.is_external_auth_enabled()
         external_subject = None
@@ -283,7 +329,7 @@ def create_user(
             raise ValueError("Password is required when local authentication is enabled")
 
         org_value = config.DEFAULT_ORG_ID
-        if actor_is_admin:
+        if _is_admin_actor(actor_role=actor_role_text, actor_is_superuser=actor_is_superuser):
             requested_org = str(getattr(user_create, "org_id", "") or "").strip()
             if requested_org:
                 org_value = requested_org
@@ -332,6 +378,66 @@ def create_user(
         return UserSchema.model_validate(service.to_user_schema(user))
 
 
+def _validate_user_update_data(
+    update_data: dict[str, object],
+    *,
+    updater_id: Optional[str],
+    user_id: str,
+) -> None:
+    for field in ("username", "email", "org_id", "role", "is_active", "must_setup_mfa", "needs_password_change"):
+        if field in update_data and update_data[field] is None:
+            update_data.pop(field, None)
+
+    if updater_id and user_id == updater_id:
+        if update_data.get("is_active") is False:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You cannot disable your own account",
+            )
+        if set(update_data.keys()) & {"role", "group_ids", "org_id"}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Users cannot change their own role, tenant scope, or group memberships",
+            )
+
+
+def _enforce_user_update_actor_policy(
+    *,
+    user: User,
+    user_id: str,
+    updater_id: Optional[str],
+    updater_user: Optional[User],
+    update_data: dict[str, object],
+) -> None:
+    updater_is_superuser = bool(getattr(updater_user, "is_superuser", False))
+    updater_role_text = _role_to_text(getattr(updater_user, "role", ""))
+
+    if _is_admin_user(user) and updater_user and updater_role_text != Role.ADMIN.value and not updater_is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can modify admin accounts",
+        )
+
+    if updater_user and not updater_is_superuser:
+        if (SENSITIVE_USER_FIELDS & set(update_data.keys())) and updater_role_text != Role.ADMIN.value:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only administrators can modify role, tenant scope, or group memberships",
+            )
+
+        requested_role = update_data.get("role")
+        if requested_role is not None and _role_rank(requested_role) > _role_rank(updater_role_text):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot assign a role higher than your own",
+            )
+        if _is_admin_user(user) and str(user_id) != str(updater_id) and (set(update_data.keys()) - {"is_active"}):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin accounts can only be activated or deactivated by another admin",
+            )
+
+
 def list_users(
     service: DatabaseAuthService,
     tenant_id: str,
@@ -372,11 +478,17 @@ def update_user(
     user_id: str,
     user_update: UserUpdate,
     tenant_id: str,
+    *,
     updater_id: Optional[str] = None,
 ) -> Optional[UserSchema]:
     service.ensure_initialized()
     with get_db_session() as db:
-        user = _get_user(db, user_id=user_id, tenant_id=tenant_id, with_groups=True, with_api_keys=True)
+        user = _get_user(
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            load=UserLoadOptions(with_groups=True, with_api_keys=True),
+        )
         if not user:
             return None
 
@@ -385,51 +497,15 @@ def update_user(
             for k, v in user_update.model_dump(exclude_unset=True).items()
             if k in MUTABLE_USER_FIELDS or k == "group_ids"
         }
-
-        for field in ("username", "email", "org_id", "role", "is_active", "must_setup_mfa", "needs_password_change"):
-            if field in update_data and update_data[field] is None:
-                update_data.pop(field, None)
-
-        if updater_id and user_id == updater_id:
-            if update_data.get("is_active") is False:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="You cannot disable your own account",
-                )
-            if set(update_data.keys()) & {"role", "group_ids", "org_id"}:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Users cannot change their own role, tenant scope, or group memberships",
-                )
-
+        _validate_user_update_data(update_data, updater_id=updater_id, user_id=user_id)
         updater_user = _get_user(db, user_id=updater_id, tenant_id=tenant_id) if updater_id else None
-        updater_is_superuser = bool(getattr(updater_user, "is_superuser", False))
-        updater_role_text = _role_to_text(getattr(updater_user, "role", ""))
-
-        if _is_admin_user(user) and updater_user and updater_role_text != Role.ADMIN.value and not updater_is_superuser:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only administrators can modify admin accounts",
-            )
-
-        if updater_user and not updater_is_superuser:
-            if (SENSITIVE_USER_FIELDS & set(update_data.keys())) and updater_role_text != Role.ADMIN.value:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only administrators can modify role, tenant scope, or group memberships",
-                )
-
-            requested_role = update_data.get("role")
-            if requested_role is not None and _role_rank(requested_role) > _role_rank(updater_role_text):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Cannot assign a role higher than your own",
-                )
-            if _is_admin_user(user) and str(user_id) != str(updater_id) and (set(update_data.keys()) - {"is_active"}):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Admin accounts can only be activated or deactivated by another admin",
-                )
+        _enforce_user_update_actor_policy(
+            user=user,
+            user_id=user_id,
+            updater_id=updater_id,
+            updater_user=updater_user,
+            update_data=update_data,
+        )
 
         if getattr(user, "auth_provider", "local") != "local" and "email" in update_data:
             raise HTTPException(
@@ -574,6 +650,7 @@ def update_user_permissions(
     user_id: str,
     permission_names: List[str],
     tenant_id: str,
+    *,
     actor: Optional[AuthActorCaps] = None,
 ) -> bool:
     actor = actor or AuthActorCaps()
@@ -590,7 +667,7 @@ def update_user_permissions(
                 detail="Actor context is required for permission updates",
             )
 
-        user = _get_user(db, user_id=user_id, tenant_id=tenant_id, with_permissions=True)
+        user = _get_user(db, user_id=user_id, tenant_id=tenant_id, load=UserLoadOptions(with_permissions=True))
         if not user:
             return False
 

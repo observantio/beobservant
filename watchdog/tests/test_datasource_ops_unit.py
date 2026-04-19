@@ -26,11 +26,14 @@ from db_models import ApiKeyShare, Base, GrafanaDatasource, Group, Tenant, User,
 from models.grafana.grafana_datasource_models import DatasourceCreate, DatasourceUpdate
 from services.grafana import datasource_ops
 from services.grafana.grafana_bundles import (
+    DatasourceAccessCriteria,
     DatasourceCreateOptions,
     DatasourceListParams,
     DatasourceQueryEnforcement,
+    DatasourceUpdateRequest,
     DatasourceUpdateOptions,
     GrafanaUserScope,
+    HiddenToggleParams,
 )
 from services.grafana.grafana_service import GrafanaAPIError
 
@@ -260,23 +263,42 @@ def test_datasource_access_scope_and_metadata_helpers():
     assert "scope-shared" in scopes
     assert datasource_ops._scope_conflicts_with_other_tenants(db, org_id="scope-collide", tenant_id="t1") is True
 
-    assert datasource_ops.check_datasource_access(db, ds_private.grafana_uid, owner.id, "t1", []) is not None
-    assert datasource_ops.check_datasource_access(db, ds_private.grafana_uid, viewer.id, "t1", [group.id]) is None
+    owner_scope = GrafanaUserScope(owner.id, "t1", [])
+    viewer_group_scope = GrafanaUserScope(viewer.id, "t1", [group.id])
+    assert datasource_ops.check_datasource_access(db, ds_private.grafana_uid, owner_scope, DatasourceAccessCriteria()) is not None
+    assert datasource_ops.check_datasource_access(db, ds_private.grafana_uid, viewer_group_scope, DatasourceAccessCriteria()) is None
     assert (
-        datasource_ops.check_datasource_access(db, ds_group.grafana_uid, viewer.id, "t1", [group.id]).id == ds_group.id
+        datasource_ops.check_datasource_access(
+            db,
+            ds_group.grafana_uid,
+            viewer_group_scope,
+            DatasourceAccessCriteria(),
+        ).id
+        == ds_group.id
     )
     assert (
         datasource_ops.check_datasource_access(
-            db, ds_group.grafana_uid, viewer.id, "t1", [group.id], require_write=True
+            db,
+            ds_group.grafana_uid,
+            viewer_group_scope,
+            DatasourceAccessCriteria(require_write=True),
         )
         is None
     )
     assert (
-        datasource_ops.check_datasource_access_by_id(db, ds_tenant.grafana_id, viewer.id, "t1", []).id == ds_tenant.id
+        datasource_ops.check_datasource_access_by_id(
+            db,
+            ds_tenant.grafana_id,
+            GrafanaUserScope(viewer.id, "t1", []),
+            DatasourceAccessCriteria(),
+        ).id
+        == ds_tenant.id
     )
 
     accessible, allow_system = datasource_ops.get_accessible_datasource_uids(
-        SimpleNamespace(), db, viewer.id, "t1", [group.id]
+        SimpleNamespace(),
+        db,
+        viewer_group_scope,
     )
     assert set(accessible) == {"uid-group", "uid-tenant"}
     assert allow_system is True
@@ -285,7 +307,12 @@ def test_datasource_access_scope_and_metadata_helpers():
     assert datasource_ops.collect_datasource_refs_from_query_payload(
         {"queries": [{"datasourceUid": "uid-group"}, {"datasource": {"uid": "uid-tenant"}}]}
     ) == {"uid-group", "uid-tenant"}
-    assert datasource_ops.toggle_datasource_hidden(db, ds_group.grafana_uid, viewer.id, "t1", True) is True
+    assert datasource_ops.toggle_datasource_hidden(
+        db,
+        ds_group.grafana_uid,
+        GrafanaUserScope(viewer.id, "t1", []),
+        HiddenToggleParams(hidden=True),
+    ) is True
     assert viewer.id in db.query(GrafanaDatasource).filter_by(id=ds_group.id).first().hidden_by
     assert datasource_ops.get_datasource_metadata(db, "t1") == {"team_ids": [group.id]}
 
@@ -525,8 +552,8 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
                 service,
                 db,
                 DatasourceCreate(name="Grouped", type="graphite", url="http://new"),
-                viewer_scope,
-                DatasourceCreateOptions(),
+                scope=viewer_scope,
+                options=DatasourceCreateOptions(),
             )
         )
 
@@ -536,8 +563,8 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
             service,
             db,
             DatasourceCreate(name="Metrics", type="prometheus", url="http://new", orgId="scope-shared"),
-            viewer_scope,
-            DatasourceCreateOptions(visibility="group", shared_group_ids=[group.id]),
+            scope=viewer_scope,
+            options=DatasourceCreateOptions(visibility="group", shared_group_ids=[group.id]),
         )
     )
     assert created.name == "Metrics"
@@ -568,10 +595,12 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
             datasource_ops.update_datasource(
                 service,
                 db,
-                "uid-created",
-                DatasourceUpdate(name="Nope"),
-                viewer_scope,
-                DatasourceUpdateOptions(),
+                DatasourceUpdateRequest(
+                    uid="uid-created",
+                    datasource_update=DatasourceUpdate(name="Nope"),
+                    scope=viewer_scope,
+                    options=DatasourceUpdateOptions(),
+                ),
             )
         )
     stub.items["uid-created"].isDefault = False
@@ -581,10 +610,12 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
         datasource_ops.update_datasource(
             service,
             db,
-            "uid-created",
-            DatasourceUpdate(name="Renamed", orgId="scope-shared"),
-            viewer_scope,
-            DatasourceUpdateOptions(visibility="tenant"),
+            DatasourceUpdateRequest(
+                uid="uid-created",
+                datasource_update=DatasourceUpdate(name="Renamed", orgId="scope-shared"),
+                scope=viewer_scope,
+                options=DatasourceUpdateOptions(visibility="tenant"),
+            ),
         )
     )
     assert updated.name == "Renamed"

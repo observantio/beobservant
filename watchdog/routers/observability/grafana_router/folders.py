@@ -10,6 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import List, Optional
 
 from fastapi import Body, Depends, HTTPException, Query, Path
@@ -31,17 +32,36 @@ from models.observability.grafana_request_models import (
 )
 from routers.observability.grafana_router.param_helpers import show_hidden_enabled
 from services.grafana.grafana_bundles import (
+    FolderCreateRequest as FolderCreateBundle,
+    FolderDeleteRequest as FolderDeleteBundle,
+    FolderGetRequest as FolderGetBundle,
     FolderCreateOptions,
     FolderDeleteOptions,
     FolderGetParams,
     FolderListParams,
+    FolderUpdateRequest as FolderUpdateBundle,
     FolderUpdateOptions,
     GrafanaUserScope,
+    HiddenToggleParams,
+    HiddenToggleRequest,
 )
 from services.grafana.route_payloads import validate_visibility
 from custom_types.json import JSONDict
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
+
+
+@dataclass(frozen=True, slots=True)
+class FolderUpdateRequest:
+    uid: str
+    payload: GrafanaUpdateFolderRequest
+
+
+def _folder_update_request_dep(
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
+    payload: GrafanaUpdateFolderRequest = Body(...),
+) -> FolderUpdateRequest:
+    return FolderUpdateRequest(uid=uid, payload=payload)
 
 
 @router.get("/folders", response_model=List[Folder])
@@ -65,9 +85,11 @@ async def get_folder_by_uid(
     user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     folder = await proxy.get_folder(
         db=db,
-        uid=uid,
-        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-        params=FolderGetParams(is_admin=is_admin),
+        request=FolderGetBundle(
+            uid=uid,
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            params=FolderGetParams(is_admin=is_admin),
+        ),
     )
     if not folder:
         raise HTTPException(status_code=404, detail=f"Folder {uid} not found or access denied")
@@ -80,6 +102,7 @@ async def create_folder(
     payload: GrafanaCreateFolderRequest,
     visibility: str = Query("private"),
     shared_group_ids: Optional[List[str]] = Query(None),
+    *,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_FOLDERS, "grafana")),
     db: Session = Depends(get_db),
 ) -> Folder:
@@ -87,13 +110,15 @@ async def create_folder(
     user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     result = await proxy.create_folder(
         db=db,
-        title=payload.title,
-        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-        options=FolderCreateOptions(
-            visibility=visibility,
-            shared_group_ids=shared_group_ids or [],
-            allow_dashboard_writes=payload.allow_dashboard_writes,
-            is_admin=is_admin,
+        request=FolderCreateBundle(
+            title=payload.title,
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            options=FolderCreateOptions(
+                visibility=visibility,
+                shared_group_ids=shared_group_ids or [],
+                allow_dashboard_writes=payload.allow_dashboard_writes,
+                is_admin=is_admin,
+            ),
         ),
     )
     if not result:
@@ -111,9 +136,11 @@ async def delete_folder(
     user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     ok = await proxy.delete_folder(
         db=db,
-        uid=uid,
-        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-        options=FolderDeleteOptions(is_admin=is_admin),
+        request=FolderDeleteBundle(
+            uid=uid,
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            options=FolderDeleteOptions(is_admin=is_admin),
+        ),
     )
     if not ok:
         raise HTTPException(status_code=404, detail=f"Folder {uid} not found or delete failed")
@@ -123,10 +150,10 @@ async def delete_folder(
 @router.put("/folders/{uid}", response_model=Folder)
 @handle_route_errors()
 async def update_folder(
-    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
-    payload: GrafanaUpdateFolderRequest = Body(...),
+    request: FolderUpdateRequest = Depends(_folder_update_request_dep),
     visibility: Optional[str] = Query(None),
     shared_group_ids: Optional[List[str]] = Query(None),
+    *,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_FOLDERS, "grafana")),
     db: Session = Depends(get_db),
 ) -> Folder:
@@ -134,18 +161,20 @@ async def update_folder(
     user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     result = await proxy.update_folder(
         db=db,
-        uid=uid,
-        scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-        options=FolderUpdateOptions(
-            title=payload.title,
-            visibility=visibility,
-            shared_group_ids=shared_group_ids,
-            allow_dashboard_writes=payload.allow_dashboard_writes,
-            is_admin=is_admin,
+        request=FolderUpdateBundle(
+            uid=request.uid,
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            options=FolderUpdateOptions(
+                title=request.payload.title,
+                visibility=visibility,
+                shared_group_ids=shared_group_ids,
+                allow_dashboard_writes=request.payload.allow_dashboard_writes,
+                is_admin=is_admin,
+            ),
         ),
     )
     if not result:
-        raise HTTPException(status_code=404, detail=f"Folder {uid} not found or update failed")
+        raise HTTPException(status_code=404, detail=f"Folder {request.uid} not found or update failed")
     return result
 
 
@@ -163,10 +192,11 @@ async def hide_folder(
     ok = await rtp(
         proxy.toggle_folder_hidden,
         db=db,
-        uid=uid,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        hidden=payload.hidden,
+        request=HiddenToggleRequest(
+            uid=uid,
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=[]),
+            params=HiddenToggleParams(hidden=payload.hidden),
+        ),
     )
     if not ok:
         raise HTTPException(status_code=404, detail=f"Folder {uid} not found")

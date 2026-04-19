@@ -17,15 +17,19 @@ from fastapi import Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, Response
 
 from config import config
-from middleware.dependencies import enforce_public_endpoint_security, require_authenticated_with_scope
+from middleware.dependencies import (
+    PublicEndpointSecurityConfig,
+    enforce_public_endpoint_security,
+    require_authenticated_with_scope,
+)
 from models.access.auth_models import TokenData
 from models.observability.grafana_request_models import (
     GrafanaBootstrapSessionRequest,
     GrafanaBootstrapSessionResponse,
 )
 from services.common.cookies import cookie_secure
+from services.grafana_proxy_service import ProxyAuthorizationRequest
 from services.grafana.normalize import normalize_grafana_next_path
-
 from .shared import auth_service, proxy, router
 
 
@@ -48,13 +52,22 @@ async def grafana_auth(
 ) -> Response:
     enforce_public_endpoint_security(
         request,
-        scope="grafana_proxy_auth",
-        limit=config.RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE,
-        window_seconds=60,
-        allowlist=config.GRAFANA_PROXY_IP_ALLOWLIST,
-        fallback_mode="deny",
+        PublicEndpointSecurityConfig(
+            scope="grafana_proxy_auth",
+            limit=config.RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE,
+            window_seconds=60,
+            allowlist=config.GRAFANA_PROXY_IP_ALLOWLIST,
+            fallback_mode="deny",
+        ),
     )
-    headers = await proxy.authorize_proxy_request(request=request, auth_service=auth_service, token=token, orig=orig)
+    headers = await proxy.authorize_proxy_request(
+        ProxyAuthorizationRequest(
+            request=request,
+            auth_service=auth_service,
+            token=token,
+            orig=orig,
+        )
+    )
     return Response(status_code=204, headers=headers)
 
 
@@ -66,11 +79,13 @@ async def bootstrap_grafana_session(
 ) -> JSONResponse:
     enforce_public_endpoint_security(
         request,
-        scope="grafana_bootstrap_session",
-        limit=config.RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE,
-        window_seconds=60,
-        allowlist=None,
-        fallback_mode="allow",
+        PublicEndpointSecurityConfig(
+            scope="grafana_bootstrap_session",
+            limit=config.RATE_LIMIT_GRAFANA_PROXY_PER_MINUTE,
+            window_seconds=60,
+            allowlist=None,
+            fallback_mode="allow",
+        ),
     )
     next_path = normalize_grafana_next_path(payload.next)
     auth_header = request.headers.get("Authorization", "")

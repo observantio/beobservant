@@ -24,6 +24,7 @@ from services.grafana.grafana_bundles import (
     AccessibleTitleConflictParams,
     DashboardSearchParams,
     DashboardUpdateOptions,
+    DashboardUpdateRequest,
     GrafanaUserScope,
 )
 
@@ -675,10 +676,12 @@ async def test_update_dashboard_clears_folder_uid_when_moved_to_general():
     updated = await dashboard_ops.update_dashboard(
         service,
         db,
-        "dash-uid-1",
-        update_payload,
-        GrafanaUserScope("u1", "t1", []),
-        DashboardUpdateOptions(),
+        DashboardUpdateRequest(
+            uid="dash-uid-1",
+            dashboard_update=update_payload,
+            scope=GrafanaUserScope("u1", "t1", []),
+            options=DashboardUpdateOptions(),
+        ),
     )
 
     assert updated is not None

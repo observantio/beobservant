@@ -10,7 +10,8 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import Annotated, List, Optional
+from dataclasses import dataclass
+from typing import List, Optional
 
 from fastapi import Body, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
@@ -33,10 +34,14 @@ from routers.observability.grafana_router.param_helpers import (
     show_hidden_enabled,
 )
 from services.grafana.grafana_bundles import (
+    DashboardCreateRequest as DashboardCreateBundle,
     DashboardCreateOptions,
     DashboardSearchParams,
+    DashboardUpdateRequest as DashboardUpdateBundle,
     DashboardUpdateOptions,
     GrafanaUserScope,
+    HiddenToggleParams,
+    HiddenToggleRequest,
 )
 from services.grafana.route_payloads import (
     parse_dashboard_create_payload,
@@ -55,53 +60,116 @@ async def get_dashboard_filter_metadata(
     return await rtp(proxy.get_dashboard_metadata, db=db, tenant_id=current_user.tenant_id)
 
 
+@dataclass(frozen=True, slots=True)
 class SearchDashboardsTextParams:
-    def __init__(
-        self,
-        query: Optional[str] = Query(None),
-        tag: Optional[str] = Query(None),
-        uid: Optional[str] = Query(None),
-        team_id: Optional[str] = Query(None),
-    ) -> None:
-        self.query = query
-        self.tag = tag
-        self.uid = uid
-        self.team_id = team_id
+    query: Optional[str]
+    tag: Optional[str]
+    uid: Optional[str]
+    team_id: Optional[str]
 
 
+@dataclass(frozen=True, slots=True)
 class SearchDashboardsFolderParams:
-    def __init__(
-        self,
-        folder_ids: Optional[List[int]] = Query(None, alias="folderIds"),
-        folder_uids: Optional[List[str]] = Query(None, alias="folderUIDs"),
-        dashboard_uids: Optional[List[str]] = Query(None, alias="dashboardUID"),
-        search_type: Optional[str] = Query(None, alias="type"),
-    ) -> None:
-        self.folder_ids = folder_ids
-        self.folder_uids = folder_uids
-        self.dashboard_uids = dashboard_uids
-        self.search_type = search_type
+    folder_ids: Optional[List[int]]
+    folder_uids: Optional[List[str]]
+    dashboard_uids: Optional[List[str]]
+    search_type: Optional[str]
 
 
+@dataclass(frozen=True, slots=True)
 class SearchDashboardsPagingParams:
-    def __init__(
-        self,
-        starred: Optional[bool] = Query(None),
-        show_hidden: str = Query("false", pattern=r"^(true|false)$"),
-        limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
-        offset: int = Query(0, ge=0),
-    ) -> None:
-        self.starred = starred
-        self.show_hidden = show_hidden
-        self.limit = limit
-        self.offset = offset
+    starred: Optional[bool]
+    show_hidden: str
+    limit: int
+    offset: int
+
+
+@dataclass(frozen=True, slots=True)
+class SearchDashboardsRequestParams:
+    text: SearchDashboardsTextParams
+    folders: SearchDashboardsFolderParams
+    paging: SearchDashboardsPagingParams
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardVisibilityParams:
+    visibility: str | None
+    shared_group_ids: list[str] | None
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardUpdateRequest:
+    uid: str
+    payload: GrafanaDashboardPayloadRequest
+
+
+def _search_dashboards_text_dep(
+    query: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None),
+    uid: Optional[str] = Query(None),
+    team_id: Optional[str] = Query(None),
+) -> SearchDashboardsTextParams:
+    return SearchDashboardsTextParams(query=query, tag=tag, uid=uid, team_id=team_id)
+
+
+def _search_dashboards_folder_dep(
+    folder_ids: Optional[List[int]] = Query(None, alias="folderIds"),
+    folder_uids: Optional[List[str]] = Query(None, alias="folderUIDs"),
+    dashboard_uids: Optional[List[str]] = Query(None, alias="dashboardUID"),
+    search_type: Optional[str] = Query(None, alias="type"),
+) -> SearchDashboardsFolderParams:
+    return SearchDashboardsFolderParams(
+        folder_ids=folder_ids,
+        folder_uids=folder_uids,
+        dashboard_uids=dashboard_uids,
+        search_type=search_type,
+    )
+
+
+def _search_dashboards_paging_dep(
+    starred: Optional[bool] = Query(None),
+    show_hidden: str = Query("false", pattern=r"^(true|false)$"),
+    limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
+    offset: int = Query(0, ge=0),
+) -> SearchDashboardsPagingParams:
+    return SearchDashboardsPagingParams(starred=starred, show_hidden=show_hidden, limit=limit, offset=offset)
+
+
+def _search_dashboards_request_dep(
+    text: SearchDashboardsTextParams = Depends(_search_dashboards_text_dep),
+    folders: SearchDashboardsFolderParams = Depends(_search_dashboards_folder_dep),
+    paging: SearchDashboardsPagingParams = Depends(_search_dashboards_paging_dep),
+) -> SearchDashboardsRequestParams:
+    return SearchDashboardsRequestParams(text=text, folders=folders, paging=paging)
+
+
+def _dashboard_create_visibility_dep(
+    visibility: str = Query("private"),
+    shared_group_ids: Optional[List[str]] = Query(None),
+) -> DashboardVisibilityParams:
+    return DashboardVisibilityParams(visibility=visibility, shared_group_ids=shared_group_ids)
+
+
+def _dashboard_update_visibility_dep(
+    visibility: Optional[str] = Query(None),
+    shared_group_ids: Optional[List[str]] = Query(None),
+) -> DashboardVisibilityParams:
+    return DashboardVisibilityParams(visibility=visibility, shared_group_ids=shared_group_ids)
+
+
+def _dashboard_update_request_dep(
+    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
+    payload: GrafanaDashboardPayloadRequest = Body(...),
+) -> DashboardUpdateRequest:
+    return DashboardUpdateRequest(uid=uid, payload=payload)
 
 
 @router.get("/dashboards/search")
 async def search_dashboards(
-    dash_text: Annotated[SearchDashboardsTextParams, Depends()],
-    dash_folders: Annotated[SearchDashboardsFolderParams, Depends()],
-    dash_paging: Annotated[SearchDashboardsPagingParams, Depends()],
+    dash_text: SearchDashboardsTextParams = Depends(_search_dashboards_text_dep),
+    dash_folders: SearchDashboardsFolderParams = Depends(_search_dashboards_folder_dep),
+    dash_paging: SearchDashboardsPagingParams = Depends(_search_dashboards_paging_dep),
+    *,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DASHBOARDS, "grafana")),
     db: Session = Depends(get_db),
 ) -> List[DashboardSearchResult]:
@@ -164,6 +232,7 @@ async def create_dashboard(
     payload: GrafanaDashboardPayloadRequest,
     visibility: str = Query("private"),
     shared_group_ids: Optional[List[str]] = Query(None),
+    *,
     current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ) -> JSONDict:
@@ -172,13 +241,15 @@ async def create_dashboard(
     raw = dashboard_payload(payload)
     result = await proxy.create_dashboard(
         db=db,
-        dashboard_create=parse_dashboard_create_payload(raw),
-        subject=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-        options=DashboardCreateOptions(
-            visibility=visibility,
-            shared_group_ids=shared_group_ids or [],
-            is_admin=is_admin,
-            actor_permissions=current_user.permissions or [],
+        request=DashboardCreateBundle(
+            dashboard_create=parse_dashboard_create_payload(raw),
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            options=DashboardCreateOptions(
+                visibility=visibility,
+                shared_group_ids=shared_group_ids or [],
+                is_admin=is_admin,
+                actor_permissions=current_user.permissions or [],
+            ),
         ),
     )
     if not result:
@@ -203,14 +274,16 @@ async def save_dashboard_from_grafana_ui(
         if existing.get("uid_db_dashboard") is not None:
             result = await proxy.update_dashboard(
                 db=db,
-                uid=uid,
-                dashboard_update=parse_dashboard_update_payload(raw),
-                subject=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-                options=DashboardUpdateOptions(
-                    visibility=None,
-                    shared_group_ids=None,
-                    is_admin=is_admin,
-                    actor_permissions=current_user.permissions or [],
+                request=DashboardUpdateBundle(
+                    uid=uid,
+                    dashboard_update=parse_dashboard_update_payload(raw),
+                    scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+                    options=DashboardUpdateOptions(
+                        visibility=None,
+                        shared_group_ids=None,
+                        is_admin=is_admin,
+                        actor_permissions=current_user.permissions or [],
+                    ),
                 ),
             )
             if result:
@@ -218,13 +291,15 @@ async def save_dashboard_from_grafana_ui(
 
     result = await proxy.create_dashboard(
         db=db,
-        dashboard_create=parse_dashboard_create_payload(raw),
-        subject=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-        options=DashboardCreateOptions(
-            visibility="private",
-            shared_group_ids=[],
-            is_admin=is_admin,
-            actor_permissions=current_user.permissions or [],
+        request=DashboardCreateBundle(
+            dashboard_create=parse_dashboard_create_payload(raw),
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            options=DashboardCreateOptions(
+                visibility="private",
+                shared_group_ids=[],
+                is_admin=is_admin,
+                actor_permissions=current_user.permissions or [],
+            ),
         ),
     )
     if not result:
@@ -235,30 +310,35 @@ async def save_dashboard_from_grafana_ui(
 @router.put("/dashboards/{uid}")
 @handle_route_errors()
 async def update_dashboard(
-    uid: str = Path(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_-]+$"),
-    payload: GrafanaDashboardPayloadRequest = Body(...),
+    request: DashboardUpdateRequest = Depends(_dashboard_update_request_dep),
     visibility: Optional[str] = Query(None),
     shared_group_ids: Optional[List[str]] = Query(None),
+    *,
     current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
 ) -> JSONDict:
     validate_visibility(visibility)
     user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
-    raw = dashboard_payload(payload)
+    raw = dashboard_payload(request.payload)
     result = await proxy.update_dashboard(
         db=db,
-        uid=uid,
-        dashboard_update=parse_dashboard_update_payload(raw),
-        subject=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-        options=DashboardUpdateOptions(
-            visibility=visibility,
-            shared_group_ids=shared_group_ids,
-            is_admin=is_admin,
-            actor_permissions=current_user.permissions or [],
+        request=DashboardUpdateBundle(
+            uid=request.uid,
+            dashboard_update=parse_dashboard_update_payload(raw),
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+            options=DashboardUpdateOptions(
+                visibility=visibility,
+                shared_group_ids=shared_group_ids,
+                is_admin=is_admin,
+                actor_permissions=current_user.permissions or [],
+            ),
         ),
     )
     if not result:
-        raise HTTPException(status_code=404, detail=f"Dashboard {uid} not found, access denied, or update failed")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dashboard {request.uid} not found, access denied, or update failed",
+        )
     return result
 
 
@@ -294,10 +374,11 @@ async def hide_dashboard(
     ok = await rtp(
         proxy.toggle_dashboard_hidden,
         db=db,
-        uid=uid,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        hidden=payload.hidden,
+        request=HiddenToggleRequest(
+            uid=uid,
+            scope=GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=[]),
+            params=HiddenToggleParams(hidden=payload.hidden),
+        ),
     )
     if not ok:
         raise HTTPException(status_code=404, detail=f"Dashboard {uid} not found")
