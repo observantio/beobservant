@@ -46,6 +46,7 @@ class DatasourceScopeDefaultsContext:
     user_id: str
     tenant_id: str
     existing_json: Optional[JSONDict] = None
+    existing_type: Optional[str] = None
 
 
 def validate_datasource_lookup(
@@ -115,7 +116,7 @@ def apply_scoped_datasource_defaults(
     resolve_org_scope: Callable[..., str],
 ) -> DatasourceCreate | DatasourceUpdate:
     datasource = ctx.datasource
-    datasource_type = str(getattr(datasource, "type", "") or "")
+    datasource_type = str(getattr(datasource, "type", "") or ctx.existing_type or "")
     if datasource_type not in {"prometheus", "loki", "tempo"}:
         return datasource
 

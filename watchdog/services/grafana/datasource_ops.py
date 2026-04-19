@@ -670,6 +670,7 @@ async def update_datasource(
                     or getattr(existing, "jsonData", None)
                     or {}
                 ),
+                existing_type=str(getattr(existing, "type", "") or ""),
             ),
             resolve_org_scope=_resolve_datasource_org_scope,
         ),
