@@ -1,6 +1,5 @@
 """
 Middleware and helpers for request auditing and security headers.
-
 The constants and helper functions are also available for tests and other modules.
 
 Copyright (c) 2026 Stefan Kumarasinghe
