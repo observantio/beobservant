@@ -24,11 +24,9 @@ from services.common import ttl_cache as ttl_mod
 @pytest.mark.asyncio
 async def test_ttl_cache_remaining_memory_and_pending_paths(monkeypatch):
     cache = ttl_mod.TTLCache()
-    # ttl<=0 path
     await cache.set("k", {"v": 1}, 0)
     assert await cache.get("k") is None
 
-    # get_or_set returns cached value path
     await cache.set("cached", {"ok": True}, 5)
 
     async def factory():
@@ -60,7 +58,6 @@ async def test_ttl_cache_redis_falsey_ping_and_none_client_paths(monkeypatch):
     cache = ttl_mod.TTLCache()
     assert await cache._ensure_redis() is False
 
-    # clear early return when ensure_redis true but client is None
     async def ensure_true():
         return True
 
@@ -72,7 +69,6 @@ async def test_ttl_cache_redis_falsey_ping_and_none_client_paths(monkeypatch):
 
 
 def test_ttl_cache_importerror_branch(monkeypatch):
-    # Re-import module with redis import failing to hit ImportError initialization branch.
     import services.common.ttl_cache as module_ref
 
     orig_import = builtins.__import__
