@@ -210,9 +210,9 @@ INTERNAL_AND_PUBLIC_CASES: list[
         None,
         403,
     ),
-    ("internal_query_deprecated_missing_header", "GET", "/api/internal/otlp/validate", None, None, {"token": "x"}, 422),
+    ("internal_query_missing_header", "GET", "/api/internal/otlp/validate", None, None, {"token": "x"}, 422),
     (
-        "internal_query_deprecated_wrong_header",
+        "internal_query_wrong_header",
         "GET",
         "/api/internal/otlp/validate",
         {"X-Internal-Token": "wrong"},

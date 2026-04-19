@@ -138,7 +138,7 @@ def test_vault_provider_get_cache_and_payload_shapes(monkeypatch):
             ("v2", "beta"): {"data": {"data": {"beta": 2}}},
             ("v2", "gamma"): {"data": {"data": {"only": "one"}}},
             ("v2", "empty"): {"data": {"data": {}}},
-            ("v1", "legacy"): {"data": {"value": "legacy-secret"}},
+            ("v1", "plain"): {"data": {"value": "plain-secret"}},
             ("v1", "missing"): FakeInvalidPath(),
         }
     )
@@ -157,8 +157,8 @@ def test_vault_provider_get_cache_and_payload_shapes(monkeypatch):
     provider_v1 = vault_client.VaultSecretProvider(
         vault_client.VaultSecretProviderSettings(address="https://vault", token="tok", kv_version=1),
     )
-    assert provider_v1.get("legacy") == "legacy-secret"
-    assert provider_v1.get_many(["legacy", "missing"]) == {"legacy": "legacy-secret", "missing": None}
+    assert provider_v1.get("plain") == "plain-secret"
+    assert provider_v1.get_many(["plain", "missing"]) == {"plain": "plain-secret", "missing": None}
 
 
 def test_vault_provider_errors_not_found_and_cache_cleanup(monkeypatch):

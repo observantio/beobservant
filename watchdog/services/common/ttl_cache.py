@@ -71,7 +71,7 @@ class TTLCache:
             except (TypeError, ValueError, json.JSONDecodeError):
                 logger.warning("TTL cache JSON payload is invalid; dropping cache value")
                 return None
-        logger.warning("TTL cache encountered non-JSON legacy payload; dropping cache value")
+        logger.warning("TTL cache encountered non-JSON payload; dropping cache value")
         return None
 
     async def _close_redis_client(self) -> None:

@@ -12,6 +12,7 @@ All notable changes to this project are documented here.
 * Tightened pylint design limits in root/resolver/notifier configs and completed resolver+notifier type/test hardening so `mypy` and `pytest` run cleanly at 100% coverage.
 * Refactored notifier alerting, incident, Jira, notification transport/email, and access/storage service APIs to typed request/context models with compatibility adapters, restoring strict `pylint`, `mypy`, and `pytest` (100% coverage) under the tightened design limits.
 * Refactored gatekeeper gateway auth configuration and proxy trust/rate-limit handling to satisfy strict lint design thresholds while keeping full test/type gates green.
+* Completed a cleanup pass removing stale watchdog replay-wrapper tests and deprecated/legacy naming noise across watchdog, notifier, resolver, and OTEL synthetic logs while preserving runtime behavior and keeping all global quality gates green.
 
 
 ## [v0.0.4] - 2026-04-14

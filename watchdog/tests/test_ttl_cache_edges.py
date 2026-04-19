@@ -81,7 +81,7 @@ async def test_memory_cache_and_serialization_paths(monkeypatch):
 
     assert cache._deserialize_value(b'j:{"a":1}') == {"a": 1}
     assert cache._deserialize_value(b"j:{") is None
-    assert cache._deserialize_value(b"legacy") is None
+    assert cache._deserialize_value(b"opaque") is None
     assert warnings
 
     now = {"value": 10.0}

@@ -147,13 +147,19 @@ def test_bootstrap_indexes_and_api_key_helpers(monkeypatch):
     assert existing.otlp_token_hash == "hash:default-raw"
 
     existing = SimpleNamespace(
-        id="k2", user_id="u2", is_enabled=True, updated_at=None, name="Other", otlp_token_hash=None, otlp_token="legacy"
+        id="k2",
+        user_id="u2",
+        is_enabled=True,
+        updated_at=None,
+        name="Other",
+        otlp_token_hash=None,
+        otlp_token="plain-token",
     )
     db = _DB(query_rows=[existing])
     boot_mod.ensure_default_api_key(
         service, db, SimpleNamespace(id="u2", username="user", tenant_id="tenant", org_id="org-2")
     )
-    assert existing.otlp_token_hash == "hash:legacy"
+    assert existing.otlp_token_hash == "hash:plain-token"
 
     db = _DB(query_rows=[None])
     user = SimpleNamespace(id="u3", username="user", tenant_id="tenant", org_id="org-3")
