@@ -661,7 +661,7 @@ ERROR_TEMPLATES = {
     ],
     "fraud-detection": [
         lambda: (
-            f"ML model inference failed | model={pick(ML_MODELS)} transaction_id={tid()} user_id={uid()} error={pick(['model_file_not_found', 'feature_vector_shape_mismatch', 'onnx_runtime_exception', 'gpu_oom'])} inference_timeout_ms=200 elapsed_ms={ms(201, 5000)} fallback_model={pick(['rule_engine_only', 'legacy_lr_v1'])} fallback_activated=true impact=reduced_fraud_detection_accuracy"
+            f"ML model inference failed | model={pick(ML_MODELS)} transaction_id={tid()} user_id={uid()} error={pick(['model_file_not_found', 'feature_vector_shape_mismatch', 'onnx_runtime_exception', 'gpu_oom'])} inference_timeout_ms=200 elapsed_ms={ms(201, 5000)} fallback_model={pick(['rule_engine_only', 'compat_lr_v1'])} fallback_activated=true impact=reduced_fraud_detection_accuracy"
         ),
         lambda: (
             f"Rules engine timeout | transaction_id={tid()} user_id={uid()} rules_evaluated={rand(5, 50)} total_rules={rand(100, 300)} timeout_ms=500 elapsed_ms={ms(501, 2000)} timed_out_rules=[rule_{rand(100, 999)},rule_{rand(100, 999)}] decision_made_with_partial_rules=true decision=review risk_increased_due_to_timeout=true"

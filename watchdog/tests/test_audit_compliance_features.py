@@ -92,8 +92,8 @@ class AuditComplianceFeatureTests(unittest.TestCase):
             headers = {"x-internal-token": "internal-test-token"}
 
             try:
-                legacy = client.get("/api/internal/otlp/validate", params={"token": "tok"}, headers=headers)
-                self.assertEqual(legacy.status_code, 410)
+                query_route_resp = client.get("/api/internal/otlp/validate", params={"token": "tok"}, headers=headers)
+                self.assertEqual(query_route_resp.status_code, 410)
 
                 with patch(
                     "services.database_auth_service.DatabaseAuthService.validate_otlp_token",

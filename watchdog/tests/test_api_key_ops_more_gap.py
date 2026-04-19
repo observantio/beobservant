@@ -192,7 +192,7 @@ def test_backfill_otlp_tokens_rollback_on_failure(monkeypatch):
             user_id=owner.id,
             name="Key",
             key="scope1",
-            otlp_token="legacy",
+            otlp_token="plain-token",
             otlp_token_hash=None,
             is_default=False,
             is_enabled=True,

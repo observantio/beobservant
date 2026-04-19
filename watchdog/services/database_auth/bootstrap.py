@@ -235,7 +235,7 @@ def _backfill_otlp_token_hashes(service: DatabaseAuthService, db: Session, *, ba
             break
 
     if total_backfilled:
-        service.logger.info("Backfilled %s legacy OTLP tokens to hash-only storage", total_backfilled)
+        service.logger.info("Backfilled %s cleartext OTLP tokens to hash-only storage", total_backfilled)
 
 
 def _sync_admin_permissions(db: Session, admin_user: User) -> int:
