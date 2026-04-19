@@ -223,7 +223,7 @@ def test_fetch_org_from_api_variants(monkeypatch):
         def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(self, *args):
             return False
 
         def post(self, url, headers=None, json=None):

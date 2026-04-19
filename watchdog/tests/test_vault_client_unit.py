@@ -31,7 +31,7 @@ class _KVV2:
     def __init__(self, client):
         self.client = client
 
-    def read_secret_version(self, path, mount_point, raise_on_deleted_version=False):
+    def read_secret_version(self, path, *args, **kwargs):
         value = self.client.read_map.get(("v2", path))
         if isinstance(value, Exception):
             raise value
@@ -42,7 +42,7 @@ class _KVV1:
     def __init__(self, client):
         self.client = client
 
-    def read_secret(self, path, mount_point):
+    def read_secret(self, path, *args, **kwargs):
         value = self.client.read_map.get(("v1", path))
         if isinstance(value, Exception):
             raise value

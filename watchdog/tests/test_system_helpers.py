@@ -15,7 +15,7 @@ class DummyProcess:
     def __init__(self):
         self._cpu_calls = 0
 
-    def cpu_percent(self, interval=None):
+    def cpu_percent(self, *args, **kwargs):
         self._cpu_calls += 1
         return 0 if self._cpu_calls == 1 else 40
 
@@ -41,7 +41,7 @@ class DummyProcess:
 
         return IO()
 
-    def connections(self, kind=None):
+    def connections(self, *args, **kwargs):
         class C:
             status = "ESTABLISHED"
 

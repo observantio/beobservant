@@ -137,7 +137,7 @@ async def test_audit_helpers_and_security_headers(monkeypatch):
 
     writes = []
     monkeypatch.setattr(audit_middleware, "client_ip", lambda request: "203.0.113.10")
-    monkeypatch.setattr(audit_middleware, "set_request_audit_context", lambda ip, ua: ("ctx",))
+    monkeypatch.setattr(audit_middleware, "set_request_audit_context", lambda *args, **kwargs: ("ctx",))
     monkeypatch.setattr(audit_middleware, "reset_request_audit_context", lambda token: writes.append(("reset", token)))
     monkeypatch.setattr(audit_middleware.auth_service, "decode_token", lambda token: TokenData())
 
@@ -176,7 +176,7 @@ async def test_docs_security_headers_allow_swagger_assets(monkeypatch):
     request = _request("/docs")
 
     monkeypatch.setattr(audit_middleware, "client_ip", lambda request: "203.0.113.10")
-    monkeypatch.setattr(audit_middleware, "set_request_audit_context", lambda ip, ua: ("ctx",))
+    monkeypatch.setattr(audit_middleware, "set_request_audit_context", lambda *args, **kwargs: ("ctx",))
     monkeypatch.setattr(audit_middleware, "reset_request_audit_context", lambda token: None)
 
     async def call_next(_request: Request) -> Response:
@@ -194,7 +194,7 @@ async def test_security_headers_skip_audit_when_request_has_no_token(monkeypatch
     writes = []
 
     monkeypatch.setattr(audit_middleware, "client_ip", lambda request: "203.0.113.10")
-    monkeypatch.setattr(audit_middleware, "set_request_audit_context", lambda ip, ua: ("ctx",))
+    monkeypatch.setattr(audit_middleware, "set_request_audit_context", lambda *args, **kwargs: ("ctx",))
     monkeypatch.setattr(audit_middleware, "reset_request_audit_context", lambda token: writes.append(("reset", token)))
 
     async def fake_run_in_threadpool(func, *args, **kwargs):
@@ -222,7 +222,7 @@ async def test_security_headers_skip_audit_when_decoded_token_is_empty(monkeypat
     writes = []
 
     monkeypatch.setattr(audit_middleware, "client_ip", lambda request: "203.0.113.10")
-    monkeypatch.setattr(audit_middleware, "set_request_audit_context", lambda ip, ua: ("ctx",))
+    monkeypatch.setattr(audit_middleware, "set_request_audit_context", lambda *args, **kwargs: ("ctx",))
     monkeypatch.setattr(audit_middleware, "reset_request_audit_context", lambda token: writes.append(("reset", token)))
     monkeypatch.setattr(audit_middleware.auth_service, "decode_token", lambda token: None)
 
@@ -292,7 +292,7 @@ async def test_request_size_and_concurrency_middleware_paths(monkeypatch):
 
     sent_messages.clear()
 
-    async def timeout_wait_for(awaitable, timeout):
+    async def timeout_wait_for(*args, **kwargs):
         raise asyncio.TimeoutError()
 
     monkeypatch.setattr(asyncio, "wait_for", timeout_wait_for)
