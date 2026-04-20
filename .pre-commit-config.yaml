@@ -6,7 +6,7 @@ repos:
         language: system
         entry: >-
           bash -lc 'VENV_PY="$PWD/.venv/bin/python"; cd watchdog && "$VENV_PY" -m pytest -q
-          -o cache_dir=/tmp/pre-commit-pytest-cache-watchdog'
+          -o cache_dir=/tmp/pre-commit-pytest-cache-watchdog --ignore=mutants'
         pass_filenames: false
         files: ^watchdog/.*\.py$
         exclude: (^|/)tests/

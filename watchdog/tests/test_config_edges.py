@@ -95,6 +95,17 @@ def test_config_helper_functions_cover_none_paths():
     assert module._is_placeholder(None, ["x"]) is True
 
 
+def test_config_allows_missing_data_encryption_key_in_development(monkeypatch):
+    with monkeypatch.context() as ctx:
+        for key, value in _valid_dev_env().items():
+            ctx.setenv(key, value)
+        ctx.delenv("DATA_ENCRYPTION_KEY", raising=False)
+        ctx.delenv("REQUIRE_TOTP_ENCRYPTION_KEY", raising=False)
+        module = _reload_config_module()
+        assert module.config.DATA_ENCRYPTION_KEY is None
+        assert module.config.REQUIRE_TOTP_ENCRYPTION_KEY is False
+
+
 def test_oidc_mfa_members_defaults_false(monkeypatch):
     with monkeypatch.context() as ctx:
         for key, value in _valid_dev_env().items():
