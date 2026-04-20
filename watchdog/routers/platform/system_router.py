@@ -14,6 +14,7 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.concurrency import run_in_threadpool
 
 from custom_types.json import JSONDict
 from middleware.dependencies import auth_service, require_permission_with_scope
@@ -53,7 +54,7 @@ async def get_system_quotas(
         selected_org = str(current_user.tenant_id)
 
     if requested_org:
-        visible_keys = auth_service.list_api_keys(current_user.user_id, show_hidden=False)
+        visible_keys = await run_in_threadpool(auth_service.list_api_keys, current_user.user_id, False)
         allowed_org_ids = {
             str(getattr(k, "key", "") or "")
             for k in visible_keys
@@ -98,13 +99,16 @@ async def get_ojo_releases(
         headers = {"Accept": "application/vnd.github+json"}
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                latest_res, list_res = await client.get(
-                    GITHUB_OJO_LATEST_RELEASE_URL,
-                    headers=headers,
-                ), await client.get(
-                    GITHUB_OJO_RELEASES_URL,
-                    params={"per_page": 2},
-                    headers=headers,
+                latest_res, list_res = await asyncio.gather(
+                    client.get(
+                        GITHUB_OJO_LATEST_RELEASE_URL,
+                        headers=headers,
+                    ),
+                    client.get(
+                        GITHUB_OJO_RELEASES_URL,
+                        params={"per_page": 2},
+                        headers=headers,
+                    ),
                 )
         except httpx.HTTPError:
             if OJO_RELEASE_CACHE_PAYLOAD is not None:

@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
+from fastapi.concurrency import run_in_threadpool
 from models.internal.otlp_validate import OtlpValidateRequest
 
 from services.internal_service import InternalService
@@ -60,4 +61,4 @@ async def validate_otlp_token_post(
         token.encode("utf-8")
     except UnicodeEncodeError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid token encoding") from exc
-    return internal_service.validate_token_or_404(token)
+    return await run_in_threadpool(internal_service.validate_token_or_404, token)

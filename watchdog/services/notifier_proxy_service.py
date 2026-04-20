@@ -18,6 +18,7 @@ from typing import Optional
 
 import httpx
 from fastapi import HTTPException, Request, Response, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.exc import SQLAlchemyError
 
 from config import config
@@ -139,13 +140,17 @@ class NotifierProxyService(BaseProxyService):
         api_key_id: Optional[str] = None
         context_token: Optional[str] = None
         if current_user:
-            api_key_id = self._resolve_actor_api_key_id(current_user)
+            api_key_id = await run_in_threadpool(self._resolve_actor_api_key_id, current_user)
             if require_api_key and not api_key_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="No active API key available for this operation",
                 )
-            context_token = self.sign_context_token(current_user=current_user, api_key_id=api_key_id)
+            context_token = await run_in_threadpool(
+                self.sign_context_token,
+                current_user=current_user,
+                api_key_id=api_key_id,
+            )
 
         target = f"{self.base_url}{upstream_path}"
         body = request_body if request_body is not None else await request.body()
@@ -177,7 +182,7 @@ class NotifierProxyService(BaseProxyService):
                 headers=headers,
             )
         except httpx.TimeoutException as exc:
-            self.write_audit(
+            await self.write_audit_async(
                 current_user=current_user,
                 action=f"{audit_action}.timeout",
                 resource_id=upstream_path,
@@ -189,7 +194,7 @@ class NotifierProxyService(BaseProxyService):
                 headers={"X-Request-ID": corr},
             ) from exc
         except httpx.HTTPError as exc:
-            self.write_audit(
+            await self.write_audit_async(
                 current_user=current_user,
                 action=f"{audit_action}.error",
                 resource_id=upstream_path,
@@ -202,7 +207,7 @@ class NotifierProxyService(BaseProxyService):
             ) from exc
 
         elapsed_ms = int((time.time() - start) * 1000)
-        self.write_audit(
+        await self.write_audit_async(
             current_user=current_user,
             action=f"{audit_action}.complete",
             resource_id=upstream_path,
