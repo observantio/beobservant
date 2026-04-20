@@ -330,3 +330,20 @@ async def test_service_wrapper_key_volume_series_path():
     client = DummyClient({"data": {"result": [{"values": [[1711000000, "1"]]}]}})
     points = await svc.key_volume_series("tenant-a", client)
     assert points == [{"ts": 1711000000, "value": 1}]
+    cached_points = await svc.key_volume_series("tenant-a", client)
+    assert cached_points == points
+    assert sum(url.endswith("/api/v1/query_range") for url in client.request_urls) == 1
+
+
+@pytest.mark.asyncio
+async def test_service_wrapper_key_activity_uses_cache():
+    svc = AgentService()
+    client = DummyClient({"data": {"result": [{"value": [1711000000, "3"]}]}})
+
+    activity = await svc.key_activity("tenant-a", client)
+    assert activity["metrics_active"] is True
+    assert activity["metrics_count"] == 3
+
+    cached_activity = await svc.key_activity("tenant-a", client)
+    assert cached_activity == activity
+    assert sum(url.endswith("/api/v1/query") for url in client.request_urls) == 1
