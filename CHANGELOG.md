@@ -8,6 +8,7 @@ All notable changes to this project are documented here.
 
 * Hardened the watchdog auth test harness to run against a temporary SQLite database, then fixed the API-key, group-permission, MFA/TOTP, and OIDC-linking edge cases uncovered by that real DB-backed run.
 * Scoped the active-agents UI/request path to the selected tenant.
+* Moved watchdog proxy I/O off the event loop, batched Tempo trace hydration, cached agent activity lookups, and kept the generated watchdog OpenAPI snapshot current.
 * The copy button for quick API key now shows a success acknowledgement when the token is copied.
 * The RCA page polling now refreshes only active queued jobs when a completed job is selected, preventing unnecessary full queue refreshes.
 * Expanded mutation testing coverage and test tooling for resolver and notifier, and fixed related script/config issues.
