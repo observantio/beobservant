@@ -244,6 +244,29 @@ class _DatabaseAuthMfaMixin(DatabaseAuthServiceState):
     def needs_mfa_setup(self, user: User) -> bool:
         return db_mfa.needs_mfa_setup(user)
 
+    def _check_local_mfa(
+        self,
+        _svc: "DatabaseAuthService",
+        user: User,
+        token: Optional[str],
+    ) -> Optional[Union[bool, JSONDict, Token]]:
+        if getattr(user, "auth_provider", "local") != "local" and config.SKIP_LOCAL_MFA_FOR_EXTERNAL:
+            return True
+
+        setup_response = getattr(self, "MFA_SETUP_RESPONSE", "mfa_setup_required")
+        required_response = getattr(self, "MFA_REQUIRED_RESPONSE", "mfa_required")
+
+        if self.needs_mfa_setup(user):
+            return {setup_response: True}
+
+        if getattr(user, "mfa_enabled", False):
+            if not token:
+                return {required_response: True}
+            if not self.verify_totp_code(user, token):
+                return None
+
+        return True
+
 
 class _DatabaseAuthAuthFlowMixin(DatabaseAuthServiceState):
     """Access tokens, login and OIDC flows."""

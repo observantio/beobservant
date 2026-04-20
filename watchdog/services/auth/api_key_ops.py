@@ -25,7 +25,6 @@ from services.auth.api_key_schema import ApiKeySchemaContext, api_key_to_schema,
 from services.database_auth.audit import AuditLogRecord
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
-
 BACKFILL_BATCH_SIZE = 500
 ORG_SCOPE_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,199}$")
 
@@ -453,6 +452,7 @@ def _update_owned_api_key_fields(ctx: ApiKeyUpdateContext, *, now: datetime) -> 
             if replacement_key is None:
                 raise ValueError("At least one API key must be enabled")
             ctx.api_key.is_enabled = False
+            db.flush()
             replacement_key.is_enabled = True
             replacement_key.updated_at = now
             _set_org_id(ctx.viewer, getattr(replacement_key, "key", None), now)

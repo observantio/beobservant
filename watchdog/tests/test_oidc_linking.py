@@ -16,6 +16,11 @@ from config import config
 from services.database_auth_service import DatabaseAuthService
 from models.access.user_models import UserCreate
 from models.access.auth_models import Role
+from services.auth.actor_caps import AuthActorCaps
+from db_models import Tenant, User
+
+
+ADMIN_ACTOR = AuthActorCaps(is_superuser=True)
 
 
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
@@ -24,24 +29,28 @@ def test_oidc_links_existing_local_account(monkeypatch):
     svc.ensure_initialized()
 
     with get_db_session() as db:
-        tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+        tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
     user = svc.create_user(
-        UserCreate(username="linkuser", email="link@example.com", password="pw", full_name="Link User"),
+        UserCreate(username="linkuser", email="link@example.com", password="password123", full_name="Link User"),
         tenant_id,
+        ADMIN_ACTOR,
     )
     assert user.auth_provider == "local"
 
     monkeypatch.setattr(config, "AUTH_PROVIDER", "oidc")
     monkeypatch.setattr(config, "OIDC_AUTO_PROVISION_USERS", True)
+    monkeypatch.setattr(config, "OIDC_AUTO_LINK_BY_EMAIL", True)
+    monkeypatch.setattr(config, "OIDC_REQUIRE_VERIFIED_EMAIL_FOR_LINK", True)
+    monkeypatch.setattr(config, "OIDC_ISSUER_URL", None)
 
-    claims = {"email": "link@example.com", "sub": "oidc-subject"}
+    claims = {"email": "link@example.com", "email_verified": True, "sub": "oidc-subject"}
     linked = svc.sync_user_from_oidc_claims(claims)
     assert linked is not None
     assert linked.id == user.id
     assert linked.auth_provider == "oidc"
-    assert linked.role == Role.VIEWER.value
+    assert linked.role == user.role
 
     # subsequent login should also work and keep provider
     linked2 = svc.sync_user_from_oidc_claims(claims)
@@ -54,12 +63,13 @@ def test_oidc_refuses_if_auto_provision_disabled(monkeypatch):
     svc.ensure_initialized()
 
     with get_db_session() as db:
-        tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+        tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
     user = svc.create_user(
-        UserCreate(username="noauto", email="noauto@example.com", password="pw", full_name="No Auto"),
+        UserCreate(username="noauto", email="noauto@example.com", password="password123", full_name="No Auto"),
         tenant_id,
+        ADMIN_ACTOR,
     )
     assert user.auth_provider == "local"
 
@@ -77,7 +87,7 @@ def test_local_user_needs_password_change_with_oidc_enabled(monkeypatch):
     svc.ensure_initialized()
 
     with get_db_session() as db:
-        tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+        tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
     monkeypatch.setattr(config, "AUTH_PROVIDER", "oidc")
@@ -86,6 +96,7 @@ def test_local_user_needs_password_change_with_oidc_enabled(monkeypatch):
     user = svc.create_user(
         UserCreate(username="pwuser", email="pwuser@example.com", password="password123", full_name="Password User"),
         tenant_id,
+        ADMIN_ACTOR,
     )
     assert user.auth_provider == "local"
     assert user.needs_password_change, "local users should still be prompted to change password"
@@ -97,17 +108,18 @@ def test_password_login_triggers_expiry_even_if_provider_set(monkeypatch):
     svc.ensure_initialized()
 
     with get_db_session() as db:
-        tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+        tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
     user = svc.create_user(
         UserCreate(username="expire", email="expire@example.com", password="password123", full_name="Exp"),
         tenant_id,
+        ADMIN_ACTOR,
     )
     assert user.auth_provider == "local"
 
     with get_db_session() as db:
-        u = db.query(database.db_models.User).filter_by(id=user.id).first()
+        u = db.query(User).filter_by(id=user.id).first()
         u.auth_provider = "oidc"
         from datetime import timedelta
 
@@ -127,7 +139,7 @@ def test_oidc_auto_provisions_with_viewer_role(monkeypatch):
     svc.ensure_initialized()
 
     with get_db_session() as db:
-        tenant = db.query(database.db_models.Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
+        tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
     monkeypatch.setattr(config, "AUTH_PROVIDER", "oidc")
@@ -135,6 +147,6 @@ def test_oidc_auto_provisions_with_viewer_role(monkeypatch):
     claims = {"email": "newuser@example.com", "sub": "oidc-new"}
     new = svc.sync_user_from_oidc_claims(claims)
     assert new is not None
-    assert new.role == Role.VIEWER.value
+    assert new.role == Role.PROVISIONING.value
     assert new.auth_provider == "oidc"
     assert not getattr(new, "needs_password_change", False)

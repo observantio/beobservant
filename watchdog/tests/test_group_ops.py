@@ -21,6 +21,9 @@ from models.access.user_models import UserCreate
 from db_models import AuditLog, GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, Tenant
 
 
+ADMIN_ACTOR = AuthActorCaps(is_superuser=True)
+
+
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
 def test_update_group_permissions_logs_actor_user_id():
     svc = DatabaseAuthService()
@@ -30,7 +33,9 @@ def test_update_group_permissions_logs_actor_user_id():
         tenant_id = tenant.id
 
     creator = svc.create_user(
-        UserCreate(username="gcreator", email="gcreator@example.com", password="pw", full_name="Creator"), tenant_id
+        UserCreate(username="gcreator", email="gcreator@example.com", password="password123", full_name="Creator"),
+        tenant_id,
+        ADMIN_ACTOR,
     )
     group = svc.create_group(GroupCreate(name="test-group", description="test"), tenant_id, creator.id)
 
@@ -38,7 +43,7 @@ def test_update_group_permissions_logs_actor_user_id():
         group.id,
         ["read:agents"],
         tenant_id=tenant_id,
-        actor=AuthActorCaps(user_id=creator.id, role="user"),
+        actor=AuthActorCaps(user_id=creator.id, role="admin"),
     )
     assert ok is True
     with get_db_session() as db:
@@ -62,7 +67,9 @@ def test_non_admin_cannot_grant_manage_permissions_to_group():
         tenant_id = tenant.id
 
     creator = svc.create_user(
-        UserCreate(username="gcreator2", email="gcreator2@example.com", password="pw", full_name="Creator"), tenant_id
+        UserCreate(username="gcreator2", email="gcreator2@example.com", password="password123", full_name="Creator"),
+        tenant_id,
+        ADMIN_ACTOR,
     )
     group = svc.create_group(GroupCreate(name="test-group-2", description="test"), tenant_id, creator.id)
 
@@ -86,16 +93,19 @@ def test_update_group_members_prunes_removed_member_grafana_group_shares():
         tenant_id = tenant.id
 
     admin = svc.create_user(
-        UserCreate(username="gadmin", email="gadmin@example.com", password="pw", full_name="Admin"),
+        UserCreate(username="gadmin", email="gadmin@example.com", password="password123", full_name="Admin"),
         tenant_id,
+        ADMIN_ACTOR,
     )
     owner = svc.create_user(
-        UserCreate(username="gowner", email="gowner@example.com", password="pw", full_name="Owner"),
+        UserCreate(username="gowner", email="gowner@example.com", password="password123", full_name="Owner"),
         tenant_id,
+        ADMIN_ACTOR,
     )
     member = svc.create_user(
-        UserCreate(username="gmember", email="gmember@example.com", password="pw", full_name="Member"),
+        UserCreate(username="gmember", email="gmember@example.com", password="password123", full_name="Member"),
         tenant_id,
+        ADMIN_ACTOR,
     )
 
     group = svc.create_group(GroupCreate(name="share-prune-group", description="test"), tenant_id, admin.id)

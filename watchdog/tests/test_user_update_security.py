@@ -17,6 +17,7 @@ from config import config
 from services.database_auth_service import DatabaseAuthService
 from models.access.user_models import UserCreate, UserUpdate
 from models.access.auth_models import Role
+from services.auth.actor_caps import AuthActorCaps
 from db_models import Tenant, User
 
 
@@ -29,11 +30,16 @@ def test_non_admin_cannot_escalate_user_role():
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
+    admin_actor = AuthActorCaps(is_superuser=True)
     actor = svc.create_user(
-        UserCreate(username="actor1", email="actor1@example.com", password="pw", full_name="Actor"), tenant_id
+        UserCreate(username="actor1", email="actor1@example.com", password="password123", full_name="Actor"),
+        tenant_id,
+        admin_actor,
     )
     target = svc.create_user(
-        UserCreate(username="target1", email="target1@example.com", password="pw", full_name="Target"), tenant_id
+        UserCreate(username="target1", email="target1@example.com", password="password123", full_name="Target"),
+        tenant_id,
+        admin_actor,
     )
 
     with pytest.raises(HTTPException) as exc:
@@ -50,8 +56,11 @@ def test_non_admin_cannot_create_admin_user():
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
+    admin_actor = AuthActorCaps(is_superuser=True)
     actor = svc.create_user(
-        UserCreate(username="creator1", email="creator1@example.com", password="pw", full_name="Creator"), tenant_id
+        UserCreate(username="creator1", email="creator1@example.com", password="password123", full_name="Creator"),
+        tenant_id,
+        admin_actor,
     )
 
     with pytest.raises(HTTPException) as exc:
@@ -59,15 +68,12 @@ def test_non_admin_cannot_create_admin_user():
             UserCreate(
                 username="admincand1",
                 email="admincand1@example.com",
-                password="pw",
+                password="password123",
                 full_name="Admin Candidate",
                 role=Role.ADMIN,
             ),
             tenant_id,
-            creator_id=actor.id,
-            actor_role="user",
-            actor_permissions=["create:users"],
-            actor_is_superuser=False,
+            AuthActorCaps(user_id=actor.id, role="user", permissions=["create:users"]),
         )
     assert exc.value.status_code == 403
 
@@ -81,12 +87,16 @@ def test_admin_can_only_toggle_is_active_for_another_admin():
         tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
         tenant_id = tenant.id
 
+    admin_actor = AuthActorCaps(is_superuser=True)
     actor = svc.create_user(
-        UserCreate(username="admin-actor", email="admin-actor@example.com", password="pw", full_name="Actor"), tenant_id
+        UserCreate(username="admin-actor", email="admin-actor@example.com", password="password123", full_name="Actor"),
+        tenant_id,
+        admin_actor,
     )
     target = svc.create_user(
-        UserCreate(username="admin-target", email="admin-target@example.com", password="pw", full_name="Target"),
+        UserCreate(username="admin-target", email="admin-target@example.com", password="password123", full_name="Target"),
         tenant_id,
+        admin_actor,
     )
 
     with get_db_session() as db:
