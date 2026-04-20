@@ -229,7 +229,7 @@ class ResolverProxyService(BaseProxyService):
                 headers={"X-Request-ID": context.correlation_id},
             )
             self._resolve_inflight_error(owner, inflight_future, err)
-            self.write_audit(
+            await self.write_audit_async(
                 current_user=context.current_user,
                 action=f"{context.audit_action}.timeout",
                 resource_id=context.upstream_path,
@@ -247,7 +247,7 @@ class ResolverProxyService(BaseProxyService):
                 headers={"X-Request-ID": context.correlation_id},
             )
             self._resolve_inflight_error(owner, inflight_future, err)
-            self.write_audit(
+            await self.write_audit_async(
                 current_user=context.current_user,
                 action=f"{context.audit_action}.error",
                 resource_id=context.upstream_path,
@@ -260,7 +260,7 @@ class ResolverProxyService(BaseProxyService):
             raise err from exc
 
         elapsed_ms = int((time.time() - started) * 1000)
-        self.write_audit(
+        await self.write_audit_async(
             current_user=context.current_user,
             action=f"{context.audit_action}.complete",
             resource_id=context.upstream_path,

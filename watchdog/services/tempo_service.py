@@ -107,38 +107,37 @@ class TempoService:
         try:
             data = await self._get_json(f"{self.tempo_url}/api/search", params=params, headers=headers)
             raw_traces = _dict_list(data.get("traces"))
+            trace_ids = [
+                str(trace["traceID"])
+                for trace in raw_traces
+                if isinstance(trace.get("traceID"), str) and trace.get("traceID")
+            ]
 
             if fetch_full_traces:
-                semaphore = asyncio.Semaphore(max(1, config.TEMPO_TRACE_FETCH_CONCURRENCY))
+                batch_size = max(1, config.TEMPO_TRACE_FETCH_CONCURRENCY)
 
                 async def _fetch_one(trace_id: str) -> Trace:
-                    async with semaphore:
-                        self._observe("tempo_full_trace_fetch_total")
-                        try:
-                            return await self.get_trace(trace_id, tenant_id=tenant_id) or Trace(
-                                traceID=trace_id,
-                                spans=[],
-                                processes={},
-                                warnings=["Trace details unavailable"],
-                            )
-                        except (httpx.HTTPError, OSError, RuntimeError, ValueError):
-                            logger.warning("Failed to fetch trace %s", trace_id)
-                            return Trace(
-                                traceID=trace_id,
-                                spans=[],
-                                processes={},
-                                warnings=["Trace details unavailable"],
-                            )
+                    self._observe("tempo_full_trace_fetch_total")
+                    try:
+                        return await self.get_trace(trace_id, tenant_id=tenant_id) or Trace(
+                            traceID=trace_id,
+                            spans=[],
+                            processes={},
+                            warnings=["Trace details unavailable"],
+                        )
+                    except (httpx.HTTPError, OSError, RuntimeError, ValueError):
+                        logger.warning("Failed to fetch trace %s", trace_id)
+                        return Trace(
+                            traceID=trace_id,
+                            spans=[],
+                            processes={},
+                            warnings=["Trace details unavailable"],
+                        )
 
-                traces = list(
-                    await asyncio.gather(
-                        *[
-                            _fetch_one(str(t["traceID"]))
-                            for t in raw_traces
-                            if isinstance(t.get("traceID"), str) and t.get("traceID")
-                        ],
-                    )
-                )
+                traces = []
+                for batch_start in range(0, len(trace_ids), batch_size):
+                    batch = trace_ids[batch_start : batch_start + batch_size]
+                    traces.extend(await asyncio.gather(*(_fetch_one(trace_id) for trace_id in batch)))
             else:
                 traces = [t for t in (tempo_parsers.build_summary_trace(r) for r in raw_traces) if t]
 

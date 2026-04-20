@@ -17,6 +17,7 @@ from typing import Optional
 
 import httpx
 import jwt
+from fastapi.concurrency import run_in_threadpool
 
 from database import get_db_session
 from db_models import AuditLog
@@ -63,6 +64,22 @@ class BaseProxyService:
                     details=details,
                 )
             )
+
+    async def write_audit_async(
+        self,
+        *,
+        current_user: Optional[TokenData],
+        action: str,
+        resource_id: str,
+        details: JSONDict,
+    ) -> None:
+        await run_in_threadpool(
+            self.write_audit,
+            current_user=current_user,
+            action=action,
+            resource_id=resource_id,
+            details=details,
+        )
 
     @staticmethod
     def _build_base_jwt_claims(
