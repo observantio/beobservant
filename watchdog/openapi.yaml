@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Watchdog with Your Infrastructure
   description: Unified API for managing Tempo, Loki, AlertManager, Grafana, and Resolver
-  version: 0.0.4
+  version: 0.0.5
 paths:
   /api/internal/otlp/validate:
     get:
