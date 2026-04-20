@@ -163,7 +163,7 @@ export default function AgentsPage() {
       try {
         const [agentsRes, activeRes, volumeRes] = await Promise.all([
           getAgents({ signal: controller.signal, maxRetries: 0 }),
-          getActiveAgents({ signal: controller.signal, maxRetries: 0 }),
+          getActiveAgents({ tenantId: activeTenantId, signal: controller.signal, maxRetries: 0 }),
           getAgentMetricVolume({
             tenantId: activeTenantId,
             stepSeconds: 60,

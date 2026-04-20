@@ -96,6 +96,16 @@ async def test_agents_router_aggregates_host_names_from_heartbeat_registry(monke
 
 
 @pytest.mark.asyncio
+async def test_agents_router_returns_empty_list_when_no_api_keys(monkeypatch):
+    monkeypatch.setattr(agents_router.auth_service, "list_api_keys", lambda *_args: [])
+    monkeypatch.setattr(agents_router.agent_service, "list_agents", lambda: [])
+
+    user = SimpleNamespace(user_id="u1")
+    active = await agents_router.list_active_agents(user)
+    assert active == []
+
+
+@pytest.mark.asyncio
 async def test_system_router_quota_scope_fallback_and_forbidden_paths(monkeypatch):
     captured = []
 

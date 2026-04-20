@@ -627,8 +627,11 @@ export async function updateUserPassword(userId, passwords) {
   });
 }
 
-export async function getActiveAgents(opts = {}) {
-  return request("/api/agents/active", opts);
+export async function getActiveAgents({ tenantId, signal, maxRetries } = {}) {
+  const params = new URLSearchParams();
+  if (String(tenantId || "").trim()) params.set("tenant_id", String(tenantId).trim());
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return request(`/api/agents/active${qs}`, { signal, maxRetries });
 }
 
 export async function getAgents(opts = {}) {

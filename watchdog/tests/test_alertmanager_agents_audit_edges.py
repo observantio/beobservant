@@ -226,6 +226,15 @@ async def test_agents_router_list_active_and_heartbeat(monkeypatch):
     assert active[0]["host_names"] == ["host-a"]
     assert active[1]["success"] is False
 
+    scoped_active = await agents_router.list_active_agents(current_user, tenant_id="tenant-a")
+    assert len(scoped_active) == 1
+    assert scoped_active[0]["tenant_id"] == "tenant-a"
+    assert scoped_active[0]["active"] is True
+
+    with pytest.raises(HTTPException) as exc:
+        await agents_router.list_active_agents(current_user, tenant_id="missing")
+    assert exc.value.status_code == 403
+
     async def fake_key_volume_series(_key_value, _client, **_kwargs):
         return [
             {"ts": 1711000000, "value": 2},
