@@ -6,7 +6,21 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
+import atexit
 import os
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+from cryptography.fernet import Fernet
+
+
+_TEST_SQLITE_DIR = Path(tempfile.mkdtemp(prefix="observantio-watchdog-tests-"))
+_TEST_SQLITE_URL = f"sqlite:///{_TEST_SQLITE_DIR / 'watchdog.sqlite3'}"
+_TEST_DATABASE_INITIALIZED = False
+
+atexit.register(shutil.rmtree, _TEST_SQLITE_DIR, ignore_errors=True)
 
 
 _TEST_JWT_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
@@ -52,11 +66,35 @@ jwIDAQAB
 
 
 def ensure_test_env() -> None:
-    os.environ.setdefault("DATABASE_URL", "postgresql://safeuser:safePass_123@db:5432/watchdog")
-    os.environ.setdefault("SKIP_STARTUP_DB_INIT", "1")
+    global _TEST_DATABASE_INITIALIZED
+
+    service_root = Path(__file__).resolve().parents[1]
+    if str(service_root) not in sys.path:
+        sys.path.insert(0, str(service_root))
+
+    use_temp_sqlite = os.getenv("USE_TEMP_SQLITE_TEST_DB", "").strip().lower() in {"1", "true", "yes", "on"}
+    if use_temp_sqlite:
+        os.environ["DATABASE_URL"] = _TEST_SQLITE_URL
+        os.environ["SKIP_STARTUP_DB_INIT"] = "1"
+    else:
+        os.environ.setdefault("DATABASE_URL", "postgresql://safeuser:safePass_123@db:5432/watchdog")
+        os.environ.setdefault("SKIP_STARTUP_DB_INIT", "1")
+
     os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
     os.environ.setdefault("CORS_ALLOW_CREDENTIALS", "true")
     os.environ.setdefault("JWT_ALGORITHM", "RS256")
     os.environ.setdefault("JWT_PRIVATE_KEY", _TEST_JWT_PRIVATE_KEY)
     os.environ.setdefault("JWT_PUBLIC_KEY", _TEST_JWT_PUBLIC_KEY)
     os.environ.setdefault("JWT_AUTO_GENERATE_KEYS", "true")
+    if not os.environ.get("DATA_ENCRYPTION_KEY", "").strip():
+        os.environ["DATA_ENCRYPTION_KEY"] = Fernet.generate_key().decode("utf-8")
+
+    database_url = os.environ.get("DATABASE_URL", "")
+    if _TEST_DATABASE_INITIALIZED or not database_url.startswith("sqlite"):
+        return
+
+    from database import init_database, init_db
+
+    init_database(database_url)
+    init_db()
+    _TEST_DATABASE_INITIALIZED = True

@@ -28,6 +28,15 @@ from services.database_auth import shared as shared_mod
 from services.database_auth import token as token_mod
 
 
+@pytest.fixture(autouse=True)
+def _restore_database_state() -> None:
+    original_engine = database_module._ENGINE
+    original_session_local = database_module._SESSION_LOCAL
+    yield
+    database_module._ENGINE = original_engine
+    database_module._SESSION_LOCAL = original_session_local
+
+
 def test_database_lifecycle_and_session_paths(monkeypatch):
     database_module.dispose_database()
     warning_calls = []
@@ -129,6 +138,7 @@ def test_database_lifecycle_and_session_paths(monkeypatch):
 
 
 def test_database_remaining_helper_branches(monkeypatch):
+    database_module.dispose_database()
     database_module.dispose_database()
     monkeypatch.setattr(database_module.os, "getenv", lambda name: None)
     assert database_module._env_int("MISSING", 9) == 9
