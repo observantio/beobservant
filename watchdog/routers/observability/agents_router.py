@@ -53,13 +53,29 @@ async def list_agents(
 
 @router.get("/active")
 async def list_active_agents(
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents")),
+    tenant_id: str | None = Query(default=None),
 ) -> list[dict[str, object]]:
     api_keys = await rtp(auth_service.list_api_keys, current_user.user_id)
+    requested_tenant_id = tenant_id.strip() if isinstance(tenant_id, str) else ""
+    if requested_tenant_id:
+        api_keys = [key for key in api_keys if key.key == requested_tenant_id]
+        if not api_keys:
+            raise HTTPException(status_code=403, detail="API key scope is not available to this user")
+
+    if not api_keys:
+        return []
+
+    concurrency = max(1, min(20, len(api_keys)))
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def _load_activity(key: object) -> KeyActivity:
+        async with semaphore:
+            return await agent_service.key_activity(getattr(key, "key", ""), mimir_client)
 
     tasks: list[asyncio.Task[KeyActivity]] = []
     for key in api_keys:
-        tasks.append(asyncio.create_task(agent_service.key_activity(key.key, mimir_client)))
+        tasks.append(asyncio.create_task(_load_activity(key)))
 
     results = await asyncio.gather(*tasks, return_exceptions=True) if tasks else []
 

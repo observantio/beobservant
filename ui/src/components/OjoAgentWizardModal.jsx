@@ -440,7 +440,7 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
       try {
         const [knownRes, activeRes] = await Promise.all([
           api.getAgents({ maxRetries: 0 }),
-          api.getActiveAgents({ maxRetries: 0 }),
+          api.getActiveAgents({ tenantId: selectedApiKey?.key, maxRetries: 0 }),
         ]);
         const knownAgents = Array.isArray(knownRes) ? knownRes : [];
         const scopedAgents = selectedApiScope
