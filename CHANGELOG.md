@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased] - 2026-04-17
+## [0.0.5] - 2026-04-20
 
 ### Fixes
 
@@ -126,7 +126,7 @@ All notable changes to this project are documented here.
 - Removed border styling from auth entry cards (`Login` and OIDC callback) to match the cleaner sign-in visual direction.
 - Updated OIDC callback success handling to perform a hard redirect refresh (`location.replace("/")`) after token completion.
 - Switched layout defaults to sidebar navigation, with clearer section grouping, smaller nav links, and dedicated documentation topic links.
-- Updated header chrome in sidebar mode to show release/build context (`wolfmegasaur v0.0.4`) plus quick GitHub/Ojo links.
+- Updated header chrome in sidebar mode to show release/build context (`wolfmegasaur v0.0.5`) plus quick GitHub/Ojo links.
 - Refined “OTel Collector Overview” template panels by removing empty-prone CPU/network breakdowns and adding resilient process-disk throughput coverage.
 - Updated Grafana launch URL normalization to strip internal `orgId` query params and forward only `org-key`.
 - Updated Audit & Compliance filter semantics:

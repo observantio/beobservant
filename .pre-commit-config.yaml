@@ -17,7 +17,7 @@ repos:
         language: system
         entry: >-
           bash -lc 'VENV_PY="$PWD/.venv/bin/python"; cd gatekeeper && "$VENV_PY" -m pytest -q
-          -o cache_dir=/tmp/pre-commit-pytest-cache-gatekeeper'
+          -o cache_dir=/tmp/pre-commit-pytest-cache-gatekeeper --ignore=mutants'
         pass_filenames: false
         files: ^gatekeeper/.*\.py$
         exclude: (^|/)tests/

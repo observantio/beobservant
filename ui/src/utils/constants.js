@@ -13,7 +13,7 @@ export const GRAFANA_URL =
 export const APP_ORG_KEY =
   import.meta.env.VITE_APP_ORG_KEY || "observantio-default";
 export const APP_VERSION =
-  import.meta.env.VITE_APP_VERSION || "v0.0.4";
+  import.meta.env.VITE_APP_VERSION || "v0.0.5";
 export const OIDC_PROVIDER_LABEL =
   import.meta.env.VITE_OIDC_PROVIDER_LABEL || "SSO";
 
