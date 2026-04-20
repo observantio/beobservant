@@ -17,7 +17,11 @@ from database import get_db_session
 from config import config
 from services.database_auth_service import DatabaseAuthService
 from models.access.user_models import UserCreate
-from db_models import Tenant
+from services.auth.actor_caps import AuthActorCaps
+from db_models import Tenant, User
+
+
+ADMIN_ACTOR = AuthActorCaps(is_superuser=True)
 
 
 import database
@@ -33,8 +37,9 @@ def test_enroll_and_verify_mfa_flow():
         tenant_id = tenant.id
 
     user = svc.create_user(
-        UserCreate(username="mfa-user", email="mfa-user@example.com", password="pwstrong", full_name="MFA User"),
+        UserCreate(username="mfa-user", email="mfa-user@example.com", password="password123", full_name="MFA User"),
         tenant_id,
+        ADMIN_ACTOR,
     )
     payload = svc.enroll_totp(user.id)
     assert "secret" in payload and payload["secret"]
@@ -56,8 +61,9 @@ def test_skip_local_mfa_for_external(monkeypatch):
         tenant_id = tenant.id
 
     user = svc.create_user(
-        UserCreate(username="ext-mfa", email="ext-mfa@example.com", password="pw", full_name="External MFA"),
+        UserCreate(username="ext-mfa", email="ext-mfa@example.com", password="password123", full_name="External MFA"),
         tenant_id,
+        ADMIN_ACTOR,
     )
 
     with get_db_session() as db:

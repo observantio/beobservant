@@ -18,9 +18,13 @@ import database
 from database import get_db_session
 from config import config
 from services.database_auth_service import ApiKeyShareReplaceRequest, DatabaseAuthService
+from services.auth.actor_caps import AuthActorCaps
 from models.access.user_models import UserCreate
 from models.access.api_key_models import ApiKeyCreate, ApiKeyUpdate
 from db_models import Tenant, User
+
+
+ADMIN_ACTOR = AuthActorCaps(is_superuser=True)
 
 
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
@@ -33,10 +37,14 @@ def test_list_api_keys_hides_otlp_token_for_shared_user():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner", email="owner@example.com", password="pw", full_name="Owner"), tenant_id
+        UserCreate(username="owner", email="owner@example.com", password="password123", full_name="Owner"),
+        tenant_id,
+        ADMIN_ACTOR,
     )
     other = svc.create_user(
-        UserCreate(username="other", email="other@example.com", password="pw", full_name="Other"), tenant_id
+        UserCreate(username="other", email="other@example.com", password="password123", full_name="Other"),
+        tenant_id,
+        ADMIN_ACTOR,
     )
 
     created = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="owner-key", key="org-owner"))
@@ -66,7 +74,9 @@ def test_otlp_token_is_one_time_reveal_for_owner():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner-otlp", email="owner-otlp@example.com", password="pw", full_name="Owner"), tenant_id
+        UserCreate(username="owner-otlp", email="owner-otlp@example.com", password="password123", full_name="Owner"),
+        tenant_id,
+        ADMIN_ACTOR,
     )
     created = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="owner-key-otlp", key="org-owner-otlp"))
     assert created.otlp_token
@@ -87,10 +97,14 @@ def test_delete_api_key_by_non_owner_returns_403():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="del-owner", email="del-owner@example.com", password="pw", full_name="Owner"), tenant_id
+        UserCreate(username="del-owner", email="del-owner@example.com", password="password123", full_name="Owner"),
+        tenant_id,
+        ADMIN_ACTOR,
     )
     other = svc.create_user(
-        UserCreate(username="del-other", email="del-other@example.com", password="pw", full_name="Other"), tenant_id
+        UserCreate(username="del-other", email="del-other@example.com", password="password123", full_name="Other"),
+        tenant_id,
+        ADMIN_ACTOR,
     )
 
     created = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="del-key", key="org-del"))
@@ -114,7 +128,9 @@ def test_delete_api_key_by_owner_succeeds():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner2", email="owner2@example.com", password="pw", full_name="Owner"), tenant_id
+        UserCreate(username="owner2", email="owner2@example.com", password="password123", full_name="Owner"),
+        tenant_id,
+        ADMIN_ACTOR,
     )
     created = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="owner2-key", key="org-owner2"))
 
@@ -132,10 +148,14 @@ def test_enabling_owned_key_updates_user_org_and_keeps_single_active_view():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner3", email="owner3@example.com", password="pw", full_name="Owner"), tenant_id
+           UserCreate(username="owner3", email="owner3@example.com", password="password123", full_name="Owner"),
+           tenant_id,
+           ADMIN_ACTOR,
     )
     other = svc.create_user(
-        UserCreate(username="other3", email="other3@example.com", password="pw", full_name="Other"), tenant_id
+           UserCreate(username="other3", email="other3@example.com", password="password123", full_name="Other"),
+           tenant_id,
+           ADMIN_ACTOR,
     )
 
     shared_key = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="shared-key", key="org-shared-1"))
@@ -175,13 +195,17 @@ def test_default_api_key_cannot_be_shared():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner4", email="owner4@example.com", password="pw", full_name="Owner"), tenant_id
+           UserCreate(username="owner4", email="owner4@example.com", password="password123", full_name="Owner"),
+           tenant_id,
+           ADMIN_ACTOR,
     )
     other = svc.create_user(
-        UserCreate(username="other4", email="other4@example.com", password="pw", full_name="Other"), tenant_id
+           UserCreate(username="other4", email="other4@example.com", password="password123", full_name="Other"),
+           tenant_id,
+           ADMIN_ACTOR,
     )
 
-    default_key = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="default-key", key="org-default-1"))
+    default_key = next(key for key in svc.list_api_keys(owner.id) if key.is_default)
     assert default_key.is_default is True
 
     with pytest.raises(ValueError, match="Default key cannot be shared"):
@@ -201,14 +225,11 @@ def test_default_api_key_otlp_token_cannot_be_regenerated():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(
-            username="owner-default-regen", email="owner-default-regen@example.com", password="pw", full_name="Owner"
-        ),
-        tenant_id,
+            UserCreate(username="owner-default-regen", email="owner-default-regen@example.com", password="password123", full_name="Owner"),
+            tenant_id,
+            ADMIN_ACTOR,
     )
-    default_key = svc.create_api_key(
-        owner.id, tenant_id, ApiKeyCreate(name="default-key-regen", key="org-default-regen-1")
-    )
+    default_key = next(key for key in svc.list_api_keys(owner.id) if key.is_default)
     assert default_key.is_default is True
 
     with pytest.raises(HTTPException) as exc:
@@ -227,10 +248,14 @@ def test_shared_key_cannot_be_set_as_default():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner5", email="owner5@example.com", password="pw", full_name="Owner"), tenant_id
+           UserCreate(username="owner5", email="owner5@example.com", password="password123", full_name="Owner"),
+           tenant_id,
+           ADMIN_ACTOR,
     )
     other = svc.create_user(
-        UserCreate(username="other5", email="other5@example.com", password="pw", full_name="Other"), tenant_id
+           UserCreate(username="other5", email="other5@example.com", password="password123", full_name="Other"),
+           tenant_id,
+           ADMIN_ACTOR,
     )
 
     svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="default-owner-key", key="org-owner-default-1"))
@@ -264,10 +289,14 @@ def test_api_key_value_cannot_collide_across_tenants():
         tenant_b_id = tenant_b.id
 
     owner_a = svc.create_user(
-        UserCreate(username="owner6", email="owner6@example.com", password="pw", full_name="Owner"), tenant_a_id
+        UserCreate(username="owner6", email="owner6@example.com", password="password123", full_name="Owner"),
+        tenant_a_id,
+        ADMIN_ACTOR,
     )
     owner_b = svc.create_user(
-        UserCreate(username="owner7", email="owner7@example.com", password="pw", full_name="Owner"), tenant_b_id
+        UserCreate(username="owner7", email="owner7@example.com", password="password123", full_name="Owner"),
+        tenant_b_id,
+        ADMIN_ACTOR,
     )
 
     scope_value = f"scope-{uuid.uuid4().hex[:10]}"
@@ -288,8 +317,9 @@ def test_api_key_name_must_be_unique_case_insensitive_per_owner():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner-name-check", email="owner-name-check@example.com", password="pw", full_name="Owner"),
+        UserCreate(username="owner-name-check", email="owner-name-check@example.com", password="password123", full_name="Owner"),
         tenant_id,
+        ADMIN_ACTOR,
     )
 
     created = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="ProdKey", key="org-prod-name-check"))
@@ -309,7 +339,9 @@ def test_regenerate_otlp_token_returns_one_time_reveal():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner8", email="owner8@example.com", password="pw", full_name="Owner"), tenant_id
+        UserCreate(username="owner8", email="owner8@example.com", password="password123", full_name="Owner"),
+        tenant_id,
+        ADMIN_ACTOR,
     )
     created = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="regen-key", key="org-regen-1"))
     assert created.otlp_token
@@ -334,8 +366,9 @@ def test_inactive_key_otlp_tokens_remain_valid_for_ingest():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner-ingest", email="owner-ingest@example.com", password="pw", full_name="Owner"),
+        UserCreate(username="owner-ingest", email="owner-ingest@example.com", password="password123", full_name="Owner"),
         tenant_id,
+        ADMIN_ACTOR,
     )
     first = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="first-key", key="org-ingest-1"))
     second = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="second-key", key="org-ingest-2"))
@@ -361,7 +394,9 @@ def test_switching_between_owned_enabled_keys_preserves_unique_enabled_constrain
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner9", email="owner9@example.com", password="pw", full_name="Owner"), tenant_id
+        UserCreate(username="owner9", email="owner9@example.com", password="password123", full_name="Owner"),
+        tenant_id,
+        ADMIN_ACTOR,
     )
     key_a = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="key-a", key="org-switch-a"))
     key_b = svc.create_api_key(owner.id, tenant_id, ApiKeyCreate(name="key-b", key="org-switch-b"))
@@ -391,8 +426,9 @@ def test_disabling_owned_non_default_key_falls_back_to_default_key():
         tenant_id = tenant.id
 
     owner = svc.create_user(
-        UserCreate(username="owner-disable", email="owner-disable@example.com", password="pw", full_name="Owner"),
+        UserCreate(username="owner-disable", email="owner-disable@example.com", password="password123", full_name="Owner"),
         tenant_id,
+        ADMIN_ACTOR,
     )
 
     default_key = next(key for key in svc.list_api_keys(owner.id) if key.is_default)
