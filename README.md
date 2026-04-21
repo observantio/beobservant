@@ -213,11 +213,20 @@ Internal-only services in the default compose layout:
 - `gateway-auth` (`4321`) is reachable on the Docker network, not via host `localhost`.
 - `resolver` (`4322`) is reachable on the Docker network, not via host `localhost`.
 
+## Choose An Install Path
+
+- Local development and repo hacking: use [install.py](install.py). It creates a working `.env`, clones the companion repos if needed, and brings up the compose stack for a developer workstation.
+- Release bundle on a Linux host: use [download.sh](download.sh), which unpacks the release bundle and hands off to [release/install.sh](release/install.sh).
+- Kubernetes: use [charts/observantio/installer.sh](charts/observantio/installer.sh), which wraps the Helm chart and its profile-driven values files, or download the matching `observantio-${BUNDLE_VERSION}-helm-charts.tar.gz` release asset and run `installer.sh` from the extracted chart root.
+
+If you only want to evaluate the code locally, the experimental compose installer is the fastest path. If you want the release tarball experience, stay on the release-bundle flow. If you want a cluster deployment, use the Helm chart path.
+
 ## Kubernetes Helm Charts
 
 If you want Kubernetes deployment instead of Docker Compose, use the chart under `charts/observantio`.
 
 - Chart path: `charts/observantio`
+- Release asset: `observantio-${BUNDLE_VERSION}-helm-charts.tar.gz`
 - Chart docs: [`charts/observantio/README.md`](charts/observantio/README.md)
 - Installer script: `charts/observantio/installer.sh`
 
