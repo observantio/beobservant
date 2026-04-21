@@ -41,6 +41,7 @@ if [[ "${1:-}" == "--purge" ]]; then
   "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml down --volumes --remove-orphans
   echo ""
   echo "Observantio production stack uninstalled with volumes removed."
+  echo ""
 else
   echo ""
   "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml down --remove-orphans

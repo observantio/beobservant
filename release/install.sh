@@ -6,6 +6,37 @@
 
 set -euo pipefail
 
+usage() {
+  cat <<'USAGE'
+Observantio release installer
+
+Usage:
+  ./release/install.sh [--help]
+
+What it does:
+  - Verifies Docker and Docker Compose access for the current user.
+  - Creates .env from .env.example if needed.
+  - Randomizes insecure defaults and updates host-facing URLs.
+  - Runs the host-aware observability config generator.
+  - Pulls images and optionally starts the compose stack.
+
+Notes:
+  - This installer is interactive and must be run from a terminal.
+  - Use the release bundle README and DEPLOYMENT guide for the full flow.
+USAGE
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -gt 0 ]]; then
+  echo "Unknown option: $1" >&2
+  usage >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "${SCRIPT_DIR}/docker-compose.prod.yml" ]]; then
   ROOT_DIR="${SCRIPT_DIR}"
@@ -18,21 +49,55 @@ fi
 
 cd "${ROOT_DIR}"
 
+require_docker_access() {
+  if docker info >/dev/null 2>&1; then
+    return
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
+    echo "Docker is only accessible via sudo on this host. Add your user to the docker group before continuing." >&2
+    exit 1
+  fi
+
+  echo "Docker is installed but not usable by the current user. Add your user to the docker group or configure non-interactive access first." >&2
+  exit 1
+}
+
+require_compose_access() {
+  if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker compose)
+    return
+  fi
+
+  if command -v docker-compose >/dev/null 2>&1 && docker-compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker-compose)
+    return
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    if sudo -n docker compose version >/dev/null 2>&1 || { command -v docker-compose >/dev/null 2>&1 && sudo -n docker-compose version >/dev/null 2>&1; }; then
+      echo "Docker Compose is only accessible via sudo on this host. Add your user to the docker group before continuing." >&2
+      exit 1
+    fi
+  fi
+
+  echo "Docker compose (plugin) or docker-compose is required. Please install Docker Compose and try again." >&2
+  exit 1
+}
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required but not installed. Please install Docker and try again. Go to the observantio folder and the extracted folder and rerun the install.sh script" >&2
   exit 1
 fi
 
-if docker compose version >/dev/null 2>&1; then
-  COMPOSE_CMD=(docker compose)
-elif command -v docker-compose >/dev/null 2>&1; then
-  COMPOSE_CMD=(docker-compose)
-else
-  echo "Docker compose (plugin) or docker-compose is required. Please install Docker Compose and try again. Go to the observantio folder and the extracted folder and rerun the install.sh script" >&2
-  exit 1
-fi
+require_docker_access
+require_compose_access
 
 if [[ ! -f ".env" ]]; then
+  if [[ ! -f ".env.example" ]]; then
+    echo "Missing required file: .env.example" >&2
+    exit 1
+  fi
   cp .env.example .env
 fi
 
@@ -45,6 +110,7 @@ fi
 chmod +x "${RUN_OPTIMAL_SCRIPT}"
 
 randomized_keys=()
+bundle_version_keys=()
 
 set_env_key() {
   local key="$1"
@@ -127,6 +193,57 @@ set_secret_if_insecure() {
     randomized_keys+=("${key}")
   fi
 }
+
+read_version_json_field() {
+  local key="$1"
+  local manifest_path
+
+  for manifest_path in "${ROOT_DIR}/versions.json" "${SCRIPT_DIR}/versions.json" "${ROOT_DIR}/release/versions.json"; do
+    if [[ -f "${manifest_path}" ]]; then
+      sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "${manifest_path}" | head -n1
+      return 0
+    fi
+  done
+}
+
+normalize_bundle_image_tag() {
+  local key="$1"
+  local value="$2"
+  local current
+
+  current="$(get_env_key "${key}")"
+  if [[ -z "${current}" || "${current}" == "v0.0.0" || "${current}" == replace_with_* || "${current}" == changeme* || "${current}" != "${value}" ]]; then
+    set_env_key "${key}" "${value}"
+    bundle_version_keys+=("${key}")
+  fi
+}
+
+bundle_version="$(read_version_json_field bundle_version)"
+if [[ -z "${bundle_version}" ]]; then
+  bundle_version="$(get_env_key OBSERVANTIO_BUNDLE_VERSION)"
+fi
+if [[ -z "${bundle_version}" ]]; then
+  bundle_version="v0.0.4"
+fi
+
+if [[ -z "$(get_env_key OBSERVANTIO_BUNDLE_VERSION)" || "$(get_env_key OBSERVANTIO_BUNDLE_VERSION)" == "v0.0.0" || "$(get_env_key OBSERVANTIO_BUNDLE_VERSION)" != "${bundle_version}" ]]; then
+  set_env_key "OBSERVANTIO_BUNDLE_VERSION" "${bundle_version}"
+  bundle_version_keys+=("OBSERVANTIO_BUNDLE_VERSION")
+fi
+
+watchdog_version="$(read_version_json_field watchdog)"
+gatekeeper_version="$(read_version_json_field gatekeeper)"
+ui_version="$(read_version_json_field ui)"
+otel_agent_version="$(read_version_json_field otel_agent)"
+notifier_version="$(read_version_json_field notifier)"
+resolver_version="$(read_version_json_field resolver)"
+
+normalize_bundle_image_tag "IMAGE_TAG_WATCHDOG" "${watchdog_version:-$bundle_version}"
+normalize_bundle_image_tag "IMAGE_TAG_GATEKEEPER" "${gatekeeper_version:-$bundle_version}"
+normalize_bundle_image_tag "IMAGE_TAG_UI" "${ui_version:-$bundle_version}"
+normalize_bundle_image_tag "IMAGE_TAG_OTEL_AGENT" "${otel_agent_version:-$bundle_version}"
+normalize_bundle_image_tag "IMAGE_TAG_NOTIFIER" "${notifier_version:-$bundle_version}"
+normalize_bundle_image_tag "IMAGE_TAG_RESOLVER" "${resolver_version:-$bundle_version}"
 
 old_postgres_password="$(get_env_key POSTGRES_PASSWORD)"
 new_postgres_password="${old_postgres_password}"
@@ -280,6 +397,10 @@ default_admin_password="$(get_env_key DEFAULT_ADMIN_PASSWORD)"
 default_admin_email="$(get_env_key DEFAULT_ADMIN_EMAIL)"
 default_cors_origins="$(get_env_key CORS_ORIGINS)"
 
+if is_insecure_value "${default_admin_password}" "Obsrv!AdminR4nD0m"; then
+  default_admin_password=""
+fi
+
 default_ui_host="localhost"
 if [[ -n "${default_cors_origins}" ]]; then
   first_origin="${default_cors_origins%%,*}"
@@ -292,6 +413,11 @@ if [[ -n "${default_cors_origins}" ]]; then
   fi
 fi
 
+if [[ ! -t 0 ]]; then
+  echo "This installer is interactive and must be run from a terminal session." >&2
+  exit 1
+fi
+
 read -r -p "What is the UI host IP or DNS (This is for CORS and where the UI will be accessible) [${default_ui_host}]: " input_ui_host
 ui_host="${input_ui_host:-${default_ui_host}}"
 ui_origin="http://${ui_host}:5173"
@@ -301,13 +427,33 @@ grafana_root_url="http://${ui_host}:8080/grafana/"
 app_login_url="${ui_origin}/login"
 
 read -r -p "Admin username [${default_admin_username:-admin}]: " input_admin_username
-read -r -s -p "Admin password (Needs to be at least 16 characters long) [hidden, press Enter to keep default]: " input_admin_password
-echo
 read -r -p "Admin email (Ensure it's a valid email address if you need to convert to OIDC) [${default_admin_email:-admin@observantio.local}]: " input_admin_email
 
+if [[ -n "${default_admin_password}" ]]; then
+  read -r -s -p "Admin password (Needs to be at least 16 characters long) [hidden, press Enter to keep default]: " input_admin_password
+else
+  read -r -s -p "Admin password (Needs to be at least 16 characters long) [required]: " input_admin_password
+fi
+echo
+
 admin_username="${input_admin_username:-${default_admin_username:-admin}}"
-admin_password="${input_admin_password:-${default_admin_password:-Obsrv!AdminR4nD0m}}"
 admin_email="${input_admin_email:-${default_admin_email:-admin@observantio.local}}"
+
+if [[ -n "${default_admin_password}" ]]; then
+  admin_password="${input_admin_password:-${default_admin_password}}"
+else
+  admin_password="${input_admin_password:-}"
+fi
+
+if [[ -z "${admin_password}" ]]; then
+  echo "Admin password is required." >&2
+  exit 1
+fi
+
+if [[ ${#admin_password} -lt 16 ]]; then
+  echo "Admin password must be at least 16 characters long." >&2
+  exit 1
+fi
 
 set_env_key "DEFAULT_ADMIN_USERNAME" "$admin_username"
 set_env_key "DEFAULT_ADMIN_PASSWORD" "$admin_password"
@@ -327,6 +473,12 @@ if [[ "${#randomized_keys[@]}" -gt 0 ]]; then
   echo " "
   echo "Randomized secure defaults for:"
   printf '%s\n' "${randomized_keys[@]}" | awk '!seen[$0]++ { print " - " $0 }'
+fi
+
+if [[ "${#bundle_version_keys[@]}" -gt 0 ]]; then
+  echo " "
+  echo "Normalized bundle image tags for:"
+  printf '%s\n' "${bundle_version_keys[@]}" | awk '!seen[$0]++ { print " - " $0 }'
 fi
 
 release_arch="$(get_env_key RELEASE_ARCH)"
