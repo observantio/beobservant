@@ -347,3 +347,33 @@ async def test_forward_requires_service_token_and_preserves_scope_header(monkeyp
     normalized_headers = {key.lower(): value for key, value in captured["headers"].items()}
     assert normalized_headers["x-scope-orgid"] == "tenant-uppercase"
     assert captured["headers"]["X-Forwarded-For"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_forward_uses_unknown_forwarded_for_when_client_host_missing(monkeypatch):
+    svc = NotifierProxyService()
+    captured = {}
+
+    monkeypatch.setattr(config, "get_secret", lambda key: "service-token")
+    monkeypatch.setattr(svc, "write_audit", lambda **_: None)
+
+    async def fake_request(*, method, url, params, content, headers):
+        captured["headers"] = dict(headers)
+        return _DummyResponse()
+
+    svc._client.request = fake_request
+    req = _request()
+    req.scope["client"] = (None, 12345)
+
+    response = await svc.forward(
+        NotifierForwardRequest(
+            request=req,
+            upstream_path="/foo",
+            current_user=None,
+            require_api_key=False,
+            audit_action="jira",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert captured["headers"]["X-Forwarded-For"] == "unknown"

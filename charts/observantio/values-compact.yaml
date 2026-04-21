@@ -29,8 +29,11 @@ observantio:
     CORS_ALLOW_CREDENTIALS: "true"
   resources:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
 
 gatekeeper:
   enabled: false
@@ -39,6 +42,9 @@ gatekeeper:
     requests:
       cpu: 100m
       memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 notifier:
   replicaCount: 1
@@ -46,8 +52,11 @@ notifier:
     enabled: false
   resources:
     requests:
-      cpu: 100m
-      memory: 192Mi
+      cpu: 150m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 resolver:
   replicaCount: 1
@@ -55,8 +64,11 @@ resolver:
     enabled: false
   resources:
     requests:
-      cpu: 150m
-      memory: 256Mi
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
 
 otlpGateway:
   replicaCount: 1
@@ -66,14 +78,20 @@ otlpGateway:
     requests:
       cpu: 100m
       memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 grafanaAuthGateway:
   enforceAuth: false
   replicaCount: 1
   resources:
     requests:
-      cpu: 50m
-      memory: 64Mi
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 otelAgent:
   enabled: true
@@ -82,52 +100,79 @@ otelAgent:
     requests:
       cpu: 100m
       memory: 192Mi
+    limits:
+      cpu: 250m
+      memory: 384Mi
 
 ui:
   replicaCount: 1
   resources:
     requests:
-      cpu: 50m
-      memory: 64Mi
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 loki:
   resources:
     requests:
-      cpu: 150m
-      memory: 256Mi
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      cpu: 750m
+      memory: 768Mi
 
 tempo:
   resources:
     requests:
-      cpu: 150m
-      memory: 256Mi
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      cpu: 750m
+      memory: 768Mi
 
 mimir:
   resources:
     requests:
-      cpu: 200m
-      memory: 384Mi
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
 
 alertmanager:
   resources:
     requests:
       cpu: 50m
       memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 grafana:
   resources:
     requests:
-      cpu: 100m
+      cpu: 150m
       memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 postgres:
   resources:
     requests:
-      cpu: 150m
-      memory: 256Mi
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
 
 redis:
   resources:
     requests:
-      cpu: 50m
+      cpu: 100m
       memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi

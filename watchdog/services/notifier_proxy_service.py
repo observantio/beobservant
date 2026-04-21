@@ -160,7 +160,7 @@ class NotifierProxyService(BaseProxyService):
         headers = {
             "X-Service-Token": service_token,
             "X-Correlation-ID": corr,
-            "X-Forwarded-For": request.client.host if request.client else "unknown",
+            "X-Forwarded-For": str(getattr(request.client, "host", None) or "unknown"),
         }
         webhook_token = request.headers.get("x-watchdog-webhook-token")
         if webhook_token:

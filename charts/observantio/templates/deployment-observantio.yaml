@@ -74,6 +74,12 @@ spec:
           value: /etc/observantio/internal-tls/tls.crt
         - name: SSL_KEYFILE
           value: /etc/observantio/internal-tls/tls.key
+        - name: SSL_CERT_FILE
+          value: /etc/observantio/internal-ca/ca.crt
+        - name: NOTIFIER_CA_CERT_PATH
+          value: /etc/observantio/internal-ca/ca.crt
+        - name: RESOLVER_CA_CERT_PATH
+          value: /etc/observantio/internal-ca/ca.crt
         {{- end }}
         envFrom:
         - secretRef:

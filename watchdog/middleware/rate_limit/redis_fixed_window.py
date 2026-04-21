@@ -15,6 +15,8 @@ import time
 from importlib import import_module
 from urllib.parse import urlparse, urlunparse
 
+from redis.exceptions import RedisError
+
 from .models import RateLimitHitResult
 
 logger = logging.getLogger(__name__)
@@ -54,10 +56,14 @@ class RedisFixedWindowRateLimiter:
         )
 
         try:
-            if not client.ping():
-                raise RuntimeError("redis ping returned falsy response")
-        except (ConnectionError, OSError, RuntimeError, TimeoutError) as exc:
+            ping_result = client.ping()
+        except RedisError as exc:
             raise RuntimeError(f"unable to connect to Redis at {_sanitize_redis_url(redis_url)}: {exc}") from exc
+
+        if not ping_result:
+            raise RuntimeError(
+                f"unable to connect to Redis at {_sanitize_redis_url(redis_url)}: redis ping returned falsy response"
+            )
 
         self._client = client
         logger.info("Connected to Redis for rate limiting: %s", _sanitize_redis_url(redis_url))

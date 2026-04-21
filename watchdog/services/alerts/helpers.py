@@ -288,7 +288,7 @@ async def find_silence_for_mutation(*, request: Request, current_user: TokenData
     headers = {
         "X-Service-Token": service_token,
         "X-Correlation-ID": request.headers.get("X-Request-ID", ""),
-        "X-Forwarded-For": request.client.host if request.client else "unknown",
+        "X-Forwarded-For": str(getattr(request.client, "host", None) or "unknown"),
         "Authorization": f"Bearer {context_token}",
     }
     target = f"{notifier_proxy_service.base_url}/internal/v1/api/alertmanager/silences"

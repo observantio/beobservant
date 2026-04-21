@@ -215,6 +215,18 @@ def test_rate_limit_primitives_and_ip_edges(monkeypatch):
         redis_module.RedisFixedWindowRateLimiter("redis://user:pass@host:6379/0")
     assert "host:6379" in str(ping_error.value)
 
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
+    class RaisingClient(FakeClient):
+        def ping(self):
+            raise RedisConnectionError("down")
+
+    monkeypatch.setattr(redis_module, "import_module", lambda name: FakeRedisModule(RaisingClient()))
+    with pytest.raises(RuntimeError) as redis_error:
+        redis_module.RedisFixedWindowRateLimiter("redis://host:6379/0")
+    assert "host:6379" in str(redis_error.value)
+    assert isinstance(redis_error.value.__cause__, RedisConnectionError)
+
     monkeypatch.setattr(redis_module, "import_module", lambda name: FakeRedisModule(FakeClient(count=2)))
     limiter = redis_module.RedisFixedWindowRateLimiter("redis://host:6379/0")
     assert limiter.hit("key", limit=0, window_seconds=60).allowed is True
@@ -305,6 +317,7 @@ def test_rate_limit_primitives_and_ip_edges(monkeypatch):
     monkeypatch.setattr(ip_module.config, "TRUST_PROXY_HEADERS", False)
     assert ip_module.client_ip(_request(client=("198.51.100.2", 1234))) == "198.51.100.2"
     assert ip_module.client_ip(_request(client=None)) == "unknown"
+    assert ip_module.client_ip(_request(client=(None, 1234))) == "unknown"
 
     monkeypatch.setattr(ip_module.config, "TRUST_PROXY_HEADERS", True)
     monkeypatch.setattr(ip_module.config, "TRUSTED_PROXY_CIDRS", [])

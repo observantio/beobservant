@@ -1,5 +1,7 @@
 {{- if .Values.otlpGateway.enabled }}
 {{- $gatekeeperEnabled := .Values.gatekeeper.enabled }}
+{{- $gatekeeperService := include "observantio.componentFullname" (dict "root" . "name" "gatekeeper") }}
+{{- $gatekeeperScheme := ternary "https" "http" .Values.internalTLS.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -57,7 +59,7 @@ data:
                           "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
                           http_service:
                             server_uri:
-                              uri: http://{{ include "observantio.componentFullname" (dict "root" . "name" "gatekeeper") }}:{{ .Values.gatekeeper.service.port }}
+                              uri: {{ printf "%s://%s:%d" $gatekeeperScheme $gatekeeperService .Values.gatekeeper.service.port }}
                               cluster: gateway-auth
                               timeout: 2s
                             path_prefix: /api/gateway/validate
@@ -87,8 +89,19 @@ data:
                   - endpoint:
                       address:
                         socket_address:
-                          address: {{ include "observantio.componentFullname" (dict "root" . "name" "gatekeeper") }}
+                          address: {{ $gatekeeperService }}
                           port_value: {{ .Values.gatekeeper.service.port }}
+        {{- if .Values.internalTLS.enabled }}
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              sni: {{ $gatekeeperService }}
+              common_tls_context:
+                validation_context:
+                  trusted_ca:
+                    filename: /etc/otlp-gateway/internal-ca/ca.crt
+        {{- end }}
         {{- end }}
         - name: loki
           connect_timeout: 5s
@@ -251,6 +264,11 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /etc/envoy
+        {{- if .Values.internalTLS.enabled }}
+        - name: internal-ca
+          mountPath: /etc/otlp-gateway/internal-ca
+          readOnly: true
+        {{- end }}
         resources:
           {{- toYaml .Values.otlpGateway.resources | nindent 10 }}
         securityContext:
@@ -259,4 +277,12 @@ spec:
       - name: config
         configMap:
           name: {{ include "observantio.componentFullname" (dict "root" . "name" "otlp-gateway-config") }}
+      {{- if .Values.internalTLS.enabled }}
+      - name: internal-ca
+        secret:
+          secretName: {{ include "observantio.internalTLSSecretName" . }}
+          items:
+          - key: {{ .Values.internalTLS.caKey }}
+            path: ca.crt
+      {{- end }}
 {{- end }}

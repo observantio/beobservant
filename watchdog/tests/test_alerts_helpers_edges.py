@@ -312,6 +312,35 @@ async def test_find_silence_for_mutation_paths(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_find_silence_for_mutation_uses_unknown_forwarded_for_when_client_host_missing(monkeypatch):
+    request = _request(headers=[(b"x-request-id", b"req-1")])
+    request.scope["client"] = (None, 12345)
+    user = _user()
+    captured = {}
+
+    monkeypatch.setattr(helpers_mod.config, "get_secret", lambda key: "service-token")
+    monkeypatch.setattr(helpers_mod.notifier_proxy_service, "sign_context_token", lambda **_: "ctx")
+
+    class OkResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return [{"id": "s1"}]
+
+    async def fake_request(*args, **kwargs):
+        captured["headers"] = dict(kwargs["headers"])
+        return OkResponse()
+
+    monkeypatch.setattr(helpers_mod.notifier_proxy_service._client, "request", fake_request)
+
+    assert await helpers_mod.find_silence_for_mutation(request=request, current_user=user, silence_id="s1") == {
+        "id": "s1"
+    }
+    assert captured["headers"]["X-Forwarded-For"] == "unknown"
+
+
+@pytest.mark.asyncio
 async def test_webhook_route_enforces_security_and_forwards(monkeypatch):
     calls = []
 

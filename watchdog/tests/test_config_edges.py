@@ -242,6 +242,17 @@ def test_config_accepts_strong_production_secrets_and_jwt_secret(monkeypatch):
         assert module.config.NOTIFIER_CONTEXT_SIGNING_KEY == "strong_context_signing_key_123"
 
 
+def test_config_allows_restart_without_default_admin_password(monkeypatch):
+    env = _valid_prod_env()
+    env["DEFAULT_ADMIN_PASSWORD"] = ""
+    env["DEFAULT_ADMIN_BOOTSTRAP_ENABLED"] = "false"
+    with monkeypatch.context() as ctx:
+        for key, value in env.items():
+            ctx.setenv(key, value)
+        module = _reload_config_module()
+        assert module.config.DEFAULT_ADMIN_PASSWORD == ""
+
+
 @pytest.mark.parametrize(
     ("env_updates", "expected_message"),
     [
@@ -250,12 +261,12 @@ def test_config_accepts_strong_production_secrets_and_jwt_secret(monkeypatch):
             "JWT_AUTO_GENERATE_KEYS must be disabled in production",
         ),
         (
-            {"APP_ENV": "production", "DEFAULT_ADMIN_PASSWORD": ""},
-            "DEFAULT_ADMIN_PASSWORD must be set to a strong value in production",
-        ),
-        (
             {"APP_ENV": "production", "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "true"},
             "DEFAULT_ADMIN_BOOTSTRAP_ENABLED must be false in production",
+        ),
+        (
+            {"APP_ENV": "production", "DEFAULT_ADMIN_PASSWORD": "admin123"},
+            "DEFAULT_ADMIN_PASSWORD must be set to a strong value in production",
         ),
         (
             {"REQUIRE_TOTP_ENCRYPTION_KEY": "true", "DATA_ENCRYPTION_KEY": ""},

@@ -20,6 +20,8 @@
 
 </div>
 
+The same chart is also published in release assets as `observantio-${BUNDLE_VERSION}-helm-charts.tar.gz`. If you download that tarball, extract it and run `installer.sh` from the chart root.
+
 ## Quick Start
 
 Run from repo root:
@@ -44,8 +46,8 @@ bash charts/observantio/installer.sh --profile production --no-port-forward
 
 ## Profiles
 
-- `production`: Uses [`values-production.yaml`](values-production.yaml).
-- `compact`: Uses production values plus [`values-compact.yaml`](values-compact.yaml) for smaller clusters.
+- `production`: Uses [`values-production.yaml`](values-production.yaml) and leaves TLS to the selected values files.
+- `compact`: Uses production values plus [`values-compact.yaml`](values-compact.yaml) for smaller clusters, with TLS off in the bundled values.
 
 Examples:
 
@@ -53,6 +55,16 @@ Examples:
 bash charts/observantio/installer.sh --profile production
 bash charts/observantio/installer.sh --profile compact
 ```
+
+## Install Model
+
+The wrapper script is intentionally self-contained.
+
+- It disables `externalSecrets` and creates or reuses a cluster secret for the app credentials.
+- It generates the internal TLS secret when the selected profile needs it.
+- It can also reuse an existing secret with `--existing-secret <name>` or skip secret management entirely with `--skip-secret-management`.
+
+If you want the chart to consume ExternalSecrets directly, install with plain `helm` and your own values file instead of the wrapper script.
 
 ## Common Flags
 
@@ -116,6 +128,16 @@ Start with `values-production.yaml`, then adapt for your environment:
 - Service exposure and ingress choices
 
 Tip: keep your org-specific config in a separate values file and pass it with `--values`.
+
+## Validate
+
+Useful checks while iterating on the chart:
+
+- `helm lint charts/observantio`
+- `helm template demo charts/observantio -f charts/observantio/values-production.yaml`
+- `helm template demo charts/observantio -f charts/observantio/values-compact.yaml`
+- `kubectl get events -n observantio --sort-by=.lastTimestamp`
+- `kubectl describe pod -n observantio <pod-name>`
 
 ## Cleanup
 

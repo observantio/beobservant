@@ -29,6 +29,12 @@ def _valid_ip(value: str) -> Optional[str]:
         return None
 
 
+def _request_client_host(request: Request) -> str:
+    client = request.client
+    host = getattr(client, "host", "") if client is not None else ""
+    return str(host or "").strip()
+
+
 def client_ip(request: Request) -> str:
     def _peer_in_trusted_cidrs(peer: object, cidrs: list[str]) -> bool:
         try:
@@ -52,7 +58,7 @@ def client_ip(request: Request) -> str:
         if not trusted_cidrs:
             return True
 
-        direct = (request.client.host if request.client else "").strip()
+        direct = _request_client_host(request)
         validated = _valid_ip(direct)
         return _peer_in_trusted_cidrs(validated, trusted_cidrs) if validated else False
 
@@ -72,6 +78,6 @@ def client_ip(request: Request) -> str:
                 resolved_ip = valid_real_ip
 
     if resolved_ip is None:
-        direct = (request.client.host if request.client else "unknown").strip()
+        direct = _request_client_host(request)
         resolved_ip = _valid_ip(direct)
     return resolved_ip or "unknown"

@@ -15,8 +15,6 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 import logging
 import asyncio
-import os
-from typing import TypedDict
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
@@ -28,7 +26,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import ENCODERS_BY_TYPE
 from pydantic import BaseModel
 import httpx
-import uvicorn
 
 from config import config, constants
 from middleware.audit import security_headers_middleware
@@ -40,6 +37,7 @@ from middleware.error_handlers import (
 )
 from middleware.openapi import install_custom_openapi
 from middleware.request_size_limit import RequestSizeLimitMiddleware
+from middleware.runtime_ssl import RuntimeSSLOptions, run_uvicorn
 from routers import (
     agents_router,
     alertmanager_router,
@@ -204,8 +202,16 @@ async def health() -> dict[str, str]:
 
 async def _upstream_reachable(base_url: str) -> bool:
     timeout = httpx.Timeout(2.0)
+    verify: str | bool = True
+    normalized_base_url = base_url.rstrip("/")
+    if normalized_base_url.startswith("http://"):
+        verify = False
+    elif normalized_base_url == config.NOTIFIER_URL.rstrip("/") and config.NOTIFIER_CA_CERT_PATH:
+        verify = config.NOTIFIER_CA_CERT_PATH
+    elif normalized_base_url == config.RESOLVER_URL.rstrip("/") and config.RESOLVER_CA_CERT_PATH:
+        verify = config.RESOLVER_CA_CERT_PATH
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, verify=verify) as client:
             response = await client.get(base_url)
             return 200 <= response.status_code < 500
     except (httpx.HTTPError, asyncio.TimeoutError):
@@ -252,40 +258,13 @@ async def ready() -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
 
 
-class _RuntimeSSLOptions(TypedDict):
-    ssl_certfile: str
-    ssl_keyfile: str
-
-
-def _runtime_ssl_options() -> _RuntimeSSLOptions | None:
-    enabled = (os.getenv("SSL_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on"))
-    if not enabled:
-        return None
-
-    certfile = os.getenv("SSL_CERTFILE", "").strip()
-    keyfile = os.getenv("SSL_KEYFILE", "").strip()
-    if not certfile or not keyfile:
-        raise ValueError("SSL_ENABLED=true requires SSL_CERTFILE and SSL_KEYFILE to be set")
-
-    return {
-        "ssl_certfile": certfile,
-        "ssl_keyfile": keyfile,
-    }
-
-
 if __name__ == "__main__":
     logger.info("Starting %s v%s", constants.APP_NAME, constants.APP_VERSION)
-    ssl_options = _runtime_ssl_options()
-    if ssl_options is not None:
-        logger.info("SSL runtime enabled for watchdog listener")
-        uvicorn.run(
-            app,
-            host=config.HOST,
-            port=config.PORT,
-            loop="uvloop",
-            log_level=config.LOG_LEVEL,
-            ssl_certfile=ssl_options["ssl_certfile"],
-            ssl_keyfile=ssl_options["ssl_keyfile"],
-        )
-    else:
-        uvicorn.run(app, host=config.HOST, port=config.PORT, loop="uvloop", log_level=config.LOG_LEVEL)
+    run_uvicorn(
+        app,
+        host=config.HOST,
+        port=config.PORT,
+        loop="uvloop",
+        log_level=config.LOG_LEVEL,
+        ssl_options=RuntimeSSLOptions.from_env(),
+    )
