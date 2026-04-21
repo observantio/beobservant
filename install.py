@@ -24,7 +24,7 @@ REPO_URL = "https://github.com/observantio/watchdog.git"
 RESOLVER_REPO_URL = "https://github.com/observantio/resolver.git"
 NOTIFIER_REPO_URL = "https://github.com/observantio/notifier.git"
 
-PASSWORD_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+PASSWORD_RE = re.compile(r"^[A-Za-z0-9._@%+=:,/!+-]+$")
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
@@ -180,7 +180,7 @@ def ask_password() -> str:
     import getpass
 
     while True:
-        p1 = getpass.getpass("Admin password (letters/numbers/_/.- only): ")
+        p1 = getpass.getpass("Admin password (letters, numbers, and safe punctuation): ")
         p2 = getpass.getpass("Confirm password: ")
         if not p1:
             warn("Password cannot be empty.")
@@ -192,7 +192,7 @@ def ask_password() -> str:
             warn("Passwords do not match.")
             continue
         if not PASSWORD_RE.fullmatch(p1):
-            warn("Password must match: [A-Za-z0-9._-]")
+            warn("Password must match: [A-Za-z0-9._@%+=:,/!+-]")
             continue
         return p1
 
@@ -436,6 +436,9 @@ def print_urls() -> None:
     hr()
     say("Access URLs")
     say("  UI:            http://localhost:5173")
+    say("  API:           http://localhost:4319")
+    say("  OTLP gateway:   http://localhost:4320")
+    say("  Grafana proxy:  http://localhost:8080")
     hr()
 
 
@@ -534,7 +537,6 @@ def main() -> int:
     say()
 
     require_cmd("docker")
-    require_cmd("node")
     require_cmd("git")
     require_buildx("0.17.0")
     compose_cmd = require_docker_compose()

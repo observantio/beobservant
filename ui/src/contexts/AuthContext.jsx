@@ -20,6 +20,7 @@ const OIDC_CODE_VERIFIER_KEY = "oidc_code_verifier";
 const OIDC_REDIRECT_PATH = "/auth/callback";
 const getOidcRedirectUri = () =>
   `${globalThis.location.origin}${OIDC_REDIRECT_PATH}`;
+const AUTH_MODE_BOOTSTRAP_TIMEOUT_MS = 12000;
 
 const resolveActiveOrgId = (userData) => {
   const keys = userData?.api_keys || [];
@@ -83,21 +84,26 @@ export function AuthProvider({ children }) {
 
   const loadAuthMode = useCallback(async () => {
     setAuthModeLoading(true);
+    const fallback = {
+      provider: "local",
+      oidc_enabled: false,
+      password_enabled: true,
+      registration_enabled: true,
+      oidc_scopes: "openid profile email",
+    };
+    let timeoutId = null;
     try {
-      const mode = await api.getAuthMode();
+      const timeoutMode = new Promise((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallback), AUTH_MODE_BOOTSTRAP_TIMEOUT_MS);
+      });
+      const mode = await Promise.race([api.getAuthMode(), timeoutMode]);
       setAuthMode(mode);
       return mode;
     } catch {
-      const fallback = {
-        provider: "local",
-        oidc_enabled: false,
-        password_enabled: true,
-        registration_enabled: true,
-        oidc_scopes: "openid profile email",
-      };
       setAuthMode(fallback);
       return fallback;
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
       setAuthModeLoading(false);
     }
   }, []);

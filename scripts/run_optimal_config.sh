@@ -451,7 +451,7 @@ set_env_key "MIMIR_CPUS" "${MIMIR_CPUS}"
 set_env_key "MIMIR_MEM_LIMIT" "${MIMIR_MEM_LIMIT}"
 set_env_key "MIMIR_DEPLOY_RESERVATION_CPUS" "${MIMIR_DEPLOY_RESERVATION_CPUS}"
 set_env_key "MIMIR_DEPLOY_RESERVATION_MEMORY" "${MIMIR_DEPLOY_RESERVATION_MEMORY}"
-
+echo ""
 echo "Rendered observability sizing profile:"
 echo " - host_cpus=${HOST_CPUS}"
 echo " - host_memory_mb=${HOST_MEMORY_MB}"

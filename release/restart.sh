@@ -44,4 +44,5 @@ echo ""
 echo ""
 "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml up -d --build ui
 echo ""
-echo "Observantio production stack restarted with updated configrations"
+echo "Observantio production stack restarted with updated configrations, please wait a few moments for all services to be up and running."
+echo ""
