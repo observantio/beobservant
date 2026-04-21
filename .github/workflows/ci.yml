@@ -167,3 +167,41 @@ jobs:
             ! -name tmp \
             ! -name vendor | sort)"
           pylint --rcfile "${{ github.workspace }}/pyproject.toml" $TARGETS
+
+  installer-surface:
+    name: Installer and chart checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Compile Python installer
+        run: python -m py_compile install.py
+
+      - name: Shell syntax checks
+        run: |
+          bash -n charts/observantio/installer.sh
+          bash -n release/install.sh
+          bash -n release/restart.sh
+          bash -n release/uninstall.sh
+          bash -n download.sh
+          bash -n scripts/run_optimal_config.sh
+
+      - name: Release installer help
+        run: bash release/install.sh --help >/dev/null
+
+      - name: Helm lint
+        run: helm lint charts/observantio
+
+      - name: Helm template production profile
+        run: helm template observantio charts/observantio -f charts/observantio/values-production.yaml >/dev/null
+
+      - name: Helm template compact profile
+        run: helm template observantio charts/observantio -f charts/observantio/values-compact.yaml >/dev/null

@@ -241,3 +241,97 @@ jobs:
           overwrite_files: true
           files: observantio-${{ env.BUNDLE_VERSION }}-linux-${{ env.ARCH }}.tar.gz
           fail_on_unmatched_files: true
+
+  helm-release-bundle:
+    name: Upload Helm chart bundle
+    runs-on: ubuntu-latest
+    needs: [resolve-versions, create-release]
+    permissions:
+      contents: write
+    env:
+      BUNDLE_VERSION: ${{ needs.resolve-versions.outputs.bundle_version }}
+      WATCHDOG_VERSION: ${{ needs.resolve-versions.outputs.watchdog_version }}
+      GATEKEEPER_VERSION: ${{ needs.resolve-versions.outputs.gatekeeper_version }}
+      UI_VERSION: ${{ needs.resolve-versions.outputs.ui_version }}
+      OTEL_AGENT_VERSION: ${{ needs.resolve-versions.outputs.otel_agent_version }}
+      NOTIFIER_VERSION: ${{ needs.resolve-versions.outputs.notifier_version }}
+      RESOLVER_VERSION: ${{ needs.resolve-versions.outputs.resolver_version }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Build Helm chart bundle directory
+        run: |
+          set -euo pipefail
+          BUNDLE_DIR="observantio-${BUNDLE_VERSION}-helm-charts"
+          mkdir -p "bundle/${BUNDLE_DIR}"
+          cp -R charts/observantio/. "bundle/${BUNDLE_DIR}/"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          bundle_version = os.environ['BUNDLE_VERSION']
+          chart_version = bundle_version[1:] if bundle_version.startswith('v') else bundle_version
+          root = Path('bundle') / f'observantio-{bundle_version}-helm-charts'
+
+          chart_path = root / 'Chart.yaml'
+          chart_lines = chart_path.read_text(encoding='utf-8').splitlines()
+          for index, line in enumerate(chart_lines):
+            if line.startswith('version:'):
+              chart_lines[index] = f'version: {chart_version}'
+            elif line.startswith('appVersion:'):
+              chart_lines[index] = f'appVersion: "{chart_version}"'
+          chart_path.write_text('\n'.join(chart_lines) + '\n', encoding='utf-8')
+
+          values_path = root / 'values.yaml'
+          tag_map = {
+              'observantio': os.environ['WATCHDOG_VERSION'],
+              'gatekeeper': os.environ['GATEKEEPER_VERSION'],
+              'notifier': os.environ['NOTIFIER_VERSION'],
+              'resolver': os.environ['RESOLVER_VERSION'],
+              'otelAgent': os.environ['OTEL_AGENT_VERSION'],
+              'ui': os.environ['UI_VERSION'],
+          }
+          values_lines = values_path.read_text(encoding='utf-8').splitlines()
+          current_section = None
+          image_indent = None
+          pending_tag_section = None
+
+          for index, line in enumerate(values_lines):
+            stripped = line.lstrip(' ')
+            indent = len(line) - len(stripped)
+
+            if indent == 0 and line.endswith(':'):
+              current_section = line[:-1]
+              image_indent = None
+              pending_tag_section = None
+              continue
+
+            if current_section in tag_map:
+              if stripped == 'image:':
+                image_indent = indent
+                pending_tag_section = current_section
+                continue
+
+              if pending_tag_section == current_section and image_indent is not None and indent > image_indent and stripped.startswith('tag:'):
+                values_lines[index] = ' ' * indent + f'tag: {tag_map[current_section]}'
+                pending_tag_section = None
+
+          values_path.write_text('\n'.join(values_lines) + '\n', encoding='utf-8')
+          PY
+          chmod +x "bundle/${BUNDLE_DIR}/installer.sh"
+
+      - name: Build Helm chart tarball
+        run: |
+          BUNDLE_DIR="observantio-${BUNDLE_VERSION}-helm-charts"
+          tar -czf "observantio-${BUNDLE_VERSION}-helm-charts.tar.gz" -C bundle "${BUNDLE_DIR}"
+
+      - name: Upload Helm chart release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.BUNDLE_VERSION }}
+          overwrite_files: true
+          files: observantio-${{ env.BUNDLE_VERSION }}-helm-charts.tar.gz
+          fail_on_unmatched_files: true

@@ -2,6 +2,8 @@
 
 This guide explains how to deploy Observantio from the release tarball, what to open on the host firewall/security group, and what to harden after first boot.
 
+This page covers the release-bundle compose path only. For local development, use [install.py](install.py); for Kubernetes, use [charts/observantio/installer.sh](charts/observantio/installer.sh) or the separate `observantio-${BUNDLE_VERSION}-helm-charts.tar.gz` release asset.
+
 ## Prerequisites
 
 - Linux host with Docker Engine installed
@@ -17,8 +19,8 @@ curl -fsSL https://raw.githubusercontent.com/observantio/watchdog/main/download.
 bash download.sh
 
 # Optional:
-# bash download.sh v0.0.5 arm64
-# bash download.sh v0.0.5 amd64
+# bash download.sh v0.0.4 arm64
+# bash download.sh v0.0.4 amd64
 ```
 
 `download.sh` defaults to the latest GitHub release and `multi` architecture. Before it downloads anything, it checks that:

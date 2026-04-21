@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [v0.0.5] - 2026-04-20
 
+### Added
+
+* Published a separate Helm chart release asset as `observantio-${BUNDLE_VERSION}-helm-charts.tar.gz`, alongside the compose release bundle.
+
 ### Fixes
 
 * Hardened the watchdog auth test harness to run against a temporary SQLite database, then fixed the API-key, group-permission, MFA/TOTP, and OIDC-linking edge cases uncovered by that real DB-backed run.

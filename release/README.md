@@ -11,7 +11,9 @@
   </p>
 </div>
 
-This folder contains release runtime scripts for deploying and operating the production compose stack (`docker-compose.prod.yml`).
+This folder contains release runtime scripts for deploying and operating the production compose stack (`docker-compose.prod.yml`). The release workflow also publishes a separate Helm chart bundle as `observantio-${BUNDLE_VERSION}-helm-charts.tar.gz`, which contains the chart root, values files, templates, and `installer.sh`.
+
+This is the release-bundle counterpart to the experimental developer installer ([install.py](../install.py)) and the Kubernetes chart installer ([charts/observantio/installer.sh](../charts/observantio/installer.sh)).
 
 ## Why Docker Compose Matters Here
 
@@ -40,6 +42,7 @@ Repository reality:
 
 ```bash
 ./release/install.sh
+./release/install.sh --help
 ```
 
 What it does:
@@ -50,6 +53,8 @@ What it does:
 - Prompts for UI host + bootstrap admin details.
 - Runs `scripts/run_optimal_config.sh` for host-aware sizing.
 - Starts stack with `docker-compose.prod.yml` when selected in flow.
+
+The installer is interactive and should be run from a terminal session.
 
 ### `restart.sh`
 
