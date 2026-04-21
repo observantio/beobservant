@@ -467,7 +467,11 @@ def enforce_public_endpoint_security(
     resolved_fallback_mode = _validate_rate_limit_fallback_mode(security_config.fallback_mode)
     resolved_ip = client_ip(request)
     scope = security_config.scope
-    if config.REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS and resolved_ip == "unknown":
+    if (
+        config.REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS
+        and resolved_ip == "unknown"
+        and security_config.allowlist is not None
+    ):
         logger.warning(
             "Rejected public request for scope=%s because client IP resolution failed",
             security_config.scope,

@@ -21,6 +21,7 @@ from starlette.requests import Request
 
 import settings
 import main as gateway_main
+from middleware.runtime_ssl import RuntimeSSLOptions
 from routers import gateway_router
 from services import gateway_service as gateway_service_module
 from services.gateway_service import DatabaseUnavailable, GatewayAuthService
@@ -350,6 +351,54 @@ async def test_gateway_main_entrypoint_without_tls_files(monkeypatch):
     runpy.run_module("main", run_name="__main__")
     assert captured["ssl_certfile"] is None
     assert captured["ssl_keyfile"] is None
+
+
+@pytest.mark.asyncio
+async def test_gateway_main_entrypoint_with_tls_ca_only(monkeypatch):
+    captured = {}
+    fake_uvicorn = types.SimpleNamespace(run=lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
+    monkeypatch.delenv("GATEWAY_SSL_CERTFILE", raising=False)
+    monkeypatch.delenv("GATEWAY_SSL_KEYFILE", raising=False)
+    monkeypatch.setenv("GATEWAY_SSL_CA_CERTS", "/tmp/ca.pem")
+    monkeypatch.setenv("GATEWAY_HOST", "127.0.0.1")
+    monkeypatch.setenv("GATEWAY_PORT", "4318")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    config_module = importlib.import_module("settings")
+    importlib.reload(config_module)
+    runpy.run_module("main", run_name="__main__")
+    assert captured["ssl_certfile"] is None
+    assert captured["ssl_keyfile"] is None
+    assert captured["ssl_ca_certs"] == "/tmp/ca.pem"
+
+
+def test_gateway_runtime_ssl_options_rejects_partial_configuration():
+    with pytest.raises(
+        ValueError,
+        match="GATEWAY_SSL_CERTFILE and GATEWAY_SSL_KEYFILE must be set together when TLS is enabled",
+    ):
+        RuntimeSSLOptions.from_settings(types.SimpleNamespace(SSL_CERTFILE="/tmp/cert.pem", SSL_KEYFILE="", SSL_CA_CERTS=""))
+
+
+def test_gateway_runtime_ssl_options_ca_only_preserves_ca_bundle():
+    options = RuntimeSSLOptions.from_settings(
+        types.SimpleNamespace(SSL_CERTFILE="", SSL_KEYFILE="", SSL_CA_CERTS="/tmp/ca.pem")
+    )
+
+    assert options is not None
+    assert options.to_uvicorn_kwargs() == {"ssl_ca_certs": "/tmp/ca.pem"}
+
+
+def test_gateway_runtime_ssl_options_without_ca_certs_omits_ca_kwargs():
+    options = RuntimeSSLOptions(
+        ssl_certfile="/tmp/cert.pem",
+        ssl_keyfile="/tmp/key.pem",
+    )
+
+    assert options.to_uvicorn_kwargs() == {
+        "ssl_certfile": "/tmp/cert.pem",
+        "ssl_keyfile": "/tmp/key.pem",
+    }
 
 
 def test_gateway_service_remaining_branches(monkeypatch):

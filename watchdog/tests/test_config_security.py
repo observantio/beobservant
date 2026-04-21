@@ -155,6 +155,34 @@ class ConfigSecurityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 _reload_config_module()
 
+    def test_allows_restart_without_default_admin_password(self):
+        private_key, public_key = _rsa_keypair_pem()
+        with patch.dict(
+            os.environ,
+            {
+                "APP_ENV": "production",
+                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                "CORS_ORIGINS": "https://app.example.com",
+                "CORS_ALLOW_CREDENTIALS": "true",
+                "JWT_ALGORITHM": "RS256",
+                "JWT_PRIVATE_KEY": private_key,
+                "JWT_PUBLIC_KEY": public_key,
+                "JWT_AUTO_GENERATE_KEYS": "false",
+                "DEFAULT_ADMIN_PASSWORD": "",
+                "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "false",
+                "DATA_ENCRYPTION_KEY": "9j95_Fl__by42XjEQ03cNIw1MNfK8gxjhEC5Q8ru4ZE=",
+                "NOTIFIER_SERVICE_TOKEN": "strong_notifier_service_token_123",
+                "NOTIFIER_CONTEXT_SIGNING_KEY": "strong_context_signing_key_123",
+                "RESOLVER_SERVICE_TOKEN": "strong_resolver_service_token_123",
+                "RESOLVER_CONTEXT_SIGNING_KEY": "strong_resolver_context_signing_key_123",
+                "GATEWAY_INTERNAL_SERVICE_TOKEN": "strong_gateway_token_123",
+                "INBOUND_WEBHOOK_TOKEN": "strong_webhook_token_123",
+            },
+            clear=False,
+        ):
+            module = _reload_config_module()
+            self.assertEqual(module.config.DEFAULT_ADMIN_PASSWORD, "")
+
     def test_rejects_missing_jwt_keypair_when_auto_generation_disabled_in_production(self):
         with patch.dict(
             os.environ,

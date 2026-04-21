@@ -17,9 +17,9 @@ from contextlib import asynccontextmanager
 
 import settings
 import start
-import uvicorn
 from fastapi import FastAPI
 from middleware.openapi import install_custom_openapi
+from middleware.runtime_ssl import RuntimeSSLOptions, run_uvicorn
 from models.exceptions import DatabaseUnavailable
 from pydantic import BaseModel
 from routers import router as gateway_router
@@ -119,18 +119,17 @@ async def health_root() -> dict[str, str]:
 
 
 if __name__ == "__main__":
-    ssl_certfile = settings.SSL_CERTFILE or None
-    ssl_keyfile = settings.SSL_KEYFILE or None
-    ssl_ca_certs = settings.SSL_CA_CERTS or None
-    if settings.SSL_CERTFILE and settings.SSL_KEYFILE:
+    ssl_options = RuntimeSSLOptions.from_settings(settings)
+    if ssl_options is not None:
         logger.info("TLS enabled")
 
-    uvicorn.run(
-        app="main:app",
+    run_uvicorn(
+        app,
         host=settings.HOST,
         port=settings.PORT,
         log_level=settings.LOG_LEVEL.lower(),
-        ssl_certfile=ssl_certfile,
-        ssl_keyfile=ssl_keyfile,
-        ssl_ca_certs=ssl_ca_certs,
+        ssl_certfile=None,
+        ssl_keyfile=None,
+        ssl_ca_certs=None,
+        ssl_options=ssl_options,
     )

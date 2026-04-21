@@ -65,16 +65,22 @@ observantio:
     CORS_ALLOW_CREDENTIALS: "true"
   resources:
     requests:
-      cpu: 100m
+      cpu: 150m
       memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
 
 gatekeeper:
-  enabled: false
+  enabled: true
   replicaCount: 1
   resources:
     requests:
       cpu: 100m
       memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
 
 notifier:
   replicaCount: 1
@@ -84,6 +90,9 @@ notifier:
     requests:
       cpu: 100m
       memory: 192Mi
+    limits:
+      cpu: "1"
+      memory: 768Mi
 
 resolver:
   replicaCount: 1
@@ -93,6 +102,9 @@ resolver:
     requests:
       cpu: 150m
       memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
 
 otlpGateway:
   replicaCount: 1
@@ -107,6 +119,9 @@ otlpGateway:
     requests:
       cpu: 100m
       memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 otelAgent:
   enabled: true
@@ -115,6 +130,9 @@ otelAgent:
     requests:
       cpu: 100m
       memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 grafanaAuthGateway:
   enforceAuth: true
@@ -123,6 +141,9 @@ grafanaAuthGateway:
     requests:
       cpu: 50m
       memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 ui:
   replicaCount: 1
@@ -130,6 +151,9 @@ ui:
     requests:
       cpu: 50m
       memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 loki:
   storage:
@@ -138,6 +162,9 @@ loki:
     requests:
       cpu: 150m
       memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
 
 tempo:
   storage:
@@ -146,6 +173,9 @@ tempo:
     requests:
       cpu: 150m
       memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
 
 mimir:
   storage:
@@ -154,6 +184,9 @@ mimir:
     requests:
       cpu: 200m
       memory: 384Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
 
 alertmanager:
   storage:
@@ -162,6 +195,9 @@ alertmanager:
     requests:
       cpu: 50m
       memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 grafana:
   storage:
@@ -170,6 +206,9 @@ grafana:
     requests:
       cpu: 100m
       memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 postgres:
   storage:
@@ -178,6 +217,9 @@ postgres:
     requests:
       cpu: 150m
       memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
 
 redis:
   storage:
@@ -186,3 +228,6 @@ redis:
     requests:
       cpu: 50m
       memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi

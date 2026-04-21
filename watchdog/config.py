@@ -671,13 +671,13 @@ class Config:
         if self.IS_PRODUCTION and self.JWT_AUTO_GENERATE_KEYS:
             raise ValueError("JWT_AUTO_GENERATE_KEYS must be disabled in production")
 
-        if self.IS_PRODUCTION and _is_placeholder(
-            self.DEFAULT_ADMIN_PASSWORD, placeholders=["admin123", "admin", "password", "changeme", ""]
-        ):
-            raise ValueError("DEFAULT_ADMIN_PASSWORD must be set to a strong value in production")
-
         if self.IS_PRODUCTION and self.DEFAULT_ADMIN_BOOTSTRAP_ENABLED:
             raise ValueError("DEFAULT_ADMIN_BOOTSTRAP_ENABLED must be false in production")
+
+        if self.IS_PRODUCTION and self.DEFAULT_ADMIN_PASSWORD and _is_placeholder(
+            self.DEFAULT_ADMIN_PASSWORD, placeholders=["admin123", "admin", "password", "changeme"]
+        ):
+            raise ValueError("DEFAULT_ADMIN_PASSWORD must be set to a strong value in production")
 
         if self.REQUIRE_TOTP_ENCRYPTION_KEY and not self.DATA_ENCRYPTION_KEY:
             raise ValueError("DATA_ENCRYPTION_KEY is required when REQUIRE_TOTP_ENCRYPTION_KEY is enabled")

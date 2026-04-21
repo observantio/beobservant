@@ -21,6 +21,8 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
+from middleware.runtime_ssl import RuntimeSSLOptions
+
 
 def _load_main(monkeypatch):
     if "main" in sys.modules:
@@ -74,6 +76,7 @@ async def test_root_health_and_ready(monkeypatch):
 @pytest.mark.asyncio
 async def test_upstream_reachable_and_lifespan_cleanup(monkeypatch):
     main_module = _load_main(monkeypatch)
+    verify_values = []
 
     class FakeClient:
         def __init__(self, response=None, error=None, *args, **kwargs):
@@ -91,12 +94,57 @@ async def test_upstream_reachable_and_lifespan_cleanup(monkeypatch):
                 raise self.error
             return self.response
 
+    def make_async_client(*, response=None, error=None):
+        def factory(**kwargs):
+            verify_values.append(kwargs.get("verify"))
+            return FakeClient(response=response, error=error)
+
+        return factory
+
     monkeypatch.setattr(
-        main_module.httpx, "AsyncClient", lambda **kwargs: FakeClient(response=types.SimpleNamespace(status_code=204))
+        main_module.httpx,
+        "AsyncClient",
+        make_async_client(response=types.SimpleNamespace(status_code=204)),
     )
     assert await main_module._upstream_reachable("http://tempo") is True
+    assert verify_values[-1] is False
+
+    verify_values.clear()
+    monkeypatch.setattr(main_module.config, "NOTIFIER_URL", "https://notifier.example/")
+    monkeypatch.setattr(main_module.config, "NOTIFIER_CA_CERT_PATH", "/tmp/notifier-ca.crt")
     monkeypatch.setattr(
-        main_module.httpx, "AsyncClient", lambda **kwargs: FakeClient(error=main_module.httpx.ConnectError("down"))
+        main_module.httpx,
+        "AsyncClient",
+        make_async_client(response=types.SimpleNamespace(status_code=204)),
+    )
+    assert await main_module._upstream_reachable("https://notifier.example/") is True
+    assert verify_values[-1] == "/tmp/notifier-ca.crt"
+
+    verify_values.clear()
+    monkeypatch.setattr(main_module.config, "RESOLVER_URL", "https://resolver.example/")
+    monkeypatch.setattr(main_module.config, "RESOLVER_CA_CERT_PATH", "/tmp/resolver-ca.crt")
+    monkeypatch.setattr(
+        main_module.httpx,
+        "AsyncClient",
+        make_async_client(response=types.SimpleNamespace(status_code=204)),
+    )
+    assert await main_module._upstream_reachable("https://resolver.example/") is True
+    assert verify_values[-1] == "/tmp/resolver-ca.crt"
+
+    verify_values.clear()
+    monkeypatch.setattr(main_module.config, "RESOLVER_CA_CERT_PATH", "")
+    monkeypatch.setattr(
+        main_module.httpx,
+        "AsyncClient",
+        make_async_client(response=types.SimpleNamespace(status_code=204)),
+    )
+    assert await main_module._upstream_reachable("https://resolver.example/") is True
+    assert verify_values[-1] is True
+
+    monkeypatch.setattr(
+        main_module.httpx,
+        "AsyncClient",
+        make_async_client(error=main_module.httpx.ConnectError("down")),
     )
     assert await main_module._upstream_reachable("http://tempo") is False
 
@@ -178,33 +226,29 @@ def test_dunder_main_runs_uvicorn_with_ssl_runtime(monkeypatch):
 
 
 def test_runtime_ssl_options_disabled(monkeypatch):
-    main_module = _load_main(monkeypatch)
     monkeypatch.delenv("SSL_ENABLED", raising=False)
     monkeypatch.delenv("SSL_CERTFILE", raising=False)
     monkeypatch.delenv("SSL_KEYFILE", raising=False)
-    assert main_module._runtime_ssl_options() is None
+    assert RuntimeSSLOptions.from_env() is None
 
 
 def test_runtime_ssl_options_enabled_requires_paths(monkeypatch):
-    main_module = _load_main(monkeypatch)
     monkeypatch.setenv("SSL_ENABLED", "true")
     monkeypatch.delenv("SSL_CERTFILE", raising=False)
     monkeypatch.delenv("SSL_KEYFILE", raising=False)
 
     with pytest.raises(ValueError, match="SSL_ENABLED=true requires SSL_CERTFILE and SSL_KEYFILE"):
-        main_module._runtime_ssl_options()
+        RuntimeSSLOptions.from_env()
 
 
 def test_runtime_ssl_options_enabled_with_paths(monkeypatch):
-    main_module = _load_main(monkeypatch)
     monkeypatch.setenv("SSL_ENABLED", "true")
     monkeypatch.setenv("SSL_CERTFILE", "/tmp/tls.crt")
     monkeypatch.setenv("SSL_KEYFILE", "/tmp/tls.key")
 
-    assert main_module._runtime_ssl_options() == {
-        "ssl_certfile": "/tmp/tls.crt",
-        "ssl_keyfile": "/tmp/tls.key",
-    }
+    ssl_options = RuntimeSSLOptions.from_env()
+    assert ssl_options is not None
+    assert ssl_options.to_uvicorn_kwargs() == {"ssl_certfile": "/tmp/tls.crt", "ssl_keyfile": "/tmp/tls.key"}
 
 
 def test_encode_datetime_rfc3339_handles_naive_and_aware(monkeypatch):
