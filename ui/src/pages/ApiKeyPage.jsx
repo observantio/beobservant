@@ -573,10 +573,10 @@ export default function ApiKeyPage() {
             </div>
           ) : (
             <div className="mt-3 overflow-x-auto rounded-lg border border-sre-border bg-sre-surface/30">
-              <table className="min-w-full text-left text-sm">
+              <table className="min-w-full table-fixed text-left text-sm">
                 <thead>
                   <tr className="bg-sre-surface text-sre-text-muted text-xs uppercase tracking-wide">
-                    <th className="px-4 py-3.5">
+                    <th className="px-4 py-3.5 w-[24rem]">
                       <span className="inline-flex items-center gap-1">
                         <span className="material-icons text-sm">label</span>
                         <span>Name</span>
@@ -617,8 +617,8 @@ export default function ApiKeyPage() {
                         handleActivateKey(key);
                       }}
                     >
-                      <td className="px-4 py-4">
-                        <div className="font-medium text-sre-text">
+                      <td className="px-4 py-4 w-[24rem] max-w-[24rem]">
+                        <div className="font-medium text-sre-text truncate" title={key.name || ""}>
                           {key.name}
                         </div>
                         {key.is_default && (
