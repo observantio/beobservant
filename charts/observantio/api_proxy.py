@@ -63,12 +63,11 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
 
         try:
             if self.server.upstream_is_https:
-                context = ssl._create_unverified_context()
                 conn = http.client.HTTPSConnection(
                     "127.0.0.1",
                     self.server.upstream_port,
                     timeout=30,
-                    context=context,
+                    context=self.server.upstream_ssl_context,
                 )
             else:
                 conn = http.client.HTTPConnection(
@@ -116,10 +115,20 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
         self._forward()
 
 
+def _build_upstream_ssl_context(cafile: str | None) -> ssl.SSLContext:
+    if cafile:
+        context = ssl.create_default_context(cafile=cafile)
+    else:
+        context = ssl.create_default_context()
+    # The port-forward terminates on localhost, so verify the internal CA without hostname matching.
+    context.check_hostname = False
+    return context
+
+
 def main() -> int:
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in {4, 5}:
         print(
-            "Usage: api_proxy.py <listen_port> <upstream_port> <upstream_is_https>",
+            "Usage: api_proxy.py <listen_port> <upstream_port> <upstream_is_https> [ca_bundle_path]",
             file=sys.stderr,
         )
         return 1
@@ -127,10 +136,12 @@ def main() -> int:
     listen_port = int(sys.argv[1])
     upstream_port = int(sys.argv[2])
     upstream_is_https = sys.argv[3].lower() == "true"
+    ca_bundle_path = sys.argv[4] if len(sys.argv) == 5 else None
 
     server = ThreadingHTTPServer(("127.0.0.1", listen_port), ProxyHandler)
     server.upstream_port = upstream_port
     server.upstream_is_https = upstream_is_https
+    server.upstream_ssl_context = _build_upstream_ssl_context(ca_bundle_path) if upstream_is_https else None
 
     print(
         f"API proxy listening on 127.0.0.1:{listen_port} -> 127.0.0.1:{upstream_port} "

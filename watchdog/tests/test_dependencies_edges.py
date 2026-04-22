@@ -152,13 +152,12 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
     monkeypatch.setattr(dependencies, "enforce_ip_rate_limit", lambda *args, **kwargs: ip_rate_calls.append(kwargs))
     monkeypatch.setattr(dependencies, "client_ip", lambda request: "unknown")
     monkeypatch.setattr(dependencies.config, "REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS", True)
-    monkeypatch.setattr(dependencies.config, "AUTH_PUBLIC_IP_ALLOWLIST", None)
-    dependencies.enforce_public_endpoint_security(
-        _request(client=None),
-        dependencies.PublicEndpointSecurityConfig(scope="public", limit=1, window_seconds=60),
-    )
-    assert ip_rate_calls == [{"scope": "public", "limit": 1, "window_seconds": 60, "fallback_mode": None}]
-    ip_rate_calls.clear()
+    with pytest.raises(HTTPException, match="Access denied"):
+        dependencies.enforce_public_endpoint_security(
+            _request(client=None),
+            dependencies.PublicEndpointSecurityConfig(scope="public", limit=1, window_seconds=60),
+        )
+    assert ip_rate_calls == []
     with pytest.raises(HTTPException, match="Access denied"):
         dependencies.enforce_public_endpoint_security(
             _request(client=None),
