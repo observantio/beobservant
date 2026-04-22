@@ -277,6 +277,8 @@ Two practical warnings for new users:
 
 The included installer is meant for evaluation and local testing. It is best to use the Experimental Installer if you want to develop the code, since it creates a working `.env` and starts all the required services cleanly for development.
 
+If you want a shorter entrypoint, run `make quickstart` from the repository root.
+
 It will:
 
 - Check for required commands.
@@ -340,6 +342,10 @@ For internal services that are not published to host ports (`gateway-auth`, `res
 ## Developer Quality Gates
 
 Global quality scripts in `scripts/` support either all services or a single service argument (`resolver`, `gatekeeper`, `notifier`, `watchdog`).
+
+For a quick workflow map, see [DEVELOPERS.md](DEVELOPERS.md).
+
+The root [Makefile](Makefile) provides a small wrapper around the same workflow, including `make quickstart`, `make lint`, `make typecheck`, and `make test`.
 
 Run all services:
 
