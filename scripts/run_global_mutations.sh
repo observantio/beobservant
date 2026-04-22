@@ -23,10 +23,16 @@ KNOWN_EQUIVALENT_MUTANTS=(
   "resolver:api.routes.exception.x_handle_exceptions__mutmut_7"
   "resolver:api.routes.exception.x_handle_exceptions__mutmut_12"
   "resolver:api.routes.exception.x_handle_exceptions__mutmut_16"
+  "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_2"
+  "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_7"
+  "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_10"
+  "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_13"
   "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_17"
   "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_18"
   "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_25"
   "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_26"
+  "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_27"
+  "notifier:services.common.url_utils.x_is_safe_http_url__mutmut_32"
 )
 
 usage() {
