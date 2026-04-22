@@ -18,6 +18,7 @@ API_PROXY_PORT="${API_PROXY_PORT:-4319}"
 API_UPSTREAM_PORT="${API_UPSTREAM_PORT:-14319}"
 API_PROXY_LOG="/tmp/observantio-api-proxy.log"
 API_UPSTREAM_LOG="/tmp/observantio-api-upstream.log"
+API_PROXY_CA_BUNDLE=""
 GRAFANA_PORT_FORWARD_LOG="/tmp/observantio-grafana-auth-gateway-port-forward.log"
 UI_PORT_FORWARD_LOG="/tmp/observantio-ui-port-forward.log"
 
@@ -39,6 +40,9 @@ cleanup() {
   for pid in "${BACKGROUND_PIDS[@]}"; do
     kill "$pid" 2>/dev/null || true
   done
+  if [[ -n "$API_PROXY_CA_BUNDLE" ]]; then
+    rm -f "$API_PROXY_CA_BUNDLE" 2>/dev/null || true
+  fi
 }
 trap cleanup EXIT
 
@@ -310,7 +314,12 @@ tls_enabled_in_files() {
 }
 
 ensure_tls_secret() {
-  kubectl -n "$NAMESPACE" get secret "$INTERNAL_TLS_SECRET" >/dev/null 2>&1 && return
+  API_PROXY_CA_BUNDLE="$(mktemp /tmp/observantio-api-proxy-ca.XXXXXX.crt)"
+
+  if kubectl -n "$NAMESPACE" get secret "$INTERNAL_TLS_SECRET" >/dev/null 2>&1; then
+    kubectl -n "$NAMESPACE" get secret "$INTERNAL_TLS_SECRET" -o jsonpath='{.data.ca\.crt}' | base64 -d >"$API_PROXY_CA_BUNDLE"
+    return
+  fi
 
   echo "Generating internal TLS certificates..."
   local tmp ca_key ca_crt
@@ -349,6 +358,8 @@ ensure_tls_secret() {
     --from-file=resolver.crt="${tmp}/resolver.crt" \
     --from-file=resolver.key="${tmp}/resolver.key" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+  cp "$ca_crt" "$API_PROXY_CA_BUNDLE"
 
   rm -rf "$tmp"
 }
@@ -462,6 +473,7 @@ kill_listeners_on_ports() {
 start_api_proxy() {
   local detached="$1"
   local upstream_is_https="$2"
+  local -a proxy_cmd=(python3 "$SCRIPT_DIR/api_proxy.py" "$API_PROXY_PORT" "$API_UPSTREAM_PORT" "$upstream_is_https")
 
   kill_listeners_on_ports "$API_PROXY_PORT" "$API_UPSTREAM_PORT"
 
@@ -473,11 +485,19 @@ start_api_proxy() {
       kubectl -n "$NAMESPACE" port-forward "svc/$OBSERVANTIO_SVC" "${API_UPSTREAM_PORT}:4319"
   fi
 
+  if [[ "$upstream_is_https" == "true" ]]; then
+    if [[ -z "$API_PROXY_CA_BUNDLE" ]]; then
+      echo "Missing API proxy CA bundle for HTTPS upstream." >&2
+      exit 1
+    fi
+    proxy_cmd+=("$API_PROXY_CA_BUNDLE")
+  fi
+
   if [[ "$detached" == "true" ]]; then
-    nohup python3 "$SCRIPT_DIR/api_proxy.py" "$API_PROXY_PORT" "$API_UPSTREAM_PORT" "$upstream_is_https" \
+    nohup "${proxy_cmd[@]}" \
       >"$API_PROXY_LOG" 2>&1 &
   else
-    python3 "$SCRIPT_DIR/api_proxy.py" "$API_PROXY_PORT" "$API_UPSTREAM_PORT" "$upstream_is_https" \
+    "${proxy_cmd[@]}" \
       >"$API_PROXY_LOG" 2>&1 &
     BACKGROUND_PIDS+=("$!")
   fi
