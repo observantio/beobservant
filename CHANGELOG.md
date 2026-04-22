@@ -10,6 +10,7 @@ All notable changes to this project are documented here.
 
 ### Fixes
 
+* Fixed the chart installer so foreground/detach proxy login no longer trips the watchdog public-endpoint client-IP gate, and remove/purge now stops the local API proxy and port-forward listeners.
 * Tightened watchdog public-endpoint client-IP enforcement, switched the chart API proxy to verify internal TLS using the generated CA bundle, and fixed the release restart status message typo.
 * Hardened the watchdog auth test harness to run against a temporary SQLite database, then fixed the API-key, group-permission, MFA/TOTP, and OIDC-linking edge cases uncovered by that real DB-backed run.
 * Scoped the active-agents UI/request path to the selected tenant.
