@@ -110,6 +110,21 @@ require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "Missing required comm
 random_hex()  { openssl rand -hex "$1"; }
 random_b64()  { openssl rand -base64 32 | tr -d '\n'; }
 
+kill_listeners_on_ports() {
+  local port listener_output pids pid
+
+  for port in "$@"; do
+    listener_output="$(ss -H -ltnp "( sport = :${port} )" 2>/dev/null || true)"
+    [[ -n "$listener_output" ]] || continue
+
+    pids="$(printf '%s\n' "$listener_output" | grep -o 'pid=[0-9]\+' | cut -d= -f2 | sort -u || true)"
+    for pid in $pids; do
+      [[ -n "$pid" ]] || continue
+      kill "$pid" 2>/dev/null || true
+    done
+  done
+}
+
 SECRET_NAME="${RELEASE}-observantio-secrets"
 INTERNAL_TLS_SECRET="${RELEASE}-observantio-internal-tls"
 OBSERVANTIO_SVC="${RELEASE}-observantio-observantio"
@@ -126,6 +141,8 @@ kubectl cluster-info >/dev/null
 # ── Remove / Purge ────────────────────────────────────────────────────────────
 
 if [[ "$MODE" == "remove" || "$MODE" == "purge" ]]; then
+  kill_listeners_on_ports "$API_PROXY_PORT" "$API_UPSTREAM_PORT" 8080 5173
+
   echo "Uninstalling ${RELEASE} from ${NAMESPACE}..."
   helm -n "$NAMESPACE" uninstall "$RELEASE" 2>/dev/null || true
 
@@ -328,6 +345,9 @@ ensure_tls_secret() {
 
   openssl req -x509 -newkey rsa:2048 -days 365 -nodes \
     -keyout "$ca_key" -out "$ca_crt" \
+    -addext "basicConstraints=critical,CA:TRUE" \
+    -addext "keyUsage=critical,keyCertSign,cRLSign" \
+    -addext "subjectKeyIdentifier=hash" \
     -subj "/CN=observantio-internal-ca" >/dev/null 2>&1
 
   make_cert() {
@@ -455,21 +475,6 @@ start_foreground_port_forward() {
   BACKGROUND_PIDS+=("$!")
 }
 
-kill_listeners_on_ports() {
-  local port listener_output pids pid
-
-  for port in "$@"; do
-    listener_output="$(ss -H -ltnp "( sport = :${port} )" 2>/dev/null || true)"
-    [[ -n "$listener_output" ]] || continue
-
-    pids="$(printf '%s\n' "$listener_output" | grep -o 'pid=[0-9]\+' | cut -d= -f2 | sort -u || true)"
-    for pid in $pids; do
-      [[ -n "$pid" ]] || continue
-      kill "$pid" 2>/dev/null || true
-    done
-  done
-}
-
 start_api_proxy() {
   local detached="$1"
   local upstream_is_https="$2"
@@ -554,12 +559,18 @@ deploy() {
   local notifier_db="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${pg_svc}:5432/watchdog_notified"
   local resolver_db="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${pg_svc}:5432/watchdog_resolver"
   local force_secure_cookies="true"
+  local require_client_ip_for_public_endpoints="true"
+  local trust_proxy_headers="false"
   local gatekeeper_enabled="true"
 
   # Local foreground/detached access is plain HTTP on localhost, so secure cookies
   # would be dropped by the browser and login would never persist.
   if [[ "$PORT_FORWARD_MODE" != "none" ]]; then
     force_secure_cookies="false"
+    # Port-forward/proxy mode can race with Request.client metadata; avoid false
+    # 403s on public auth endpoints while still keeping allowlist fail-closed.
+    require_client_ip_for_public_endpoints="false"
+    trust_proxy_headers="true"
   fi
 
   # Gatekeeper in production requires HTTPS auth API; keep it disabled unless
@@ -590,7 +601,8 @@ deploy() {
     --set-string observantio.env.DATABASE_URL="$db_url"
     --set-string observantio.env.ALLOWLIST_FAIL_OPEN=false
     --set-string observantio.env.FORCE_SECURE_COOKIES="$force_secure_cookies"
-    --set-string observantio.env.REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS=true
+    --set-string observantio.env.REQUIRE_CLIENT_IP_FOR_PUBLIC_ENDPOINTS="$require_client_ip_for_public_endpoints"
+    --set-string observantio.env.TRUST_PROXY_HEADERS="$trust_proxy_headers"
     --set-string observantio.env.REQUIRE_TOTP_ENCRYPTION_KEY=true
     --set-string observantio.env.SKIP_LOCAL_MFA_FOR_EXTERNAL=false
     --set-string gatekeeper.env.DATABASE_URL="$db_url"
