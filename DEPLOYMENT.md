@@ -19,8 +19,8 @@ curl -fsSL https://raw.githubusercontent.com/observantio/watchdog/main/download.
 bash download.sh
 
 # Optional:
-# bash download.sh v0.0.4 arm64
-# bash download.sh v0.0.4 amd64
+# bash download.sh v0.0.5 arm64
+# bash download.sh v0.0.5 amd64
 ```
 
 `download.sh` defaults to the latest GitHub release and `multi` architecture. Before it downloads anything, it checks that:

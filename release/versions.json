@@ -1,9 +1,9 @@
 {
-  "bundle_version": "v0.0.4",
-  "watchdog": "v0.0.4",
-  "gatekeeper": "v0.0.4",
-  "ui": "v0.0.4",
-  "otel_agent": "v0.0.4",
-  "notifier": "v0.0.4",
-  "resolver": "v0.0.4"
+  "bundle_version": "v0.0.5",
+  "watchdog": "v0.0.5",
+  "gatekeeper": "v0.0.5",
+  "ui": "v0.0.5",
+  "otel_agent": "v0.0.5",
+  "notifier": "v0.0.5",
+  "resolver": "v0.0.5"
 }

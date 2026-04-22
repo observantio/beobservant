@@ -86,7 +86,7 @@ If you want the chart to consume ExternalSecrets directly, install with plain `h
 
 ## Change Image Tags
 
-Recommended approach: extra values file.
+Recommended approach: extra values file. Please remember that TLS support was only supported from 0.0.4 and above
 
 ```yaml
 # /tmp/observantio-image-overrides.yaml
