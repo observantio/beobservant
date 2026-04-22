@@ -26,6 +26,7 @@ from models.access.user_models import (
     _normalize_username,
     _normalize_username_input,
 )
+from models.access.api_key_models import ApiKeyUpdate
 from models.access import group_models
 from models.access import user_models
 from models.observability.agent_models import AgentHeartbeat, AgentInfo
@@ -88,6 +89,17 @@ def test_misc_model_payloads_cover_status_aliases_and_time_validation():
     assert AnalyzeJobStatus(" started ") is AnalyzeJobStatus.RUNNING
     assert AnalyzeJobStatus("unknown-status") is AnalyzeJobStatus.PENDING
     assert AnalyzeJobStatus._missing_(object()) is AnalyzeJobStatus.PENDING
+
+
+def test_api_key_update_rejects_fuzzed_extra_fields_and_control_chars():
+    with pytest.raises(ValidationError):
+        ApiKeyUpdate.model_validate(
+            {
+                "name": "\u0013bad",
+                "is_enabled": False,
+                "unexpected": {"nested": [1, 2, 3]},
+            }
+        )
 
 
 def test_datetime_serializers_and_agent_model_edges():

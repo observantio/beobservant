@@ -11,7 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from typing import Optional, List
 from datetime import datetime, timezone
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 def _serialize_datetime(value: datetime) -> str:
@@ -35,7 +35,9 @@ class ApiKeyCreate(ApiKeyBase):
 
 
 class ApiKeyUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(None, min_length=1, max_length=100, pattern=r"^[^\x00-\x1F]+$")
     is_enabled: Optional[bool] = None
     is_default: Optional[bool] = None
 
