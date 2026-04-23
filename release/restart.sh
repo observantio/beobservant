@@ -6,6 +6,19 @@
 
 set -euo pipefail
 
+PURGE_VOLUMES=false
+
+if [[ "${1:-}" == "--purge" ]]; then
+  PURGE_VOLUMES=true
+  shift
+fi
+
+if [[ $# -gt 0 ]]; then
+  echo "Unknown option: $1" >&2
+  echo "Usage: $0 [--purge]" >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "${SCRIPT_DIR}/docker-compose.prod.yml" ]]; then
   ROOT_DIR="${SCRIPT_DIR}"
@@ -40,7 +53,12 @@ fi
 chmod +x "${RUN_OPTIMAL_SCRIPT}"
 "${RUN_OPTIMAL_SCRIPT}"
 echo ""
-"${COMPOSE_CMD[@]}" -f docker-compose.prod.yml down
+if [[ "$PURGE_VOLUMES" == true ]]; then
+  echo "Stopping stack and removing named volumes..."
+  "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml down --volumes --remove-orphans
+else
+  "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml down
+fi
 echo ""
 echo "Pulling latest configured images for this bundle..."
 "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml pull
