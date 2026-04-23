@@ -1,7 +1,6 @@
 import { Badge, Spinner } from "../../components/ui";
 import { useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
-import { FixedSizeList as List } from "react-window";
 import {
   formatNsToIso,
   formatRelativeTime,
@@ -157,7 +156,7 @@ export default function LogResults({
   const visibleStreams = filteredStreams.slice(startIndex, endIndex);
 
   return (
-    <div className="space-y-4 overflow-auto scrollbar-thin scrollbar-thumb-sre-border scrollbar-track-sre-bg-alt scrollbar-thumb-rounded max-h-[calc(100vh-18rem)] pr-2 md:pr-4">
+    <div className="space-y-4 pr-2 md:pr-4">
       <div className="flex items-center justify-between rounded-lg border border-sre-border/60 bg-sre-bg-alt/60 px-3 py-2 text-xs text-sre-text-muted">
         <div className="font-medium">
           Showing {totalStreams === 0 ? 0 : startIndex + 1}–{endIndex} of{" "}
@@ -235,20 +234,14 @@ export default function LogResults({
             </div>
 
             <div className="divide-y divide-sre-border">
-              {(() => {
-                const displayValues = filteredValues
-                  .slice()
-                  .slice(0, viewMode === "compact" ? 200 : 100)
-                  .map((value, index) => ({
+              {filteredValues
+                .slice()
+                .slice(0, viewMode === "compact" ? 200 : 100)
+                .map((value, index) => {
+                  const row = {
                     value,
                     key: buildLogItemKey(streamKey, value, index),
-                  }));
-                const rowHeight =
-                  viewMode === "compact" ? 36 : viewMode === "raw" ? 100 : 120;
-
-                const listHeight = displayValues.length * rowHeight;
-                const Row = ({ index, style, data }) => {
-                  const row = data[index];
+                  };
                   const v = row.value;
                   const formatted = parseLogLine(v[1]);
                   const logKey = row.key;
@@ -270,21 +263,25 @@ export default function LogResults({
                   if (viewMode === "compact") {
                     return (
                       <div
-                        style={style}
+                        key={row.key}
                         className="px-4 py-2 hover:bg-sre-surface/70 transition-colors text-xs font-mono"
                       >
-                        <span className="text-sre-text-muted mr-3 tabular-nums">
-                          {formatNsToIso(v[0]).substring(11, 19)}
-                        </span>
-                        <span
-                          className={`${badge.bgClass} px-2 py-0.5 rounded text-[10px] font-bold mr-2`}
-                        >
-                          {badge.text}
-                        </span>
-                        <span className={getLogLevel(v[1]).color}>
-                          {String(v[1]).substring(0, 150)}
-                          {String(v[1]).length > 150 ? "..." : ""}
-                        </span>
+                        <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
+                          <span className="text-sre-text-muted tabular-nums shrink-0">
+                            {formatNsToIso(v[0]).substring(11, 19)}
+                          </span>
+                          <span
+                            className={`${badge.bgClass} px-2 py-0.5 rounded text-[10px] font-bold shrink-0`}
+                          >
+                            {badge.text}
+                          </span>
+                          <span
+                            className={`${badge.color} min-w-0 flex-1 break-words whitespace-pre-wrap`}
+                          >
+                            {String(v[1]).substring(0, 150)}
+                            {String(v[1]).length > 150 ? "..." : ""}
+                          </span>
+                        </div>
                       </div>
                     );
                   }
@@ -292,7 +289,7 @@ export default function LogResults({
                   if (viewMode === "raw") {
                     return (
                       <div
-                        style={style}
+                        key={row.key}
                         className="px-4 py-2 hover:bg-sre-surface/70 transition-colors"
                       >
                         <pre className="text-xs font-mono text-sre-text whitespace-pre-wrap break-all">
@@ -308,10 +305,10 @@ export default function LogResults({
 
                   return (
                     <div
-                      style={style}
+                      key={row.key}
                       className="px-4 py-3 hover:bg-sre-surface/70 transition-colors"
                     >
-                      <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-start justify-between mb-2 gap-3">
                         <div className="flex items-center gap-3">
                           <span
                             className={`${badge.bgClass} px-2 py-1 rounded text-[10px] font-bold border`}
@@ -327,7 +324,7 @@ export default function LogResults({
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
                             onClick={() => copyToClipboard(v[1])}
@@ -404,7 +401,7 @@ export default function LogResults({
                         </div>
                       ) : (
                         <div
-                          className={`mt-2 text-sm font-mono ${getLogLevel(formatted.data).color} break-all`}
+                          className={`mt-2 text-sm font-mono ${getLogLevel(formatted.data).color} break-all whitespace-pre-wrap`}
                         >
                           {displayText}
                           {!isExpanded && formatted.data.length > 300 && (
@@ -420,23 +417,7 @@ export default function LogResults({
                       )}
                     </div>
                   );
-                };
-
-                return (
-                  <div>
-                    <List
-                      height={listHeight}
-                      itemCount={displayValues.length}
-                      itemSize={rowHeight}
-                      itemData={displayValues}
-                      itemKey={(index, data) => data[index].key}
-                      width="100%"
-                    >
-                      {Row}
-                    </List>
-                  </div>
-                );
-              })()}
+                })}
             </div>
           </div>
         );
