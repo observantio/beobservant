@@ -451,6 +451,8 @@ async def create_dashboard(
             user_id=user_id,
             group_ids=group_ids,
             title=requested_title,
+            visibility=visibility,
+            shared_group_ids=shared_group_ids,
         ),
     ):
         raise HTTPException(status_code=409, detail="Dashboard title already exists in your visible scope")
@@ -569,6 +571,8 @@ async def update_dashboard(
         return None
 
     requested_title = str(getattr(getattr(dashboard_update, "dashboard", None), "title", "") or "").strip()
+    requested_visibility = visibility or str(db_dashboard.visibility or "private")
+    requested_shared_group_ids = shared_group_ids if shared_group_ids is not None else _shared_group_ids(db_dashboard)
     if requested_title and await _has_accessible_title_conflict(
         service,
         db,
@@ -577,6 +581,8 @@ async def update_dashboard(
             user_id=user_id,
             group_ids=gids,
             title=requested_title,
+            visibility=requested_visibility,
+            shared_group_ids=requested_shared_group_ids,
             exclude_uid=uid,
         ),
     ):
