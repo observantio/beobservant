@@ -42,7 +42,10 @@ chmod +x "${RUN_OPTIMAL_SCRIPT}"
 echo ""
 "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml down
 echo ""
-"${COMPOSE_CMD[@]}" -f docker-compose.prod.yml up -d --build ui
+echo "Pulling latest configured images for this bundle..."
+"${COMPOSE_CMD[@]}" -f docker-compose.prod.yml pull
+echo ""
+"${COMPOSE_CMD[@]}" -f docker-compose.prod.yml up -d
 echo ""
 echo "Observantio production stack restarted with updated configurations, please wait a few moments for all services to be up and running."
 echo ""
