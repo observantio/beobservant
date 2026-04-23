@@ -98,6 +98,25 @@ NOTICE:
 EOF
 }
 
+check_kubectl_ready() {
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "kubectl is required but not installed. Install kubectl and ensure it is on your PATH." >&2
+    exit 1
+  fi
+
+  if ! kubectl config current-context >/dev/null 2>&1; then
+    echo "kubectl is installed, but no current context is configured. Set a kubeconfig context that points to a cluster first." >&2
+    echo "Recommended targets: EKS, AKS, or a local cluster such as kind/minikube." >&2
+    exit 1
+  fi
+
+  if ! kubectl cluster-info >/dev/null 2>&1; then
+    echo "kubectl is configured, but the selected context does not appear to reach a Kubernetes cluster." >&2
+    echo "Verify your kubeconfig and cluster access, then try again." >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --install)   MODE="install";  shift ;;
@@ -145,11 +164,11 @@ RESOLVER_SVC="${RELEASE}-observantio-resolver"
 
 print_cluster_notice
 
-for cmd in kubectl helm openssl curl python3; do
+check_kubectl_ready
+
+for cmd in helm openssl curl python3; do
   require_cmd "$cmd"
 done
-
-kubectl cluster-info >/dev/null
 
 # ── Remove / Purge ────────────────────────────────────────────────────────────
 
