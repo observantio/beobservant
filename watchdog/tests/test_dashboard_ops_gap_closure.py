@@ -121,6 +121,73 @@ async def test_create_dashboard_retries_uid_on_conflict_and_then_succeeds(monkey
 
 
 @pytest.mark.asyncio
+async def test_create_dashboard_allows_same_title_in_different_visibility_scope():
+    db = _session()
+    _seed_minimal(db)
+    db.add(
+        GrafanaDashboard(
+            tenant_id="t1",
+            created_by="u1",
+            grafana_uid="existing-tenant-dash",
+            grafana_id=202,
+            title="CPU",
+            visibility="tenant",
+        )
+    )
+    db.commit()
+
+    calls = {"create": 0}
+
+    class _GrafanaService:
+        async def create_dashboard(self, payload):
+            calls["create"] += 1
+            return {
+                "uid": payload.dashboard.uid,
+                "id": 11,
+                "dashboard": {
+                    "uid": payload.dashboard.uid,
+                    "title": payload.dashboard.title,
+                    "tags": payload.dashboard.tags,
+                },
+            }
+
+        async def search_dashboards(self, filters=None, **_kwargs):
+            return [SimpleNamespace(uid="existing-tenant-dash", title="CPU")]
+
+        async def get_folders(self):
+            return []
+
+    service = SimpleNamespace(
+        grafana_service=_GrafanaService(),
+        logger=SimpleNamespace(debug=lambda *args, **kwargs: None),
+        validate_group_visibility=lambda *args, **kwargs: [],
+        raise_http_from_grafana_error=lambda exc: (_ for _ in ()).throw(
+            HTTPException(status_code=500, detail=str(exc))
+        ),
+    )
+
+    out = await dashboard_ops.create_dashboard(
+        service,
+        db,
+        DashboardCreate(
+            dashboard=Dashboard(
+                uid="dash-private-new",
+                title="CPU",
+                tags=["ops"],
+                panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds-1"}}],
+            ),
+            folderId=0,
+            overwrite=False,
+        ),
+        scope=GrafanaUserScope("u1", "t1", []),
+        options=DashboardCreateOptions(visibility="private"),
+    )
+
+    assert out is not None
+    assert calls["create"] == 1
+
+
+@pytest.mark.asyncio
 async def test_create_dashboard_maps_grafana_error_after_failed_retry(monkeypatch):
     db = _session()
     _seed_minimal(db)

@@ -10,7 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, TypedDict
+from typing import Dict, Iterable, List, Optional, TypedDict
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
@@ -62,6 +62,36 @@ def _to_safe_int32(value: object) -> Optional[int]:
 
 def _normalize_title(title: Optional[str]) -> str:
     return str(title or "").strip().lower()
+
+
+def _normalized_group_id_set(group_ids: Optional[Iterable[object]]) -> set[str]:
+    normalized: set[str] = set()
+    for group_id in group_ids or []:
+        value = getattr(group_id, "id", group_id)
+        text = str(value).strip()
+        if text:
+            normalized.add(text)
+    return normalized
+
+
+def _title_conflict_matches_requested_scope(
+    dashboard: GrafanaDashboard,
+    params: AccessibleTitleConflictParams,
+) -> bool:
+    if params.visibility is None:
+        return True
+
+    requested_visibility = str(params.visibility).strip()
+    dashboard_visibility = str(getattr(dashboard, "visibility", "") or "private")
+    if dashboard_visibility != requested_visibility:
+        return False
+
+    if requested_visibility == "group":
+        requested_groups = _normalized_group_id_set(params.shared_group_ids)
+        dashboard_groups = _normalized_group_id_set(getattr(dashboard, "shared_groups", None))
+        return dashboard_groups == requested_groups
+
+    return True
 
 
 def _visible_scope_filter(user_id: str, group_ids: List[str]) -> ColumnElement[bool]:
@@ -149,6 +179,8 @@ async def _has_accessible_title_conflict(
             GrafanaUserScope(user_id=params.user_id, tenant_id=params.tenant_id, group_ids=params.group_ids),
             DashboardAccessCriteria(),
         ) is not None:
+            if not _title_conflict_matches_requested_scope(dash, params):
+                continue
             return True
     return False
 

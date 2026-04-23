@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from fastapi import HTTPException
 from starlette.requests import Request
 
 try:
@@ -85,7 +86,7 @@ async def test_remove_api_key_share_forwards_actor_scope_to_service(monkeypatch:
 
 
 @pytest.mark.asyncio
-async def test_save_dashboard_from_grafana_ui_falls_back_to_create_when_update_returns_none(
+async def test_save_dashboard_from_grafana_ui_rejects_update_miss_for_existing_uid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(dashboards, "rtp", run_in_threadpool_inline)
@@ -115,10 +116,11 @@ async def test_save_dashboard_from_grafana_ui_falls_back_to_create_when_update_r
     monkeypatch.setattr(dashboards.proxy, "create_dashboard", _create_dashboard)
 
     payload = GrafanaDashboardPayloadRequest.model_validate({"dashboard": {"uid": "dash-1", "title": "Latency"}})
-    result = await dashboards.save_dashboard_from_grafana_ui(payload, current_user=_resolver_user(), db="db")
+    with pytest.raises(HTTPException) as exc:
+        await dashboards.save_dashboard_from_grafana_ui(payload, current_user=_resolver_user(), db="db")
 
-    assert result["uid"] == "created-from-fallback"
-    assert calls == {"update": 1, "create": 1}
+    assert exc.value.status_code == 404
+    assert calls == {"update": 1, "create": 0}
 
 
 @pytest.mark.asyncio

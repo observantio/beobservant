@@ -288,6 +288,10 @@ async def save_dashboard_from_grafana_ui(
             )
             if result:
                 return result
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dashboard {uid} not found, access denied, or update failed",
+            )
 
     result = await proxy.create_dashboard(
         db=db,

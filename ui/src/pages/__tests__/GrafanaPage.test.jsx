@@ -73,7 +73,14 @@ vi.mock("../../components/ui", () => ({
       <div>
         <div>{title}</div>
         <div>{message}</div>
-        <button onClick={onConfirm}>{confirmText}</button>
+        <button
+          onClick={async () => {
+            await onConfirm?.();
+            onClose?.();
+          }}
+        >
+          {confirmText}
+        </button>
         <button onClick={onClose}>{cancelText}</button>
       </div>
     ) : null,

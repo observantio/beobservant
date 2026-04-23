@@ -281,6 +281,7 @@ export default function GrafanaPage() {
     confirmText: "Delete",
     cancelText: "Cancel",
   });
+  const skipConfirmDialogCancelRef = useRef(false);
 
   const [grafanaConfirmDialog, setGrafanaConfirmDialog] = useState({
     isOpen: false,
@@ -377,6 +378,21 @@ export default function GrafanaPage() {
       isOpen: true,
       path: path,
     });
+  }
+
+  function handleConfirmDialogClose() {
+    const onCancel = confirmDialog.onCancel;
+    const skipCancel = skipConfirmDialogCancelRef.current;
+    skipConfirmDialogCancelRef.current = false;
+    setConfirmDialog((prev) => ({
+      ...prev,
+      isOpen: false,
+      onConfirm: null,
+      onCancel: null,
+    }));
+    if (!skipCancel && typeof onCancel === "function") {
+      void onCancel();
+    }
   }
 
   async function confirmOpenInGrafana() {
@@ -811,6 +827,7 @@ export default function GrafanaPage() {
         confirmText: "Yes, sync datasource",
         cancelText: "No, dashboard only",
         onConfirm: async () => {
+          skipConfirmDialogCancelRef.current = true;
           await saveDashboard(jsonOverride, {
             syncDatasourceVisibility: true,
             skipVisibilitySyncPrompt: true,
@@ -1487,18 +1504,7 @@ export default function GrafanaPage() {
 
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
-        onClose={() => {
-          const onCancel = confirmDialog.onCancel;
-          setConfirmDialog((prev) => ({
-            ...prev,
-            isOpen: false,
-            onConfirm: null,
-            onCancel: null,
-          }));
-          if (typeof onCancel === "function") {
-            void onCancel();
-          }
-        }}
+        onClose={handleConfirmDialogClose}
         onConfirm={confirmDialog.onConfirm || (() => {})}
         title={confirmDialog.title}
         message={confirmDialog.message}

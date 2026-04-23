@@ -91,6 +91,8 @@ class AccessibleTitleConflictParams:
     user_id: str
     group_ids: List[str]
     title: str
+    visibility: Optional[str] = None
+    shared_group_ids: Optional[List[str]] = None
     exclude_uid: Optional[str] = None
 
 
