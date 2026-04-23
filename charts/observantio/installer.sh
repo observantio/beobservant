@@ -87,6 +87,17 @@ Examples:
 EOF
 }
 
+print_cluster_notice() {
+  cat <<'EOF'
+
+NOTICE:
+  Ensure kubectl is configured and pointing to a reachable Kubernetes cluster.
+  This installer will fail if no active cluster context is available.
+  Recommended targets: EKS, AKS, or a local cluster such as kind/minikube.
+
+EOF
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --install)   MODE="install";  shift ;;
@@ -131,6 +142,8 @@ OBSERVANTIO_SVC="${RELEASE}-observantio-observantio"
 GATEKEEPER_SVC="${RELEASE}-observantio-gatekeeper"
 NOTIFIER_SVC="${RELEASE}-observantio-notifier"
 RESOLVER_SVC="${RELEASE}-observantio-resolver"
+
+print_cluster_notice
 
 for cmd in kubectl helm openssl curl python3; do
   require_cmd "$cmd"
