@@ -60,6 +60,7 @@ The installer is interactive and should be run from a terminal session.
 
 ```bash
 ./release/restart.sh
+./release/restart.sh --purge
 ```
 
 What it does:
@@ -67,6 +68,7 @@ What it does:
 - Re-runs `scripts/run_optimal_config.sh`.
 - Performs compose down/up sequence for the production stack.
 - Useful after config changes or host resizing.
+- `--purge` removes named volumes before restarting, so the stack comes back up with fresh data volumes.
 
 ### `uninstall.sh`
 
@@ -114,7 +116,8 @@ At minimum, set/verify these before internet-facing use:
    - `curl http://localhost:4319/health`
    - `curl http://localhost:4319/ready`
 4. Use `./release/restart.sh` after changing sizing/config.
-5. Use `./release/uninstall.sh` (or `--purge`) for teardown.
+5. Use `./release/restart.sh --purge` when you want to refresh the stack with new empty volumes.
+6. Use `./release/uninstall.sh` (or `--purge`) for teardown.
 
 ## Read This Next
 
