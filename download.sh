@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="observantio/watchdog"
-INSTALL_DIR="${HOME}/observantio"
+INSTALL_DIR="${PWD}/observantio"
 VERSION="${1:-}"
 RESOLVED_VERSION=""
 DOWNLOADER=""
@@ -185,6 +185,12 @@ require_compose_access() {
   fail "Missing Docker Compose. Install the docker compose plugin or docker-compose first."
 }
 
+ensure_install_dir() {
+  mkdir -p "$INSTALL_DIR" || fail "Failed to create install directory: ${INSTALL_DIR}"
+  [[ -d "$INSTALL_DIR" ]] || fail "Install path is not a directory: ${INSTALL_DIR}"
+  [[ -w "$INSTALL_DIR" ]] || fail "Install directory is not writable: ${INSTALL_DIR}"
+}
+
 extract_asset() {
   local archive="$1"
   local target_dir="$2"
@@ -241,7 +247,7 @@ main() {
   local extract_dir="${INSTALL_DIR}/observantio-${RESOLVED_VERSION}-linux-${ARCH}"
   local install_script
 
-  mkdir -p "$INSTALL_DIR"
+  ensure_install_dir
 
   print_summary
   log "Preparing download"
