@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [v0.0.6] - 2026-04-24
+
+### Fixes
+
+* Fixed the dashboards for ojo, did not have the instance id and service name filter for sub-services
+
 ## [v0.0.5] - 2026-04-21
 
 ### Added
