@@ -246,7 +246,7 @@ export default function LogResults({
                   const formatted = parseLogLine(v[1]);
                   const logKey = row.key;
                   const isExpanded = !!expandedLogs[logKey];
-                  const badge = getLogLevel(v[1]);
+                  const badge = getLogLevel(formatted.data, stream.stream);
 
                   let displayText;
                   if (isExpanded) {
@@ -292,7 +292,7 @@ export default function LogResults({
                         key={row.key}
                         className="px-4 py-2 hover:bg-sre-surface/70 transition-colors"
                       >
-                        <pre className="text-xs font-mono text-sre-text whitespace-pre-wrap break-all">
+                        <pre className={`text-xs font-mono ${badge.color} whitespace-pre-wrap break-all`}>
                           {JSON.stringify(
                             { timestamp: v[0], log: v[1] },
                             null,
@@ -378,9 +378,7 @@ export default function LogResults({
                                 <span className="text-sre-primary font-semibold min-w-[120px] font-mono">
                                   {key}:
                                 </span>
-                                <span
-                                  className={`${getLogLevel(String(val)).color} flex-1 font-mono break-all`}
-                                >
+                                <span className={`${badge.color} flex-1 font-mono break-all`}>
                                   {typeof val === "object"
                                     ? JSON.stringify(val)
                                     : String(val)}
@@ -400,9 +398,7 @@ export default function LogResults({
                             )}
                         </div>
                       ) : (
-                        <div
-                          className={`mt-2 text-sm font-mono ${getLogLevel(formatted.data).color} break-all whitespace-pre-wrap`}
-                        >
+                        <div className={`mt-2 text-sm font-mono ${badge.color} break-all whitespace-pre-wrap`}>
                           {displayText}
                           {!isExpanded && formatted.data.length > 300 && (
                             <button

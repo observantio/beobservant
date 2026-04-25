@@ -135,4 +135,32 @@ describe("LogResults pagination", () => {
     fireEvent.click(screen.getByRole("button", { name: /show 2 more fields/i }));
     expect(toggleLogExpand).toHaveBeenCalledTimes(1);
   });
+
+  it("uses explicit detected levels from stream metadata instead of message text", () => {
+    const queryResult = {
+      data: {
+        result: [
+          {
+            stream: { service: "api", detected_level: "INFO" },
+            values: [[String(Date.now() * 1e6), "this line mentions error but stays info"]],
+          },
+        ],
+      },
+    };
+
+    render(
+      <LogResults
+        queryResult={queryResult}
+        loading={false}
+        searchText={""}
+        viewMode="table"
+        expandedLogs={{}}
+        toggleLogExpand={() => {}}
+        copyToClipboard={() => {}}
+      />,
+    );
+
+    expect(screen.getAllByText("INFO")).toHaveLength(2);
+    expect(screen.queryByText("ERROR")).not.toBeInTheDocument();
+  });
 });
