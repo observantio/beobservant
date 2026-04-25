@@ -57,54 +57,54 @@ jobs:
                   f"bundle_version ({manifest['bundle_version']}) must match pushed tag ({os.environ['GITHUB_REF_NAME']})"
               )
 
-            def parse_semver(tag: str):
+          def parse_semver(tag: str):
               match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag)
               if not match:
-                return None
+                  return None
               return tuple(int(part) for part in match.groups())
 
-            current_tag = os.environ['GITHUB_REF_NAME']
-            previous_tag = None
+          current_tag = os.environ['GITHUB_REF_NAME']
+          previous_tag = None
 
-            raw_tags = subprocess.check_output(['git', 'tag'], text=True).splitlines()
-            parsed_tags = []
-            for tag in raw_tags:
+          raw_tags = subprocess.check_output(['git', 'tag'], text=True).splitlines()
+          parsed_tags = []
+          for tag in raw_tags:
               if tag == current_tag:
-                continue
+                  continue
               version = parse_semver(tag)
               if version is None:
-                continue
+                  continue
               parsed_tags.append((version, tag))
 
-            if parsed_tags:
+          if parsed_tags:
               parsed_tags.sort(key=lambda item: item[0])
               previous_tag = parsed_tags[-1][1]
 
-            previous_manifest = {}
-            if previous_tag is not None:
+          previous_manifest = {}
+          if previous_tag is not None:
               try:
-                previous_manifest = json.loads(
-                  subprocess.check_output(
-                    ['git', 'show', f'{previous_tag}:release/versions.json'],
-                    text=True,
+                  previous_manifest = json.loads(
+                      subprocess.check_output(
+                          ['git', 'show', f'{previous_tag}:release/versions.json'],
+                          text=True,
+                      )
                   )
-                )
               except subprocess.CalledProcessError:
-                previous_manifest = {}
+                  previous_manifest = {}
 
-            def should_build(service_key: str) -> bool:
+          def should_build(service_key: str) -> bool:
               prev = previous_manifest.get(service_key)
               curr = manifest.get(service_key)
               if not curr:
-                return False
+                  return False
               if prev is None:
-                return True
+                  return True
               return curr != prev
 
-            build_watchdog = should_build('watchdog')
-            build_gatekeeper = should_build('gatekeeper')
-            build_ui = should_build('ui')
-            build_otel_agent = should_build('otel_agent')
+          build_watchdog = should_build('watchdog')
+          build_gatekeeper = should_build('gatekeeper')
+          build_ui = should_build('ui')
+          build_otel_agent = should_build('otel_agent')
 
           out = Path(os.environ['GITHUB_OUTPUT'])
           with out.open('a', encoding='utf-8') as f:
@@ -120,12 +120,12 @@ jobs:
               f.write(f"build_ui={'true' if build_ui else 'false'}\n")
               f.write(f"build_otel_agent={'true' if build_otel_agent else 'false'}\n")
 
-            print(f"Current tag: {current_tag}")
-            print(f"Previous tag: {previous_tag or 'none'}")
-            print(f"Build watchdog: {build_watchdog}")
-            print(f"Build gatekeeper: {build_gatekeeper}")
-            print(f"Build ui: {build_ui}")
-            print(f"Build otel_agent: {build_otel_agent}")
+          print(f"Current tag: {current_tag}")
+          print(f"Previous tag: {previous_tag or 'none'}")
+          print(f"Build watchdog: {build_watchdog}")
+          print(f"Build gatekeeper: {build_gatekeeper}")
+          print(f"Build ui: {build_ui}")
+          print(f"Build otel_agent: {build_otel_agent}")
           PY
 
   publish-local-images:
