@@ -16,9 +16,12 @@ describe("helpers", () => {
     vi.restoreAllMocks();
   });
 
-  it("extracts log levels and service names", () => {
-    expect(getLogLevel("fatal error").text).toBe("ERROR");
-    expect(getLogLevel("warn: issue").text).toBe("WARN");
+  it("uses explicit structured log levels and service names", () => {
+    expect(getLogLevel({ detected_level: "INFO" }).text).toBe("INFO");
+    expect(getLogLevel({ severity_text: "warning" }).text).toBe("WARN");
+    expect(getLogLevel({ severityNumber: 17 }).text).toBe("ERROR");
+    expect(getLogLevel({ severity_number: 5 }).text).toBe("DEBUG");
+    expect(getLogLevel("fatal error").text).toBe("LOG");
     expect(getServiceName({ process: { serviceName: "api" } })).toBe("api");
     expect(getServiceName(null)).toBe("unknown");
   });

@@ -6,50 +6,105 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 `;
 /**
- * Get log level information from log line
- * @param {string|object} line - Log line to analyze
- * @returns {{text: string, color: string, bgClass: string}} Log level info
+ * Get log display information from explicit structured severity fields.
+ * @param {string|object} line - Log line or parsed payload to analyze
+ * @param {object} metadata - Optional stream or label metadata for explicit severity hints
+ * @returns {{text: string, color: string, bgClass: string}} Log display info
  */
 
-export function getLogLevel(line) {
-  const lowerLine = (
-    typeof line === "string" ? line : JSON.stringify(line)
-  ).toLowerCase();
-
-  if (lowerLine.includes("error") || lowerLine.includes("fatal")) {
-    return {
-      text: "ERROR",
-      color: "text-red-400",
-      bgClass: "bg-red-500/20 text-red-400 border-red-500/30",
-    };
-  }
-  if (lowerLine.includes("warn")) {
-    return {
-      text: "WARN",
-      color: "text-yellow-400",
-      bgClass: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-    };
-  }
-  if (lowerLine.includes("info")) {
-    return {
-      text: "INFO",
-      color: "text-blue-400",
-      bgClass: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-    };
-  }
-  if (lowerLine.includes("debug")) {
-    return {
-      text: "DEBUG",
-      color: "text-gray-400",
-      bgClass: "bg-gray-500/20 text-gray-400 border-gray-500/30",
-    };
-  }
-
-  return {
+const LOG_LEVEL_STYLES = {
+  ERROR: {
+    text: "ERROR",
+    color: "text-rose-700 dark:text-rose-300",
+    bgClass:
+      "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/30",
+  },
+  WARN: {
+    text: "WARN",
+    color: "text-amber-800 dark:text-amber-300",
+    bgClass:
+      "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30",
+  },
+  INFO: {
+    text: "INFO",
+    color: "text-sky-700 dark:text-sky-300",
+    bgClass:
+      "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/30",
+  },
+  DEBUG: {
+    text: "DEBUG",
+    color: "text-violet-700 dark:text-violet-300",
+    bgClass:
+      "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/30",
+  },
+  LOG: {
     text: "LOG",
     color: "text-sre-text",
     bgClass: "bg-sre-surface text-sre-text-muted border-sre-border",
-  };
+  },
+};
+
+const LOG_LEVEL_KEYS = [
+  "detected_level",
+  "detectedLevel",
+  "severity_text",
+  "severityText",
+  "level",
+  "log_level",
+  "logLevel",
+  "severity",
+];
+
+function normalizeLogLevel(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim().toUpperCase();
+  if (!normalized) return null;
+
+  if (normalized === "WARNING") return "WARN";
+  if (normalized === "INFORMATION") return "INFO";
+  if (normalized === "ERR" || normalized === "ERROR" || normalized === "FATAL" || normalized === "CRITICAL") {
+    return "ERROR";
+  }
+  if (normalized === "WARN" || normalized === "INFO" || normalized === "DEBUG") {
+    return normalized;
+  }
+  if (normalized === "TRACE") return "DEBUG";
+
+  return null;
+}
+
+function severityNumberToLevel(value) {
+  const numericValue =
+    typeof value === "number" ? value : Number.parseInt(String(value), 10);
+  if (!Number.isFinite(numericValue)) return null;
+
+  if (numericValue >= 17) return "ERROR";
+  if (numericValue >= 13) return "WARN";
+  if (numericValue >= 9) return "INFO";
+  if (numericValue >= 1) return "DEBUG";
+
+  return null;
+}
+
+function readExplicitLogLevel(source) {
+  if (!source || typeof source !== "object") return null;
+
+  for (const key of LOG_LEVEL_KEYS) {
+    const level = normalizeLogLevel(source[key]);
+    if (level) return level;
+  }
+
+  const severityNumber = source.severity_number ?? source.severityNumber;
+  const levelFromNumber = severityNumberToLevel(severityNumber);
+  if (levelFromNumber) return levelFromNumber;
+
+  return null;
+}
+
+export function getLogLevel(line, metadata) {
+  const level = readExplicitLogLevel(line) || readExplicitLogLevel(metadata) || "LOG";
+
+  return LOG_LEVEL_STYLES[level];
 }
 
 /**
