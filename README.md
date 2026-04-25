@@ -89,7 +89,7 @@ Watchdog adds the pieces those components do not provide as a single opinionated
 | `ui` | React/Vite frontend. Exposes dashboards, logs, traces, alerts, incidents, integrations, API keys, users/groups, audit views, and RCA pages. |
 | `docker-compose.yml` | Local reference deployment for the entire stack. |
 | `.env.example` | Environment contract for all services. |
-| `tests` | OTEL collector and sample telemetry generators used to feed demo traces and logs into the stack. |
+| `otel` | OTEL collector and sample telemetry generators used to feed demo traces and logs into the stack. |
 
 ## Repo Links
 
@@ -516,7 +516,7 @@ There are three different security boundaries in this stack:
 
 ## Documentation
 
-- Detailed walkthrough: [User Guide](USER%20GUIDE.md)
+- Detailed walkthrough: [User Guide](USER GUIDE.md)
 - Environment reference: [Example Environment File](.env.example)
 - Release deployment and hardening: [Deployment Guide](DEPLOYMENT.md)
 

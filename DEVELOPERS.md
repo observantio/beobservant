@@ -4,9 +4,8 @@ This file is a quick map for contributors who want the shortest path to the righ
 
 ## Start Here
 
-- If you are an AI coding agent, read [AGENTS.md](AGENTS.md) first.
 - Read [README.md](README.md) for the product overview and local setup paths.
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) for contribution expectations.
+- Read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for collaboration expectations.
 - Read [scripts/README.md](scripts/README.md) for the canonical task runner details.
 - Use [Makefile](Makefile) for the shortest local bootstrap and quality-gate aliases.
 - Use [DEPLOYMENT.md](DEPLOYMENT.md) when your change affects release or compose deployment behavior.

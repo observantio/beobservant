@@ -141,4 +141,4 @@ Expect:
 
 - Root project overview: [../README.md](../README.md)
 - Deployment details and hardening: [../DEPLOYMENT.md](../DEPLOYMENT.md)
-- Test strategy guide: [../tests/README.md](../tests/README.md)
+- Developer workflow index: [../DEVELOPERS.md](../DEVELOPERS.md)
