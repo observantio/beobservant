@@ -8,6 +8,8 @@ All notable changes to this project are documented here.
 
 * Fixed the dashboards for ojo, did not have the instance id and service name filter for sub-services
 
+* Updated Loki log rendering to use structured severity metadata for consistent badge colors and explicit level detection in expanded and collapsed views.
+
 ## [v0.0.5] - 2026-04-21
 
 ### Added
