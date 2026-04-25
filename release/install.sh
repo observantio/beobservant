@@ -223,7 +223,7 @@ if [[ -z "${bundle_version}" ]]; then
   bundle_version="$(get_env_key OBSERVANTIO_BUNDLE_VERSION)"
 fi
 if [[ -z "${bundle_version}" ]]; then
-  bundle_version="v0.0.5"
+  bundle_version="v0.0.6"
 fi
 
 if [[ -z "$(get_env_key OBSERVANTIO_BUNDLE_VERSION)" || "$(get_env_key OBSERVANTIO_BUNDLE_VERSION)" == "v0.0.0" || "$(get_env_key OBSERVANTIO_BUNDLE_VERSION)" != "${bundle_version}" ]]; then

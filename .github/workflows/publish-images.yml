@@ -17,11 +17,16 @@ jobs:
       otel_agent_version: ${{ steps.versions.outputs.otel_agent_version }}
       notifier_version: ${{ steps.versions.outputs.notifier_version }}
       resolver_version: ${{ steps.versions.outputs.resolver_version }}
+      build_watchdog: ${{ steps.versions.outputs.build_watchdog }}
+      build_gatekeeper: ${{ steps.versions.outputs.build_gatekeeper }}
+      build_ui: ${{ steps.versions.outputs.build_ui }}
+      build_otel_agent: ${{ steps.versions.outputs.build_otel_agent }}
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
+          fetch-depth: 0
 
       - name: Read versions manifest
         id: versions
@@ -29,6 +34,8 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import re
+          import subprocess
           from pathlib import Path
 
           manifest = json.loads(Path('release/versions.json').read_text(encoding='utf-8'))
@@ -50,6 +57,55 @@ jobs:
                   f"bundle_version ({manifest['bundle_version']}) must match pushed tag ({os.environ['GITHUB_REF_NAME']})"
               )
 
+            def parse_semver(tag: str):
+              match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag)
+              if not match:
+                return None
+              return tuple(int(part) for part in match.groups())
+
+            current_tag = os.environ['GITHUB_REF_NAME']
+            previous_tag = None
+
+            raw_tags = subprocess.check_output(['git', 'tag'], text=True).splitlines()
+            parsed_tags = []
+            for tag in raw_tags:
+              if tag == current_tag:
+                continue
+              version = parse_semver(tag)
+              if version is None:
+                continue
+              parsed_tags.append((version, tag))
+
+            if parsed_tags:
+              parsed_tags.sort(key=lambda item: item[0])
+              previous_tag = parsed_tags[-1][1]
+
+            previous_manifest = {}
+            if previous_tag is not None:
+              try:
+                previous_manifest = json.loads(
+                  subprocess.check_output(
+                    ['git', 'show', f'{previous_tag}:release/versions.json'],
+                    text=True,
+                  )
+                )
+              except subprocess.CalledProcessError:
+                previous_manifest = {}
+
+            def should_build(service_key: str) -> bool:
+              prev = previous_manifest.get(service_key)
+              curr = manifest.get(service_key)
+              if not curr:
+                return False
+              if prev is None:
+                return True
+              return curr != prev
+
+            build_watchdog = should_build('watchdog')
+            build_gatekeeper = should_build('gatekeeper')
+            build_ui = should_build('ui')
+            build_otel_agent = should_build('otel_agent')
+
           out = Path(os.environ['GITHUB_OUTPUT'])
           with out.open('a', encoding='utf-8') as f:
               f.write(f"bundle_version={manifest['bundle_version']}\n")
@@ -59,6 +115,17 @@ jobs:
               f.write(f"otel_agent_version={manifest['otel_agent']}\n")
               f.write(f"notifier_version={manifest['notifier']}\n")
               f.write(f"resolver_version={manifest['resolver']}\n")
+              f.write(f"build_watchdog={'true' if build_watchdog else 'false'}\n")
+              f.write(f"build_gatekeeper={'true' if build_gatekeeper else 'false'}\n")
+              f.write(f"build_ui={'true' if build_ui else 'false'}\n")
+              f.write(f"build_otel_agent={'true' if build_otel_agent else 'false'}\n")
+
+            print(f"Current tag: {current_tag}")
+            print(f"Previous tag: {previous_tag or 'none'}")
+            print(f"Build watchdog: {build_watchdog}")
+            print(f"Build gatekeeper: {build_gatekeeper}")
+            print(f"Build ui: {build_ui}")
+            print(f"Build otel_agent: {build_otel_agent}")
           PY
 
   publish-local-images:
@@ -89,6 +156,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push watchdog
+        if: needs.resolve-versions.outputs.build_watchdog == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./watchdog
@@ -98,6 +166,7 @@ jobs:
           tags: ghcr.io/${{ steps.owner.outputs.owner_lc }}/watchdog:${{ needs.resolve-versions.outputs.watchdog_version }}
 
       - name: Build and push gatekeeper
+        if: needs.resolve-versions.outputs.build_gatekeeper == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./gatekeeper
@@ -107,6 +176,7 @@ jobs:
           tags: ghcr.io/${{ steps.owner.outputs.owner_lc }}/gatekeeper:${{ needs.resolve-versions.outputs.gatekeeper_version }}
 
       - name: Build and push ui
+        if: needs.resolve-versions.outputs.build_ui == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./ui
@@ -116,6 +186,7 @@ jobs:
           tags: ghcr.io/${{ steps.owner.outputs.owner_lc }}/ui:${{ needs.resolve-versions.outputs.ui_version }}
 
       - name: Build and push otel-agent
+        if: needs.resolve-versions.outputs.build_otel_agent == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./otel

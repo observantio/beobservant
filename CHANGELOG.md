@@ -10,7 +10,7 @@ All notable changes to this project are documented here.
 
 * Updated Loki log rendering to use structured severity metadata for consistent badge colors and explicit level detection in expanded and collapsed views.
 
-* Fixed outdated documentation
+* Fixed outdated documentation and minor UI-related polish for this release.
 
 ## [v0.0.5] - 2026-04-21
 
