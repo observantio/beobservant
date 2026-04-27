@@ -67,7 +67,8 @@ describe("dashboard subcomponents", () => {
       />,
     );
 
-    expect(screen.getByText(/Metrics: 9/i)).toBeInTheDocument();
+    expect(screen.getByText("Metrics:")).toBeInTheDocument();
+    expect(screen.getByText("9")).toBeInTheDocument();
     expect(screen.getByText(/Host: host-a/i)).toBeInTheDocument();
     expect(screen.getByText("Focused")).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();

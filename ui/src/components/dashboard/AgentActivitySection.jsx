@@ -22,11 +22,16 @@ AgentStatusBadges.propTypes = {
 };
 
 const formatActivityLabel = (agent) => {
-  const parts = [
-    agent.metrics_count > 0 && `Metrics: ${agent.metrics_count}`,
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join(" · ") : "No activity";
+  if ((agent.metrics_count || 0) > 0) {
+    return {
+      hasMetrics: true,
+      count: agent.metrics_count,
+    };
+  }
+  return {
+    hasMetrics: false,
+    count: 0,
+  };
 };
 
 const AgentCard = ({ agent }) => {
@@ -42,13 +47,20 @@ const AgentCard = ({ agent }) => {
   return (
     <div className="rounded-lg border border-sre-border bg-sre-bg-alt px-4 py-3">
       <div className="flex items-center gap-4">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <div className="font-semibold text-sre-text text-left">
             {displayName}
           </div>
-          <div className="text-xs text-sre-text-muted text-left">
-            {activityLabel}
-          </div>
+          {activityLabel.hasMetrics ? (
+            <div className="flex w-full items-center justify-start gap-1 whitespace-nowrap text-xs text-sre-text-muted text-left">
+              <span>Metrics:</span>{" "}
+              <span className="tabular-nums">{activityLabel.count}</span>
+            </div>
+          ) : (
+            <div className="text-xs text-sre-text-muted text-left">
+              No activity
+            </div>
+          )}
           {hostLabel && (
             <div className="text-xs text-sre-text-muted text-left">
               Host: {hostLabel}

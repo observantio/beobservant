@@ -35,7 +35,7 @@ export function DashboardLayout({ dashboardData, agentData }) {
                 <h2 className="text-xl font-semibold text-sre-text">
                   Welcome to Observantio
                 </h2>
-                <div className="mt-2 inline-flex rounded-full bg-sre-surface px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sre-text-muted ring-1 ring-sre-border">
+                <div className="text-sm">
                   Observability made beautiful
                 </div>
               </div>

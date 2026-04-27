@@ -6,9 +6,10 @@ import { usePersistentOrder } from "../usePersistentOrder";
 import * as api from "../../api";
 
 let hasPermission = () => true;
+let userState = { id: "u1", org_id: "org-a", api_keys: [] };
 
 vi.mock("../../contexts/AuthContext", () => ({
-  useAuth: () => ({ hasPermission }),
+  useAuth: () => ({ hasPermission, user: userState }),
 }));
 
 vi.mock("../../utils/lokiQueryUtils", () => ({
@@ -32,6 +33,7 @@ describe("data hooks", () => {
     vi.clearAllMocks();
     localStorage.clear();
     hasPermission = () => true;
+    userState = { id: "u1", org_id: "org-a", api_keys: [] };
   });
 
   it("useAgentActivity handles success and failure", async () => {
@@ -44,6 +46,28 @@ describe("data hooks", () => {
     const failed = renderHook(() => useAgentActivity());
     await waitFor(() => expect(failed.result.current.loadingAgents).toBe(false));
     expect(failed.result.current.agentActivity).toEqual([]);
+  });
+
+  it("useAgentActivity refetches when active API key changes", async () => {
+    api.getActiveAgents
+      .mockResolvedValueOnce([{ name: "tenant-a-agent" }])
+      .mockResolvedValueOnce([{ name: "tenant-b-agent" }]);
+
+    const { result, rerender } = renderHook(() => useAgentActivity());
+    await waitFor(() => expect(result.current.loadingAgents).toBe(false));
+    expect(api.getActiveAgents).toHaveBeenCalledTimes(1);
+
+    userState = {
+      id: "u1",
+      org_id: "org-b",
+      api_keys: [
+        { id: "key-a", key: "org-a", is_enabled: false },
+        { id: "key-b", key: "org-b", is_enabled: true },
+      ],
+    };
+    rerender();
+
+    await waitFor(() => expect(api.getActiveAgents).toHaveBeenCalledTimes(2));
   });
 
   it("useDashboardData fills fields when allowed and handles denied branches", async () => {
@@ -67,6 +91,32 @@ describe("data hooks", () => {
     expect(partial.result.current.loadingAlerts).toBe(false);
     expect(partial.result.current.loadingDashboards).toBe(false);
     expect(partial.result.current.loadingDatasources).toBe(false);
+  });
+
+  it("useDashboardData refetches when active API key changes", async () => {
+    api.fetchHealth.mockResolvedValue({ status: "Healthy" });
+    api.getAlerts.mockResolvedValue([]);
+    api.getLogVolume.mockResolvedValue({ data: { result: [] } });
+    api.searchDashboards.mockResolvedValue([]);
+    api.getSilences.mockResolvedValue([]);
+    api.getDatasources.mockResolvedValue([]);
+    api.fetchSystemMetrics.mockResolvedValue({ stress: { message: "ok" } });
+
+    const { result, rerender } = renderHook(() => useDashboardData());
+    await waitFor(() => expect(result.current.loadingSystemMetrics).toBe(false));
+    expect(api.fetchHealth).toHaveBeenCalledTimes(1);
+
+    userState = {
+      id: "u1",
+      org_id: "org-b",
+      api_keys: [
+        { id: "key-a", key: "org-a", is_enabled: false },
+        { id: "key-b", key: "org-b", is_enabled: true },
+      ],
+    };
+    rerender();
+
+    await waitFor(() => expect(api.fetchHealth).toHaveBeenCalledTimes(2));
   });
 
   it("useIncidentSummary handles permission gate and successful load", async () => {

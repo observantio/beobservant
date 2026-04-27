@@ -121,9 +121,9 @@ export const DEFAULT_QUERY_LIMITS = {
 };
 
 export const DEFAULT_DURATION_RANGE = {
-  min: 0, 
-  max: 5000000000, 
-  step: 50000000, 
+  min: 0,
+  max: 10000000000,
+  step: 50000000,
 };
 
 

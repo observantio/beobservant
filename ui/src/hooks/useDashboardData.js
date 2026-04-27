@@ -12,10 +12,13 @@ import { getVolumeValues } from "../utils/lokiQueryUtils";
 import { useAuth } from "../contexts/AuthContext";
 
 export function useDashboardData() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const canReadAlerts = hasPermission("read:alerts");
   const canReadDashboards = hasPermission("read:dashboards");
   const canReadLogs = hasPermission("read:logs");
+  const keys = user?.api_keys || [];
+  const activeKey = keys.find((k) => k.is_enabled) || keys.find((k) => k.is_default);
+  const activeApiKeyId = activeKey?.id || activeKey?.key || user?.org_id || "";
   const [health, setHealth] = useState(null);
   const [loadingHealth, setLoadingHealth] = useState(true);
   const [alertCount, setAlertCount] = useState(null);
@@ -181,7 +184,7 @@ export function useDashboardData() {
       active = false;
       controller.abort();
     };
-  }, [canReadAlerts, canReadDashboards, canReadLogs]);
+  }, [canReadAlerts, canReadDashboards, canReadLogs, activeApiKeyId]);
 
   return {
     health,
