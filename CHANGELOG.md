@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased] - 2026-04-26
+
+### Fixes
+
+* The default tempo range in he filter is now set to max, this is to avoid confusing the user of hiding traces with large durations by default
+
+* Other UI updates, more or so related to the aesthetic and user experience 
+
 ## [v0.0.6] - 2026-04-24
 
 ### Fixes
