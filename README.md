@@ -56,6 +56,41 @@ In plain terms, this workspace gives you:
 
 This repository is best understood as one product made of several cooperating services.
 
+## Screenshots
+
+Here are some functionality of Watchdog + Ojo
+
+<table>
+  <tr>
+    <td><img src="assets/slides/dashboard.png" width="400"/></td>
+    <td><img src="assets/slides/docker.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/slides/gpu.png" width="400"/></td>
+    <td><img src="assets/slides/linux00.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/slides/linux01.png" width="400"/></td>
+    <td><img src="assets/slides/linx02.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/slides/logs.png" width="400"/></td>
+    <td><img src="assets/slides/logstream.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/slides/rca.png" width="400"/></td>
+    <td><img src="assets/slides/sensors.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/slides/traceline.png" width="400"/></td>
+    <td><img src="assets/slides/traces.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/slides/windows00.png" width="400"/></td>
+    <td><img src="assets/slides/windows01.png" width="400"/></td>
+  </tr>
+</table>
+
 ## What The System Is Trying To Achieve
 
 Watchdog aims to turn the raw LGTM stack into a usable multi-user application.
