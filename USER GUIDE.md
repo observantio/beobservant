@@ -39,7 +39,7 @@ Host-published endpoints in the default `docker-compose.yml`:
 - `http://localhost:4319` (`watchdog`)
 - `http://localhost:4320` (`otlp-gateway`)
 - `http://localhost:4323` (`notifier`)
-- `http://localhost:8080` (`grafana-proxy`)
+- `http://localhost:8080/grafana/` (`grafana-proxy`)
 
 Internal-only services (Docker network only):
 
@@ -80,18 +80,18 @@ Internal-only services (Docker network only):
 
 - Docker with `docker compose`
 - Git
-- Python 3.11+ (for installer)
+- Python 3.10+ (3.11+ recommended for development)
 - Free host ports: `5173`, `4319`, `4320`, `4323`, `8080`
 
 ## 5. Setup Paths
 
-### Option A: Installer (evaluation)
+### Option A: Installer (recommended for a fresh checkout)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/observantio/watchdog/main/install.py -o install.py && python3 install.py
 ```
 
-The installer is the best option if you want to develop the code, because it creates a working `.env` and starts all required services cleanly for development.
+The installer is the fastest option for a fresh checkout because it clones the companion repos when needed, creates a working `.env`, and starts all required services cleanly.
 
 Installer behavior (current script):
 
@@ -110,6 +110,8 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+This path only works if `notifier/` and `resolver/` already exist beside `docker-compose.yml`. If you cloned just this repository, either clone those companion repos first or use the installer above, which does that for you.
+
 ## 6. Required `.env` Values for First Run
 
 Set these deliberately:
@@ -119,6 +121,7 @@ Set these deliberately:
 - `DEFAULT_ADMIN_EMAIL`
 - `DATA_ENCRYPTION_KEY`
 - `DEFAULT_OTLP_TOKEN`
+- `CORS_ORIGINS` (the installer sets this to `http://localhost:5173`)
 - `GATEWAY_INTERNAL_SERVICE_TOKEN`
 - `NOTIFIER_SERVICE_TOKEN` and `NOTIFIER_EXPECTED_SERVICE_TOKEN`
 - `RESOLVER_SERVICE_TOKEN` and `RESOLVER_EXPECTED_SERVICE_TOKEN`
