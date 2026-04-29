@@ -46,25 +46,157 @@ cleanup() {
 }
 trap cleanup EXIT
 
+USE_COLOR="0"
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  USE_COLOR="1"
+fi
+USE_EMOJI="0"
+if [[ -t 1 && "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" == *"UTF-8"* ]]; then
+  USE_EMOJI="1"
+fi
+if [[ "${OBSERVANTIO_EMOJI:-auto}" == "0" ]]; then
+  USE_EMOJI="0"
+elif [[ "${OBSERVANTIO_EMOJI:-auto}" == "1" ]]; then
+  USE_EMOJI="1"
+fi
+
+C_RESET=$'\033[0m'
+C_BOLD=$'\033[1m'
+C_DIM=$'\033[2m'
+C_CYAN=$'\033[36m'
+C_GREEN=$'\033[32m'
+C_YELLOW=$'\033[33m'
+C_RED=$'\033[31m'
+C_MAGENTA=$'\033[35m'
+
+EM_INFO="i"
+EM_OK="+"
+EM_WARN="!"
+EM_WAIT="..."
+EM_ERR="x"
+if [[ "$USE_EMOJI" == "1" ]]; then
+  EM_INFO="ⓘ"
+  EM_OK="✔"
+  EM_WARN="⚠"
+  EM_WAIT="…"
+  EM_ERR="✖"
+fi
+
+colorize() {
+  local code="$1"
+  shift
+  if [[ "$USE_COLOR" == "1" ]]; then
+    printf '%b%s%b' "$code" "$*" "$C_RESET"
+  else
+    printf '%s' "$*"
+  fi
+}
+
+banner() {
+  printf '\n%s\n%s\n%s\n\n' \
+    "$(colorize "${C_MAGENTA}${C_BOLD}" "Observantio Helm Installer")" \
+    "$(colorize "${C_CYAN}" "Simple deployment for  Kubernetes")" \
+    "$(colorize "${C_DIM}" "------------------------------------------------------------")"
+}
+
+section() {
+  printf '%s\n' "$(colorize "${C_BOLD}${C_CYAN}" "$*")"
+}
+
+info() {
+  printf '%s %s %s\n' "$(colorize "$C_CYAN" "[INFO]")" "$EM_INFO" "$(colorize "$C_CYAN" "$*")"
+}
+
+ok() {
+  printf '%s %s %s\n' "$(colorize "$C_GREEN" "[OK]")" "$EM_OK" "$(colorize "$C_GREEN" "$*")"
+}
+
+warn() {
+  printf '%s %s %s\n' "$(colorize "$C_YELLOW" "[WARN]")" "$EM_WARN" "$(colorize "$C_YELLOW" "$*")"
+}
+
+wait_status() {
+  printf '%s %s %s\n' "$(colorize "$C_YELLOW" "[WAIT]")" "$EM_WAIT" "$(colorize "$C_YELLOW" "$*")"
+}
+
+err() {
+  printf '%s %s %s\n' "$(colorize "$C_RED" "[ERROR]")" "$EM_ERR" "$(colorize "$C_RED" "$*")" >&2
+}
+
+port_label() {
+  case "$1" in
+    4319) printf '%s' "API proxy" ;;
+    5173) printf '%s' "UI" ;;
+    8080) printf '%s' "Grafana auth gateway" ;;
+    *)    printf '%s' "Port $1" ;;
+  esac
+}
+
+port_is_listening() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -H -ltn "( sport = :${port} )" 2>/dev/null | grep -q .
+    return $?
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
+preflight_local_ports() {
+  local ports=(4319 8080 5173)
+  local busy=()
+  local port
+
+  if ! command -v ss >/dev/null 2>&1 && ! command -v lsof >/dev/null 2>&1; then
+    warn "Port preflight skipped because ss/lsof is unavailable."
+    return 0
+  fi
+
+  for port in "${ports[@]}"; do
+    if port_is_listening "$port"; then
+      busy+=("$port")
+    fi
+  done
+
+  [[ "${#busy[@]}" -eq 0 ]] && return 0
+
+  echo ""
+  err "Cannot start local access because one or more required ports are already in use."
+  for port in "${busy[@]}"; do
+    warn "Port ${port} ($(port_label "$port")) is busy."
+  done
+  echo ""
+  echo "Helpful checks:"
+  echo "  ss -ltnp 'sport = :4319'"
+  echo "  ss -ltnp 'sport = :8080'"
+  echo "  ss -ltnp 'sport = :5173'"
+  echo "If this is another Observantio stack, stop it first and rerun with --foreground or --detach."
+  echo ""
+  return 1
+}
+
 usage() {
   cat <<EOF
-Observantio Helm installer
+$(colorize "${C_MAGENTA}${C_BOLD}" "Observantio Helm installer")
 
-Usage:
+$(colorize "${C_CYAN}${C_BOLD}" "Usage:")
   bash installer.sh [mode] [options]
 
-Modes (default: --install):
+$(colorize "${C_CYAN}${C_BOLD}" "Modes (default: --install):")
   --install         Deploy or upgrade the chart with credential setup
   --restart         Upgrade chart only, reuse existing secrets (no prompts)
   --remove          Uninstall the Helm release
   --purge           Uninstall, delete all PVCs, and remove the namespace
 
-Port-forward modes:
+$(colorize "${C_CYAN}${C_BOLD}" "Port-forward modes:")
   --foreground      Start local API proxy and port-forwards, then wait
   --detach          Start local API proxy and port-forwards in background
   --no-port-forward Do not start any local proxy or port-forwards
 
-Options:
+$(colorize "${C_CYAN}${C_BOLD}" "Options:")
   --release <n>     Helm release name    (default: ${RELEASE})
   --namespace <n>   Kubernetes namespace (default: ${NAMESPACE})
   --chart <path>    Chart directory      (default: script directory)
@@ -72,12 +204,12 @@ Options:
   --values <file>   Extra values file, repeatable
   -h, --help        Show this help
 
-Environment:
+$(colorize "${C_CYAN}${C_BOLD}" "Environment:")
   OBSERVANTIO_USERNAME  Admin username (interactive prompt if unset)
   OBSERVANTIO_EMAIL     Admin email    (interactive prompt if unset)
   OBSERVANTIO_PASSWORD  Admin password (interactive prompt if unset)
 
-Examples:
+$(colorize "${C_CYAN}${C_BOLD}" "Examples:")
   bash installer.sh
   bash installer.sh --profile compact
   bash installer.sh --restart
@@ -88,31 +220,30 @@ EOF
 }
 
 print_cluster_notice() {
-  cat <<'EOF'
-
-NOTICE:
-  Ensure kubectl is configured and pointing to a reachable Kubernetes cluster.
-  This installer will fail if no active cluster context is available.
-  Recommended targets: EKS, AKS, or a local cluster such as kind/minikube.
-
-EOF
+  section "Cluster notice"
+  printf '\n'
+  printf '%s\n' "$(colorize "${C_YELLOW}${C_BOLD}" "NOTICE:")"
+  printf '%s\n' "$(colorize "${C_YELLOW}" "  Ensure kubectl is configured and pointing to a reachable Kubernetes cluster.")"
+  printf '%s\n' "$(colorize "${C_YELLOW}" "  This installer will fail if no active cluster context is available.")"
+  printf '%s\n' "$(colorize "${C_YELLOW}" "  Recommended targets: EKS, AKS, or a local cluster such as kind/minikube.")"
+  printf '\n'
 }
 
 check_kubectl_ready() {
   if ! command -v kubectl >/dev/null 2>&1; then
-    echo "kubectl is required but not installed. Install kubectl and ensure it is on your PATH." >&2
+    err "kubectl is required but not installed. Install kubectl and ensure it is on your PATH."
     exit 1
   fi
 
   if ! kubectl config current-context >/dev/null 2>&1; then
-    echo "kubectl is installed, but no current context is configured. Set a kubeconfig context that points to a cluster first." >&2
-    echo "Recommended targets: EKS, AKS, or a local cluster such as kind/minikube." >&2
+    err "kubectl is installed, but no current context is configured. Set a kubeconfig context that points to a cluster first."
+    warn "Recommended targets: EKS, AKS, or a local cluster such as kind/minikube."
     exit 1
   fi
 
   if ! kubectl cluster-info >/dev/null 2>&1; then
-    echo "kubectl is configured, but the selected context does not appear to reach a Kubernetes cluster." >&2
-    echo "Verify your kubeconfig and cluster access, then try again." >&2
+    err "kubectl is configured, but the selected context does not appear to reach a Kubernetes cluster."
+    warn "Verify your kubeconfig and cluster access, then try again."
     exit 1
   fi
 }
@@ -132,11 +263,11 @@ while [[ $# -gt 0 ]]; do
     --detach)    PORT_FORWARD_MODE="detach"; shift ;;
     --no-port-forward) PORT_FORWARD_MODE="none"; shift ;;
     -h|--help)   usage; exit 0 ;;
-    *)           echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    *)           err "Unknown option: $1"; usage >&2; exit 1 ;;
   esac
 done
 
-require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "Missing required command: $1" >&2; exit 1; }; }
+require_cmd() { command -v "$1" >/dev/null 2>&1 || { err "Missing required command: $1"; exit 1; }; }
 random_hex()  { openssl rand -hex "$1"; }
 random_b64()  { openssl rand -base64 32 | tr -d '\n'; }
 
@@ -164,49 +295,77 @@ RESOLVER_SVC="${RELEASE}-observantio-resolver"
 
 print_cluster_notice
 
+banner
+
 check_kubectl_ready
 
 for cmd in helm openssl curl python3; do
   require_cmd "$cmd"
 done
 
-# ── Remove / Purge ────────────────────────────────────────────────────────────
+# -- Remove / Purge -----------------------------------------------------------
 
 if [[ "$MODE" == "remove" || "$MODE" == "purge" ]]; then
   kill_listeners_on_ports "$API_PROXY_PORT" "$API_UPSTREAM_PORT" 8080 5173
 
-  echo "Uninstalling ${RELEASE} from ${NAMESPACE}..."
-  helm -n "$NAMESPACE" uninstall "$RELEASE" 2>/dev/null || true
+  if helm -n "$NAMESPACE" status "$RELEASE" >/dev/null 2>&1; then
+    info "Uninstalling ${RELEASE} from ${NAMESPACE}..."
+    helm -n "$NAMESPACE" uninstall "$RELEASE"
+    ok "Helm release removed."
+  else
+    warn "Helm release ${RELEASE} is already absent."
+  fi
 
   if [[ "$MODE" == "purge" ]]; then
-    echo "Purging namespace ${NAMESPACE}..."
+    warn "Purging namespace ${NAMESPACE}..."
     if kubectl get ns "$NAMESPACE" >/dev/null 2>&1; then
-      kubectl -n "$NAMESPACE" delete pvc --all --wait=false 2>/dev/null || true
+      info "Deleting PVCs in ${NAMESPACE}..."
+      kubectl -n "$NAMESPACE" delete pvc --all --wait=true --timeout=300s --ignore-not-found=true
+      ok "PVC cleanup complete."
       kubectl get pv --no-headers \
         -o custom-columns=NAME:.metadata.name,NS:.spec.claimRef.namespace 2>/dev/null \
         | awk -v ns="$NAMESPACE" '$2==ns{print $1}' \
-        | xargs -r kubectl delete pv --wait=false 2>/dev/null || true
-      kubectl delete ns "$NAMESPACE" --wait=true --timeout=300s 2>/dev/null || true
+        | xargs -r kubectl delete pv --wait=true --timeout=300s
+      ok "Bound PV cleanup complete."
+      info "Deleting namespace ${NAMESPACE}..."
+      kubectl delete ns "$NAMESPACE" --wait=true --timeout=300s --ignore-not-found=true
+      ok "Namespace ${NAMESPACE} deleted."
+    else
+      warn "Namespace ${NAMESPACE} is already absent."
     fi
+
+    if kubectl get ns "$NAMESPACE" >/dev/null 2>&1; then
+      err "Namespace ${NAMESPACE} still exists after purge."
+      exit 1
+    fi
+
+    if kubectl get pv --no-headers -o custom-columns=NAME:.metadata.name,NS:.spec.claimRef.namespace 2>/dev/null | awk -v ns="$NAMESPACE" '$2==ns{found=1} END {exit found ? 0 : 1}'; then
+      err "Some persistent volumes still reference ${NAMESPACE} after purge."
+      exit 1
+    fi
+
+    ok "Purge complete: release, PVCs, bound PVs, and namespace removed."
   fi
 
-  echo "Done."
+  if [[ "$MODE" == "remove" ]]; then
+    ok "Removal complete."
+  fi
   exit 0
 fi
 
-# ── Validate ──────────────────────────────────────────────────────────────────
+# -- Validate -----------------------------------------------------------------
 
 case "$PROFILE" in
   production|compact) ;;
-  *) echo "Unknown profile: $PROFILE (expected: production|compact)" >&2; exit 1 ;;
+  *) err "Unknown profile: $PROFILE (expected: production|compact)"; exit 1 ;;
 esac
 
 CHART="$(cd "$CHART" && pwd)"
-[[ -f "$CHART/Chart.yaml" ]] || { echo "Invalid chart path: $CHART" >&2; exit 1; }
+[[ -f "$CHART/Chart.yaml" ]] || { err "Invalid chart path: $CHART"; exit 1; }
 
 kubectl get ns "$NAMESPACE" >/dev/null 2>&1 || kubectl create ns "$NAMESPACE" >/dev/null
 
-# ── Credentials ──────────────────────────────────────────────────────────────
+# -- Credentials --------------------------------------------------------------
 
 is_valid_username() { [[ "$1" =~ ^[A-Za-z0-9._-]{3,64}$ ]]; }
 is_valid_email()    { [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; }
@@ -216,42 +375,42 @@ prompt_credentials() {
     OBSERVANTIO_USERNAME="${OBSERVANTIO_USERNAME:-admin}"
     OBSERVANTIO_EMAIL="${OBSERVANTIO_EMAIL:-${OBSERVANTIO_USERNAME}@example.com}"
     [[ -n "$OBSERVANTIO_PASSWORD" ]] || {
-      echo "OBSERVANTIO_PASSWORD is required in non-interactive mode" >&2; exit 1
+        err "OBSERVANTIO_PASSWORD is required in non-interactive mode"; exit 1
     }
     return
   fi
 
   if [[ -z "$OBSERVANTIO_USERNAME" ]]; then
     while true; do
-      read -r -p "Admin username [admin]: " OBSERVANTIO_USERNAME
+      read -r -p "$(colorize "${C_BOLD}" "Admin username [admin]: ")" OBSERVANTIO_USERNAME
       OBSERVANTIO_USERNAME="${OBSERVANTIO_USERNAME:-admin}"
       is_valid_username "$OBSERVANTIO_USERNAME" && break
-      echo "3-64 chars: letters, numbers, dot, underscore, or hyphen."
+      warn "3-64 chars: letters, numbers, dot, underscore, or hyphen."
     done
   fi
 
   if [[ -z "$OBSERVANTIO_EMAIL" ]]; then
     while true; do
-      read -r -p "Admin email [${OBSERVANTIO_USERNAME}@example.com]: " OBSERVANTIO_EMAIL
+      read -r -p "$(colorize "${C_BOLD}" "Admin email [${OBSERVANTIO_USERNAME}@example.com]: ")" OBSERVANTIO_EMAIL
       OBSERVANTIO_EMAIL="${OBSERVANTIO_EMAIL:-${OBSERVANTIO_USERNAME}@example.com}"
       is_valid_email "$OBSERVANTIO_EMAIL" && break
-      echo "Please enter a valid email address."
+      warn "Please enter a valid email address."
     done
   fi
 
   if [[ -z "$OBSERVANTIO_PASSWORD" ]]; then
     local confirm
     while true; do
-      read -r -s -p "Admin password (min 16 chars): " OBSERVANTIO_PASSWORD; echo
-      [[ ${#OBSERVANTIO_PASSWORD} -ge 16 ]] || { echo "Password too short."; continue; }
-      read -r -s -p "Confirm password: " confirm; echo
+      read -r -s -p "$(colorize "${C_BOLD}" "Admin password (min 16 chars): ")" OBSERVANTIO_PASSWORD; echo
+      [[ ${#OBSERVANTIO_PASSWORD} -ge 16 ]] || { warn "Password too short."; continue; }
+      read -r -s -p "$(colorize "${C_BOLD}" "Confirm password: ")" confirm; echo
       [[ "$OBSERVANTIO_PASSWORD" == "$confirm" ]] && break
-      echo "Passwords do not match."; OBSERVANTIO_PASSWORD=""
+      warn "Passwords do not match."; OBSERVANTIO_PASSWORD=""
     done
   fi
 }
 
-# ── Secrets ───────────────────────────────────────────────────────────────────
+# -- Secrets ------------------------------------------------------------------
 
 secret_field() {
   kubectl -n "$NAMESPACE" get secret "$1" \
@@ -349,7 +508,7 @@ apply_secret() {
   rm -rf "$tmp"
 }
 
-# ── TLS secret (only when internalTLS.enabled: true in values) ────────────────
+# -- TLS secret (only when internalTLS.enabled: true in values) ---------------
 
 tls_enabled_in_files() {
   local result="false"
@@ -370,7 +529,7 @@ ensure_tls_secret() {
     return
   fi
 
-  echo "Generating internal TLS certificates..."
+  info "Generating internal TLS certificates..."
   local tmp ca_key ca_crt
   tmp="$(mktemp -d)"
   ca_key="${tmp}/ca.key" ca_crt="${tmp}/ca.crt"
@@ -416,17 +575,21 @@ ensure_tls_secret() {
   rm -rf "$tmp"
 }
 
-# ── Rollout helpers ───────────────────────────────────────────────────────────
+# -- Rollout helpers -----------------------------------------------------------
 
 wait_for_rollout() {
   local dep="$1"
   kubectl -n "$NAMESPACE" get deployment "$dep" >/dev/null 2>&1 || return 0
-  kubectl -n "$NAMESPACE" rollout status deployment "$dep" --timeout="$ROLLOUT_TIMEOUT" || {
-    echo "Rollout failed: $dep" >&2
+  wait_status "Waiting for rollout: $dep"
+  local rollout_output
+  if ! rollout_output="$(kubectl -n "$NAMESPACE" rollout status deployment "$dep" --timeout="$ROLLOUT_TIMEOUT" 2>&1)"; then
+    err "Rollout failed: $dep"
+    printf '%s\n' "$rollout_output" >&2
     kubectl -n "$NAMESPACE" get pods -l "app.kubernetes.io/instance=${RELEASE}" -o wide >&2 || true
     kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -30 >&2 || true
     exit 1
-  }
+  fi
+  ok "Rollout complete: $dep"
 }
 
 wait_for_http() {
@@ -436,11 +599,15 @@ wait_for_http() {
   body="$(mktemp)" err="$(mktemp)"
   for ((i=1; i<=attempts; i++)); do
     http_code="$(curl "$@" -o "$body" -w '%{http_code}' "$url" 2>"$err" || true)"
-    [[ "$http_code" == 2* ]] && { rm -f "$body" "$err"; return 0; }
-    (( i == 1 || i % 10 == 0 )) && echo "Waiting for ${desc} (${i}/${attempts}, status: ${http_code:-000})..."
+    if [[ "$http_code" == 2* ]]; then
+      rm -f "$body" "$err"
+      ok "${desc} is ready"
+      return 0
+    fi
+    (( i == 1 || i % 10 == 0 )) && wait_status "Waiting for ${desc} (${i}/${attempts}, status: ${http_code:-000})..."
     sleep "$interval"
   done
-  echo "${desc} not ready after ${attempts} attempts." >&2
+  err "${desc} not ready after ${attempts} attempts."
   [[ -s "$body" ]] && sed -n '1,20p' "$body" >&2
   rm -f "$body" "$err"
   return 1
@@ -524,7 +691,7 @@ start_api_proxy() {
 
   if [[ "$upstream_is_https" == "true" ]]; then
     if [[ -z "$API_PROXY_CA_BUNDLE" ]]; then
-      echo "Missing API proxy CA bundle for HTTPS upstream." >&2
+      err "Missing API proxy CA bundle for HTTPS upstream."
       exit 1
     fi
     proxy_cmd+=("$API_PROXY_CA_BUNDLE")
@@ -561,29 +728,41 @@ start_user_port_forwards() {
 print_port_forward_info() {
   if [[ "$PORT_FORWARD_MODE" == "none" ]]; then
     if [[ "$INTERNAL_TLS_ENABLED" == "true" ]]; then
-      cat <<NOTE
-  Local forwarding is disabled.
-  Re-run with --foreground to start a local proxy that upgrades the API upstream to HTTPS automatically.
-NOTE
+      warn "Local forwarding is disabled."
     else
-      cat <<EOF
-  Port-forwards:
-    kubectl -n ${NAMESPACE} port-forward svc/${OBSERVANTIO_SVC} 4319:4319
-    kubectl -n ${NAMESPACE} port-forward svc/${RELEASE}-observantio-grafana-auth-gateway 8080:8080
-    kubectl -n ${NAMESPACE} port-forward svc/${RELEASE}-observantio-ui 5173:80
-EOF
+      info "Port-forwards:"
+      printf '  kubectl -n %s port-forward svc/%s 4319:4319\n' "$NAMESPACE" "$OBSERVANTIO_SVC"
+      printf '  kubectl -n %s port-forward svc/%s-observantio-grafana-auth-gateway 8080:8080\n' "$NAMESPACE" "$RELEASE"
+      printf '  kubectl -n %s port-forward svc/%s-observantio-ui 5173:80\n' "$NAMESPACE" "$RELEASE"
     fi
   else
-    cat <<EOF
-  Local access:
-    http://127.0.0.1:4319  (API proxy)
-    http://127.0.0.1:8080  (Grafana auth gateway)
-    http://127.0.0.1:5173  (UI)
-EOF
+    info "Local access:"
+    printf '  http://127.0.0.1:4319  (API proxy)\n'
+    printf '  http://127.0.0.1:8080  (Grafana auth gateway)\n'
+    printf '  http://127.0.0.1:5173  (UI)\n'
   fi
 }
 
-# ── Deploy ────────────────────────────────────────────────────────────────────
+print_success_summary() {
+  printf '\n%s\n' "$(colorize "${C_DIM}" "------------------------------------------------------------")"
+  printf '%s\n' "$(colorize "${C_MAGENTA}${C_BOLD}" "  Observantio is ready")"
+  printf '  Release:    %s\n' "$RELEASE"
+  printf '  Namespace:  %s\n' "$NAMESPACE"
+  printf '  Profile:    %s\n' "$PROFILE"
+  if [[ "$MODE" == "install" ]]; then
+    printf '  Admin:      %s (%s)\n' "$OBSERVANTIO_USERNAME" "$OBSERVANTIO_EMAIL"
+    printf '  MFA:        enforced on first login\n'
+  fi
+  printf '  What to do next:\n'
+  printf '    - Open the access URL(s) below.\n'
+  printf '    - Keep this terminal open if you chose foreground mode, or use --detach for background port-forwards.\n'
+  printf '    - Re-run with --restart to reuse the generated secrets.\n'
+  printf '%s\n' "$(colorize "${C_DIM}" "------------------------------------------------------------")"
+  print_port_forward_info
+  printf '%s\n' "$(colorize "${C_DIM}" "------------------------------------------------------------")"
+}
+
+# -- Deploy -------------------------------------------------------------------
 
 deploy() {
   local pg_svc="${RELEASE}-postgres"
@@ -656,7 +835,7 @@ deploy() {
     )
   fi
 
-  echo "Deploying ${PROFILE} profile → ${RELEASE} in ${NAMESPACE}..."
+  info "Deploying ${PROFILE} profile to ${RELEASE} in ${NAMESPACE}..."
   helm "${args[@]}" >/dev/null
 
   wait_for_rollout "$OBSERVANTIO_SVC"
@@ -669,17 +848,40 @@ deploy() {
   wait_for_rollout "${RELEASE}-observantio-ui"
 }
 
-# ── Post-deploy ───────────────────────────────────────────────────────────────
+# -- Post-deploy --------------------------------------------------------------
+
+hash_token_in_pod() {
+  local pod="$1"
+  local token_value="$2"
+  kubectl -n "$NAMESPACE" exec -i "$pod" -- env TOKEN_VALUE="$token_value" python - <<'PY'
+import hashlib, os
+
+print(hashlib.sha256(os.environ["TOKEN_VALUE"].encode()).hexdigest())
+PY
+}
 
 verify_tokens() {
   local wd="$1" no="$2" re="$3"
   local wd_n wd_r no_e re_e
-  wd_n="$(kubectl -n "$NAMESPACE" exec "$wd" -- sh -lc 'printf %s "${NOTIFIER_SERVICE_TOKEN}"  | sha256sum | cut -d" " -f1')"
-  wd_r="$(kubectl -n "$NAMESPACE" exec "$wd" -- sh -lc 'printf %s "${RESOLVER_SERVICE_TOKEN}"  | sha256sum | cut -d" " -f1')"
-  no_e="$(kubectl -n "$NAMESPACE" exec "$no" -- sh -lc 'printf %s "${NOTIFIER_EXPECTED_SERVICE_TOKEN}" | sha256sum | cut -d" " -f1')"
-  re_e="$(kubectl -n "$NAMESPACE" exec "$re" -- sh -lc 'printf %s "${RESOLVER_EXPECTED_SERVICE_TOKEN}" | sha256sum | cut -d" " -f1')"
-  [[ "$wd_n" == "$no_e" ]] || { echo "Notifier token mismatch between observantio and notifier" >&2; exit 1; }
-  [[ "$wd_r" == "$re_e" ]] || { echo "Resolver token mismatch between observantio and resolver" >&2; exit 1; }
+  local notifier_service_token resolver_service_token notifier_expected_token resolver_expected_token
+
+  # Keep compatibility with both old and current variable names.
+  notifier_service_token="${NOTIFIER_SERVICE_TOKEN:-${NOTIFIER_TOKEN:-}}"
+  resolver_service_token="${RESOLVER_SERVICE_TOKEN:-${RESOLVER_TOKEN:-}}"
+  notifier_expected_token="${NOTIFIER_EXPECTED_SERVICE_TOKEN:-${NOTIFIER_TOKEN:-}}"
+  resolver_expected_token="${RESOLVER_EXPECTED_SERVICE_TOKEN:-${RESOLVER_TOKEN:-}}"
+
+  [[ -n "$notifier_service_token" ]] || { err "Notifier service token is missing"; exit 1; }
+  [[ -n "$resolver_service_token" ]] || { err "Resolver service token is missing"; exit 1; }
+  [[ -n "$notifier_expected_token" ]] || { err "Notifier expected service token is missing"; exit 1; }
+  [[ -n "$resolver_expected_token" ]] || { err "Resolver expected service token is missing"; exit 1; }
+
+  wd_n="$(hash_token_in_pod "$wd" "$notifier_service_token")"
+  wd_r="$(hash_token_in_pod "$wd" "$resolver_service_token")"
+  no_e="$(hash_token_in_pod "$no" "$notifier_expected_token")"
+  re_e="$(hash_token_in_pod "$re" "$resolver_expected_token")"
+  [[ "$wd_n" == "$no_e" ]] || { err "Notifier token mismatch between observantio and notifier"; exit 1; }
+  [[ "$wd_r" == "$re_e" ]] || { err "Resolver token mismatch between observantio and resolver"; exit 1; }
 }
 
 bootstrap_admin() {
@@ -753,6 +955,10 @@ import base64, json, os
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+RESET = "\033[0m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+
 username    = os.environ.get("GRAFANA_USERNAME", "").strip()
 password    = os.environ.get("GRAFANA_PASSWORD", "")
 grafana_url = os.environ["GF_URL"].rstrip("/")
@@ -782,12 +988,12 @@ except HTTPError as e:
 except URLError as e:
     raise SystemExit(f"Grafana validation failed: {e}")
 
-print("Grafana credentials validated.")
+print(f"{GREEN}Grafana credentials validated.{RESET}")
 PY
 
   local fail_open
   fail_open="$(kubectl -n "$NAMESPACE" exec "$pod" -- sh -lc 'printenv ALLOWLIST_FAIL_OPEN || true')"
-  [[ "$fail_open" == "false" ]] || { echo "ALLOWLIST_FAIL_OPEN is not false inside observantio" >&2; exit 1; }
+  [[ "$fail_open" == "false" ]] || { err "ALLOWLIST_FAIL_OPEN is not false inside observantio"; exit 1; }
 }
 
 verify_admin_mfa() {
@@ -801,6 +1007,8 @@ from database import init_database, get_db_session
 from db_models import User
 
 username = os.environ["OBS_USER"].strip()
+RESET = "\033[0m"
+YELLOW = "\033[33m"
 init_database(config.DATABASE_URL)
 
 with get_db_session() as db:
@@ -809,40 +1017,36 @@ with get_db_session() as db:
         raise SystemExit("Admin user not found after bootstrap")
     if not bool(user.mfa_enabled) and not bool(user.must_setup_mfa):
         raise SystemExit("Admin MFA policy not enforced")
-    print(f"MFA policy: mfa_enabled={user.mfa_enabled} must_setup_mfa={user.must_setup_mfa}")
+    print(f"{YELLOW}MFA policy: mfa_enabled={user.mfa_enabled} must_setup_mfa={user.must_setup_mfa}{RESET}")
 PY
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main --------------------------------------------------------------------
 
 already_installed() {
   helm -n "$NAMESPACE" status "$RELEASE" >/dev/null 2>&1
 }
 
 if [[ "$MODE" == "install" ]] && already_installed; then
-  cat <<EOF
-Release '${RELEASE}' is already installed in namespace '${NAMESPACE}'.
-
-  --restart   Upgrade the chart and reuse existing secrets (no prompts)
-  --purge     Wipe everything and start fresh
-
-EOF
+  warn "Release '${RELEASE}' is already installed in namespace '${NAMESPACE}'."
+  info "  --restart   Upgrade the chart and reuse existing secrets (no prompts)"
+  info "  --purge     Wipe everything and start fresh"
   exit 1
 fi
 
 if [[ "$MODE" == "install" ]]; then
   prompt_credentials
-  [[ ${#OBSERVANTIO_PASSWORD} -ge 16 ]] || { echo "Password must be at least 16 characters." >&2; exit 1; }
-  is_valid_username "$OBSERVANTIO_USERNAME"  || { echo "Invalid username." >&2; exit 1; }
-  is_valid_email    "$OBSERVANTIO_EMAIL"     || { echo "Invalid email."    >&2; exit 1; }
+  [[ ${#OBSERVANTIO_PASSWORD} -ge 16 ]] || { err "Password must be at least 16 characters."; exit 1; }
+  is_valid_username "$OBSERVANTIO_USERNAME"  || { err "Invalid username."; exit 1; }
+  is_valid_email    "$OBSERVANTIO_EMAIL"     || { err "Invalid email."; exit 1; }
 fi
 
-echo "Preparing secrets..."
+section "Preparing secrets"
 kubectl -n "$NAMESPACE" get secret "$SECRET_NAME" >/dev/null 2>&1 && load_secret "$SECRET_NAME"
 
 if [[ "$MODE" == "restart" ]]; then
   [[ -n "$POSTGRES_PASSWORD" ]] || {
-    echo "Secret ${SECRET_NAME} not found. Run --install first." >&2; exit 1
+    err "Secret ${SECRET_NAME} not found. Run --install first."; exit 1
   }
 else
   fill_secret_defaults
@@ -863,15 +1067,19 @@ deploy
 PF_DETACHED="false"
 [[ "$PORT_FORWARD_MODE" == "detach" ]] && PF_DETACHED="true"
 
+if [[ "$PORT_FORWARD_MODE" != "none" ]]; then
+  preflight_local_ports
+fi
+
 start_api_proxy "$PF_DETACHED" "$INTERNAL_TLS_ENABLED"
 
 WD_POD="$(get_ready_pod observantio)"
 NO_POD="$(get_ready_pod notifier)"
 RE_POD="$(get_ready_pod resolver)"
 
-[[ -n "$WD_POD" ]] || { echo "No ready observantio pod found." >&2; exit 1; }
-[[ -n "$NO_POD" ]] || { echo "No ready notifier pod found."    >&2; exit 1; }
-[[ -n "$RE_POD" ]] || { echo "No ready resolver pod found."    >&2; exit 1; }
+[[ -n "$WD_POD" ]] || { err "No ready observantio pod found."; exit 1; }
+[[ -n "$NO_POD" ]] || { err "No ready notifier pod found."; exit 1; }
+[[ -n "$RE_POD" ]] || { err "No ready resolver pod found."; exit 1; }
 
 verify_tokens "$WD_POD" "$NO_POD" "$RE_POD"
 
@@ -886,24 +1094,10 @@ if [[ "$PORT_FORWARD_MODE" != "none" ]]; then
   start_user_port_forwards "$PF_DETACHED"
 fi
 
-cat <<EOF
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Observantio deployed successfully
-  Release:    ${RELEASE}
-  Namespace:  ${NAMESPACE}
-  Profile:    ${PROFILE}
-$(if [[ "$MODE" == "install" ]]; then
-  printf "  Admin:      %s (%s)\n" "$OBSERVANTIO_USERNAME" "$OBSERVANTIO_EMAIL"
-  printf "  MFA:        enforced on first login\n"
-fi)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-$(print_port_forward_info)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EOF
+print_success_summary
 
 if [[ "$PORT_FORWARD_MODE" == "foreground" ]]; then
   echo
-  echo "Foreground mode active. Press Ctrl+C to stop the API proxy and port-forwards."
+  info "Foreground mode active. Press Ctrl+C to stop the API proxy and port-forwards."
   wait "${BACKGROUND_PIDS[@]}"
 fi
