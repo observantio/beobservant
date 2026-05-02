@@ -40,7 +40,7 @@ export default function RcaReportSummary({ report, compact = false }) {
       <h3 className="text-lg text-sre-text font-semibold mb-2">
         Report Summary
       </h3>
-      <p className="text-sm text-sre-text-muted mb-4">
+      <p className="mb-4 text-sm font-medium leading-relaxed text-sre-text">
         {report.summary || "No summary available"}
       </p>
       <div className="flex flex-wrap gap-3">

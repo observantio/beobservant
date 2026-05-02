@@ -108,7 +108,7 @@ function CauseCard({ cause, rank, index }) {
 
         {cause.corroboration_summary && (
           <DetailRow label="Corroboration">
-            <span className="text-xs text-sre-text leading-snug">
+            <span className="text-sm font-medium leading-snug text-sre-text">
               {cause.corroboration_summary}
             </span>
           </DetailRow>
@@ -120,7 +120,7 @@ function CauseCard({ cause, rank, index }) {
               {cause.evidence.map((e, i) => (
                 <span
                   key={i}
-                  className="text-xs border border-sre-border/70 bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md"
+                  className="rounded-md border border-sre-border/70 bg-sre-surface px-2 py-0.5 text-xs font-medium text-sre-text dark:text-sre-text-muted"
                 >
                   {e}
                 </span>
@@ -166,7 +166,7 @@ function CauseCard({ cause, rank, index }) {
                   .map(([k, v]) => (
                     <span
                       key={k}
-                      className="text-xs border border-sre-border/70 bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md"
+                      className="rounded-md border border-sre-border/70 bg-sre-surface px-2 py-0.5 text-xs font-medium text-sre-text dark:text-sre-text-muted"
                     >
                       {k}:{Number(v).toFixed(3)}
                     </span>
@@ -184,7 +184,7 @@ function CauseCard({ cause, rank, index }) {
                   .map(([k, v]) => (
                     <span
                       key={k}
-                      className="text-xs border border-sre-border/70 bg-sre-surface text-sre-text-muted px-2 py-0.5 rounded-md"
+                      className="rounded-md border border-sre-border/70 bg-sre-surface px-2 py-0.5 text-xs font-medium text-sre-text dark:text-sre-text-muted"
                     >
                       {k}:{String(v)}
                     </span>
