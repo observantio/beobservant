@@ -46,36 +46,39 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
   :root,
   :root[data-theme='light'],
   body[data-theme='light'] {
-    /* Light Theme Colors */
+    --sre-ink: #1a0d2e;
+    --sre-highlight: #eab308;
+    /* Crisp, high-readability light shell */
     --sre-bg: #ffffff;
-    --sre-bg-alt: #ffffff;
+    --sre-bg-alt: #faf8ff;
     --sre-bg-card: #ffffff;
     --sre-surface: #ffffff;
-    --sre-surface-light: #fafafa;
-    --sre-border: #b8c4d6;
-    --sre-text: #0f172a;
-    --sre-text-muted: #475569;
-    --sre-text-subtle: #64748b;
-    --sre-primary-rgb: 59 130 246;
-    --sre-primary-light-rgb: 96 165 250;
+    --sre-surface-light: #f3ecfc;
+    --sre-border: rgba(26, 13, 46, 0.42);
+    --sre-text: #11081f;
+    --sre-text-muted: #3f2d52;
+    --sre-text-subtle: #5c486f;
+    --sre-primary-rgb: 124 58 237;
+    --sre-primary-light-rgb: 147 51 234;
     color-scheme: light;
   }
 
   .dark,
   :root[data-theme='dark'],
   body[data-theme='dark'] {
-    /* Dark Theme Colors */
-    --sre-bg: #06090f;
-    --sre-bg-alt: #0a1019;
-    --sre-bg-card: #111824;
-    --sre-surface: #151d2a;
-    --sre-surface-light: #1b2535;
-    --sre-border: rgba(240, 247, 255, 0.36);
-    --sre-text: #f3f7ff;
-    --sre-text-muted: #bdc8db;
-    --sre-text-subtle: #8a98ad;
-    --sre-primary-rgb: 16 185 129;
-    --sre-primary-light-rgb: 52 211 153;
+    --sre-ink: #c4b5fd;
+    --sre-highlight: #fde047;
+    --sre-bg: #0c0614;
+    --sre-bg-alt: #120a1c;
+    --sre-bg-card: #181026;
+    --sre-surface: #221631;
+    --sre-surface-light: #2d1f42;
+    --sre-border: rgba(196, 181, 253, 0.38);
+    --sre-text: #faf5ff;
+    --sre-text-muted: #d8ccf0;
+    --sre-text-subtle: #a89bc4;
+    --sre-primary-rgb: 184 140 255;
+    --sre-primary-light-rgb: 212 180 255;
     color-scheme: dark;
   }
 
@@ -88,7 +91,15 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
   body {
     background: linear-gradient(to bottom, var(--sre-bg), var(--sre-bg-alt), var(--sre-bg));
     color: var(--sre-text);
-    font-family: "Ubuntu Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Courier New", monospace;
+    font-family:
+      Ubuntu,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      "Helvetica Neue",
+      Arial,
+      sans-serif;
     @apply antialiased;
     transition: background-color 0.3s ease, color 0.3s ease;
     overflow-y: auto;
@@ -100,6 +111,20 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
   * {
     @apply box-border;
+  }
+
+  :root[data-theme='light'] body,
+  body[data-theme='light'] {
+    background:
+      radial-gradient(980px circle at 12% -8%, rgb(var(--sre-primary-rgb) / 0.09), transparent 46%),
+      radial-gradient(760px circle at 94% 28%, rgb(234 88 12 / 0.06), transparent 44%),
+      linear-gradient(to bottom, var(--sre-bg), var(--sre-bg-alt));
+  }
+
+  :root[data-theme='light'] ::selection,
+  body[data-theme='light'] ::selection {
+    background: rgb(var(--sre-primary-rgb) / 0.22);
+    color: var(--sre-text);
   }
 }
 
@@ -135,7 +160,15 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
   }
   
   .animate-slide-in-right {
-    animation: slide-in-right 0.3s ease-out;
+    animation: slide-in-right 0.32s cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-slide-in-right {
+      animation: none !important;
+      transform: none !important;
+      opacity: 1 !important;
+    }
   }
 }
 
@@ -166,7 +199,7 @@ select {
   background-position: right 0.75rem center;
   background-repeat: no-repeat;
   background-size: 1rem;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='%23334155' d='M5.25 7.5L10 12.75 14.75 7.5z'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='%231a0d2e' d='M5.25 7.5L10 12.75 14.75 7.5z'/></svg>");
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
@@ -174,7 +207,7 @@ select {
 :root[data-theme='dark'] select,
 body[data-theme='dark'] select,
 .dark select {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='%238b93a8' d='M5.25 7.5L10 12.75 14.75 7.5z'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='%23d8ccf0' d='M5.25 7.5L10 12.75 14.75 7.5z'/></svg>");
 }
 
 /* Hide native IE/Edge expand button */
@@ -189,38 +222,154 @@ select.text-xs {
   background-size: 0.85rem;
 }
 
-/* Keep login and MFA panels visually flat (no card border/shadow) in both themes. */
-.auth-login-page input,
-.auth-login-page .border,
-.auth-login-page .border-sre-border {
-  border: 0 !important;
-  box-shadow: none !important;
+/* Login page — showcase-style layered backdrop (purple / amber washes) */
+.auth-login-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      ellipse 140% 88% at 50% -28%,
+      rgb(var(--sre-primary-rgb) / 0.17),
+      transparent 54%
+    ),
+    radial-gradient(
+      ellipse 92% 58% at 100% 12%,
+      rgb(251 191 36 / 0.14),
+      transparent 44%
+    ),
+    radial-gradient(
+      ellipse 78% 48% at -6% 88%,
+      rgb(var(--sre-primary-light-rgb) / 0.13),
+      transparent 50%
+    ),
+    linear-gradient(
+      168deg,
+      var(--sre-bg) 0%,
+      var(--sre-bg-alt) 42%,
+      var(--sre-surface-light) 100%
+    );
+}
+
+.dark .auth-login-shell,
+:root[data-theme="dark"] .auth-login-shell,
+body[data-theme="dark"] .auth-login-shell {
+  background:
+    radial-gradient(
+      ellipse 125% 92% at 50% -38%,
+      rgb(var(--sre-primary-rgb) / 0.3),
+      transparent 56%
+    ),
+    radial-gradient(
+      ellipse 72% 58% at 102% 108%,
+      rgb(253 224 71 / 0.1),
+      transparent 46%
+    ),
+    radial-gradient(
+      ellipse 58% 42% at -12% 58%,
+      rgb(168 85 247 / 0.14),
+      transparent 44%
+    ),
+    linear-gradient(
+      172deg,
+      var(--sre-bg) 0%,
+      #120818 40%,
+      var(--sre-bg-alt) 100%
+    );
+}
+
+/* SSO — flat gradient button (no offset shadow / pseudo-3D) */
+.auth-login-page .auth-sso-cartoon-button {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.875rem 1.35rem;
+  border-radius: 1rem;
+  border: 2px solid rgb(var(--sre-primary-rgb) / 0.4);
+  box-shadow: none;
+  background: linear-gradient(
+    104deg,
+    rgb(var(--sre-primary-rgb)),
+    rgb(168 85 247) 52%,
+    rgb(245 158 11)
+  );
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    filter 0.2s ease,
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.auth-login-page .auth-sso-cartoon-button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.auth-login-page .auth-sso-cartoon-button:active:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.auth-login-page .auth-sso-cartoon-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--sre-primary-rgb) / 0.35);
+}
+
+.auth-login-page .auth-sso-cartoon-button:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+  filter: grayscale(0.08);
+}
+
+.dark .auth-login-page .auth-sso-cartoon-button,
+:root[data-theme="dark"] .auth-login-page .auth-sso-cartoon-button,
+body[data-theme="dark"] .auth-login-page .auth-sso-cartoon-button {
+  border-color: rgb(var(--sre-primary-rgb) / 0.5);
+  background: linear-gradient(
+    104deg,
+    rgb(91 33 182),
+    rgb(126 34 206) 48%,
+    rgb(180 83 9)
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-login-page .auth-sso-cartoon-button {
+    transition: none;
+  }
 }
 
 /* ReactFlow Custom Styles */
 .react-flow__node-service {
-  border-radius: 12px !important;
+  border-radius: 18px !important;
 }
 
 .react-flow__controls {
   background: var(--sre-surface) !important;
-  border: 1px solid var(--sre-border) !important;
-  border-radius: 8px !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  border: 2px solid var(--sre-border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 2px 14px rgb(0 0 0 / 0.06) !important;
 }
 
 .react-flow__controls-button {
   background: var(--sre-bg) !important;
-  border: 1px solid var(--sre-border) !important;
+  border: 2px solid var(--sre-border) !important;
   color: var(--sre-text) !important;
-  border-radius: 6px !important;
-  transition: all 0.2s ease !important;
+  border-radius: 10px !important;
+  transition:
+    background-color 0.2s cubic-bezier(0.33, 1, 0.68, 1),
+    color 0.2s cubic-bezier(0.33, 1, 0.68, 1),
+    transform 0.2s cubic-bezier(0.33, 1, 0.68, 1) !important;
 }
 
 .react-flow__controls-button:hover {
   background: var(--sre-primary) !important;
   color: white !important;
-  transform: scale(1.05) !important;
+  transform: scale(1.02) !important;
 }
 
 /* Fix: ensure ReactFlow controls are visible and usable in dark theme */
@@ -253,8 +402,8 @@ select.text-xs {
 .react-flow__minimap {
   z-index: 20 !important;
   background: var(--sre-surface) !important;
-  border: 1px solid var(--sre-border) !important;
-  border-radius: 8px !important;
+  border: 2px solid var(--sre-border) !important;
+  border-radius: 14px !important;
   overflow: hidden !important;
 }
 
@@ -314,7 +463,7 @@ select.text-xs {
 :root[data-theme='dark'] *:focus-visible,
 body[data-theme='dark'] *:focus-visible,
 .dark *:focus-visible {
-  outline: 1px solid rgba(255, 255, 255, 0.7);
+  outline: 2px solid rgb(var(--sre-primary-rgb) / 0.65);
   outline-offset: 2px;
 }
 
@@ -330,7 +479,8 @@ button:focus-visible,
 body[data-theme='dark'],
 .dark body {
   background:
-    radial-gradient(1200px circle at 85% -10%, rgb(var(--sre-primary-rgb) / 0.14), transparent 45%),
+    radial-gradient(1100px circle at 82% -12%, rgb(var(--sre-primary-rgb) / 0.18), transparent 46%),
+    radial-gradient(700px circle at 8% 40%, rgb(255 113 57 / 0.07), transparent 42%),
     linear-gradient(to bottom, var(--sre-bg), var(--sre-bg-alt), var(--sre-bg));
 }
 
@@ -473,30 +623,31 @@ body[data-theme='dark'] .border-dotted[class*='border-'],
 :root[data-theme='dark'] .bg-sre-surface\/50,
 body[data-theme='dark'] .bg-sre-surface\/50,
 .dark .bg-sre-surface\/50 {
-  background-color: rgba(28, 39, 56, 0.86) !important;
+  background-color: rgb(45 31 66 / 0.88) !important;
 }
 
 /* Light theme contrast pass for low-opacity and dotted/dashed borders */
 :root[data-theme='light'] .border-sre-border\/40,
 body[data-theme='light'] .border-sre-border\/40 {
-  border-color: rgba(71, 85, 105, 0.38);
+  border-color: rgba(26, 13, 46, 0.34);
 }
 
 :root[data-theme='light'] .border-sre-border\/50,
 body[data-theme='light'] .border-sre-border\/50 {
-  border-color: rgba(51, 65, 85, 0.46);
+  border-color: rgba(26, 13, 46, 0.42);
 }
 
 :root[data-theme='light'] .border-sre-border\/60,
 body[data-theme='light'] .border-sre-border\/60 {
-  border-color: rgba(30, 41, 59, 0.52);
+  border-color: rgba(26, 13, 46, 0.5);
 }
 
+/* Light theme: dashed rules follow ink (stronger than slate gray) */
 :root[data-theme='light'] .border-dashed,
 :root[data-theme='light'] .border-dotted,
 body[data-theme='light'] .border-dashed,
 body[data-theme='light'] .border-dotted {
-  border-color: #64748b !important;
+  border-color: rgba(26, 13, 46, 0.38) !important;
 }
 
 /* Grafana page light theme: darker card borders for contrast */

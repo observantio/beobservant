@@ -122,7 +122,9 @@ describe("AppSidebar", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Switch to Top Nav" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Switch to top navigation layout" }),
+    );
     expect(toggleSidebarMode).toHaveBeenCalledTimes(1);
   });
 });

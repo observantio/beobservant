@@ -18,7 +18,16 @@ const RELEASE_LABEL = `Wolfmegasaur ${APP_VERSION}`;
 const WATCHDOG_GITHUB_URL = "https://github.com/observantio/watchdog";
 
 function getApiKeyColor(apiKeyId) {
-  if (!apiKeyId) return "hsl(220, 25%, 65%)";
+  if (!apiKeyId) {
+    if (typeof document !== "undefined") {
+      const theme =
+        document.documentElement.getAttribute("data-theme") ||
+        document.body.getAttribute("data-theme") ||
+        "light";
+      if (theme === "dark") return "hsl(220, 14%, 72%)";
+    }
+    return "hsl(265, 14%, 28%)";
+  }
   let hash = 0;
   for (let i = 0; i < apiKeyId.length; i += 1) {
     hash = apiKeyId.charCodeAt(i) + ((hash << 5) - hash);
@@ -36,8 +45,8 @@ function getApiKeyColor(apiKeyId) {
       lightness = 72;
       saturation = 60;
     } else {
-      lightness = 42;
-      saturation = 70;
+      lightness = 30;
+      saturation = 72;
     }
   }
 
@@ -118,36 +127,36 @@ export function NavItem({
   incidentSummary = null,
   variant = "top",
 }) {
-  const baseClasses =
-    variant === "sidebar"
-      ? "w-full rounded-lg text-[14px] font-normal flex items-center gap-2.5 transition-colors px-3 py-2.5"
-      : isMobile
-        ? "rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-2 transition-all px-3 py-1.5 border border-transparent"
-        : "px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 border-b-2 border-transparent min-w-0";
   const incidentsWithBadges = item.path === "/incidents" && incidentSummary;
-  const classesWithBadges = incidentsWithBadges
-    ? `${baseClasses} relative pr-7`
-    : baseClasses;
+
+  const sidebarBaseRow =
+    "relative w-full flex items-center gap-2.5 px-3 py-2.5 text-[14px] transition-[color,background-color,border-color] duration-200 ease-smooth motion-reduce:transition-none";
+
+  const composedBase =
+    variant === "sidebar"
+      ? `${sidebarBaseRow}${incidentsWithBadges ? " relative pr-7" : ""}`
+      : isMobile
+        ? "rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-2 px-3 py-2 border-2 border-transparent transition-[color,background-color,border-color] duration-200 ease-smooth motion-reduce:transition-none"
+        : "min-w-0 border-b-[3px] border-transparent px-3 py-2 text-sm font-semibold transition-[color,background-color,border-color] duration-200 ease-smooth motion-reduce:transition-none flex items-center gap-2";
+
   const activeClasses =
     variant === "sidebar"
-      ? "text-black bg-sre-primary/10 dark:text-sre-success dark:bg-sre-success/10"
+      ? "font-semibold text-sre-text rounded-none border-t-0 border-r-0 border-b-0 border-l-[3px] border-sre-highlight bg-transparent"
       : isMobile
-        ? "text-sre-primary bg-sre-primary/10 border-sre-primary/50"
-        : "text-sre-primary border-sre-primary bg-sre-primary/5";
+        ? "text-sre-primary bg-sre-primary/12 border-sre-highlight border-2 rounded-xl transition-colors duration-200 ease-smooth"
+        : "text-sre-primary border-sre-highlight border-b-[3px] bg-sre-primary/10 rounded-t-xl transition-colors duration-200 ease-smooth";
   const inactiveClasses =
     variant === "sidebar"
-      ? "text-black dark:text-sre-text-muted hover:text-black dark:hover:text-sre-text hover:bg-sre-surface-light/60"
+      ? "font-medium text-sre-text-muted rounded-none border-t-0 border-r-0 border-b-0 border-l-[3px] border-transparent hover:text-sre-text hover:bg-sre-surface-light"
       : isMobile
-        ? "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light hover:border-sre-border/70"
-        : "text-sre-text-muted hover:text-sre-text hover:border-sre-border";
+        ? "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light border-sre-border/50 border-2 rounded-xl transition-colors duration-200 ease-smooth"
+        : "text-sre-text-muted hover:text-sre-text hover:border-sre-border/70 border-b-2 border-transparent rounded-t-lg transition-colors duration-200 ease-smooth";
 
   return (
     <NavLink
       to={item.path}
       className={({ isActive }) =>
-        `${classesWithBadges} ${
-          isActive ? activeClasses : inactiveClasses
-        }`
+        `${composedBase} ${isActive ? activeClasses : inactiveClasses}`
       }
     >
       {variant === "sidebar" && (
@@ -174,7 +183,7 @@ export function NavItem({
         <span className="pointer-events-none absolute right-0 top-0 flex items-center gap-1">
           {(incidentSummary.assigned_to_me_open || 0) > 0 && (
             <span
-              className="inline-flex h-6 items-center justify-center rounded-full border border-sre-border bg-sre-surface text-emerald-400 text-[10px] font-semibold px-1 shadow-sm"
+              className="inline-flex h-6 items-center justify-center rounded-lg border-2 border-sre-border bg-sre-surface-light text-emerald-700 text-[10px] font-bold px-1.5 transition-colors duration-200 ease-smooth dark:bg-sre-surface dark:text-emerald-400"
               title="Assigned to me"
             >
               {incidentSummary.assigned_to_me_open}
@@ -225,8 +234,8 @@ function ApiKeyDropdown({
 
   const selectedKey = selectableKeys?.find((k) => k.id === activeKeyId);
   const btnClass = compact
-    ? "px-2 py-1 text-xs bg-sre-surface border border-sre-border rounded text-sre-text flex items-center justify-between"
-    : "px-3 py-2 min-w-[190px] text-xs bg-sre-surface border border-sre-border rounded text-sre-text flex items-center justify-between";
+    ? "px-2 py-1 text-xs bg-sre-surface-light border-2 border-sre-border rounded-xl text-sre-text flex items-center justify-between transition-[border-color,background-color] duration-200 ease-smooth"
+    : "px-3 py-2 min-w-[190px] text-xs bg-sre-surface-light border-2 border-sre-border rounded-xl text-sre-text flex items-center justify-between transition-[border-color,background-color] duration-200 ease-smooth";
 
   return (
     <div ref={ref} className="relative">
@@ -239,7 +248,7 @@ function ApiKeyDropdown({
         aria-expanded={open}
       >
         <span
-          className="truncate"
+          className="truncate font-semibold"
           style={{
             maxWidth: "70px",
             color: getApiKeyColor(selectedKey?.id),
@@ -262,7 +271,7 @@ function ApiKeyDropdown({
       {open && (
         <ul
           role="listbox"
-          className="absolute top-full mt-1 w-full bg-sre-bg-card border border-sre-border rounded shadow-lg z-50 py-1 max-h-60 overflow-y-auto"
+          className="absolute top-full mt-1 w-full bg-sre-bg-card border-2 border-sre-border rounded-xl shadow-float-sm z-50 py-1 max-h-60 overflow-y-auto transition-opacity duration-200 ease-smooth"
         >
           {selectableKeys.map((k) => (
             <li key={k.id} role="option" aria-selected={k.id === activeKeyId}>
@@ -278,7 +287,7 @@ function ApiKeyDropdown({
               >
                 <div className="flex items-center gap-2">
                   <span
-                    className="truncate block"
+                    className="block truncate font-semibold"
                     style={{
                       maxWidth: "70px",
                       color: getApiKeyColor(k.id),
@@ -393,7 +402,7 @@ function QuickCreateApiKeyButton({ onCreated }) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sre-border bg-sre-surface/60 text-sre-text-muted backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-sre-primary/50 hover:bg-sre-surface/80 hover:text-sre-text"
+        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sre-border bg-sre-surface/60 text-sre-text-muted backdrop-blur-md transition-[background-color,border-color,color,transform] duration-200 ease-smooth hover:border-sre-primary/50 hover:bg-sre-surface/85 hover:text-sre-text active:scale-[0.94] motion-reduce:active:scale-100"
         aria-label="Quick create API key"
         title="Quick create API key"
       >
@@ -581,7 +590,7 @@ function QuickMetricsQueryButton({ apiKeys = [] }) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sre-border bg-sre-surface/60 text-sre-text-muted backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-sre-primary/50 hover:bg-sre-surface/80 hover:text-sre-text disabled:cursor-not-allowed disabled:opacity-50"
+        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sre-border bg-sre-surface/60 text-sre-text-muted backdrop-blur-md transition-[background-color,border-color,color,transform] duration-200 ease-smooth hover:border-sre-primary/50 hover:bg-sre-surface/85 hover:text-sre-text active:scale-[0.94] motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Quick query metrics"
         title="Quick query metrics"
         disabled={selectableKeys.length === 0}
@@ -748,7 +757,7 @@ export default function Header() {
 
   const headerBarClass = sidebarMode
     ? "sticky top-0 z-50 border-b-0 shadow-none bg-transparent"
-    : "sticky top-0 z-50 border-b-2 border-dashed border-sre-border shadow-none bg-sre-surface/80 backdrop-blur-xl";
+    : "sticky top-0 z-50 border-b-[3px] border-dashed border-sre-highlight/40 bg-sre-surface/90 backdrop-blur-xl transition-[background-color,border-color] duration-200 ease-smooth";
 
   const mobileNavClass = sidebarMode
     ? "md:hidden border-t-0 bg-transparent px-3 py-2 flex gap-2 overflow-x-auto"
@@ -760,21 +769,21 @@ export default function Header() {
     >
       {sidebarMode && (
         <div className="hidden lg:flex items-center gap-2">
-          <span className="inline-flex items-center rounded-md border border-sre-border bg-sre-surface px-2 py-1 text-[11px] font-semibold text-sre-text-muted">
+          <span className="inline-flex items-center rounded-2xl border-2 border-sre-border bg-sre-surface-light px-2.5 py-1 text-[11px] font-bold text-sre-text-muted">
             {RELEASE_LABEL}
           </span>
           <a
             href={WATCHDOG_GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center rounded-md border border-sre-border bg-sre-surface px-2 py-1 text-[11px] font-semibold text-sre-text-muted transition-colors hover:border-sre-primary/50 hover:text-sre-text"
+            className="inline-flex items-center rounded-2xl border-2 border-sre-border bg-sre-surface-light px-2.5 py-1 text-[11px] font-bold text-sre-text-muted transition-[border-color,background-color,color] duration-200 ease-smooth hover:border-sre-primary/55 hover:text-sre-text active:scale-[0.98] motion-reduce:active:scale-100"
           >
             GitHub
           </a>
           <button
             type="button"
             onClick={() => setShowOjoWizard(true)}
-            className="inline-flex items-center rounded-md border border-sre-border bg-sre-surface px-2 py-1 text-[11px] font-semibold text-sre-text-muted transition-colors hover:border-sre-primary/50 hover:text-sre-text"
+            className="inline-flex items-center rounded-2xl border-2 border-sre-border bg-sre-surface-light px-2.5 py-1 text-[11px] font-bold text-sre-text-muted transition-[border-color,background-color,color] duration-200 ease-smooth hover:border-sre-primary/55 hover:text-sre-text active:scale-[0.98] motion-reduce:active:scale-100"
           >
             Download Ojo Agent
           </button>
@@ -782,11 +791,7 @@ export default function Header() {
       )}
 
       <ThemeToggle
-        className={
-          sidebarMode
-            ? "rounded-lg border border-sre-border p-1.5 hover:bg-sre-surface-light/70"
-            : ""
-        }
+        className={sidebarMode ? "!p-1.5" : ""}
       />
 
       {visibleApiKeys.length > 0 && (
@@ -826,13 +831,13 @@ export default function Header() {
           <button
             type="button"
             onClick={toggleSidebarMode}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sre-text-muted transition-colors hover:bg-sre-surface-light/80 hover:text-sre-text md:hidden"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sre-text-muted transition-[background-color,color,transform] duration-300 ease-smooth motion-reduce:transition-none hover:bg-sre-surface-light/80 hover:text-sre-text focus:outline-none focus-visible:ring-2 focus-visible:ring-sre-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sre-bg motion-reduce:focus-visible:ring-0 active:scale-[0.96] motion-reduce:active:scale-100 md:hidden dark:focus-visible:ring-offset-sre-bg dark:hover:bg-white/[0.06]"
             aria-pressed={sidebarMode}
-            aria-label="Use top navigation layout"
-            title="Top navigation"
+            aria-label="Switch to top navigation layout"
+            title="Use top navigation instead of sidebar"
           >
             <span className="material-icons text-[22px] leading-none" aria-hidden>
-              blur_on
+              view_headline
             </span>
           </button>
           {actionsCluster}
@@ -843,7 +848,7 @@ export default function Header() {
             <button
               type="button"
               onClick={toggleSidebarMode}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sre-text-muted transition-colors hover:bg-sre-surface-light/80 hover:text-sre-text md:hidden"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sre-text-muted transition-[background-color,color,transform] duration-300 ease-smooth motion-reduce:transition-none hover:bg-sre-surface-light/80 hover:text-sre-text focus:outline-none focus-visible:ring-2 focus-visible:ring-sre-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sre-bg motion-reduce:focus-visible:ring-0 active:scale-[0.96] motion-reduce:active:scale-100 md:hidden dark:focus-visible:ring-offset-sre-bg dark:hover:bg-white/[0.06]"
               aria-pressed={sidebarMode}
               aria-label="Use sidebar navigation layout"
               title="Sidebar navigation & dashboard grid"
@@ -855,7 +860,7 @@ export default function Header() {
             <button
               type="button"
               onClick={toggleSidebarMode}
-              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sre-text-muted transition-colors hover:bg-sre-surface-light/80 hover:text-sre-text md:flex"
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sre-text-muted transition-[background-color,color,transform] duration-300 ease-smooth motion-reduce:transition-none hover:bg-sre-surface-light/80 hover:text-sre-text focus:outline-none focus-visible:ring-2 focus-visible:ring-sre-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sre-bg motion-reduce:focus-visible:ring-0 md:flex dark:focus-visible:ring-offset-sre-bg dark:hover:bg-white/[0.06]"
               aria-pressed={sidebarMode}
               aria-label="Use sidebar navigation layout"
               title="Sidebar navigation & dashboard grid"
@@ -973,10 +978,10 @@ function UserMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`flex items-center text-sre-text transition-colors ${
+        className={`flex items-center text-sre-text transition-all ${
           compact
-            ? "gap-1.5 rounded-xl border border-sre-border bg-sre-surface/55 px-2 py-1.5 backdrop-blur-xl hover:bg-sre-surface-light/70 dark:bg-sre-surface/45"
-            : "gap-2 rounded-lg px-2.5 py-1.5 hover:bg-sre-surface-light/80 sm:px-3"
+            ? "gap-1.5 rounded-xl border-2 border-sre-border bg-sre-surface-light/95 px-2 py-2 backdrop-blur-xl transition-[background-color,border-color] duration-200 ease-smooth hover:bg-sre-surface hover:border-sre-primary/35 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-sre-surface/55 dark:border-white/15"
+            : "gap-2 rounded-xl border-2 border-transparent px-2.5 py-2 hover:bg-sre-surface-light/85 hover:border-sre-border/40 sm:px-3"
         }`}
         aria-haspopup="true"
         aria-expanded={open}
@@ -1024,7 +1029,7 @@ function UserMenu({
             if (e.key === "Escape") setOpen(false);
           }}
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-52 rounded-lg border border-sre-border bg-sre-bg-card py-1 shadow-lg"
+          className="absolute right-0 z-50 mt-2 w-52 rounded-xl border-2 border-sre-border bg-sre-bg-card py-1 shadow-float-sm animate-fade-in motion-reduce:animate-none"
         >
           <div className="border-b border-sre-border/80 px-3 py-2">
             <div className="flex items-center gap-2 min-w-0">

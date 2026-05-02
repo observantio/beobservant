@@ -23,20 +23,20 @@ export function DashboardLayout({ dashboardData, agentData }) {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               {sidebarMode ? (
-                <div className="flex h-14 w-14 items-center justify-center rounded-3xl border border-sre-border bg-sre-surface-light shadow-sm">
+                <div className="flex h-16 w-16 items-center justify-center rounded-[1.35rem] border-[3px] border-sre-highlight bg-gradient-to-br from-sre-surface-light to-white transition-[border-color,transform] duration-200 ease-smooth dark:from-sre-surface dark:to-sre-surface-light">
                   <img
                     src="/wolf.png"
                     alt="Observantio wolf logo"
-                    className="h-10 w-10"
+                    className="h-11 w-11 drop-shadow-sm"
                   />
                 </div>
               ) : null}
               <div>
-                <h2 className="text-xl font-semibold text-sre-text">
+                <h2 className="text-xl font-bold tracking-tight text-sre-text">
                   Welcome to Observantio
                 </h2>
-                <div className="text-sm">
-                  Observability made beautiful
+                <div className="text-sm font-medium text-sre-primary">
+                  Built for developers · calm ops · LGTM under the hood ✨
                 </div>
               </div>
             </div>

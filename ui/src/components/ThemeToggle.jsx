@@ -6,17 +6,19 @@ export default function ThemeToggle({ className = "" }) {
 
   return (
     <button
+      type="button"
       onClick={toggleTheme}
-      className={`p-2 rounded-lg transition-all duration-200 
-        bg-sre-surface/45 backdrop-blur-md hover:bg-sre-surface/70 active:scale-95
-        focus:outline-none focus:ring-2 focus:ring-sre-primary focus:ring-offset-2 focus:ring-offset-sre-bg
+      className={`group rounded-2xl border border-sre-border/45 bg-sre-surface-light/50 p-2 shadow-sm backdrop-blur-xl backdrop-saturate-150 transition-[background-color,border-color,transform,box-shadow] duration-300 ease-smooth motion-reduce:transition-none
+        hover:border-sre-primary/35 hover:bg-sre-surface-light/70 hover:shadow-md active:scale-[0.94] motion-reduce:active:scale-100
+        dark:border-white/12 dark:bg-sre-surface/35 dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] dark:hover:border-white/22 dark:hover:bg-sre-surface/50
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-sre-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sre-bg motion-reduce:focus-visible:ring-0
         ${className}`}
       title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
       aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
     >
       {theme === "dark" ? (
         <svg
-          className="w-5 h-5 text-sre-text-muted hover:text-sre-text transition-colors"
+          className="h-5 w-5 text-sre-text-muted transition-colors duration-300 ease-smooth group-hover:text-sre-text"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -30,7 +32,7 @@ export default function ThemeToggle({ className = "" }) {
         </svg>
       ) : (
         <svg
-          className="w-5 h-5 text-sre-text-muted hover:text-sre-text transition-colors"
+          className="h-5 w-5 text-sre-text-muted transition-colors duration-300 ease-smooth group-hover:text-sre-text"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"

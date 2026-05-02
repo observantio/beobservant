@@ -22,19 +22,19 @@ export function Button({
   ...props
 }) {
   const baseClasses =
-    "inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none";
+    "inline-flex items-center justify-center font-semibold rounded-2xl border-2 transition-all duration-200 ease-smooth motion-reduce:transition-none disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-sre-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sre-bg motion-reduce:focus-visible:ring-0";
 
   const variants = {
     primary:
-      "bg-sre-primary hover:bg-sre-primary-light text-white shadow-glow-sm hover:shadow-glow",
+      "border-sre-ink/35 bg-gradient-to-br from-[rgb(144_89_255)] to-[rgb(124_77_255)] text-white hover:brightness-[1.06] active:scale-[0.98] motion-reduce:active:scale-100 dark:border-white/25",
     secondary:
-      "bg-sre-surface hover:bg-sre-surface-light text-sre-text border border-sre-border",
+      "border-sre-ink/25 bg-sre-surface-light text-sre-text hover:bg-sre-surface active:scale-[0.98] motion-reduce:active:scale-100 dark:border-white/20 dark:bg-sre-surface dark:hover:bg-sre-surface-light",
     success:
-      "bg-sre-success hover:bg-sre-success-light text-white",
+      "border-sre-ink/25 bg-sre-success text-white hover:bg-sre-success-light active:scale-[0.98] motion-reduce:active:scale-100 dark:border-white/20",
     danger:
-      "bg-sre-error hover:bg-sre-error-light text-white",
+      "border-sre-ink/25 bg-sre-error text-white hover:bg-sre-error-light active:scale-[0.98] motion-reduce:active:scale-100 dark:border-white/20",
     ghost:
-      "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface/50",
+      "border-transparent bg-transparent text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light/80 dark:hover:bg-sre-surface-light/40",
   };
 
   const sizes = {
@@ -51,7 +51,7 @@ export function Button({
     >
       {loading && (
         <svg
-          className="animate-spin -ml-1 mr-2 h-4 w-4"
+          className="animate-spin motion-reduce:animate-none -ml-1 mr-2 h-4 w-4"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
@@ -120,9 +120,9 @@ export function Card({
     <Component
       className={clsx(
         !unstyled && [
-          "w-full bg-sre-surface/50 rounded-xl border border-sre-border/60 p-4",
-          "transition-all duration-300",
-          "hover:border-sre-border/80",
+          "w-full rounded-2xl border-2 border-sre-border/70 bg-sre-surface/85 p-4 backdrop-blur-[2px]",
+          "transition-[border-color,background-color,box-shadow] duration-200 ease-smooth motion-reduce:transition-none",
+          "hover:border-sre-primary/40",
         ],
         className,
       )}
@@ -166,7 +166,7 @@ Card.propTypes = {
 export function CardHeader({ children, className, ...props }) {
   return (
     <div
-      className={clsx("px-6 py-4 border-b border-sre-border/30", className)}
+      className={clsx("px-6 py-4 border-b-2 border-sre-border/35", className)}
       {...props}
     >
       {children}
@@ -229,7 +229,7 @@ export function Badge({ children, variant = "default", className, ...props }) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border w-max text-center",
+        "inline-flex items-center px-2.5 py-1 rounded-xl text-[10px] font-bold border-2 w-max text-center tracking-wide transition-[background-color,border-color,color] duration-200 ease-smooth",
         variants[variant],
         className,
       )}
@@ -267,9 +267,10 @@ export function Input({ label, error, helperText, className, ...props }) {
       )}
       <input
         className={clsx(
-          "w-full px-3 py-1.5 bg-sre-surface border border-sre-border rounded-lg",
+          "w-full px-3 py-2 bg-sre-surface-light border-2 border-sre-border rounded-xl",
           "text-sre-text placeholder-sre-text-subtle",
-          "focus:outline-none focus:ring-2 focus:ring-sre-primary focus:border-transparent",
+          "transition-[border-color,box-shadow,background-color] duration-200 ease-smooth motion-reduce:transition-none",
+          "focus:outline-none focus-visible:border-sre-primary focus-visible:ring-2 focus-visible:ring-sre-primary/35 focus-visible:ring-offset-0",
           "transition-all duration-200",
           error && "border-sre-error focus:ring-sre-error",
           className,
@@ -311,9 +312,10 @@ export function Select({
       )}
       <select
         className={clsx(
-          "w-full px-4 pr-10 py-2 bg-sre-surface border border-sre-border rounded-lg",
+          "w-full px-4 pr-10 py-2 bg-sre-surface-light border-2 border-sre-border rounded-xl",
           "text-sre-text",
-          "focus:outline-none focus:ring-2 focus:ring-sre-primary focus:border-transparent",
+          "transition-[border-color,box-shadow,background-color] duration-200 ease-smooth motion-reduce:transition-none",
+          "focus:outline-none focus-visible:border-sre-primary focus-visible:ring-2 focus-visible:ring-sre-primary/35 focus-visible:ring-offset-0",
           "transition-all duration-200 cursor-pointer", 
           "truncate",
           error && "border-sre-error focus:ring-sre-error",
@@ -513,7 +515,10 @@ export function Spinner({ size = "md", className }) {
   return (
     <div className={clsx("flex items-center justify-center", className)}>
       <svg
-        className={clsx("animate-spin text-sre-primary", sizes[size])}
+        className={clsx(
+          "animate-spin motion-reduce:animate-none text-sre-primary",
+          sizes[size],
+        )}
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"

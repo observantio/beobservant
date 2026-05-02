@@ -587,10 +587,10 @@ ${selectedExtraService?.packageName || "ojo-service"} --config ${selectedConfigF
                           setSelectedExtraServiceKey(OJO_EXTRA_SERVICES[0]?.key || "");
                         }
                       }}
-                      className={`group rounded-xl border px-4 py-4 text-left transition-all duration-200 ${
+                      className={`group rounded-xl border-2 px-4 py-4 text-left transition-[border-color,background-color,transform,box-shadow] duration-200 ease-smooth ${
                         selectedOs === option.key
-                          ? `${styles.selected} shadow-sm`
-                          : `border-sre-border bg-sre-surface ${styles.hover} hover:-translate-y-0.5 hover:shadow-sm`
+                          ? `${styles.selected} shadow-none ring-1 ring-sre-primary/25`
+                          : `border-sre-border bg-sre-surface ${styles.hover} hover:border-sre-primary/35 active:scale-[0.99] motion-reduce:active:scale-100`
                       }`}
                     >
                       <div className="flex items-start gap-3 text-current">

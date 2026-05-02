@@ -208,20 +208,24 @@ export default function LoginPage() {
 
   const providerLabel = hasOIDC ? OIDC_PROVIDER_LABEL : "Single Sign-On";
   return (
-    <div className="min-h-screen flex items-center justify-center bg-sre-bg p-4 auth-login-page">
-      <div className="w-full max-w-md rounded-2xl bg-transparent p-6 shadow-none border-0 backdrop-blur-none">
-        <div className="text-center mb-8">
+    <div className="auth-login-page auth-login-shell relative flex min-h-screen items-center justify-center overflow-hidden p-4 transition-[background-color] duration-300 ease-smooth">
+      <div
+        className="relative w-full max-w-md rounded-2xl border-0 bg-sre-surface/85 p-7 shadow-none backdrop-blur-md transition-[background-color] duration-300 ease-smooth dark:bg-sre-bg-card/72"
+        role="region"
+        aria-label="Sign in"
+      >
+        <div className="mb-8 text-center">
           {showLoginLogo && (
             <img
               src="/wolf.png"
               alt="Watchdog logo"
-              className="mx-auto w-40 h-40 object-contain"
+              className="mx-auto h-40 w-40 object-contain"
             />
           )}
-          <h1 className="text-3xl font-bold text-sre-text mb-2">
+          <h1 className="mb-2 bg-gradient-to-r from-sre-primary via-purple-500 to-amber-600 bg-clip-text text-3xl font-bold text-transparent dark:from-violet-300 dark:via-fuchsia-300 dark:to-amber-300">
             Watchdog
           </h1>
-          <p className="font-lg">
+          <p className="text-lg text-sre-text-muted">
             Observing your entire infrastructure
           </p>
         </div>
@@ -251,8 +255,18 @@ export default function LoginPage() {
         )}
 
         {!authModeLoading && showDivider && !showMfaSetup && (
-          <div className="my-4 text-center text-xs text-sre-text-muted uppercase tracking-wide">
-            or use password
+          <div className="my-5 flex items-center gap-3">
+            <div
+              className="h-[3px] flex-1 rounded-full bg-gradient-to-r from-transparent via-sre-primary/40 to-transparent dark:via-sre-highlight/35"
+              aria-hidden
+            />
+            <span className="whitespace-nowrap text-[11px] font-bold uppercase tracking-[0.12em] text-sre-text-muted">
+              or use password
+            </span>
+            <div
+              className="h-[3px] flex-1 rounded-full bg-gradient-to-r from-transparent via-sre-primary/40 to-transparent dark:via-sre-highlight/35"
+              aria-hidden
+            />
           </div>
         )}
 

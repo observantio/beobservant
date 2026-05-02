@@ -1544,7 +1544,7 @@ export default function IncidentBoardPage() {
               </div>
 
               <div className="mb-3">
-                <div className="flex mt-0 items-center gap-1 p-0.5 bg-sre-surface rounded-md border border-sre-border w-fit">
+                <div className="flex mt-0 w-fit items-center gap-1 rounded-md bg-sre-surface p-0.5">
                   <Button
                     variant={
                       incidentVisibilityTab === "public" ? "primary" : "ghost"

@@ -227,7 +227,7 @@ describe("IntegrationsPage coverage", () => {
       expect(toastSuccess).toHaveBeenCalledWith("Channel deleted");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Shared By Organization/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Shared By Organization/i }));
     fireEvent.click(screen.getByRole("button", { name: /Hide channel/i }));
 
     await waitFor(() => {
@@ -291,7 +291,7 @@ describe("IntegrationsPage coverage", () => {
       expect(api.deleteJiraIntegration).toHaveBeenCalledWith("j1");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Shared By Organization/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Shared By Organization/i }));
     fireEvent.click(screen.getByRole("button", { name: /Hide integration/i }));
 
     await waitFor(() => {

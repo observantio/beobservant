@@ -543,7 +543,7 @@ export default function ServiceGraphAsync({ traces }) {
                   <span className="text-sre-text truncate">
                     {e.source} → {e.target}
                   </span>
-                  <span className="text-yellow-400 flex-shrink-0 tabular-nums">
+                  <span className="flex-shrink-0 tabular-nums font-bold text-yellow-500 dark:text-yellow-400">
                     {e.errorRateNum.toFixed(1)}%
                   </span>
                 </button>

@@ -628,7 +628,7 @@ export default function IntegrationsPage() {
           setDraggedChannelId("");
           setDragTargetChannelId("");
         }}
-        className={`group relative p-4 rounded-xl border border-sre-border bg-gradient-to-br from-white/3 to-white/6 shadow-sm hover:shadow-lg transition-all transform hover:-translate-y-0.5 cursor-grab active:cursor-grabbing select-none touch-none ${
+        className={`group relative cursor-grab select-none touch-none rounded-xl border-2 border-sre-border bg-gradient-to-br from-white/3 to-white/6 p-4 shadow-none transition-[border-color,background-color,transform] duration-200 ease-smooth hover:border-sre-primary/35 hover:bg-sre-surface-light/25 active:cursor-grabbing active:scale-[0.995] motion-reduce:active:scale-100 ${
           dragTargetChannelId === channelId &&
           draggedChannelId &&
           draggedChannelId !== channelId
@@ -1043,8 +1043,12 @@ export default function IntegrationsPage() {
         subtitle="Manage notification channels and Jira integrations with private, group, and organization scopes."
       />
 
-      <div className="rounded-xl bg-sre-surface/40 p-2">
-        <div className="flex flex-wrap justify-center items-center gap-2">
+      <div className="border-b border-sre-border">
+        <div
+          className="-mb-px flex flex-wrap items-end justify-center gap-x-1 gap-y-0"
+          role="tablist"
+          aria-label="Integration visibility"
+        >
           {VISIBILITY_TABS.map((tab) => {
             // Show total integrations in scope (channels + Jira integrations).
             const tabCount = tabIntegrationCounts[tab.key] || {
@@ -1052,26 +1056,36 @@ export default function IntegrationsPage() {
               channels: 0,
               jira: 0,
             };
+            const isActive = activeTab === tab.key;
             return (
             <button
               type="button"
               key={tab.key}
+              role="tab"
+              aria-selected={isActive}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2.5 text-sm rounded-lg flex items-center justify-center gap-2 transition-colors ${
-                activeTab === tab.key
-                  ? "bg-sre-primary/10 text-sre-primary"
-                  : "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface"
+              className={`flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-[color,border-color,background-color] duration-200 ease-smooth motion-reduce:transition-none ${
+                isActive
+                  ? "-mb-px border-sre-primary font-semibold text-sre-primary"
+                  : "-mb-px border-transparent font-medium text-sre-text-muted hover:border-sre-border/60 hover:bg-sre-surface-light/40 hover:text-sre-text dark:hover:bg-sre-surface-light/12"
               }`}
             >
-              <span className="material-icons text-sm">{tab.icon}</span>
-              {tab.label}
+              <span
+                className={`material-icons text-base leading-none ${
+                  isActive ? "text-sre-primary" : ""
+                }`}
+                aria-hidden
+              >
+                {tab.icon}
+              </span>
+              <span>{tab.label}</span>
               <span
                 aria-label={`${tab.label} integrations count`}
                 title={`${tabCount.total} total (${tabCount.channels} channels, ${tabCount.jira} Jira)`}
-                className={`inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
-                  activeTab === tab.key
-                    ? "bg-sre-primary/20 text-sre-primary"
-                    : "bg-sre-surface border border-sre-border text-sre-text-muted"
+                className={`ml-0.5 inline-flex min-w-[1.5rem] items-center justify-center rounded px-1.5 py-px text-xs font-semibold tabular-nums ${
+                  isActive
+                    ? "bg-sre-primary/15 text-sre-primary"
+                    : "bg-sre-surface-light/80 text-sre-text-muted dark:bg-sre-surface-light/25"
                 }`}
               >
                 {tabCount.total}

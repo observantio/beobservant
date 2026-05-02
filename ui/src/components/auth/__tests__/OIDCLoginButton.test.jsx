@@ -1,14 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import OIDCLoginButton from "../OIDCLoginButton";
 
-vi.mock("../../ui", () => ({
-  Button: ({ children, onClick, loading, ...props }) => (
-    <button onClick={onClick} data-loading={String(Boolean(loading))} {...props}>
-      {children}
-    </button>
-  ),
-}));
-
 describe("OIDCLoginButton", () => {
   it("renders provider label and handles click", () => {
     const onClick = vi.fn();

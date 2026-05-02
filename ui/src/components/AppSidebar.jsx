@@ -44,20 +44,26 @@ export default function AppSidebar() {
 
   return (
     <aside
-      className="fixed left-0 top-0 z-30 hidden h-screen w-60 shrink-0 flex-col overflow-hidden border-r-2 border-dashed border-sre-border bg-gradient-to-b from-sre-bg via-sre-bg-alt to-sre-bg md:flex"
+      className="fixed left-0 top-0 z-30 hidden h-screen w-60 shrink-0 flex-col overflow-hidden border-r-[3px] border-dashed border-sre-highlight/50 bg-gradient-to-b from-sre-bg via-sre-surface-light/45 to-sre-bg md:flex dark:border-sre-highlight/35 dark:via-sre-surface-light/30"
       aria-label="App sidebar"
     >
       <div className="flex shrink-0 px-2.5 pb-3 pt-3.5">
         <button
           type="button"
           onClick={toggleSidebarMode}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sre-text-muted transition-colors hover:bg-sre-surface-light/80 hover:text-sre-text"
+          className="group flex w-full items-center gap-2.5 rounded-xl border-2 border-transparent px-3 py-2.5 text-left text-sre-text-muted transition-[background-color,border-color,color,transform] duration-300 ease-smooth motion-reduce:transition-none hover:border-sre-border/55 hover:bg-sre-surface-light/90 hover:text-sre-text focus:outline-none focus-visible:ring-2 focus-visible:ring-sre-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sre-bg motion-reduce:focus-visible:ring-0 active:scale-[0.99] motion-reduce:active:scale-100 dark:border-0 dark:focus-visible:ring-offset-sre-bg dark:hover:border-0 dark:hover:bg-white/[0.06]"
           aria-pressed="true"
-          aria-label="Switch to Top Nav"
-          title="Switch to Top Nav"
+          aria-label="Switch to top navigation layout"
+          title="Use top navigation instead of sidebar"
         >
-          <span className="material-icons text-[22px] leading-none" aria-hidden>
-            blur_on
+          <span
+            className="material-icons shrink-0 text-[22px] leading-none transition-transform duration-300 ease-smooth group-hover:scale-105 motion-reduce:group-hover:scale-100"
+            aria-hidden
+          >
+            view_headline
+          </span>
+          <span className="min-w-0 flex-1 text-sm font-semibold leading-snug">
+            Top navigation
           </span>
         </button>
       </div>
@@ -68,7 +74,7 @@ export default function AppSidebar() {
       >
         {visibleNavItems.length > 0 && (
           <>
-            <div className="px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted/80">
+            <div className="px-3 pb-1 pt-0.5 text-[11px] font-bold uppercase tracking-wide text-sre-text-muted">
               Observability
             </div>
             {visibleNavItems.map((item) => (
@@ -90,7 +96,7 @@ export default function AppSidebar() {
             />
             {visibleManagementNav.length > 0 && (
               <>
-                <div className="px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted/80">
+                <div className="px-3 pb-1 pt-0.5 text-[11px] font-bold uppercase tracking-wide text-sre-text-muted">
                   Management
                 </div>
                 {visibleManagementNav.map((item) => (
@@ -113,7 +119,7 @@ export default function AppSidebar() {
                 <button
                   type="button"
                   onClick={() => setDocsExpanded((v) => !v)}
-                  className="flex w-full items-center justify-between px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted/80 hover:text-sre-text"
+                  className="flex w-full items-center justify-between px-3 pb-1 pt-0.5 text-[11px] font-bold uppercase tracking-wide text-sre-text-muted transition-colors duration-200 hover:text-sre-text"
                   aria-expanded={docsExpanded}
                   aria-controls="docs-sidebar-section"
                 >
@@ -137,10 +143,10 @@ export default function AppSidebar() {
                         key={item.path}
                         to={item.path}
                         className={({ isActive }) =>
-                          `block rounded-md px-2.5 py-1.5 text-xs leading-5 transition-colors ${
+                          `block rounded-none border-t-0 border-r-0 border-b-0 border-l-[3px] px-2.5 py-1.5 text-xs leading-5 transition-[background-color,border-color,color] duration-200 ease-smooth motion-reduce:transition-none ${
                             isActive
-                              ? "bg-sre-primary/10 text-sre-primary dark:bg-sre-success/10 dark:text-sre-success"
-                              : "text-sre-text-muted/80 hover:bg-sre-surface-light/60 hover:text-sre-text"
+                              ? "border-sre-highlight font-semibold text-sre-text"
+                              : "border-transparent font-medium text-sre-text-muted hover:bg-sre-surface-light hover:text-sre-text"
                           }`
                         }
                       >
