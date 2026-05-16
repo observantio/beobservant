@@ -7,19 +7,17 @@ All notable changes to this project are documented here.
 ### Fixes
 
 * The default tempo range in he filter is now set to max, this is to avoid confusing the user of hiding traces with large durations by default
-
 * Other UI updates, more or so related to the aesthetic and user experience 
-
-* Grouped the latest resolver, notifier, watchdog, and gatekeeper fixes into clean repo-specific commits, and verified the full workspace with pytest, mypy, and ruff.
+* Refreshed the shared chart API proxy, installer flow, OTEL logs/traces, and UI shell components/styles.
+* Hardened gatekeeper startup, gateway routing, token cache, and proxy trust/rate-limit handling.
+* Tightened watchdog auth, database, middleware, Grafana, Loki, Tempo, and observability service paths, and added a shared UTC helper for auth code.
 
 ## [v0.0.6] - 2026-04-24
 
 ### Fixes
 
 * Fixed the dashboards for ojo, did not have the instance id and service name filter for sub-services
-
 * Updated Loki log rendering to use structured severity metadata for consistent badge colors and explicit level detection in expanded and collapsed views.
-
 * Fixed outdated documentation and minor UI-related polish for this release.
 
 ## [v0.0.5] - 2026-04-21
