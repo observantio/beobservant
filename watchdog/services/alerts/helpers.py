@@ -11,9 +11,10 @@ from collections.abc import Awaitable, Callable
 from json import JSONDecodeError
 
 import httpx
+from fastapi import HTTPException, Request, status
+
 from config import config
 from custom_types.json import JSONDict, JSONValue
-from fastapi import HTTPException, Request, status
 from middleware.dependencies import (
     PublicEndpointSecurityConfig,
     enforce_header_token,

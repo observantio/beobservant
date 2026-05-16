@@ -15,10 +15,14 @@ from datetime import UTC, datetime
 from typing import TypeAlias
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from fastapi import Depends, HTTPException, Request, Response, status
+from sqlalchemy import String, or_
+from sqlalchemy.orm import Session
+from sqlalchemy.orm.query import RowReturningQuery
+
 from config import config
 from custom_types.json import JSONDict
 from db_models import AuditLog, User
-from fastapi import Depends, HTTPException, Request, Response, status
 from middleware.dependencies import (
     PublicEndpointSecurityConfig,
     enforce_public_endpoint_security,
@@ -28,9 +32,6 @@ from models.access.auth_models import ROLE_PERMISSIONS, Permission, Role, TokenD
 from services.auth.delegation import is_admin_actor as _is_admin_actor
 from services.auth.delegation import role_to_text as _role_to_text
 from services.common.cookies import cookie_secure
-from sqlalchemy import String, or_
-from sqlalchemy.orm import Session
-from sqlalchemy.orm.query import RowReturningQuery
 
 logger = logging.getLogger(__name__)
 

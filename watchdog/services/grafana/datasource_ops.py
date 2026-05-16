@@ -14,10 +14,13 @@ import re
 import uuid
 from typing import TypedDict, cast
 
+from fastapi import HTTPException
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
+
 from config import config
 from custom_types.json import JSONDict
 from db_models import ApiKeyShare, GrafanaDatasource, Group, User, UserApiKey
-from fastapi import HTTPException
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from services.grafana.datasource_payloads import (
     enrich_datasource_payload,
@@ -56,8 +59,6 @@ from services.grafana.visibility import (
     group_share_change_for_scope,
     resolve_group_share_on_visibility_change,
 )
-from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
 
 DS_PROXY_ID_RE = re.compile(r"/api/datasources/proxy/(\d+)")
 

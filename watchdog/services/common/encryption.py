@@ -14,8 +14,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 import json
 from functools import lru_cache
 
-from config import config as app_config
 from cryptography.fernet import Fernet, InvalidToken
+
+from config import config as app_config
 from custom_types.json import JSONDict
 
 

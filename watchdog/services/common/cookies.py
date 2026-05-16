@@ -15,8 +15,9 @@ import re
 from collections.abc import Sequence
 from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
 
-from config import config
 from fastapi import Request
+
+from config import config
 
 Network = IPv4Network | IPv6Network
 

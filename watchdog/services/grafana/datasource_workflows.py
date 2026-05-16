@@ -13,6 +13,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from sqlalchemy.orm import Session
+
 from custom_types.json import JSONDict
 from db_models import GrafanaDatasource, Group
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
@@ -25,7 +27,6 @@ from services.grafana.grafana_bundles import DatasourceAccessCriteria, GrafanaUs
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.visibility import resolve_visibility_groups_for_scope, visibility_group_resolve_context
-from sqlalchemy.orm import Session
 
 
 @dataclass(frozen=True, slots=True)
