@@ -14,14 +14,13 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException, Request
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
 
 from config import _slug_token
-from middleware.error_handlers import RouteErrorHandlerOptions, handle_route_errors
 from middleware import error_handlers as error_handlers_module
+from middleware.error_handlers import RouteErrorHandlerOptions, handle_route_errors
 from routers.observability import agents_router
 from routers.platform import system_router
 from services.agent import helpers as agent_helpers
@@ -52,7 +51,7 @@ async def test_handle_route_errors_reads_request_id_from_kwargs_request():
     @handle_route_errors(RouteErrorHandlerOptions(gateway_timeout_detail="timed-out"))
     async def raises_timeout(*, request: Request):
         _ = request
-        raise asyncio.TimeoutError()
+        raise TimeoutError()
 
     with pytest.raises(HTTPException) as exc:
         await raises_timeout(request=_request_with_header("req-kw"))

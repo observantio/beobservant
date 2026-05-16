@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import json
 from json import JSONDecodeError
-from typing import Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from typing import Any
 
 from config import config
+from custom_types.json import JSONDict
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from middleware.dependencies import (
     PublicEndpointSecurityConfig,
     apply_scoped_rate_limit,
@@ -24,8 +25,6 @@ from middleware.dependencies import (
     get_current_user_or_mfa_setup,
 )
 from models.access.auth_models import TokenData
-from custom_types.json import JSONDict
-from services.notifier_proxy_service import NotifierForwardRequest, notifier_proxy_service
 from services.alerts.helpers import (
     assert_silence_owner,
     check_permissions,
@@ -36,6 +35,7 @@ from services.alerts.helpers import (
     validate_and_normalize_silence_payload,
     webhook_route,
 )
+from services.notifier_proxy_service import NotifierForwardRequest, notifier_proxy_service
 
 router = APIRouter(prefix="/api/alertmanager", tags=["alertmanager"])
 webhook_router = APIRouter(tags=["alertmanager-webhooks"])
@@ -99,8 +99,8 @@ async def alertmanager_proxy(
     check_permissions(current_user, required)
 
     method = request.method.upper()
-    payload: Optional[JSONDict] = None
-    request_body: Optional[bytes] = None
+    payload: JSONDict | None = None
+    request_body: bytes | None = None
 
     if path.strip("/").startswith("silences") and method in {"POST", "PUT"}:
         try:

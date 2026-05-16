@@ -15,7 +15,6 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
@@ -25,15 +24,15 @@ from models.grafana.grafana_folder_models import Folder
 from services.grafana import folder_ops
 from services.grafana.grafana_bundles import (
     FolderAccessCriteria,
-    FolderCreateRequest,
     FolderCreateOptions,
-    FolderDeleteRequest,
+    FolderCreateRequest,
     FolderDeleteOptions,
-    FolderGetRequest,
+    FolderDeleteRequest,
     FolderGetParams,
+    FolderGetRequest,
     FolderListParams,
-    FolderUpdateRequest,
     FolderUpdateOptions,
+    FolderUpdateRequest,
     GrafanaUserScope,
     HiddenToggleParams,
 )
@@ -183,15 +182,13 @@ class ProxyStub:
 
 def test_folder_helpers_cover_access_and_payload_branches():
     db = _session()
-    owner, viewer, outsider, group, private_folder, tenant_folder, group_folder, hidden_folder = _seed(db)
+    owner, viewer, _outsider, group, private_folder, tenant_folder, group_folder, hidden_folder = _seed(db)
 
     assert folder_ops._db_folder_by_uid(db, "t1", "f-private").id == private_folder.id
     v_scope = GrafanaUserScope(viewer.id, "t1", [])
     v_group_scope = GrafanaUserScope(viewer.id, "t1", [group.id])
     assert folder_ops.check_folder_access(db, "missing", v_scope, FolderAccessCriteria()) is None
-    assert (
-        folder_ops.check_folder_access(db, hidden_folder.grafana_uid, v_scope, FolderAccessCriteria()) is None
-    )
+    assert folder_ops.check_folder_access(db, hidden_folder.grafana_uid, v_scope, FolderAccessCriteria()) is None
     assert (
         folder_ops.check_folder_access(
             db,
@@ -218,9 +215,7 @@ def test_folder_helpers_cover_access_and_payload_branches():
         folder_ops.check_folder_access(db, group_folder.grafana_uid, v_group_scope, FolderAccessCriteria()).id
         == group_folder.id
     )
-    assert (
-        folder_ops.check_folder_access(db, group_folder.grafana_uid, v_scope, FolderAccessCriteria()) is None
-    )
+    assert folder_ops.check_folder_access(db, group_folder.grafana_uid, v_scope, FolderAccessCriteria()) is None
 
     assert folder_ops.is_folder_accessible(db, None, v_scope, FolderAccessCriteria()) is True
     assert folder_ops.is_folder_accessible(db, "missing", v_scope, FolderAccessCriteria()) is False
@@ -249,7 +244,7 @@ def test_folder_helpers_cover_access_and_payload_branches():
 @pytest.mark.asyncio
 async def test_get_folder_and_get_folders_cover_missing_branches():
     db = _session()
-    owner, viewer, outsider, group, private_folder, tenant_folder, group_folder, hidden_folder = _seed(db)
+    _owner, viewer, _outsider, _group, _private_folder, _tenant_folder, _group_folder, _hidden_folder = _seed(db)
     stub = GrafanaServiceStub()
     stub.folders = [
         SimpleNamespace(id=11, uid="f-tenant", title="Tenant"),
@@ -261,9 +256,7 @@ async def test_get_folder_and_get_folders_cover_missing_branches():
     }
     service = ProxyStub(stub)
 
-    folders = await folder_ops.get_folders(
-        service, db, GrafanaUserScope(viewer.id, "t1", []), FolderListParams()
-    )
+    folders = await folder_ops.get_folders(service, db, GrafanaUserScope(viewer.id, "t1", []), FolderListParams())
     assert [folder.uid for folder in folders] == ["f-tenant"]
 
     gfs = FolderGetParams()
@@ -296,7 +289,7 @@ async def test_get_folder_and_get_folders_cover_missing_branches():
 @pytest.mark.asyncio
 async def test_create_folder_covers_group_and_no_uid_paths():
     db = _session()
-    owner, viewer, outsider, group, private_folder, tenant_folder, group_folder, hidden_folder = _seed(db)
+    _owner, viewer, _outsider, group, _private_folder, _tenant_folder, _group_folder, _hidden_folder = _seed(db)
     stub = GrafanaServiceStub()
     service = ProxyStub(stub)
 
@@ -355,7 +348,7 @@ async def test_create_folder_covers_group_and_no_uid_paths():
 @pytest.mark.asyncio
 async def test_update_folder_covers_none_error_and_group_visibility_paths():
     db = _session()
-    owner, viewer, outsider, group, private_folder, tenant_folder, group_folder, hidden_folder = _seed(db)
+    owner, viewer, _outsider, group, _private_folder, _tenant_folder, group_folder, _hidden_folder = _seed(db)
     stub = GrafanaServiceStub()
     service = ProxyStub(stub)
 
@@ -440,7 +433,7 @@ async def test_update_folder_covers_none_error_and_group_visibility_paths():
 @pytest.mark.asyncio
 async def test_delete_and_toggle_folder_cover_remaining_paths():
     db = _session()
-    owner, viewer, outsider, group, private_folder, tenant_folder, group_folder, hidden_folder = _seed(db)
+    owner, viewer, _outsider, _group, _private_folder, tenant_folder, group_folder, _hidden_folder = _seed(db)
     stub = GrafanaServiceStub()
     service = ProxyStub(stub)
     o_scope = GrafanaUserScope(owner.id, "t1", [])

@@ -15,12 +15,13 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from db_models import Group, Permission, User, UserApiKey
 from models.access.api_key_models import ApiKey
 from models.access.auth_models import Permission as PermissionEnum
-from models.access.group_models import Group as GroupSchema, PermissionInfo
+from models.access.group_models import Group as GroupSchema
+from models.access.group_models import PermissionInfo
 from models.access.user_models import User as UserSchema
 from models.access.user_models import UserResponse
 
@@ -70,7 +71,7 @@ def to_user_schema(service: DatabaseAuthService, user: User) -> UserSchema:
 def build_user_response(
     service: DatabaseAuthService,
     user: UserSchema,
-    fallback_permissions: Optional[List[str]] = None,
+    fallback_permissions: list[str] | None = None,
 ) -> UserResponse:
     permissions = service.get_user_permissions(user) or (fallback_permissions or [])
     coerced_permissions = [_coerce_permission(p) for p in permissions if p is not None]

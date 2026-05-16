@@ -6,19 +6,16 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from fastapi.testclient import TestClient
-from fastapi import HTTPException, status
-from fastapi import FastAPI
 import pytest
-
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from tests._env import ensure_test_env
 
 ensure_test_env()
 
-from services.internal_service import InternalService
-
 from config import config
 from routers import internal_router
+from services.internal_service import InternalService
 
 
 class DummyAuthService:

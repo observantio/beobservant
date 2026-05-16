@@ -10,15 +10,13 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from dataclasses import dataclass
-from typing import Optional
 import json
-
-from sqlalchemy.orm import Session
+from dataclasses import dataclass
 
 from custom_types.json import JSONDict
 from db_models import AuditLog
 from services.audit_context import get_request_audit_context
+from sqlalchemy.orm import Session
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,14 +27,14 @@ class AuditLogRecord:
     resource_type: str
     resource_id: str
     details: JSONDict
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
+    ip_address: str | None = None
+    user_agent: str | None = None
 
 
 def log_audit(db: Session, record: AuditLogRecord) -> None:
     json.dumps(record.details)
-    ctx_ip: Optional[str] = None
-    ctx_user_agent: Optional[str] = None
+    ctx_ip: str | None = None
+    ctx_user_agent: str | None = None
     if record.ip_address is None or record.user_agent is None:
         ctx_ip, ctx_user_agent = get_request_audit_context()
 

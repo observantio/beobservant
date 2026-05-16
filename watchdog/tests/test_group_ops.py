@@ -9,17 +9,15 @@ http://www.apache.org/licenses/LICENSE-2.0
 from tests._env import ensure_test_env
 
 ensure_test_env()
-import pytest
-from fastapi import HTTPException
-
 import database
+import pytest
 from database import get_db_session
-from services.auth.actor_caps import AuthActorCaps
-from services.database_auth_service import DatabaseAuthService
+from db_models import AuditLog, GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, Tenant
+from fastapi import HTTPException
 from models.access.group_models import GroupCreate
 from models.access.user_models import UserCreate
-from db_models import AuditLog, GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, Tenant
-
+from services.auth.actor_caps import AuthActorCaps
+from services.database_auth_service import DatabaseAuthService
 
 ADMIN_ACTOR = AuthActorCaps(is_superuser=True)
 

@@ -23,12 +23,11 @@ from services.grafana import dashboard_ops, folder_ops
 from services.grafana.grafana_bundles import (
     DashboardSearchParams,
     FolderAccessCriteria,
-    FolderCreateRequest,
-    FolderGetRequest,
     FolderCreateOptions,
+    FolderCreateRequest,
     FolderListParams,
-    FolderUpdateRequest,
     FolderUpdateOptions,
+    FolderUpdateRequest,
     GrafanaUserScope,
     GroupVisibilityValidation,
 )
@@ -66,8 +65,8 @@ class _ProxyStub:
 def db_session():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    db = Session()
+    session = sessionmaker(bind=engine)
+    db = session()
 
     tenant = Tenant(id="t1", name="tenant-1", display_name="Tenant 1")
     owner = User(

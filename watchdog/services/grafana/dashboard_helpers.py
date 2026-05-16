@@ -10,19 +10,20 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, TypedDict
-
-from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
-from sqlalchemy.sql.elements import ColumnElement
+from collections.abc import Iterable
+from typing import TypedDict
 
 from config import config
 from custom_types.json import JSONDict
 from db_models import GrafanaDashboard, Group
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
-from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.grafana_bundles import AccessibleTitleConflictParams, DashboardAccessCriteria, GrafanaUserScope
+from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.shared_ops import group_id_strs
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
+
 
 def _json_dict(value: object) -> JSONDict:
     return value if isinstance(value, dict) else {}
@@ -33,22 +34,22 @@ def _json_dict_list(value: object) -> list[JSONDict]:
 
 
 class DashboardSearchContext(TypedDict, total=False):
-    uid_db_dashboard: Optional[GrafanaDashboard]
+    uid_db_dashboard: GrafanaDashboard | None
     all_registered_uids: set[str]
-    db_dashboards: Dict[str, GrafanaDashboard]
+    db_dashboards: dict[str, GrafanaDashboard]
 
 
 INT32_MIN = -(2**31)
 INT32_MAX = (2**31) - 1
 
 
-def _cap(limit: Optional[int], offset: int) -> tuple[int, int]:
+def _cap(limit: int | None, offset: int) -> tuple[int, int]:
     mx = int(config.MAX_QUERY_LIMIT)
     req = int(limit) if limit is not None else int(config.DEFAULT_QUERY_LIMIT)
     return max(1, min(req, mx)), max(0, int(offset))
 
 
-def _to_safe_int32(value: object) -> Optional[int]:
+def _to_safe_int32(value: object) -> int | None:
     if not isinstance(value, (int, float, bool, str)):
         return None
     try:
@@ -60,11 +61,11 @@ def _to_safe_int32(value: object) -> Optional[int]:
     return parsed
 
 
-def _normalize_title(title: Optional[str]) -> str:
+def _normalize_title(title: str | None) -> str:
     return str(title or "").strip().lower()
 
 
-def _normalized_group_id_set(group_ids: Optional[Iterable[object]]) -> set[str]:
+def _normalized_group_id_set(group_ids: Iterable[object] | None) -> set[str]:
     normalized: set[str] = set()
     for group_id in group_ids or []:
         value = getattr(group_id, "id", group_id)
@@ -94,7 +95,7 @@ def _title_conflict_matches_requested_scope(
     return True
 
 
-def _visible_scope_filter(user_id: str, group_ids: List[str]) -> ColumnElement[bool]:
+def _visible_scope_filter(user_id: str, group_ids: list[str]) -> ColumnElement[bool]:
     gids = group_id_strs(group_ids)
     conds = [GrafanaDashboard.created_by == user_id, GrafanaDashboard.visibility == "tenant"]
     if gids:
@@ -107,15 +108,15 @@ def _visible_scope_filter(user_id: str, group_ids: List[str]) -> ColumnElement[b
     return or_(*conds)
 
 
-def _is_hidden_for(db_dash: Optional[GrafanaDashboard], user_id: str) -> bool:
+def _is_hidden_for(db_dash: GrafanaDashboard | None, user_id: str) -> bool:
     return bool(db_dash and user_id in (db_dash.hidden_by or []))
 
 
-def _shared_group_ids(db_dash: Optional[GrafanaDashboard]) -> List[str]:
+def _shared_group_ids(db_dash: GrafanaDashboard | None) -> list[str]:
     return [str(g.id) for g in (db_dash.shared_groups or [])] if db_dash else []
 
 
-def _db_dashboard_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[GrafanaDashboard]:
+def _db_dashboard_by_uid(db: Session, tenant_id: str, uid: str) -> GrafanaDashboard | None:
     return (
         db.query(GrafanaDashboard)
         .filter(GrafanaDashboard.grafana_uid == uid, GrafanaDashboard.tenant_id == tenant_id)
@@ -123,7 +124,7 @@ def _db_dashboard_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[Graf
     )
 
 
-def _db_dashboards_map(db: Session, tenant_id: str) -> Dict[str, GrafanaDashboard]:
+def _db_dashboards_map(db: Session, tenant_id: str) -> dict[str, GrafanaDashboard]:
     rows = (
         db.query(GrafanaDashboard)
         .filter(GrafanaDashboard.tenant_id == tenant_id)
@@ -133,9 +134,7 @@ def _db_dashboards_map(db: Session, tenant_id: str) -> Dict[str, GrafanaDashboar
     return {d.grafana_uid: d for d in rows}
 
 
-def _to_search_result(
-    grafana_obj: object, *, db_dash: Optional[GrafanaDashboard], user_id: str
-) -> DashboardSearchResult:
+def _to_search_result(grafana_obj: object, *, db_dash: GrafanaDashboard | None, user_id: str) -> DashboardSearchResult:
     payload = grafana_obj.model_dump() if hasattr(grafana_obj, "model_dump") else _json_dict(grafana_obj)
     if db_dash and db_dash.title:
         payload["title"] = db_dash.title
@@ -159,7 +158,7 @@ async def _has_accessible_title_conflict(
         return False
     all_dashboards = await service.grafana_service.search_dashboards()
     live_conflicting_uids = {
-        str(getattr(d, "uid"))
+        str(d.uid)
         for d in all_dashboards
         if getattr(d, "uid", None) and _normalize_title(getattr(d, "title", None)) == target
     }
@@ -173,12 +172,15 @@ async def _has_accessible_title_conflict(
     for dash in q.all():
         if params.exclude_uid and dash.grafana_uid == str(params.exclude_uid):
             continue
-        if check_dashboard_access(
-            db,
-            dash.grafana_uid,
-            GrafanaUserScope(user_id=params.user_id, tenant_id=params.tenant_id, group_ids=params.group_ids),
-            DashboardAccessCriteria(),
-        ) is not None:
+        if (
+            check_dashboard_access(
+                db,
+                dash.grafana_uid,
+                GrafanaUserScope(user_id=params.user_id, tenant_id=params.tenant_id, group_ids=params.group_ids),
+                DashboardAccessCriteria(),
+            )
+            is not None
+        ):
             if not _title_conflict_matches_requested_scope(dash, params):
                 continue
             return True
@@ -213,7 +215,7 @@ def check_dashboard_access(
     dashboard_uid: str,
     scope: GrafanaUserScope,
     criteria: DashboardAccessCriteria | None = None,
-) -> Optional[GrafanaDashboard]:
+) -> GrafanaDashboard | None:
     effective_criteria = criteria or DashboardAccessCriteria(require_write=False)
     dashboard = _db_dashboard_by_uid(db, scope.tenant_id, dashboard_uid)
     has_access = False
@@ -234,8 +236,8 @@ def get_accessible_dashboard_uids(
     db: Session,
     user_id: str,
     tenant_id: str,
-    group_ids: List[str],
-) -> tuple[List[str], bool]:
+    group_ids: list[str],
+) -> tuple[list[str], bool]:
     rows = (
         db.query(GrafanaDashboard.grafana_uid)
         .filter(GrafanaDashboard.tenant_id == tenant_id)
@@ -250,7 +252,7 @@ def build_dashboard_search_context(
     db: Session,
     *,
     tenant_id: str,
-    uid: Optional[str] = None,
+    uid: str | None = None,
 ) -> DashboardSearchContext:
     if uid:
         return {"uid_db_dashboard": _db_dashboard_by_uid(db, tenant_id, uid)}
@@ -323,7 +325,7 @@ def _is_non_general_folder_id(folder_id: object) -> bool:
     return parsed > 0
 
 
-async def _resolve_folder_uid_by_id(service: GrafanaProxyClient, folder_id: Optional[int]) -> Optional[str]:
+async def _resolve_folder_uid_by_id(service: GrafanaProxyClient, folder_id: int | None) -> str | None:
     if not folder_id:
         return None
     try:

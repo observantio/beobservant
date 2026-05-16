@@ -9,8 +9,8 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import pytest
-
-from routers.observability.grafana_router import dashboards, datasources, folders, proxy as grafana_proxy_router
+from routers.observability.grafana_router import dashboards, datasources, folders
+from routers.observability.grafana_router import proxy as grafana_proxy_router
 
 from .helpers import WorkflowState, patch_auth_service
 

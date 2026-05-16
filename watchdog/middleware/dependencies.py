@@ -12,22 +12,21 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hmac import compare_digest
 from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
-
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi.concurrency import run_in_threadpool
-from sqlalchemy.exc import SQLAlchemyError
 
 from config import config
 from database import get_db_session
 from db_models import ApiKeyShare, User, UserApiKey
-from middleware.rate_limit import enforce_rate_limit, enforce_ip_rate_limit, client_ip
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.concurrency import run_in_threadpool
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from middleware.rate_limit import client_ip, enforce_ip_rate_limit, enforce_rate_limit
 from models.access.auth_models import Permission, TokenData
 from models.access.user_models import User as UserSchema
 from services.database_auth_service import DatabaseAuthService
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +76,7 @@ def _extract_bearer_token(
 def _normalize_group_ids(group_ids: object) -> list[str]:
     if isinstance(group_ids, list):
         source_group_ids = group_ids
-    elif isinstance(group_ids, tuple):
-        source_group_ids = list(group_ids)
-    elif isinstance(group_ids, set):
+    elif isinstance(group_ids, (tuple, set)):
         source_group_ids = list(group_ids)
     else:
         source_group_ids = []
@@ -312,12 +309,16 @@ def _load_allowed_scope_ids_for_user(*, current_user: TokenData, default_scope_i
         own_enabled_rows = own_query.all()
         allowed_scope_ids.update(str(row[0]) for row in own_enabled_rows if row and row[0])
 
-        shared_query = db.query(UserApiKey.key).join(ApiKeyShare, ApiKeyShare.api_key_id == UserApiKey.id).filter(
-            ApiKeyShare.shared_user_id == current_user.user_id,
-            ApiKeyShare.can_use.is_(True),
-            ApiKeyShare.tenant_id == current_user.tenant_id,
-            UserApiKey.tenant_id == current_user.tenant_id,
-            UserApiKey.is_enabled.is_(True),
+        shared_query = (
+            db.query(UserApiKey.key)
+            .join(ApiKeyShare, ApiKeyShare.api_key_id == UserApiKey.id)
+            .filter(
+                ApiKeyShare.shared_user_id == current_user.user_id,
+                ApiKeyShare.can_use.is_(True),
+                ApiKeyShare.tenant_id == current_user.tenant_id,
+                UserApiKey.tenant_id == current_user.tenant_id,
+                UserApiKey.is_enabled.is_(True),
+            )
         )
         if hasattr(shared_query, "limit"):
             shared_query = shared_query.limit(MAX_SCOPE_ROWS_PER_QUERY)
@@ -374,7 +375,7 @@ def _enforce_session_revocation(user: object, token_data: TokenData) -> None:
     if invalid_before is None:
         return
     if getattr(invalid_before, "tzinfo", None) is None:
-        invalid_before = invalid_before.replace(tzinfo=timezone.utc)
+        invalid_before = invalid_before.replace(tzinfo=UTC)
     token_iat = getattr(token_data, "iat", None)
     if token_iat is None:
         raise HTTPException(
@@ -383,7 +384,7 @@ def _enforce_session_revocation(user: object, token_data: TokenData) -> None:
             headers={"WWW-Authenticate": "Bearer"},
         )
     try:
-        token_iat_dt = datetime.fromtimestamp(int(token_iat), tz=timezone.utc)
+        token_iat_dt = datetime.fromtimestamp(int(token_iat), tz=UTC)
     except (TypeError, ValueError, OverflowError, OSError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -580,7 +581,7 @@ def require_any_permission(permissions: list[Permission | str]) -> Callable[...,
             return current_user
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=("You don't have any of the required permissions: " f"{', '.join(p.upper() for p in perm_values)}"),
+            detail=(f"You don't have any of the required permissions: {', '.join(p.upper() for p in perm_values)}"),
         )
 
     return permission_checker
@@ -596,7 +597,7 @@ def require_any_permission_with_scope(permissions: list[Permission | str], scope
             return current_user
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=("You don't have any of the required permissions: " f"{', '.join(p.upper() for p in perm_values)}"),
+            detail=(f"You don't have any of the required permissions: {', '.join(p.upper() for p in perm_values)}"),
         )
 
     def dependency(current_user: TokenData = Depends(permission_checker)) -> TokenData:

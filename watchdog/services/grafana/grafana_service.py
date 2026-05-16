@@ -14,16 +14,14 @@ import base64
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import List, Optional
 
 import httpx
-
 from config import config
+from custom_types.json import JSONDict, JSONValue
 from middleware.resilience import with_retry, with_timeout
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardSearchResult, DashboardUpdate
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from models.grafana.grafana_folder_models import Folder
-from custom_types.json import JSONDict, JSONValue
 from services.common.http_client import create_async_client
 
 logger = logging.getLogger(__name__)
@@ -42,12 +40,12 @@ class GrafanaSafeRequestOpts:
 
 @dataclass(frozen=True, slots=True)
 class GrafanaDashboardSearchRequest:
-    query: Optional[str] = None
-    tag: Optional[str] = None
-    folder_ids: Optional[List[int]] = None
-    folder_uids: Optional[List[str]] = None
-    dashboard_uids: Optional[List[str]] = None
-    starred: Optional[bool] = None
+    query: str | None = None
+    tag: str | None = None
+    folder_ids: list[int] | None = None
+    folder_uids: list[str] | None = None
+    dashboard_uids: list[str] | None = None
+    starred: bool | None = None
 
 
 class GrafanaAPIError(Exception):
@@ -91,7 +89,7 @@ class _GrafanaServiceCore:
         *,
         username: str = config.GRAFANA_USERNAME,
         password: str = config.GRAFANA_PASSWORD,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
     ) -> None:
         self.grafana_url = grafana_url.rstrip("/")
         self.timeout = config.DEFAULT_TIMEOUT
@@ -203,7 +201,7 @@ class _GrafanaDashboardAPI(_GrafanaServiceCore):
     async def search_dashboards(
         self,
         filters: GrafanaDashboardSearchRequest | None = None,
-    ) -> List[DashboardSearchResult]:
+    ) -> list[DashboardSearchResult]:
         search = filters or GrafanaDashboardSearchRequest()
         params: dict[str, QueryParamValue] = {"type": "dash-db"}
         if search.query:
@@ -223,13 +221,13 @@ class _GrafanaDashboardAPI(_GrafanaServiceCore):
 
     @with_retry()
     @with_timeout()
-    async def get_dashboard(self, uid: str) -> Optional[JSONDict]:
+    async def get_dashboard(self, uid: str) -> JSONDict | None:
         result = await self._safe_request("GET", f"/api/dashboards/uid/{uid}")
         return result if isinstance(result, dict) or result is None else None
 
     @with_retry()
     @with_timeout()
-    async def create_dashboard(self, dashboard_create: DashboardCreate) -> Optional[JSONDict]:
+    async def create_dashboard(self, dashboard_create: DashboardCreate) -> JSONDict | None:
         result = await self._mutating_request(
             "POST",
             "/api/dashboards/db",
@@ -239,7 +237,7 @@ class _GrafanaDashboardAPI(_GrafanaServiceCore):
 
     @with_retry()
     @with_timeout()
-    async def update_dashboard(self, uid: str, dashboard_update: DashboardUpdate) -> Optional[JSONDict]:
+    async def update_dashboard(self, uid: str, dashboard_update: DashboardUpdate) -> JSONDict | None:
         if not await self.get_dashboard(uid):
             return None
         dashboard_update.dashboard.uid = uid
@@ -272,25 +270,25 @@ class _GrafanaDatasourceAPI(_GrafanaServiceCore):
 
     @with_retry()
     @with_timeout()
-    async def get_datasources(self) -> List[Datasource]:
+    async def get_datasources(self) -> list[Datasource]:
         data = await self._safe_request("GET", "/api/datasources", [])
         return [Datasource.model_validate(ds) for ds in _dict_list(data)]
 
     @with_retry()
     @with_timeout()
-    async def get_datasource(self, uid: str) -> Optional[Datasource]:
+    async def get_datasource(self, uid: str) -> Datasource | None:
         data = await self._safe_request("GET", f"/api/datasources/uid/{uid}")
         return Datasource.model_validate(data) if isinstance(data, dict) else None
 
     @with_retry()
     @with_timeout()
-    async def get_datasource_by_name(self, name: str) -> Optional[Datasource]:
+    async def get_datasource_by_name(self, name: str) -> Datasource | None:
         data = await self._safe_request("GET", f"/api/datasources/name/{name}")
         return Datasource.model_validate(data) if isinstance(data, dict) else None
 
     @with_retry()
     @with_timeout()
-    async def create_datasource(self, datasource: DatasourceCreate) -> Optional[Datasource]:
+    async def create_datasource(self, datasource: DatasourceCreate) -> Datasource | None:
         result = await self._mutating_request(
             "POST",
             "/api/datasources",
@@ -301,7 +299,7 @@ class _GrafanaDatasourceAPI(_GrafanaServiceCore):
 
     @with_retry()
     @with_timeout()
-    async def update_datasource(self, uid: str, datasource_update: DatasourceUpdate) -> Optional[Datasource]:
+    async def update_datasource(self, uid: str, datasource_update: DatasourceUpdate) -> Datasource | None:
         existing = await self.get_datasource(uid)
         if not existing:
             return None
@@ -324,29 +322,29 @@ class _GrafanaDatasourceAPI(_GrafanaServiceCore):
 class _GrafanaFolderAPI(_GrafanaServiceCore):
     @with_retry()
     @with_timeout()
-    async def get_folders(self) -> List[Folder]:
+    async def get_folders(self) -> list[Folder]:
         data = await self._safe_request("GET", "/api/folders", [])
         return [Folder.model_validate(folder) for folder in _dict_list(data)]
 
     @with_retry()
     @with_timeout()
-    async def create_folder(self, title: str) -> Optional[Folder]:
+    async def create_folder(self, title: str) -> Folder | None:
         data = await self._mutating_request("POST", "/api/folders", opts=GrafanaSafeRequestOpts(json={"title": title}))
         return Folder.model_validate(data) if isinstance(data, dict) else None
 
     @with_retry()
     @with_timeout()
-    async def get_folder(self, uid: str) -> Optional[Folder]:
+    async def get_folder(self, uid: str) -> Folder | None:
         data = await self._safe_request("GET", f"/api/folders/{uid}")
         return Folder.model_validate(data) if isinstance(data, dict) else None
 
-    async def _update_folder_once(self, uid: str, payload: dict[str, object]) -> Optional[Folder]:
+    async def _update_folder_once(self, uid: str, payload: dict[str, object]) -> Folder | None:
         data = await self._mutating_request("PUT", f"/api/folders/{uid}", opts=GrafanaSafeRequestOpts(json=payload))
         return Folder.model_validate(data) if isinstance(data, dict) else None
 
     @with_retry()
     @with_timeout()
-    async def update_folder(self, uid: str, title: str) -> Optional[Folder]:
+    async def update_folder(self, uid: str, title: str) -> Folder | None:
         existing = await self.get_folder(uid)
         if not existing:
             return None

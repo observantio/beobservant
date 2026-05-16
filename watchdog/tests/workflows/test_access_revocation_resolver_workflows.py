@@ -12,8 +12,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from fastapi.responses import JSONResponse
-
 from models.access.auth_models import Permission
 from routers import internal_router
 from routers.observability import resolver_router

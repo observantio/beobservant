@@ -8,6 +8,8 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 import os
 import sys
+from pathlib import Path
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -16,23 +18,23 @@ os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:
 os.environ.setdefault("CORS_ALLOW_CREDENTIALS", "False")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+ROOT = str(Path(__file__).resolve().parent.parent.parent)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from services.grafana import proxy_auth_ops
-from services.grafana.grafana_service import GrafanaAPIError
-from services.grafana.grafana_bundles import GroupVisibilityValidation
-from services.grafana_proxy_service import GrafanaProxyService
 from db_models import Base, Group, Tenant, User
 from fastapi import HTTPException
+from services.grafana import proxy_auth_ops
+from services.grafana.grafana_bundles import GroupVisibilityValidation
+from services.grafana.grafana_service import GrafanaAPIError
+from services.grafana_proxy_service import GrafanaProxyService
 
 
 def make_session():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    return Session()
+    session = sessionmaker(bind=engine)
+    return session()
 
 
 def test_raise_http_from_grafana_error_prefers_message_key():

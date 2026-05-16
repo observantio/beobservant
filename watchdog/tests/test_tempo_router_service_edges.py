@@ -15,7 +15,6 @@ import types
 import httpx
 import pytest
 from fastapi import HTTPException
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
@@ -339,14 +338,14 @@ async def test_tempo_router_edges(monkeypatch):
         tempo_router,
         "tempo_service",
         types.SimpleNamespace(
-            search_traces=lambda query, tenant_id, fetch_full_traces: search_calls.append(
-                (query, tenant_id, fetch_full_traces)
-            )
-            or asyncio.sleep(
-                0,
-                result=TraceResponse.model_validate(
-                    {"data": [_trace("t1")], "total": 1, "limit": query.limit, "offset": 0}
-                ),
+            search_traces=lambda query, tenant_id, fetch_full_traces: (
+                search_calls.append((query, tenant_id, fetch_full_traces))
+                or asyncio.sleep(
+                    0,
+                    result=TraceResponse.model_validate(
+                        {"data": [_trace("t1")], "total": 1, "limit": query.limit, "offset": 0}
+                    ),
+                )
             ),
             get_trace=lambda trace_id, tenant_id: asyncio.sleep(0, result=_trace(trace_id)),
             get_services=lambda tenant_id: asyncio.sleep(0, result=["svc-a"]),
@@ -385,16 +384,16 @@ async def test_tempo_router_timeout_and_lifespan_edges(monkeypatch):
         return "tenant-a"
 
     async def timeout_search(*args, **kwargs):
-        raise asyncio.TimeoutError()
+        raise TimeoutError()
 
     async def timeout_trace(*args, **kwargs):
-        raise asyncio.TimeoutError()
+        raise TimeoutError()
 
     async def timeout_services(*args, **kwargs):
-        raise asyncio.TimeoutError()
+        raise TimeoutError()
 
     async def timeout_operations(*args, **kwargs):
-        raise asyncio.TimeoutError()
+        raise TimeoutError()
 
     closed = []
     monkeypatch.setattr(tempo_router, "resolve_tenant_id", fake_resolve_tenant_id)

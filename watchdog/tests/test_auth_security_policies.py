@@ -9,18 +9,17 @@ http://www.apache.org/licenses/LICENSE-2.0
 from tests._env import ensure_test_env
 
 ensure_test_env()
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from starlette.requests import Request
-
 from middleware import dependencies
 from models.access.auth_models import Role, TokenData
 from models.access.user_models import UserUpdate
 from routers.access.auth_router import users as users_router
 from services.auth.helper import is_admin_check
+from starlette.requests import Request
 
 
 def _token_data(*, role: Role = Role.USER, perms=None) -> TokenData:
@@ -33,7 +32,7 @@ def _token_data(*, role: Role = Role.USER, perms=None) -> TokenData:
         is_superuser=False,
         permissions=list(perms or []),
         group_ids=[],
-        iat=int(datetime.now(timezone.utc).timestamp()),
+        iat=int(datetime.now(UTC).timestamp()),
         is_mfa_setup=False,
     )
 
@@ -53,7 +52,7 @@ def _request_with_scope_header(org_id: str) -> Request:
 
 
 def test_session_revocation_requires_iat_when_invalid_before_set():
-    user = SimpleNamespace(session_invalid_before=datetime.now(timezone.utc))
+    user = SimpleNamespace(session_invalid_before=datetime.now(UTC))
     token_data = _token_data()
     token_data.iat = None
     with pytest.raises(HTTPException) as exc:
@@ -62,7 +61,7 @@ def test_session_revocation_requires_iat_when_invalid_before_set():
 
 
 def test_session_revocation_rejects_old_token():
-    invalid_before = datetime.now(timezone.utc)
+    invalid_before = datetime.now(UTC)
     old_iat = int((invalid_before - timedelta(minutes=1)).timestamp())
     user = SimpleNamespace(session_invalid_before=invalid_before)
     token_data = _token_data()
@@ -73,7 +72,7 @@ def test_session_revocation_rejects_old_token():
 
 
 def test_session_revocation_allows_newer_token():
-    invalid_before = datetime.now(timezone.utc)
+    invalid_before = datetime.now(UTC)
     new_iat = int((invalid_before + timedelta(minutes=1)).timestamp())
     user = SimpleNamespace(session_invalid_before=invalid_before)
     token_data = _token_data()
@@ -133,7 +132,7 @@ def test_is_admin_check_accepts_string_role():
         is_superuser=False,
         permissions=["manage:users"],
         group_ids=[],
-        iat=int(datetime.now(timezone.utc).timestamp()),
+        iat=int(datetime.now(UTC).timestamp()),
         is_mfa_setup=False,
     )
     assert is_admin_check(current_user) is True

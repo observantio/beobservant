@@ -8,9 +8,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from datetime import datetime, timezone
 import types
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
@@ -18,7 +18,6 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
@@ -119,7 +118,7 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
         {"key": "user:u1:tempo", "limit": dependencies.config.RATE_LIMIT_USER_PER_MINUTE, "window_seconds": 60}
     ]
 
-    naive_user = types.SimpleNamespace(session_invalid_before=datetime.fromtimestamp(101, timezone.utc))
+    naive_user = types.SimpleNamespace(session_invalid_before=datetime.fromtimestamp(101, UTC))
     with pytest.raises(HTTPException) as revoked:
         dependencies._enforce_session_revocation(naive_user, _token_data(iat=100))
     assert revoked.value.status_code == 401
@@ -181,7 +180,9 @@ async def test_dependency_helpers_for_tenant_and_allowlist_edges(monkeypatch):
         )
 
     with pytest.raises(HTTPException) as missing_token_config:
-        dependencies.enforce_header_token(_request(), header_name="x-test", expected_token=None, unauthorized_detail="bad")
+        dependencies.enforce_header_token(
+            _request(), header_name="x-test", expected_token=None, unauthorized_detail="bad"
+        )
     assert missing_token_config.value.status_code == 401
     with pytest.raises(HTTPException) as unauthorized:
         dependencies.enforce_header_token(

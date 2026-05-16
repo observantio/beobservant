@@ -12,7 +12,6 @@ ensure_test_env()
 
 import pytest
 from fastapi import HTTPException
-
 from models.access.auth_models import Role, TokenData
 from services.alerts.helpers import assert_silence_owner
 

@@ -7,11 +7,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import pytest
-from sqlalchemy.exc import SQLAlchemyError
-from fastapi import HTTPException
-
 from config import config
+from fastapi import HTTPException
 from services.internal_service import InternalService
+from sqlalchemy.exc import SQLAlchemyError
 
 
 class DummyAuth:

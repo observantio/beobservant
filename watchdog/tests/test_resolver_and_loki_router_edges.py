@@ -8,7 +8,6 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import asdict
 from datetime import datetime
 from types import SimpleNamespace
@@ -24,15 +23,15 @@ except ImportError:
 ensure_test_env()
 
 from models.access.auth_models import Permission, Role, TokenData
+from models.observability.loki_models import LogDirection, LogFilterRequest, LogSearchRequest
 from models.observability.resolver_models import (
     AnalyzeJobStatus,
     AnalyzeJobSummary,
     AnalyzeProxyPayload,
     AnalyzeRequestPayload,
 )
-from models.observability.loki_models import LogDirection, LogFilterRequest, LogSearchRequest
-from routers.observability import resolver_router, loki_router
 from pydantic import ValidationError
+from routers.observability import loki_router, resolver_router
 from tests._proxy_stubs import unpack_resolver_json_request
 
 
@@ -79,7 +78,7 @@ def test_analyze_proxy_payload_validates_time_range() -> None:
 
 @pytest.mark.asyncio
 async def test_loki_router_endpoints_and_timeout_wrapper(monkeypatch):
-    current_user = _user()
+    _user()
 
     async def fake_resolve_tenant_id(_request, _user):
         return "tenant"
@@ -178,7 +177,7 @@ async def test_loki_router_endpoints_and_timeout_wrapper(monkeypatch):
     )["tenant"] == "tenant"
 
     async def timeout_coro():
-        raise asyncio.TimeoutError()
+        raise TimeoutError()
 
     with pytest.raises(HTTPException) as exc:
         await loki_router._handle_timeout(timeout_coro(), "timed out")

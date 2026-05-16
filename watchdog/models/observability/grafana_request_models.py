@@ -10,14 +10,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import Optional
-
-from pydantic import BaseModel, ConfigDict, Field
 from custom_types.json import JSONDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class GrafanaBootstrapSessionRequest(BaseModel):
-    next: Optional[str] = None
+    next: str | None = None
 
 
 class GrafanaBootstrapSessionResponse(BaseModel):
@@ -30,12 +28,12 @@ class GrafanaDatasourceQueryRequest(BaseModel):
 
 
 class GrafanaDashboardPayloadRequest(BaseModel):
-    dashboard: Optional[JSONDict] = None
-    folder_id: Optional[int] = Field(None, alias="folderId")
-    folder_uid: Optional[str] = Field(None, alias="folderUid")
-    overwrite: Optional[bool] = None
-    message: Optional[str] = None
-    inputs: Optional[list[JSONDict]] = None
+    dashboard: JSONDict | None = None
+    folder_id: int | None = Field(None, alias="folderId")
+    folder_uid: str | None = Field(None, alias="folderUid")
+    overwrite: bool | None = None
+    message: str | None = None
+    inputs: list[JSONDict] | None = None
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
@@ -50,6 +48,6 @@ class GrafanaCreateFolderRequest(BaseModel):
 
 
 class GrafanaUpdateFolderRequest(BaseModel):
-    title: Optional[str] = None
-    allow_dashboard_writes: Optional[bool] = Field(None, alias="allowDashboardWrites")
+    title: str | None = None
+    allow_dashboard_writes: bool | None = Field(None, alias="allowDashboardWrites")
     model_config = ConfigDict(populate_by_name=True)

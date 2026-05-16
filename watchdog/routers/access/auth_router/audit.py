@@ -14,16 +14,14 @@ import csv
 import io
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Annotated, Optional, TypeAlias
-
-from fastapi import Depends, Query
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import aliased
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, TypeAlias
 
 from config import config
 from database import get_db_session
 from db_models import AuditLog, User
+from fastapi import Depends, Query
+from fastapi.responses import StreamingResponse
 from models.access.auth_models import TokenData
 from services.audit_context import get_request_audit_context
 from services.auth.helper import (
@@ -34,6 +32,7 @@ from services.auth.helper import (
     sanitize_audit_details,
     sanitize_resource_id,
 )
+from sqlalchemy.orm import aliased
 
 from .shared import router, rtp
 
@@ -43,8 +42,8 @@ AuditLogItem: TypeAlias = dict[str, object]
 class ListAuditLogsTimeParams:
     def __init__(
         self,
-        start: Optional[datetime] = Query(None),
-        end: Optional[datetime] = Query(None),
+        start: datetime | None = Query(None),
+        end: datetime | None = Query(None),
     ) -> None:
         self.start = start
         self.end = end
@@ -52,17 +51,17 @@ class ListAuditLogsTimeParams:
 
 @dataclass(frozen=True, slots=True)
 class ListAuditLogsFilterParams:
-    user_id: Optional[str]
-    action: Optional[str]
-    resource_type: Optional[str]
-    q: Optional[str]
+    user_id: str | None
+    action: str | None
+    resource_type: str | None
+    q: str | None
 
 
 def _list_audit_filters_dep(
-    user_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-    action: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-    resource_type: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-    q: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    user_id: str | None = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    action: str | None = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    resource_type: str | None = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    q: str | None = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
 ) -> ListAuditLogsFilterParams:
     return ListAuditLogsFilterParams(user_id=user_id, action=action, resource_type=resource_type, q=q)
 
@@ -70,7 +69,7 @@ def _list_audit_filters_dep(
 class ListAuditLogsPageParams:
     def __init__(
         self,
-        tenant_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+        tenant_id: str | None = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
         limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
         offset: int = Query(0, ge=0, le=1_000_000),
     ) -> None:
@@ -101,12 +100,7 @@ async def list_audit_logs(
                     q=audit_filters.q,
                 ),
             )
-            rows = (
-                q_obj.order_by(AuditLog.created_at.desc())
-                .offset(audit_page.offset)
-                .limit(audit_page.limit)
-                .all()
-            )
+            rows = q_obj.order_by(AuditLog.created_at.desc()).offset(audit_page.offset).limit(audit_page.limit).all()
             items: list[AuditLogItem] = [
                 {
                     "id": log.id,
@@ -125,7 +119,7 @@ async def list_audit_logs(
                 for log, username, email in rows
             ]
             ip_address, user_agent = get_request_audit_context()
-            cutoff = datetime.now(timezone.utc) - timedelta(seconds=5)
+            cutoff = datetime.now(UTC) - timedelta(seconds=5)
             already_logged = (
                 db.query(AuditLog.id)
                 .filter(
@@ -159,8 +153,8 @@ async def list_audit_logs(
 class ExportAuditLogsTimeParams:
     def __init__(
         self,
-        start: Optional[datetime] = Query(None),
-        end: Optional[datetime] = Query(None),
+        start: datetime | None = Query(None),
+        end: datetime | None = Query(None),
     ) -> None:
         self.start = start
         self.end = end
@@ -168,17 +162,17 @@ class ExportAuditLogsTimeParams:
 
 @dataclass(frozen=True, slots=True)
 class ExportAuditLogsFilterParams:
-    user_id: Optional[str]
-    action: Optional[str]
-    resource_type: Optional[str]
-    tenant_id: Optional[str]
+    user_id: str | None
+    action: str | None
+    resource_type: str | None
+    tenant_id: str | None
 
 
 def _export_audit_filters_dep(
-    user_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-    action: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-    resource_type: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
-    tenant_id: Optional[str] = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    user_id: str | None = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    action: str | None = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    resource_type: str | None = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
+    tenant_id: str | None = Query(None, max_length=200, pattern=r"^[^\x00-\x1F]*$"),
 ) -> ExportAuditLogsFilterParams:
     return ExportAuditLogsFilterParams(
         user_id=user_id,
@@ -256,7 +250,7 @@ async def export_audit_logs_csv(
     for log, username, email in rows:
         created_at = log.created_at
         if created_at is not None and getattr(created_at, "tzinfo", None) is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
+            created_at = created_at.replace(tzinfo=UTC)
         writer.writerow(
             [
                 log.id,

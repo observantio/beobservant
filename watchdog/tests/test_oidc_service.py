@@ -6,8 +6,8 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-import unittest
 import importlib
+import unittest
 from unittest.mock import patch
 
 from tests._env import ensure_test_env
@@ -15,8 +15,7 @@ from tests._env import ensure_test_env
 ensure_test_env()
 
 import pytest
-
-from services.auth.oidc_service import OIDCService, OidcAuthorizationUrlBuildRequest, OidcTransactionStartRequest
+from services.auth.oidc_service import OidcAuthorizationUrlBuildRequest, OIDCService, OidcTransactionStartRequest
 
 _oidc_module = importlib.import_module(OIDCService.__module__)
 

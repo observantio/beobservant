@@ -10,13 +10,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import Optional, Set
-
 from models.access.auth_models import Permission
 
 
-def _proxy_perms_static_prefixes(p: str, m: str) -> Optional[Set[str]]:
-    path_rules: tuple[tuple[str, Set[str]], ...] = (
+def _proxy_perms_static_prefixes(p: str, m: str) -> set[str] | None:
+    path_rules: tuple[tuple[str, set[str]], ...] = (
         ("/grafana/d/", {Permission.READ_DASHBOARDS.value}),
         ("/grafana/d-solo/", {Permission.READ_DASHBOARDS.value}),
         (
@@ -41,7 +39,7 @@ def _proxy_perms_static_prefixes(p: str, m: str) -> Optional[Set[str]]:
     return None
 
 
-def _proxy_perms_dashboard_writes(p: str, m: str) -> Optional[Set[str]]:
+def _proxy_perms_dashboard_writes(p: str, m: str) -> set[str] | None:
     if p.startswith("/grafana/api/dashboards/db") and m == "POST":
         return {
             Permission.CREATE_DASHBOARDS.value,
@@ -56,7 +54,7 @@ def _proxy_perms_dashboard_writes(p: str, m: str) -> Optional[Set[str]]:
     return None
 
 
-def _proxy_perms_datasource_uid(p: str, m: str) -> Optional[Set[str]]:
+def _proxy_perms_datasource_uid(p: str, m: str) -> set[str] | None:
     if not p.startswith("/grafana/api/datasources/uid/"):
         return None
     if "/resources/" in p or "/health" in p or p.endswith("/resources"):
@@ -65,7 +63,7 @@ def _proxy_perms_datasource_uid(p: str, m: str) -> Optional[Set[str]]:
             if m in {"GET", "HEAD", "OPTIONS"}
             else {Permission.QUERY_DATASOURCES.value}
         )
-    mapping: dict[str, Set[str]] = {
+    mapping: dict[str, set[str]] = {
         "GET": {Permission.READ_DATASOURCES.value},
         "PUT": {Permission.UPDATE_DATASOURCES.value},
         "DELETE": {Permission.DELETE_DATASOURCES.value},
@@ -73,7 +71,7 @@ def _proxy_perms_datasource_uid(p: str, m: str) -> Optional[Set[str]]:
     return mapping.get(m)
 
 
-def _proxy_perms_datasource_collection(p: str, m: str) -> Optional[Set[str]]:
+def _proxy_perms_datasource_collection(p: str, m: str) -> set[str] | None:
     if not p.startswith("/grafana/api/datasources"):
         return None
     if m == "GET":
@@ -83,9 +81,9 @@ def _proxy_perms_datasource_collection(p: str, m: str) -> Optional[Set[str]]:
     return None
 
 
-def _proxy_perms_f_api(p: str, m: str) -> Optional[Set[str]]:
+def _proxy_perms_f_api(p: str, m: str) -> set[str] | None:
     if p.startswith("/grafana/api/folders"):
-        mapping: dict[str, Set[str]] = {
+        mapping: dict[str, set[str]] = {
             "GET": {Permission.READ_FOLDERS.value},
             "POST": {Permission.CREATE_FOLDERS.value},
             "DELETE": {Permission.DELETE_FOLDERS.value},
@@ -104,7 +102,7 @@ def _proxy_perms_f_api(p: str, m: str) -> Optional[Set[str]]:
     )
 
 
-def required_permissions_for_path(path: str, method: str) -> Set[str]:
+def required_permissions_for_path(path: str, method: str) -> set[str]:
     p = (path or "").lower()
     m = (method or "GET").upper()
     for fn in (

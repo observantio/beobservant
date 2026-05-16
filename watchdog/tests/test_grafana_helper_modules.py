@@ -8,7 +8,6 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest

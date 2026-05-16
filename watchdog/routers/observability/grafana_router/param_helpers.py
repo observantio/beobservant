@@ -11,12 +11,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 UID_QUERY_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
 
 
-def normalize_optional_param(value: object) -> Optional[str]:
+def normalize_optional_param(value: object) -> str | None:
     if value is None or not isinstance(value, str):
         return None
     normalized = value.strip()

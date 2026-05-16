@@ -111,7 +111,7 @@ def test_delegation_helpers_and_oidc_pure_helpers(monkeypatch):
     assert delegation_mod.permission_is_admin_only("manage:users") is True
     assert delegation_mod.permission_is_admin_only("update:user_permissions") is True
     assert delegation_mod.normalize_permissions([" read:users ", "", None]) == {"read:users", "None"}
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match=r".*"):
         delegation_mod.require_actor(None, purpose="testing")
 
     actor = SimpleNamespace(groups=[], permissions=[])
@@ -317,7 +317,9 @@ def test_oidc_sync_and_provision_helpers(monkeypatch):
     db.tenant = SimpleNamespace(id="tenant-2")
     assert oidc_mod._ensure_default_tenant(db).id == "tenant-2"
 
-    fake_user_ctor = lambda **kwargs: SimpleNamespace(**kwargs)
+    def fake_user_ctor(**kwargs):
+        return SimpleNamespace(**kwargs)
+
     monkeypatch.setattr(oidc_mod, "provision_oidc_user", real_provision_oidc_user)
     monkeypatch.setattr(oidc_mod, "User", fake_user_ctor)
     monkeypatch.setattr(oidc_mod, "_ensure_default_tenant", lambda db: SimpleNamespace(id="tenant-1"))

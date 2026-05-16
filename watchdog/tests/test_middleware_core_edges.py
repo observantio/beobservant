@@ -10,14 +10,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import types
 
 import httpx
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
@@ -66,7 +64,7 @@ async def test_error_handlers_and_json_safe_paths():
     @handle_route_errors(RouteErrorHandlerOptions(gateway_timeout_detail="timed out"))
     async def gateway_timeout(request: Request) -> str:
         _ = request
-        raise asyncio.TimeoutError()
+        raise TimeoutError()
 
     with pytest.raises(HTTPException) as bad_req_exc:
         await bad_request()
@@ -293,7 +291,7 @@ async def test_request_size_and_concurrency_middleware_paths(monkeypatch):
     sent_messages.clear()
 
     async def timeout_wait_for(*args, **kwargs):
-        raise asyncio.TimeoutError()
+        raise TimeoutError()
 
     monkeypatch.setattr(asyncio, "wait_for", timeout_wait_for)
     await concurrency_middleware({"type": "http", "headers": []}, receive_small, send)

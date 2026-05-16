@@ -12,17 +12,13 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import Dict, List, Optional, Set, TypedDict, cast
-
-from fastapi import HTTPException
-from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
+from typing import TypedDict, cast
 
 from config import config
-from db_models import ApiKeyShare, GrafanaDatasource, Group, User, UserApiKey
-from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from custom_types.json import JSONDict
-from services.grafana.proxy_client import GrafanaProxyClient
+from db_models import ApiKeyShare, GrafanaDatasource, Group, User, UserApiKey
+from fastapi import HTTPException
+from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from services.grafana.datasource_payloads import (
     enrich_datasource_payload,
     is_safe_system_datasource,
@@ -45,8 +41,8 @@ from services.grafana.datasource_workflows import (
 from services.grafana.grafana_bundles import (
     AccessibleDsNameConflictParams,
     DatasourceAccessCriteria,
-    DatasourceCreateRequest,
     DatasourceCreateOptions,
+    DatasourceCreateRequest,
     DatasourceListParams,
     DatasourceQueryEnforcement,
     DatasourceUpdateOptions,
@@ -54,22 +50,25 @@ from services.grafana.grafana_bundles import (
     GrafanaUserScope,
     HiddenToggleParams,
 )
+from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
 from services.grafana.visibility import (
     group_share_change_for_scope,
     resolve_group_share_on_visibility_change,
 )
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
 
 DS_PROXY_ID_RE = re.compile(r"/api/datasources/proxy/(\d+)")
 
 
 class DatasourceListContext(TypedDict, total=False):
-    uid_db_datasource: Optional[GrafanaDatasource]
-    db_entries: Dict[str, GrafanaDatasource]
-    all_registered_uids: Set[str]
+    uid_db_datasource: GrafanaDatasource | None
+    db_entries: dict[str, GrafanaDatasource]
+    all_registered_uids: set[str]
 
 
-def _cap(limit: Optional[int], offset: int) -> tuple[int, int]:
+def _cap(limit: int | None, offset: int) -> tuple[int, int]:
     mx = int(config.MAX_QUERY_LIMIT)
     req = int(limit) if limit is not None else int(config.DEFAULT_QUERY_LIMIT)
     return max(1, min(req, mx)), max(0, int(offset))
@@ -79,7 +78,7 @@ def _sanitize_datasource_payload(payload: JSONDict, *, is_owner: bool) -> JSONDi
     return sanitize_datasource_payload(payload, is_owner=is_owner)
 
 
-def _normalize_name(name: Optional[str]) -> str:
+def _normalize_name(name: str | None) -> str:
     return normalize_datasource_name(name)
 
 
@@ -88,7 +87,7 @@ def _build_internal_name(display_name: str, user_id: str) -> str:
     return f"{display_name}__bo_{str(user_id)[:8]}_{suffix}"
 
 
-def _merge_json_payload(existing: Optional[JSONDict], incoming: Optional[JSONDict]) -> JSONDict:
+def _merge_json_payload(existing: JSONDict | None, incoming: JSONDict | None) -> JSONDict:
     return merge_json_payload(existing, incoming)
 
 
@@ -96,7 +95,7 @@ def _is_safe_system_datasource(datasource: object) -> bool:
     return is_safe_system_datasource(datasource)
 
 
-def _db_datasource_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[GrafanaDatasource]:
+def _db_datasource_by_uid(db: Session, tenant_id: str, uid: str) -> GrafanaDatasource | None:
     return (
         db.query(GrafanaDatasource)
         .filter(GrafanaDatasource.grafana_uid == uid, GrafanaDatasource.tenant_id == tenant_id)
@@ -104,13 +103,13 @@ def _db_datasource_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[Gra
     )
 
 
-def _load_allowed_scope_org_ids(db: Session, *, user_id: str, tenant_id: str) -> tuple[str, Set[str]]:
+def _load_allowed_scope_org_ids(db: Session, *, user_id: str, tenant_id: str) -> tuple[str, set[str]]:
     user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
     if not user or not getattr(user, "is_active", False):
         raise HTTPException(status_code=403, detail="User is not active in tenant scope")
 
     default_scope = str(getattr(user, "org_id", "") or config.DEFAULT_ORG_ID)
-    allowed: Set[str] = {default_scope, str(config.DEFAULT_ORG_ID)}
+    allowed: set[str] = {default_scope, str(config.DEFAULT_ORG_ID)}
 
     own_rows = (
         db.query(UserApiKey.key)
@@ -146,7 +145,7 @@ def _scope_conflicts_with_other_tenants(db: Session, *, org_id: str, tenant_id: 
 def _resolve_datasource_org_scope(
     db: Session,
     *,
-    requested_org_id: Optional[str],
+    requested_org_id: str | None,
     user_id: str,
     tenant_id: str,
 ) -> str:
@@ -190,9 +189,7 @@ async def _has_accessible_name_conflict(
             continue
         if params.exclude_uid and uid == str(params.exclude_uid):
             continue
-        is_unregistered_safe = (
-            allow_system and uid not in all_registered_uids and is_safe_system_datasource(datasource)
-        )
+        is_unregistered_safe = allow_system and uid not in all_registered_uids and is_safe_system_datasource(datasource)
         if uid not in accessible and not is_unregistered_safe:
             continue
         db_ds = db_map.get(uid)
@@ -210,7 +207,7 @@ def check_datasource_access(
     datasource_uid: str,
     scope: GrafanaUserScope,
     criteria: DatasourceAccessCriteria | None = None,
-) -> Optional[GrafanaDatasource]:
+) -> GrafanaDatasource | None:
     effective_criteria = criteria or DatasourceAccessCriteria(require_write=False)
     datasource = (
         db.query(GrafanaDatasource)
@@ -239,7 +236,7 @@ def check_datasource_access_by_id(
     datasource_id: int,
     scope: GrafanaUserScope,
     criteria: DatasourceAccessCriteria | None = None,
-) -> Optional[GrafanaDatasource]:
+) -> GrafanaDatasource | None:
     effective_criteria = criteria or DatasourceAccessCriteria(require_write=False)
     datasource = (
         db.query(GrafanaDatasource)
@@ -267,7 +264,7 @@ def get_accessible_datasource_uids(
     _service: GrafanaProxyClient,
     db: Session,
     scope: GrafanaUserScope,
-) -> tuple[List[str], bool]:
+) -> tuple[list[str], bool]:
     conditions = [GrafanaDatasource.created_by == scope.user_id, GrafanaDatasource.visibility == "tenant"]
     if scope.group_ids:
         conditions.append(
@@ -291,7 +288,7 @@ def build_datasource_list_context(
     db: Session,
     *,
     tenant_id: str,
-    uid: Optional[str] = None,
+    uid: str | None = None,
 ) -> DatasourceListContext:
     if uid:
         return {"uid_db_datasource": _db_datasource_by_uid(db, tenant_id, uid)}
@@ -305,8 +302,8 @@ def build_datasource_list_context(
     return {"db_entries": db_entries, "all_registered_uids": set(db_entries.keys())}
 
 
-def collect_datasource_refs_from_query_payload(payload: object) -> Set[str]:
-    refs: Set[str] = set()
+def collect_datasource_refs_from_query_payload(payload: object) -> set[str]:
+    refs: set[str] = set()
 
     def walk(value: object) -> None:
         if isinstance(value, dict):
@@ -392,7 +389,7 @@ async def get_datasources(
     db: Session,
     scope: GrafanaUserScope,
     params: DatasourceListParams,
-) -> List[Datasource]:
+) -> list[Datasource]:
     user_id = scope.user_id
     tenant_id = scope.tenant_id
     group_ids = scope.group_ids
@@ -446,7 +443,7 @@ async def get_datasources(
     all_registered_uids = set(effective_context.get("all_registered_uids") or set())
     db_entries = effective_context.get("db_entries") or {}
 
-    out: List[Datasource] = []
+    out: list[Datasource] = []
     for d in all_datasources:
         uid_val = str(getattr(d, "uid", "") or "")
         if not uid_val:
@@ -474,7 +471,7 @@ async def get_datasource(
     db: Session,
     uid: str,
     scope: GrafanaUserScope,
-) -> Optional[Datasource]:
+) -> Datasource | None:
     user_id = scope.user_id
     tenant_id = scope.tenant_id
     group_ids = scope.group_ids
@@ -483,12 +480,15 @@ async def get_datasource(
     if not ds:
         return None
     if db_ds:
-        if check_datasource_access(
-            db,
-            uid,
-            GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-            DatasourceAccessCriteria(),
-        ) is None:
+        if (
+            check_datasource_access(
+                db,
+                uid,
+                GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+                DatasourceAccessCriteria(),
+            )
+            is None
+        ):
             return None
     elif not is_safe_system_datasource(ds):
         return None
@@ -501,7 +501,7 @@ async def get_datasource_by_name(
     db: Session,
     name: str,
     scope: GrafanaUserScope,
-) -> Optional[Datasource]:
+) -> Datasource | None:
     user_id = scope.user_id
     tenant_id = scope.tenant_id
     group_ids = scope.group_ids
@@ -511,12 +511,15 @@ async def get_datasource_by_name(
     uid = str(getattr(ds, "uid", "") or "")
     db_ds = _db_datasource_by_uid(db, tenant_id, uid) if uid else None
     if db_ds:
-        if check_datasource_access(
-            db,
-            uid,
-            GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
-            DatasourceAccessCriteria(),
-        ) is None:
+        if (
+            check_datasource_access(
+                db,
+                uid,
+                GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids),
+                DatasourceAccessCriteria(),
+            )
+            is None
+        ):
             return None
     elif not is_safe_system_datasource(ds):
         return None
@@ -529,9 +532,9 @@ async def create_datasource(
     db: Session,
     datasource_create: DatasourceCreate | DatasourceCreateRequest,
     *,
-    scope: Optional[GrafanaUserScope] = None,
-    options: Optional[DatasourceCreateOptions] = None,
-) -> Optional[Datasource]:
+    scope: GrafanaUserScope | None = None,
+    options: DatasourceCreateOptions | None = None,
+) -> Datasource | None:
     if isinstance(datasource_create, DatasourceCreateRequest):
         request = datasource_create
         datasource_create = request.datasource_create
@@ -623,10 +626,10 @@ async def update_datasource(
     db: Session,
     request: DatasourceUpdateRequest | str,
     *,
-    datasource_update: Optional[DatasourceUpdate] = None,
-    scope: Optional[GrafanaUserScope] = None,
-) -> Optional[Datasource]:
-    options: Optional[DatasourceUpdateOptions] = None
+    datasource_update: DatasourceUpdate | None = None,
+    scope: GrafanaUserScope | None = None,
+) -> Datasource | None:
+    options: DatasourceUpdateOptions | None = None
     if isinstance(request, DatasourceUpdateRequest):
         uid = request.uid
         datasource_update = request.datasource_update
@@ -665,18 +668,14 @@ async def update_datasource(
                 datasource=datasource_update,
                 user_id=user_id,
                 tenant_id=tenant_id,
-                existing_json=dict(
-                    getattr(existing, "json_data", None)
-                    or getattr(existing, "jsonData", None)
-                    or {}
-                ),
+                existing_json=dict(getattr(existing, "json_data", None) or getattr(existing, "jsonData", None) or {}),
                 existing_type=str(getattr(existing, "type", "") or ""),
             ),
             resolve_org_scope=_resolve_datasource_org_scope,
         ),
     )
 
-    requested_name: Optional[str] = None
+    requested_name: str | None = None
     if getattr(datasource_update, "name", None) is not None:
         requested_name = str(datasource_update.name or "").strip()
         if requested_name and await _has_accessible_name_conflict(

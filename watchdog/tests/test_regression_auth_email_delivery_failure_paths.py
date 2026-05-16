@@ -44,7 +44,9 @@ def _tenant_session(tenant_id: str | None):
 
 
 @pytest.mark.asyncio
-async def test_register_returns_user_response_even_when_welcome_email_returns_false(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_register_returns_user_response_even_when_welcome_email_returns_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(auth_router, "rtp", run_in_threadpool_inline)
     monkeypatch.setattr(auth_router, "rate_limit_func", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(auth_router.auth_service, "is_external_auth_enabled", lambda: False)
@@ -70,7 +72,9 @@ async def test_register_returns_user_response_even_when_welcome_email_returns_fa
 
 
 @pytest.mark.asyncio
-async def test_reset_temp_password_returns_delivered_message_when_email_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reset_temp_password_returns_delivered_message_when_email_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(users_router, "rtp", run_in_threadpool_inline)
     monkeypatch.setattr(
         users_router.auth_service,
@@ -100,7 +104,9 @@ async def test_reset_temp_password_returns_delivered_message_when_email_succeeds
 
 
 @pytest.mark.asyncio
-async def test_reset_temp_password_returns_out_of_band_message_on_email_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reset_temp_password_returns_out_of_band_message_on_email_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(users_router, "rtp", run_in_threadpool_inline)
     monkeypatch.setattr(
         users_router.auth_service,
@@ -130,7 +136,9 @@ async def test_reset_temp_password_returns_out_of_band_message_on_email_failure(
 
 
 @pytest.mark.asyncio
-async def test_reset_temp_password_uses_target_object_username_when_result_username_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reset_temp_password_uses_target_object_username_when_result_username_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(users_router, "rtp", run_in_threadpool_inline)
 
     target_user = SimpleNamespace(username="fallback-target", role=Role.USER)

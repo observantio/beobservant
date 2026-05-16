@@ -8,14 +8,12 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from typing import List, Optional
-
 
 def _escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def build_promql_selectors(service: Optional[str]) -> List[str]:
+def build_promql_selectors(service: str | None) -> list[str]:
     if not service:
         return ["{}"]
     svc = _escape(service)
@@ -27,7 +25,7 @@ def build_promql_selectors(service: Optional[str]) -> List[str]:
     ]
 
 
-def build_count_promql(service: Optional[str], range_s: int, label_variant: int = 0) -> str:
+def build_count_promql(service: str | None, range_s: int, label_variant: int = 0) -> str:
     selectors = build_promql_selectors(service)
     selector = selectors[min(label_variant, len(selectors) - 1)]
     return f"sum(count_over_time({selector}[{range_s}s]))"

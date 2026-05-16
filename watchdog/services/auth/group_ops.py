@@ -11,31 +11,43 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
-from typing import List, Optional, Set, Tuple, TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import httpx
-from fastapi import HTTPException, status
-from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session, joinedload
-
 from config import config
 from database import get_db_session
 from db_models import GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, Permission, User
-from models.access.group_models import GroupCreate, GroupUpdate, Group as GroupSchema
+from fastapi import HTTPException, status
 from models.access.auth_models import Role
+from models.access.group_models import Group as GroupSchema
+from models.access.group_models import GroupCreate, GroupUpdate
 from services.auth.actor_caps import AuthActorCaps
 from services.auth.delegation import (
     is_admin_actor as _is_admin_actor,
+)
+from services.auth.delegation import (
     normalize_permissions as _normalize_permissions,
+)
+from services.auth.delegation import (
     permission_is_admin_only as _permission_is_admin_only,
+)
+from services.auth.delegation import (
     require_actor as _require_actor,
+)
+from services.auth.delegation import (
     resolve_actor_permissions as _resolve_actor_permissions,
+)
+from services.auth.delegation import (
     role_rank as _shared_role_rank,
+)
+from services.auth.delegation import (
     role_to_text as _role_to_text,
 )
 from services.database_auth.audit import AuditLogRecord
+from sqlalchemy import and_, func, or_
+from sqlalchemy.orm import Session, joinedload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -52,7 +64,7 @@ logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _role_rank(value: object) -> int:
@@ -95,7 +107,7 @@ def _propagate_removed_member_group_shares(
         )
 
 
-def _get_group(db: Session, *, group_id: str, tenant_id: str, load_members: bool = False) -> Optional[Group]:
+def _get_group(db: Session, *, group_id: str, tenant_id: str, load_members: bool = False) -> Group | None:
     opts = [joinedload(Group.permissions)]
     if load_members:
         opts.append(joinedload(Group.members))
@@ -106,8 +118,8 @@ def _get_group(db: Session, *, group_id: str, tenant_id: str, load_members: bool
 def _can_access_group(
     group: Group,
     *,
-    actor_user_id: Optional[str],
-    actor_role: Optional[str],
+    actor_user_id: str | None,
+    actor_role: str | None,
     actor_is_superuser: bool,
 ) -> bool:
     if _is_admin_actor(actor_role=actor_role, actor_is_superuser=actor_is_superuser):
@@ -124,7 +136,7 @@ def _get_actor_context(
     db: Session,
     tenant_id: str,
     actor: AuthActorCaps,
-) -> Tuple[User, str, bool, Set[str]]:
+) -> tuple[User, str, bool, set[str]]:
     uid = str(actor.user_id or "").strip()
     row = db.query(User).filter_by(id=uid, tenant_id=tenant_id).first()
     if not row:
@@ -144,9 +156,9 @@ def _get_actor_context(
 
 def _enforce_permission_delegation(
     *,
-    requested_permissions: Set[str],
-    actor_permissions: Set[str],
-    actor_role: Optional[str],
+    requested_permissions: set[str],
+    actor_permissions: set[str],
+    actor_role: str | None,
     actor_is_superuser: bool,
 ) -> None:
     if actor_is_superuser:
@@ -172,7 +184,7 @@ def _enforce_permission_delegation(
 
 
 def create_group(
-    service: DatabaseAuthService, group_create: GroupCreate, tenant_id: str, creator_id: Optional[str] = None
+    service: DatabaseAuthService, group_create: GroupCreate, tenant_id: str, creator_id: str | None = None
 ) -> GroupSchema:
     name = (group_create.name or "").strip()
     if not name:
@@ -222,9 +234,9 @@ def list_groups(
     service: DatabaseAuthService,
     tenant_id: str,
     *,
-    actor: Optional[AuthActorCaps] = None,
-    q: Optional[str] = None,
-) -> List[GroupSchema]:
+    actor: AuthActorCaps | None = None,
+    q: str | None = None,
+) -> list[GroupSchema]:
     actor = actor or AuthActorCaps()
     actor_user_id = actor.user_id
     actor_role = actor.role
@@ -258,8 +270,8 @@ def get_group(
     service: DatabaseAuthService,
     group_id: str,
     tenant_id: str,
-    actor: Optional[AuthActorCaps] = None,
-) -> Optional[GroupSchema]:
+    actor: AuthActorCaps | None = None,
+) -> GroupSchema | None:
     actor = actor or AuthActorCaps()
     actor_user_id = actor.user_id
     actor_role = actor.role
@@ -281,7 +293,7 @@ def delete_group(
     service: DatabaseAuthService,
     group_id: str,
     tenant_id: str,
-    actor: Optional[AuthActorCaps] = None,
+    actor: AuthActorCaps | None = None,
 ) -> bool:
     actor = actor or AuthActorCaps()
     deleter_id = actor.user_id
@@ -324,8 +336,8 @@ def update_group(
     group_update: GroupUpdate,
     tenant_id: str,
     *,
-    actor: Optional[AuthActorCaps] = None,
-) -> Optional[GroupSchema]:
+    actor: AuthActorCaps | None = None,
+) -> GroupSchema | None:
     actor = actor or AuthActorCaps()
     updater_id = actor.user_id
     actor_role = actor.role
@@ -396,10 +408,10 @@ def update_group(
 def update_group_permissions(
     service: DatabaseAuthService,
     group_id: str,
-    permission_names: List[str],
+    permission_names: list[str],
     tenant_id: str,
     *,
-    actor: Optional[AuthActorCaps] = None,
+    actor: AuthActorCaps | None = None,
 ) -> bool:
     caps = actor or AuthActorCaps()
     actor_user_id = _require_actor(caps.user_id, purpose="group permission updates")
@@ -506,10 +518,10 @@ def update_group_permissions(
 def update_group_members(
     service: DatabaseAuthService,
     group_id: str,
-    user_ids: List[str],
+    user_ids: list[str],
     tenant_id: str,
     *,
-    actor: Optional[AuthActorCaps] = None,
+    actor: AuthActorCaps | None = None,
 ) -> bool:
     caps = actor or AuthActorCaps()
     actor_user_id = _require_actor(caps.user_id, purpose="group membership updates")
@@ -554,7 +566,7 @@ def update_group_members(
 
         existing_member_ids = {str(u.id) for u in (group.members or [])}
 
-        members: List[User] = []
+        members: list[User] = []
         requested_ids = [str(u).strip() for u in (user_ids or []) if str(u).strip()]
         if requested_ids:
             members = db.query(User).filter(and_(User.id.in_(requested_ids), User.tenant_id == tenant_id)).all()
@@ -624,7 +636,7 @@ def _prune_removed_member_grafana_group_shares(
     *,
     tenant_id: str,
     group_id: str,
-    removed_user_ids: List[str],
+    removed_user_ids: list[str],
 ) -> None:
     target_group_id = str(group_id)
     removed_ids = [str(uid) for uid in (removed_user_ids or []) if str(uid).strip()]
@@ -690,8 +702,8 @@ def _prune_removed_member_notifier_group_shares(
     *,
     tenant_id: str,
     group_id: str,
-    removed_user_ids: List[str],
-    removed_usernames: Optional[List[str]] = None,
+    removed_user_ids: list[str],
+    removed_usernames: list[str] | None = None,
 ) -> None:
     base_url = str(getattr(config, "NOTIFIER_URL", "") or "").strip().rstrip("/")
     service_token = config.get_secret("NOTIFIER_SERVICE_TOKEN")

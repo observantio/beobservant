@@ -13,12 +13,10 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-from typing import Optional
 
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from jwt.algorithms import ECAlgorithm, RSAAlgorithm
-
 from custom_types.json import JSONDict
+from jwt.algorithms import ECAlgorithm, RSAAlgorithm
 
 VerificationKey = rsa.RSAPublicKey | ec.EllipticCurvePublicKey
 
@@ -49,7 +47,7 @@ def looks_like_jwt(token: str) -> bool:
     return len(parts) == 3 and all(parts)
 
 
-def decode_jwt_header(token: str) -> Optional[JSONDict]:
+def decode_jwt_header(token: str) -> JSONDict | None:
     if not looks_like_jwt(token):
         return None
     header_b64 = token.split(".", 1)[0]
@@ -63,12 +61,12 @@ def decode_jwt_header(token: str) -> Optional[JSONDict]:
     return header if isinstance(header, dict) else None
 
 
-def issuer_candidates(issuer: Optional[str]) -> tuple[Optional[str], ...]:
+def issuer_candidates(issuer: str | None) -> tuple[str | None, ...]:
     normalized = str(issuer or "").strip().rstrip("/")
     if not normalized:
         return (None,)
 
-    candidates: list[Optional[str]] = [normalized]
+    candidates: list[str | None] = [normalized]
     # Google documents both forms of the issuer in ID token validation guidance.
     if normalized in {"https://accounts.google.com", "accounts.google.com"}:
         candidates = ["https://accounts.google.com", "accounts.google.com"]

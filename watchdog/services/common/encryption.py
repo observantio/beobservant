@@ -14,9 +14,8 @@ http://www.apache.org/licenses/LICENSE-2.0
 import json
 from functools import lru_cache
 
-from cryptography.fernet import Fernet, InvalidToken
-
 from config import config as app_config
+from cryptography.fernet import Fernet, InvalidToken
 from custom_types.json import JSONDict
 
 
@@ -71,6 +70,6 @@ def decrypt_config(cfg: JSONDict) -> JSONDict:
     except ValueError:
         raise
     except InvalidToken as exc:
-        raise ValueError("Cannot decrypt channel config – wrong key or corrupted data") from exc
+        raise ValueError("Cannot decrypt channel config - wrong key or corrupted data") from exc
     except Exception as exc:
         raise ValueError("Failed to decrypt channel config") from exc

@@ -7,13 +7,13 @@ http://www.apache.org/licenses/LICENSE-2.0btain
 a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from .resilience import with_retry, with_timeout
-from .request_size_limit import RequestSizeLimitMiddleware
 from .concurrency_limit import ConcurrencyLimitMiddleware
+from .request_size_limit import RequestSizeLimitMiddleware
+from .resilience import with_retry, with_timeout
 
 __all__ = [
+    "ConcurrencyLimitMiddleware",
+    "RequestSizeLimitMiddleware",
     "with_retry",
     "with_timeout",
-    "RequestSizeLimitMiddleware",
-    "ConcurrencyLimitMiddleware",
 ]

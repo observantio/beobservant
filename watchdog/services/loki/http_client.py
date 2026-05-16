@@ -10,10 +10,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 import logging
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Dict, Mapping, Optional, Sequence
-import httpx
 
+import httpx
 from custom_types.json import JSONDict
 
 logger = logging.getLogger(__name__)
@@ -28,13 +28,13 @@ class LokiGetJsonRequest:
     client: httpx.AsyncClient
     url: str
     params: QueryParams
-    headers: Dict[str, str]
+    headers: dict[str, str]
     quiet: bool = False
 
 
 class LokiHttpClient:
-    def __init__(self, metrics: Optional[Dict[str, float]] = None) -> None:
-        self._metrics: Dict[str, float] = metrics if metrics is not None else {}
+    def __init__(self, metrics: dict[str, float] | None = None) -> None:
+        self._metrics: dict[str, float] = metrics if metrics is not None else {}
 
     def _observe(self, metric: str, value: float = 1.0) -> None:
         self._metrics[metric] = self._metrics.get(metric, 0.0) + value
@@ -45,7 +45,7 @@ class LokiHttpClient:
         url: str,
         *,
         params: QueryParams,
-        headers: Dict[str, str],
+        headers: dict[str, str],
     ) -> JSONDict:
         started = time.perf_counter()
         try:
@@ -60,7 +60,7 @@ class LokiHttpClient:
     async def safe_get_json(
         self,
         request: LokiGetJsonRequest,
-    ) -> Optional[JSONDict]:
+    ) -> JSONDict | None:
         try:
             return await self.timed_get_json(
                 request.client,

@@ -10,6 +10,7 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 import asyncio
+
 from services.tempo import metrics as tempo_metrics
 from services.tempo.metrics import QueryMetricsRangeParams
 

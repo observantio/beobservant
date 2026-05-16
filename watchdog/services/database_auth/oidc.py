@@ -12,19 +12,18 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import List, Optional, TYPE_CHECKING
-
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from config import config
+from custom_types.json import JSONDict
 from database import get_db_session
 from db_models import Tenant, User
 from models.access.auth_models import Permission, Role
-from custom_types.json import JSONDict
 from services.database_auth.audit import AuditLogRecord
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -34,23 +33,23 @@ if TYPE_CHECKING:
 class OidcProvisionProfile:
     email: str
     preferred_username: str
-    full_name: Optional[str]
+    full_name: str | None
     subject: str
-    default_tenant: Optional[Tenant] = None
+    default_tenant: Tenant | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ExistingUserLookupContext:
     email: str
     subject: str
-    tenant_id: Optional[str]
+    tenant_id: str | None
     claims: JSONDict
 
 
 @dataclass(frozen=True, slots=True)
 class OidcUserUpdateProfile:
     email: str
-    full_name: Optional[str]
+    full_name: str | None
     subject: str
 
 
@@ -65,7 +64,7 @@ def _claim_str(claims: JSONDict, key: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def extract_permissions_from_oidc_claims(claims: JSONDict) -> List[str]:
+def extract_permissions_from_oidc_claims(claims: JSONDict) -> list[str]:
     extracted = _normalize_claim_list(claims.get("permissions"))
     extracted |= _normalize_claim_list(claims.get("scp"))
     return sorted(p for p in extracted if p in ALLOWED_OIDC_PERMISSION_VALUES)
@@ -124,18 +123,18 @@ def _preferred_username(claims: JSONDict, email: str) -> str:
     return email.split("@", 1)[0].strip().lower()
 
 
-def _full_name(claims: JSONDict) -> Optional[str]:
+def _full_name(claims: JSONDict) -> str | None:
     name = _claim_str(claims, "name")
     return name or None
 
 
-def _get_user_by_subject(db: Session, subject: str, tenant_id: Optional[str]) -> Optional[User]:
+def _get_user_by_subject(db: Session, subject: str, tenant_id: str | None) -> User | None:
     if not subject or not tenant_id:
         return None
     return db.query(User).filter(User.tenant_id == tenant_id, User.external_subject == subject).first()
 
 
-def _get_user_by_email(db: Session, email: str, tenant_id: Optional[str]) -> Optional[User]:
+def _get_user_by_email(db: Session, email: str, tenant_id: str | None) -> User | None:
     if not email or not tenant_id:
         return None
     return db.query(User).filter(User.tenant_id == tenant_id, func.lower(User.email) == email).first()
@@ -151,7 +150,7 @@ def _resolve_existing_user(
     service: DatabaseAuthService,
     db: Session,
     context: ExistingUserLookupContext,
-) -> Optional[User]:
+) -> User | None:
     resolved = _get_user_by_subject(db, context.subject, context.tenant_id)
     if resolved is None:
         candidate = _get_user_by_email(db, context.email, context.tenant_id)
@@ -189,12 +188,12 @@ def _resolve_existing_user(
     return resolved
 
 
-def sync_user_from_oidc_claims(service: DatabaseAuthService, claims: JSONDict) -> Optional[User]:
+def sync_user_from_oidc_claims(service: DatabaseAuthService, claims: JSONDict) -> User | None:
     service.ensure_initialized()
 
     email = _normalize_email(claims)
     subject = _normalize_subject(claims)
-    user: Optional[User] = None
+    user: User | None = None
 
     if not email:
         service.logger.warning("OIDC token missing email claim")
@@ -245,7 +244,7 @@ def sync_user_from_oidc_claims(service: DatabaseAuthService, claims: JSONDict) -
                         user = None
 
                 if user is not None:
-                    user.last_login = datetime.now(timezone.utc)
+                    user.last_login = datetime.now(UTC)
                     db.commit()
                     db.refresh(user)
     return user
@@ -321,7 +320,7 @@ def provision_oidc_user(
             hashed_password=service.hash_password(secrets.token_urlsafe(24)),
             # OIDC users authenticate externally; local bootstrap is unnecessary.
             needs_password_change=False,
-            password_changed_at=datetime.now(timezone.utc),
+            password_changed_at=datetime.now(UTC),
             must_setup_mfa=must_setup_mfa,
             auth_provider=config.AUTH_PROVIDER,
             external_subject=profile.subject or None,

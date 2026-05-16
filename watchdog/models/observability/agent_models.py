@@ -9,16 +9,17 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from datetime import datetime
-from typing import Annotated, Dict, Optional, List, Any
+from typing import Annotated, Any
+
 from pydantic import BaseModel, Field, field_validator
 
 
 class AgentHeartbeat(BaseModel):
     name: Annotated[str, Field(min_length=1, description="Agent name")]
     tenant_id: Annotated[str, Field(min_length=1, description="Tenant ID (API key) associated with the agent")]
-    signal: Optional[str] = Field(None, description="Signal type (logs, traces, metrics)")
-    attributes: Dict[str, str] = Field(default_factory=dict)
-    timestamp: Optional[datetime] = None
+    signal: str | None = Field(None, description="Signal type (logs, traces, metrics)")
+    attributes: dict[str, str] = Field(default_factory=dict)
+    timestamp: datetime | None = None
 
     @field_validator("timestamp", mode="before")
     @classmethod
@@ -32,7 +33,7 @@ class AgentInfo(BaseModel):
     id: str
     name: str
     tenant_id: str
-    host_name: Optional[str] = None
+    host_name: str | None = None
     last_seen: datetime
-    signals: List[str] = Field(default_factory=list)
-    attributes: Dict[str, str] = Field(default_factory=dict)
+    signals: list[str] = Field(default_factory=list)
+    attributes: dict[str, str] = Field(default_factory=dict)

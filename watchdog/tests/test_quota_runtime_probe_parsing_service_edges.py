@@ -13,13 +13,13 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
 
 from db_models import Base, Tenant, User, UserApiKey
 from models.access.auth_models import Role, TokenData
+from services.quota_service import parsing as parsing_module
 from services.quota_service.parsing import (
     compute_remaining,
     extract_from_text,
@@ -31,7 +31,6 @@ from services.quota_service.parsing import (
     prom_query_url,
     response_payload,
 )
-from services.quota_service import parsing as parsing_module
 from services.quota_service.runtime_probe import NativeQuotaFetchParams, QuotaProbe, RuntimeQuotaProbe
 from services.quota_service.service import QuotaService, RuntimeQuotaResolveParams
 from sqlalchemy import create_engine

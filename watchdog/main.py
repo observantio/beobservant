@@ -13,21 +13,21 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-import logging
 import asyncio
-from datetime import datetime, timezone
-from contextlib import asynccontextmanager
+import logging
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+
+import database as database_module
+import httpx
+from config import config, constants
 from fastapi import FastAPI, status
+from fastapi.encoders import ENCODERS_BY_TYPE
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-from fastapi.encoders import ENCODERS_BY_TYPE
-from pydantic import BaseModel
-import httpx
-
-from config import config, constants
 from middleware.audit import security_headers_middleware
 from middleware.concurrency_limit import ConcurrencyLimitMiddleware
 from middleware.dependencies import auth_service
@@ -38,6 +38,7 @@ from middleware.error_handlers import (
 from middleware.openapi import install_custom_openapi
 from middleware.request_size_limit import RequestSizeLimitMiddleware
 from middleware.runtime_ssl import RuntimeSSLOptions, run_uvicorn
+from pydantic import BaseModel
 from routers import (
     agents_router,
     alertmanager_router,
@@ -49,7 +50,6 @@ from routers import (
     system_router,
     tempo_router,
 )
-import database as database_module
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL.upper()), format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -65,7 +65,7 @@ class ReadyResponse(BaseModel):
 def _encode_datetime_rfc3339(value: datetime) -> str:
     dt = value
     if getattr(dt, "tzinfo", None) is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt.isoformat()
 
 
@@ -75,7 +75,7 @@ connection_test = database_module.connection_test
 
 if not config.SKIP_STARTUP_DB_INIT:
     logger.info("Connecting to database: %s", config.DATABASE_URL.split("@")[-1])
-    init_database_fn = getattr(database_module, "init_database")
+    init_database_fn = database_module.init_database
     init_database_fn(config.DATABASE_URL)
     database_module.init_db()
     logger.info("✓ Database initialized")
@@ -214,7 +214,7 @@ async def _upstream_reachable(base_url: str) -> bool:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, verify=verify) as client:
             response = await client.get(base_url)
             return 200 <= response.status_code < 500
-    except (httpx.HTTPError, asyncio.TimeoutError):
+    except (TimeoutError, httpx.HTTPError):
         return False
 
 
@@ -244,7 +244,7 @@ async def ready() -> JSONResponse:
     }
 
     required_results = await asyncio.gather(*(_upstream_reachable(url) for url in required_upstream_targets.values()))
-    checks.update(dict(zip(required_upstream_targets.keys(), required_results)))
+    checks.update(dict(zip(required_upstream_targets.keys(), required_results, strict=False)))
 
     checks["grafana"] = await _upstream_reachable(config.GRAFANA_URL)
 

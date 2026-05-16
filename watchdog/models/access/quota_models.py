@@ -9,7 +9,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -20,13 +20,13 @@ QuotaStatus = Literal["ok", "degraded", "unavailable"]
 class RuntimeQuota(BaseModel):
     service: Literal["loki", "tempo"]
     tenant_id: str
-    limit: Optional[float] = None
-    used: Optional[float] = None
-    remaining: Optional[float] = None
+    limit: float | None = None
+    used: float | None = None
+    remaining: float | None = None
     source: QuotaSource = "none"
     status: QuotaStatus = "unavailable"
     updated_at: datetime
-    message: Optional[str] = None
+    message: str | None = None
 
 
 class ApiKeyQuota(BaseModel):

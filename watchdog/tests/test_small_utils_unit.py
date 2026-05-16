@@ -9,10 +9,8 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
 
 import httpx
-
 from services.grafana.normalize import normalize_grafana_next_path
 from services.loki.http_client import LokiGetJsonRequest, LokiHttpClient
 

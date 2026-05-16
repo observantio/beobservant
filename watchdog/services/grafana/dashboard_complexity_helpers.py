@@ -11,21 +11,20 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Protocol, cast
+from typing import Any, Protocol, cast
 
 import httpx
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-
 from custom_types.json import JSONDict
 from db_models import GrafanaDashboard, Group
+from fastapi import HTTPException
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardSearchResult
-from services.grafana.grafana_bundles import FolderAccessCriteria, GrafanaUserScope
 from services.grafana.folder_ops import check_folder_access
+from services.grafana.grafana_bundles import FolderAccessCriteria, GrafanaUserScope, GroupVisibilityValidation
 from services.grafana.grafana_service import GrafanaAPIError
-from services.grafana.grafana_bundles import GroupVisibilityValidation
 from services.grafana.visibility import group_share_change_for_scope, resolve_group_share_on_visibility_change
+from sqlalchemy.orm import Session
 
 
 class DashboardComplexityService(Protocol):
@@ -34,15 +33,15 @@ class DashboardComplexityService(Protocol):
 
     def raise_http_from_grafana_error(self, exc: GrafanaAPIError) -> None: ...
 
-    def validate_group_visibility(self, db: Session, validation: GroupVisibilityValidation) -> List[Group]: ...
+    def validate_group_visibility(self, db: Session, validation: GroupVisibilityValidation) -> list[Group]: ...
 
 
 @dataclass(frozen=True, slots=True)
 class DashboardVisibilityUpdateContext:
     db_dashboard: GrafanaDashboard
     scope: GrafanaUserScope
-    visibility: Optional[str]
-    shared_group_ids: Optional[list[str]]
+    visibility: str | None
+    shared_group_ids: list[str] | None
     is_admin: bool
 
 
@@ -50,22 +49,22 @@ class DashboardVisibilityUpdateContext:
 class DashboardUpdateMoveVisibilityContext:
     db_dashboard: GrafanaDashboard
     is_owner: bool
-    visibility: Optional[str]
-    shared_group_ids: Optional[list[str]]
-    target_folder_uid: Optional[str]
+    visibility: str | None
+    shared_group_ids: list[str] | None
+    target_folder_uid: str | None
 
 
 @dataclass(frozen=True, slots=True)
 class CreateDashboardAccessContext:
     db: Session
-    folder_uid: Optional[str]
+    folder_uid: str | None
     user_id: str
     tenant_id: str
     gids: list[str]
     is_admin: bool
     has_create_scope: bool
     visibility: str
-    shared_group_ids: Optional[list[str]]
+    shared_group_ids: list[str] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +72,7 @@ class UpdateScopeAccessContext:
     db: Session
     db_dashboard: GrafanaDashboard
     is_owner: bool
-    actor_permissions: Optional[list[str]]
+    actor_permissions: list[str] | None
     user_id: str
     tenant_id: str
     gids: list[str]
@@ -81,10 +80,10 @@ class UpdateScopeAccessContext:
 
 
 def dedupe_search_dashboards(
-    all_dashboards: List[DashboardSearchResult],
+    all_dashboards: list[DashboardSearchResult],
     dashboard_uid_set: set[str],
-) -> List[DashboardSearchResult]:
-    deduped: Dict[str, DashboardSearchResult] = {}
+) -> list[DashboardSearchResult]:
+    deduped: dict[str, DashboardSearchResult] = {}
     for dashboard in all_dashboards:
         uid_val = str(getattr(dashboard, "uid", "") or "")
         if not uid_val or (dashboard_uid_set and uid_val not in dashboard_uid_set):
@@ -102,22 +101,22 @@ def dedupe_search_dashboards(
 async def create_dashboard_in_grafana(
     service: DashboardComplexityService,
     dashboard_create: DashboardCreate,
-) -> Optional[JSONDict]:
+) -> JSONDict | None:
     dash_obj = getattr(dashboard_create, "dashboard", None)
     try:
         created = await service.grafana_service.create_dashboard(dashboard_create)
-        return cast(Optional[JSONDict], created)
+        return cast(JSONDict | None, created)
     except GrafanaAPIError as exc:
         status = getattr(exc, "status", None)
         dash_uid = getattr(dash_obj, "uid", None) if dash_obj is not None else None
         if status in {409, 412} and dash_uid and dash_obj is not None:
-            next_uid = f"{str(dash_uid)}-{uuid.uuid4().hex[:6]}"
+            next_uid = f"{dash_uid!s}-{uuid.uuid4().hex[:6]}"
             retry_payload = dashboard_create.model_copy(
                 update={"dashboard": dash_obj.model_copy(update={"uid": next_uid})}
             )
             try:
                 created = await service.grafana_service.create_dashboard(retry_payload)
-                return cast(Optional[JSONDict], created)
+                return cast(JSONDict | None, created)
             except GrafanaAPIError as retry_exc:
                 service.raise_http_from_grafana_error(retry_exc)
                 return None
@@ -130,7 +129,7 @@ async def resolve_created_folder_uid(
     dashboard_create: DashboardCreate,
     result: JSONDict,
     dashboard_data: JSONDict,
-) -> Optional[str]:
+) -> str | None:
     folder_uid_value = result.get("folderUid") or dashboard_data.get("folderUid")
     folder_uid = folder_uid_value if isinstance(folder_uid_value, str) else None
     if folder_uid:
@@ -223,9 +222,7 @@ def ensure_update_scope_access(context: UpdateScopeAccessContext) -> bool:
         has_update_scope = True
     else:
         perm_set = {
-            str(permission).strip()
-            for permission in (context.actor_permissions or [])
-            if str(permission).strip()
+            str(permission).strip() for permission in (context.actor_permissions or []) if str(permission).strip()
         }
         has_update_scope = bool({"update:dashboards", "write:dashboards"} & perm_set)
 

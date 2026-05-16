@@ -19,7 +19,7 @@ from services.grafana.grafana_service import GrafanaService
 
 
 @pytest.mark.asyncio
-async def test_create_datasource_forwards_org_id_as_orgId(monkeypatch):
+async def test_create_datasource_forwards_org_id_as_org_id(monkeypatch):
     service = GrafanaService(grafana_url="http://grafana.test", username="u", password="p", api_key="k")
     captured = {}
 
@@ -49,7 +49,7 @@ async def test_create_datasource_forwards_org_id_as_orgId(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_update_datasource_forwards_org_id_as_orgId(monkeypatch):
+async def test_update_datasource_forwards_org_id_as_org_id(monkeypatch):
     service = GrafanaService(grafana_url="http://grafana.test", username="u", password="p", api_key="k")
     captured = {}
 

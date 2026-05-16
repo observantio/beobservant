@@ -9,18 +9,18 @@ http://www.apache.org/licenses/LICENSE-2.0
 from tests._env import ensure_test_env
 
 ensure_test_env()
+from types import SimpleNamespace
+
 import pytest
 from fastapi import HTTPException
-
+from models.access.auth_models import Role
 from services.auth.helper import (
     audit_key_is_sensitive,
     redact_query_string,
-    sanitize_resource_id,
-    sanitize_audit_details,
     require_admin_with_audit_permission,
+    sanitize_audit_details,
+    sanitize_resource_id,
 )
-from models.access.auth_models import Role
-from types import SimpleNamespace
 
 
 def test_audit_key_sensitive():

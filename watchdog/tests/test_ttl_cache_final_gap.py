@@ -8,12 +8,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-import asyncio
 import builtins
 import importlib
 
 import pytest
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
@@ -80,5 +78,5 @@ def test_ttl_cache_importerror_branch(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     reloaded = importlib.reload(module_ref)
-    assert getattr(reloaded, "_redis_asyncio") is None
+    assert reloaded._redis_asyncio is None
     importlib.reload(module_ref)

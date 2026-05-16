@@ -9,16 +9,16 @@ http://www.apache.org/licenses/LICENSE-2.0
 from tests._env import ensure_test_env
 
 ensure_test_env()
-import pytest
-from fastapi import HTTPException
 import database
-from database import get_db_session
+import pytest
 from config import config
-from services.database_auth_service import DatabaseAuthService
-from models.access.user_models import UserCreate, UserUpdate
-from models.access.auth_models import Role
-from services.auth.actor_caps import AuthActorCaps
+from database import get_db_session
 from db_models import Tenant, User
+from fastapi import HTTPException
+from models.access.auth_models import Role
+from models.access.user_models import UserCreate, UserUpdate
+from services.auth.actor_caps import AuthActorCaps
+from services.database_auth_service import DatabaseAuthService
 
 
 @pytest.mark.skipif(not database.connection_test(), reason="DB not available")
@@ -94,7 +94,9 @@ def test_admin_can_only_toggle_is_active_for_another_admin():
         admin_actor,
     )
     target = svc.create_user(
-        UserCreate(username="admin-target", email="admin-target@example.com", password="password123", full_name="Target"),
+        UserCreate(
+            username="admin-target", email="admin-target@example.com", password="password123", full_name="Target"
+        ),
         tenant_id,
         admin_actor,
     )

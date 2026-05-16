@@ -15,17 +15,17 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-import logging
 import hashlib
 import importlib
 import importlib.util
-import os
+import logging
 import secrets
 import sys
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
+from typing import TYPE_CHECKING, cast
 
 from cryptography.fernet import Fernet
 from sqlalchemy.exc import SQLAlchemyError
@@ -36,11 +36,11 @@ def _load_db_models_module() -> ModuleType:
     try:
         return importlib.import_module("db_models")
     except ImportError as exc:
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        db_models_path = os.path.join(repo_root, "db_models.py")
-        if not os.path.exists(db_models_path):
+        repo_root = Path(__file__).resolve().parent.parent
+        db_models_path = repo_root / "db_models.py"
+        if not db_models_path.exists():
             raise
-        spec = importlib.util.spec_from_file_location("db_models", db_models_path)
+        spec = importlib.util.spec_from_file_location("db_models", str(db_models_path))
         if spec is None or spec.loader is None:
             raise ImportError(f"Unable to load db_models from {db_models_path}") from exc
         db_models = importlib.util.module_from_spec(spec)
@@ -59,71 +59,141 @@ else:
 
 # pylint: disable=wrong-import-position
 from config import config
+from custom_types.json import JSONDict
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyUpdate
 from models.access.auth_models import Token, TokenData
-from models.access.group_models import Group as GroupSchema, GroupCreate, GroupUpdate
+from models.access.group_models import Group as GroupSchema
+from models.access.group_models import GroupCreate, GroupUpdate
 from models.access.user_models import (
     User as UserSchema,
+)
+from models.access.user_models import (
     UserCreate,
     UserPasswordUpdate,
     UserResponse,
     UserUpdate,
 )
-from custom_types.json import JSONDict
+from services.auth.actor_caps import AuthActorCaps
 from services.auth.api_key_ops import (
     ApiKeyShareReplaceRequest as ApiKeyShareReplaceOpsRequest,
+)
+from services.auth.api_key_ops import (
     backfill_otlp_tokens as backfill_otlp_tokens_op,
+)
+from services.auth.api_key_ops import (
     create_api_key as create_api_key_op,
+)
+from services.auth.api_key_ops import (
     delete_api_key as delete_api_key_op,
+)
+from services.auth.api_key_ops import (
     delete_api_key_share as delete_api_key_share_op,
+)
+from services.auth.api_key_ops import (
     list_api_key_shares as list_api_key_shares_op,
+)
+from services.auth.api_key_ops import (
     list_api_keys as list_api_keys_op,
+)
+from services.auth.api_key_ops import (
     regenerate_api_key_otlp_token as regenerate_api_key_otlp_token_op,
-    set_api_key_hidden as set_api_key_hidden_op,
+)
+from services.auth.api_key_ops import (
     replace_api_key_shares as replace_api_key_shares_op,
+)
+from services.auth.api_key_ops import (
+    set_api_key_hidden as set_api_key_hidden_op,
+)
+from services.auth.api_key_ops import (
     update_api_key as update_api_key_op,
 )
 from services.auth.auth_ops import (
     authenticate_user as authenticate_user_op,
+)
+from services.auth.auth_ops import (
     create_access_token as create_access_token_op,
+)
+from services.auth.auth_ops import (
     update_password as update_password_op,
+)
+from services.auth.auth_ops import (
     validate_otlp_token as validate_otlp_token_op,
 )
 from services.auth.group_ops import (
     create_group as create_group_op,
+)
+from services.auth.group_ops import (
     delete_group as delete_group_op,
+)
+from services.auth.group_ops import (
     get_group as get_group_op,
+)
+from services.auth.group_ops import (
     list_groups as list_groups_op,
+)
+from services.auth.group_ops import (
     update_group as update_group_op,
+)
+from services.auth.group_ops import (
     update_group_members as update_group_members_op,
+)
+from services.auth.group_ops import (
     update_group_permissions as update_group_permissions_op,
 )
-from services.auth.actor_caps import AuthActorCaps
 from services.auth.oidc_service import OIDCService
 from services.auth.user_ops import (
     create_user as create_user_op,
+)
+from services.auth.user_ops import (
     delete_user as delete_user_op,
+)
+from services.auth.user_ops import (
     get_user_by_id as get_user_by_id_op,
+)
+from services.auth.user_ops import (
     get_user_by_username as get_user_by_username_op,
+)
+from services.auth.user_ops import (
     list_users as list_users_op,
+)
+from services.auth.user_ops import (
     set_grafana_user_id as set_grafana_user_id_op,
+)
+from services.auth.user_ops import (
     update_user as update_user_op,
+)
+from services.auth.user_ops import (
     update_user_permissions as update_user_permissions_op,
 )
 from services.database_auth import (
     audit as db_audit,
+)
+from services.database_auth import (
     auth as db_auth,
+)
+from services.database_auth import (
     bootstrap as db_bootstrap,
+)
+from services.database_auth import (
     mfa as db_mfa,
+)
+from services.database_auth import (
     oidc as db_oidc,
+)
+from services.database_auth import (
     password as db_password,
+)
+from services.database_auth import (
     permissions as db_permissions,
+)
+from services.database_auth import (
     schema_converters as db_schema,
+)
+from services.database_auth import (
     token as db_token,
 )
-from services.secrets.provider import SecretProvider
 from services.database_auth.service_state import DatabaseAuthServiceState
-
+from services.secrets.provider import SecretProvider
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +201,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class OidcUserUpdateProfile:
     email: str
-    full_name: Optional[str]
+    full_name: str | None
     subject: str
 
 
@@ -139,8 +209,8 @@ class OidcUserUpdateProfile:
 class ApiKeyShareReplaceRequest:
     tenant_id: str
     key_id: str
-    user_ids: List[str]
-    group_ids: Optional[List[str]] = None
+    user_ids: list[str]
+    group_ids: list[str] | None = None
 
 
 class _DatabaseAuthCredentialsMixin(DatabaseAuthServiceState):
@@ -199,7 +269,7 @@ class _DatabaseAuthCredentialsMixin(DatabaseAuthServiceState):
 class _DatabaseAuthMfaMixin(DatabaseAuthServiceState):
     """MFA/TOTP and recovery code helpers."""
 
-    def get_mfa_fernet(self) -> Optional[Fernet]:
+    def get_mfa_fernet(self) -> Fernet | None:
         return db_mfa.get_mfa_fernet(_as_db_auth(self))
 
     def encrypt_mfa_secret(self, secret: str) -> str:
@@ -208,19 +278,19 @@ class _DatabaseAuthMfaMixin(DatabaseAuthServiceState):
     def decrypt_mfa_secret(self, token: str) -> str:
         return db_mfa.decrypt_mfa_secret(_as_db_auth(self), token)
 
-    def generate_recovery_codes(self, count: int = 10) -> List[str]:
+    def generate_recovery_codes(self, count: int = 10) -> list[str]:
         return db_mfa.generate_recovery_codes(_as_db_auth(self), count)
 
-    def hash_recovery_codes(self, codes: List[str]) -> List[str]:
+    def hash_recovery_codes(self, codes: list[str]) -> list[str]:
         return db_mfa.hash_recovery_codes(_as_db_auth(self), codes)
 
     def consume_recovery_code(self, db_user: User, code: str) -> bool:
         return db_mfa.consume_recovery_code(_as_db_auth(self), db_user, code)
 
-    def enroll_totp(self, user_id: str) -> Dict[str, str]:
+    def enroll_totp(self, user_id: str) -> dict[str, str]:
         return db_mfa.enroll_totp(_as_db_auth(self), user_id)
 
-    def verify_enable_totp(self, user_id: str, code: str) -> List[str]:
+    def verify_enable_totp(self, user_id: str, code: str) -> list[str]:
         return db_mfa.verify_enable_totp(_as_db_auth(self), user_id, code)
 
     def verify_totp_code(self, user: User, code: str) -> bool:
@@ -230,8 +300,8 @@ class _DatabaseAuthMfaMixin(DatabaseAuthServiceState):
         self,
         user_id: str,
         *,
-        current_password: Optional[str] = None,
-        code: Optional[str] = None,
+        current_password: str | None = None,
+        code: str | None = None,
     ) -> bool:
         return db_mfa.disable_totp(_as_db_auth(self), user_id, current_password=current_password, code=code)
 
@@ -246,10 +316,10 @@ class _DatabaseAuthMfaMixin(DatabaseAuthServiceState):
 
     def _check_local_mfa(
         self,
-        _svc: "DatabaseAuthService",
+        _svc: DatabaseAuthService,
         user: User,
-        token: Optional[str],
-    ) -> Optional[Union[bool, JSONDict, Token]]:
+        token: str | None,
+    ) -> bool | JSONDict | Token | None:
         if getattr(user, "auth_provider", "local") != "local" and config.SKIP_LOCAL_MFA_FOR_EXTERNAL:
             return True
 
@@ -277,28 +347,28 @@ class _DatabaseAuthAuthFlowMixin(DatabaseAuthServiceState):
     def _build_token_data_for_user(self, user: User) -> TokenData:
         return db_token.build_token_data_for_user(_as_db_auth(self), user)
 
-    def decode_token(self, token: str) -> Optional[TokenData]:
+    def decode_token(self, token: str) -> TokenData | None:
         return db_token.decode_token(_as_db_auth(self), token)
 
-    def authenticate_user(self, username: str, password: str) -> Optional[User]:
+    def authenticate_user(self, username: str, password: str) -> User | None:
         svc = _as_db_auth(self)
         if svc.is_external_auth_enabled() and not svc.is_password_auth_enabled():
             return None
         return authenticate_user_op(svc, username, password)
 
-    def login(self, username: str, password: str, mfa_code: Optional[str] = None) -> Optional[Union[Token, JSONDict]]:
+    def login(self, username: str, password: str, mfa_code: str | None = None) -> Token | JSONDict | None:
         return db_auth.login(_as_db_auth(self), username, password, mfa_code)
 
     def exchange_oidc_authorization_code(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         code: str,
         redirect_uri: str,
-        transaction_id: Optional[str] = None,
-        state: Optional[str] = None,
-        code_verifier: Optional[str] = None,
-        mfa_code: Optional[str] = None,
-        mfa_challenge_id: Optional[str] = None,
-    ) -> Optional[Union[Token, JSONDict]]:
+        transaction_id: str | None = None,
+        state: str | None = None,
+        code_verifier: str | None = None,
+        mfa_code: str | None = None,
+        mfa_challenge_id: str | None = None,
+    ) -> Token | JSONDict | None:
         return db_auth.exchange_oidc_authorization_code(
             _as_db_auth(self),
             code,
@@ -313,16 +383,16 @@ class _DatabaseAuthAuthFlowMixin(DatabaseAuthServiceState):
     def get_oidc_authorization_url(
         self,
         request: db_auth.OidcAuthorizationUrlRequest,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         return db_auth.get_oidc_authorization_url(_as_db_auth(self), request)
 
-    def provision_external_user(self, *, email: str, username: str, full_name: Optional[str]) -> Optional[str]:
+    def provision_external_user(self, *, email: str, username: str, full_name: str | None) -> str | None:
         return db_auth.provision_external_user(_as_db_auth(self), email=email, username=username, full_name=full_name)
 
-    def extract_permissions_from_oidc_claims(self, claims: JSONDict) -> List[str]:
+    def extract_permissions_from_oidc_claims(self, claims: JSONDict) -> list[str]:
         return db_oidc.extract_permissions_from_oidc_claims(claims)
 
-    def sync_user_from_oidc_claims(self, claims: JSONDict) -> Optional[User]:
+    def sync_user_from_oidc_claims(self, claims: JSONDict) -> User | None:
         return db_oidc.sync_user_from_oidc_claims(_as_db_auth(self), claims)
 
     def _provision_oidc_user(
@@ -348,16 +418,16 @@ class _DatabaseAuthAuthFlowMixin(DatabaseAuthServiceState):
 class _DatabaseAuthPermissionsMixin(DatabaseAuthServiceState):
     """Permission, schema conversion, and group management helpers."""
 
-    def get_user_permissions(self, user: User | UserSchema) -> List[str]:
+    def get_user_permissions(self, user: User | UserSchema) -> list[str]:
         return db_permissions.get_user_permissions(_as_db_auth(self), user)
 
-    def get_user_direct_permissions(self, user: User | UserSchema) -> List[str]:
+    def get_user_direct_permissions(self, user: User | UserSchema) -> list[str]:
         return db_permissions.get_user_direct_permissions(user)
 
-    def collect_permissions(self, user: User) -> List[str]:
+    def collect_permissions(self, user: User) -> list[str]:
         return db_permissions.collect_permissions(user)
 
-    def list_all_permissions(self) -> List[dict[str, object]]:
+    def list_all_permissions(self) -> list[dict[str, object]]:
         return db_permissions.list_all_permissions()
 
     def to_user_schema(self, user: User) -> UserSchema:
@@ -366,7 +436,7 @@ class _DatabaseAuthPermissionsMixin(DatabaseAuthServiceState):
     def build_user_response(
         self,
         user: UserSchema,
-        fallback_permissions: Optional[List[str]] = None,
+        fallback_permissions: list[str] | None = None,
     ) -> UserResponse:
         return db_schema.build_user_response(_as_db_auth(self), user, fallback_permissions)
 
@@ -376,31 +446,31 @@ class _DatabaseAuthPermissionsMixin(DatabaseAuthServiceState):
     def to_group_schema(self, group: Group) -> GroupSchema:
         return db_schema.to_group_schema(group)
 
-    def create_group(self, group_create: GroupCreate, tenant_id: str, creator_id: Optional[str] = None) -> GroupSchema:
+    def create_group(self, group_create: GroupCreate, tenant_id: str, creator_id: str | None = None) -> GroupSchema:
         return create_group_op(_as_db_auth(self), group_create, tenant_id, creator_id)
 
     def list_groups(
         self,
         tenant_id: str,
         *,
-        actor: Optional[AuthActorCaps] = None,
-        q: Optional[str] = None,
-    ) -> List[GroupSchema]:
+        actor: AuthActorCaps | None = None,
+        q: str | None = None,
+    ) -> list[GroupSchema]:
         return list_groups_op(_as_db_auth(self), tenant_id, actor=actor, q=q)
 
     def get_group(
         self,
         group_id: str,
         tenant_id: str,
-        actor: Optional[AuthActorCaps] = None,
-    ) -> Optional[GroupSchema]:
+        actor: AuthActorCaps | None = None,
+    ) -> GroupSchema | None:
         return get_group_op(_as_db_auth(self), group_id, tenant_id, actor=actor)
 
     def delete_group(
         self,
         group_id: str,
         tenant_id: str,
-        actor: Optional[AuthActorCaps] = None,
+        actor: AuthActorCaps | None = None,
     ) -> bool:
         return delete_group_op(_as_db_auth(self), group_id, tenant_id, actor=actor)
 
@@ -410,27 +480,27 @@ class _DatabaseAuthPermissionsMixin(DatabaseAuthServiceState):
         group_update: GroupUpdate,
         *,
         tenant_id: str,
-        actor: Optional[AuthActorCaps] = None,
-    ) -> Optional[GroupSchema]:
+        actor: AuthActorCaps | None = None,
+    ) -> GroupSchema | None:
         return update_group_op(_as_db_auth(self), group_id, group_update, tenant_id, actor=actor)
 
     def update_group_permissions(
         self,
         group_id: str,
-        permission_names: List[str],
+        permission_names: list[str],
         *,
         tenant_id: str,
-        actor: Optional[AuthActorCaps] = None,
+        actor: AuthActorCaps | None = None,
     ) -> bool:
         return update_group_permissions_op(_as_db_auth(self), group_id, permission_names, tenant_id, actor=actor)
 
     def update_group_members(
         self,
         group_id: str,
-        user_ids: List[str],
+        user_ids: list[str],
         *,
         tenant_id: str,
-        actor: Optional[AuthActorCaps] = None,
+        actor: AuthActorCaps | None = None,
     ) -> bool:
         return update_group_members_op(_as_db_auth(self), group_id, user_ids, tenant_id, actor=actor)
 
@@ -441,22 +511,22 @@ class _DatabaseAuthUserMixin(DatabaseAuthServiceState):
     def get_user_by_id(
         self,
         user_id: str,
-        tenant_id: Optional[str] = None,
-        db: Optional[Session] = None,
-    ) -> Optional[UserSchema]:
+        tenant_id: str | None = None,
+        db: Session | None = None,
+    ) -> UserSchema | None:
         return get_user_by_id_op(_as_db_auth(self), user_id, tenant_id=tenant_id, db=db)
 
-    def get_user_by_id_in_tenant(self, user_id: str, tenant_id: str) -> Optional[UserSchema]:
+    def get_user_by_id_in_tenant(self, user_id: str, tenant_id: str) -> UserSchema | None:
         return get_user_by_id_op(_as_db_auth(self), user_id, tenant_id)
 
-    def get_user_by_username(self, username: str) -> Optional[UserSchema]:
+    def get_user_by_username(self, username: str) -> UserSchema | None:
         return get_user_by_username_op(_as_db_auth(self), username)
 
     def create_user(
         self,
         user_create: UserCreate,
         tenant_id: str,
-        actor: Optional[AuthActorCaps] = None,
+        actor: AuthActorCaps | None = None,
     ) -> UserSchema:
         return create_user_op(_as_db_auth(self), user_create, tenant_id, actor)
 
@@ -464,10 +534,10 @@ class _DatabaseAuthUserMixin(DatabaseAuthServiceState):
         self,
         tenant_id: str,
         *,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         offset: int = 0,
-        q: Optional[str] = None,
-    ) -> List[UserSchema]:
+        q: str | None = None,
+    ) -> list[UserSchema]:
         return list_users_op(_as_db_auth(self), tenant_id, limit=limit, offset=offset, q=q)
 
     def update_user(
@@ -476,23 +546,23 @@ class _DatabaseAuthUserMixin(DatabaseAuthServiceState):
         user_update: UserUpdate,
         *,
         tenant_id: str,
-        updater_id: Optional[str] = None,
-    ) -> Optional[UserSchema]:
+        updater_id: str | None = None,
+    ) -> UserSchema | None:
         return update_user_op(_as_db_auth(self), user_id, user_update, tenant_id, updater_id=updater_id)
 
     def set_grafana_user_id(self, user_id: str, grafana_user_id: int, tenant_id: str) -> bool:
         return set_grafana_user_id_op(user_id, grafana_user_id, tenant_id)
 
-    def delete_user(self, user_id: str, tenant_id: str, deleter_id: Optional[str] = None) -> bool:
+    def delete_user(self, user_id: str, tenant_id: str, deleter_id: str | None = None) -> bool:
         return delete_user_op(_as_db_auth(self), user_id, tenant_id, deleter_id)
 
     def update_user_permissions(
         self,
         user_id: str,
-        permission_names: List[str],
+        permission_names: list[str],
         *,
         tenant_id: str,
-        actor: Optional[AuthActorCaps] = None,
+        actor: AuthActorCaps | None = None,
     ) -> bool:
         return update_user_permissions_op(
             _as_db_auth(self),
@@ -509,7 +579,7 @@ class _DatabaseAuthUserMixin(DatabaseAuthServiceState):
 class _DatabaseAuthApiKeyMixin(DatabaseAuthServiceState):
     """API key and share management helpers."""
 
-    def list_api_keys(self, user_id: str, show_hidden: bool = False) -> List[ApiKey]:
+    def list_api_keys(self, user_id: str, show_hidden: bool = False) -> list[ApiKey]:
         return list_api_keys_op(_as_db_auth(self), user_id, show_hidden)
 
     def create_api_key(self, user_id: str, tenant_id: str, key_create: ApiKeyCreate) -> ApiKey:
@@ -527,7 +597,7 @@ class _DatabaseAuthApiKeyMixin(DatabaseAuthServiceState):
     def delete_api_key(self, user_id: str, key_id: str) -> bool:
         return delete_api_key_op(_as_db_auth(self), user_id, key_id)
 
-    def list_api_key_shares(self, owner_user_id: str, tenant_id: str, key_id: str) -> List[JSONDict]:
+    def list_api_key_shares(self, owner_user_id: str, tenant_id: str, key_id: str) -> list[JSONDict]:
         return [
             share.model_dump() for share in list_api_key_shares_op(_as_db_auth(self), owner_user_id, tenant_id, key_id)
         ]
@@ -536,7 +606,7 @@ class _DatabaseAuthApiKeyMixin(DatabaseAuthServiceState):
         self,
         owner_user_id: str,
         request: ApiKeyShareReplaceRequest,
-    ) -> List[JSONDict]:
+    ) -> list[JSONDict]:
         return [
             share.model_dump()
             for share in replace_api_key_shares_op(
@@ -567,7 +637,7 @@ class _DatabaseAuthApiKeyMixin(DatabaseAuthServiceState):
             shared_user_id=shared_user_id,
         )
 
-    def validate_otlp_token(self, token: str, *, suppress_errors: bool = True) -> Optional[str]:
+    def validate_otlp_token(self, token: str, *, suppress_errors: bool = True) -> str | None:
         return validate_otlp_token_op(_as_db_auth(self), token, suppress_errors=suppress_errors)
 
     def backfill_otlp_tokens(self) -> None:
@@ -592,7 +662,7 @@ class DatabaseAuthService(
         self.logger = logger
         self.oidc_service = OIDCService()
         self._password_op_semaphore = threading.Semaphore(1)
-        self._secret_provider: Optional["SecretProvider"] = None
+        self._secret_provider: SecretProvider | None = None
 
 
 def _as_db_auth(svc: DatabaseAuthServiceState) -> DatabaseAuthService:

@@ -12,10 +12,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
+from config import config
+from custom_types.json import JSONDict, JSONList
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     DateTime,
@@ -25,14 +27,10 @@ from sqlalchemy import (
     String,
     Table,
     Text,
-    JSON,
     UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
-from config import config
-from custom_types.json import JSONDict, JSONList
 
 
 class Base(DeclarativeBase):
@@ -51,7 +49,7 @@ def _uuid() -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 user_groups = Table(
@@ -114,14 +112,14 @@ class Tenant(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
-    display_name: Mapped[Optional[str]] = mapped_column(String(200))
+    display_name: Mapped[str | None] = mapped_column(String(200))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     settings: Mapped[JSONDict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now, nullable=False)
 
-    users: Mapped[List["User"]] = relationship("User", back_populates="tenant", cascade=_CASCADE)
-    groups: Mapped[List["Group"]] = relationship("Group", back_populates="tenant", cascade=_CASCADE)
+    users: Mapped[list[User]] = relationship("User", back_populates="tenant", cascade=_CASCADE)
+    groups: Mapped[list[Group]] = relationship("Group", back_populates="tenant", cascade=_CASCADE)
     __table_args__ = (Index("idx_tenants_active", "is_active"),)
 
 
@@ -135,32 +133,32 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    full_name: Mapped[Optional[str]] = mapped_column(String(200))
+    full_name: Mapped[str | None] = mapped_column(String(200))
     org_id: Mapped[str] = mapped_column(String(100), nullable=False, default=config.DEFAULT_ORG_ID, index=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="user", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     needs_password_change: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    password_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    session_invalid_before: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    session_invalid_before: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     must_setup_mfa: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    totp_secret: Mapped[Optional[str]] = mapped_column(Text)
-    mfa_recovery_hashes: Mapped[Optional[List[str]]] = mapped_column(JSON)
-    grafana_user_id: Mapped[Optional[int]] = mapped_column(Integer, index=True)
+    totp_secret: Mapped[str | None] = mapped_column(Text)
+    mfa_recovery_hashes: Mapped[list[str] | None] = mapped_column(JSON)
+    grafana_user_id: Mapped[int | None] = mapped_column(Integer, index=True)
     auth_provider: Mapped[str] = mapped_column(String(50), nullable=False, default="local", index=True)
-    external_subject: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True)
-    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    external_subject: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
+    last_login: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now, nullable=False)
 
-    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="users")
-    groups: Mapped[List["Group"]] = relationship("Group", secondary=user_groups, back_populates="members")
-    permissions: Mapped[List["Permission"]] = relationship(
+    tenant: Mapped[Tenant] = relationship("Tenant", back_populates="users")
+    groups: Mapped[list[Group]] = relationship("Group", secondary=user_groups, back_populates="members")
+    permissions: Mapped[list[Permission]] = relationship(
         "Permission", secondary=user_permissions, back_populates="users"
     )
-    api_keys: Mapped[List["UserApiKey"]] = relationship("UserApiKey", back_populates="user", cascade=_CASCADE)
-    shared_api_key_links: Mapped[List["ApiKeyShare"]] = relationship(
+    api_keys: Mapped[list[UserApiKey]] = relationship("UserApiKey", back_populates="user", cascade=_CASCADE)
+    shared_api_key_links: Mapped[list[ApiKeyShare]] = relationship(
         "ApiKeyShare", foreign_keys="ApiKeyShare.shared_user_id", back_populates="shared_user", cascade=_CASCADE
     )
     __table_args__ = (
@@ -178,15 +176,15 @@ class Group(Base):
         String, ForeignKey(_FK_TENANTS, ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    description: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    grafana_team_id: Mapped[Optional[int]] = mapped_column(Integer, index=True)
+    grafana_team_id: Mapped[int | None] = mapped_column(Integer, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now, nullable=False)
 
-    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="groups")
-    members: Mapped[List["User"]] = relationship("User", secondary=user_groups, back_populates="groups")
-    permissions: Mapped[List["Permission"]] = relationship(
+    tenant: Mapped[Tenant] = relationship("Tenant", back_populates="groups")
+    members: Mapped[list[User]] = relationship("User", secondary=user_groups, back_populates="groups")
+    permissions: Mapped[list[Permission]] = relationship(
         "Permission", secondary=group_permissions, back_populates="groups"
     )
     __table_args__ = (
@@ -205,15 +203,15 @@ class UserApiKey(Base):
     user_id: Mapped[str] = mapped_column(String, ForeignKey(_FK_USERS, ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     key: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
-    otlp_token: Mapped[Optional[str]] = mapped_column(String(200), unique=True, index=True)
-    otlp_token_hash: Mapped[Optional[str]] = mapped_column(String(64), unique=True, index=True)
+    otlp_token: Mapped[str | None] = mapped_column(String(200), unique=True, index=True)
+    otlp_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now, nullable=False)
 
-    user: Mapped["User"] = relationship("User", back_populates="api_keys")
-    shares: Mapped[List["ApiKeyShare"]] = relationship("ApiKeyShare", back_populates="api_key", cascade=_CASCADE)
+    user: Mapped[User] = relationship("User", back_populates="api_keys")
+    shares: Mapped[list[ApiKeyShare]] = relationship("ApiKeyShare", back_populates="api_key", cascade=_CASCADE)
     __table_args__ = (
         Index(
             "uq_user_api_keys_user_default_true",
@@ -251,8 +249,8 @@ class ApiKeyShare(Base):
     can_use: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
 
-    api_key: Mapped["UserApiKey"] = relationship("UserApiKey", back_populates="shares")
-    shared_user: Mapped["User"] = relationship(
+    api_key: Mapped[UserApiKey] = relationship("UserApiKey", back_populates="shares")
+    shared_user: Mapped[User] = relationship(
         "User", foreign_keys=[shared_user_id], back_populates="shared_api_key_links"
     )
 
@@ -281,13 +279,13 @@ class Permission(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
     resource_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     action: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
 
-    groups: Mapped[List["Group"]] = relationship("Group", secondary=group_permissions, back_populates="permissions")
-    users: Mapped[List["User"]] = relationship("User", secondary=user_permissions, back_populates="permissions")
+    groups: Mapped[list[Group]] = relationship("Group", secondary=group_permissions, back_populates="permissions")
+    users: Mapped[list[User]] = relationship("User", secondary=user_permissions, back_populates="permissions")
 
     __table_args__ = (Index("idx_permissions_resource_action", "resource_type", "action"),)
 
@@ -296,14 +294,14 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    tenant_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey(_FK_TENANTS, ondelete="CASCADE"), index=True)
-    user_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey(_FK_USERS, ondelete=_SET_NULL), index=True)
+    tenant_id: Mapped[str | None] = mapped_column(String, ForeignKey(_FK_TENANTS, ondelete="CASCADE"), index=True)
+    user_id: Mapped[str | None] = mapped_column(String, ForeignKey(_FK_USERS, ondelete=_SET_NULL), index=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     resource_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    resource_id: Mapped[Optional[str]] = mapped_column(String, index=True)
-    details: Mapped[Optional[JSONDict]] = mapped_column(JSON)
-    ip_address: Mapped[Optional[str]] = mapped_column(String(45))
-    user_agent: Mapped[Optional[str]] = mapped_column(Text)
+    resource_id: Mapped[str | None] = mapped_column(String, index=True)
+    details: Mapped[JSONDict | None] = mapped_column(JSON)
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    user_agent: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False, index=True)
 
     __table_args__ = (
@@ -320,11 +318,11 @@ class GrafanaDashboard(Base):
     tenant_id: Mapped[str] = mapped_column(
         String, ForeignKey(_FK_TENANTS, ondelete="CASCADE"), nullable=False, index=True
     )
-    created_by: Mapped[Optional[str]] = mapped_column(String, ForeignKey(_FK_USERS, ondelete=_SET_NULL))
+    created_by: Mapped[str | None] = mapped_column(String, ForeignKey(_FK_USERS, ondelete=_SET_NULL))
     grafana_uid: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
-    grafana_id: Mapped[Optional[int]] = mapped_column(Integer)
+    grafana_id: Mapped[int | None] = mapped_column(Integer)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    folder_uid: Mapped[Optional[str]] = mapped_column(String(100))
+    folder_uid: Mapped[str | None] = mapped_column(String(100))
     visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="private", index=True)
     tags: Mapped[JSONList] = mapped_column(JSON, default=list)
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
@@ -332,9 +330,9 @@ class GrafanaDashboard(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now, nullable=False)
 
-    tenant: Mapped["Tenant"] = relationship("Tenant")
-    creator: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
-    shared_groups: Mapped[List["Group"]] = relationship("Group", secondary=dashboard_groups)
+    tenant: Mapped[Tenant] = relationship("Tenant")
+    creator: Mapped[User | None] = relationship("User", foreign_keys=[created_by])
+    shared_groups: Mapped[list[Group]] = relationship("Group", secondary=dashboard_groups)
 
     __table_args__ = (
         Index("idx_grafana_dashboards_tenant", "tenant_id"),
@@ -349,9 +347,9 @@ class GrafanaDatasource(Base):
     tenant_id: Mapped[str] = mapped_column(
         String, ForeignKey(_FK_TENANTS, ondelete="CASCADE"), nullable=False, index=True
     )
-    created_by: Mapped[Optional[str]] = mapped_column(String, ForeignKey(_FK_USERS, ondelete=_SET_NULL))
+    created_by: Mapped[str | None] = mapped_column(String, ForeignKey(_FK_USERS, ondelete=_SET_NULL))
     grafana_uid: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
-    grafana_id: Mapped[Optional[int]] = mapped_column(Integer)
+    grafana_id: Mapped[int | None] = mapped_column(Integer)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     type: Mapped[str] = mapped_column(String(100), nullable=False)
     visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="private", index=True)
@@ -360,9 +358,9 @@ class GrafanaDatasource(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now, nullable=False)
 
-    tenant: Mapped["Tenant"] = relationship("Tenant")
-    creator: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
-    shared_groups: Mapped[List["Group"]] = relationship("Group", secondary=datasource_groups)
+    tenant: Mapped[Tenant] = relationship("Tenant")
+    creator: Mapped[User | None] = relationship("User", foreign_keys=[created_by])
+    shared_groups: Mapped[list[Group]] = relationship("Group", secondary=datasource_groups)
 
     __table_args__ = (
         Index("idx_grafana_datasources_tenant", "tenant_id"),
@@ -377,9 +375,9 @@ class GrafanaFolder(Base):
     tenant_id: Mapped[str] = mapped_column(
         String, ForeignKey(_FK_TENANTS, ondelete="CASCADE"), nullable=False, index=True
     )
-    created_by: Mapped[Optional[str]] = mapped_column(String, ForeignKey(_FK_USERS, ondelete=_SET_NULL))
+    created_by: Mapped[str | None] = mapped_column(String, ForeignKey(_FK_USERS, ondelete=_SET_NULL))
     grafana_uid: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
-    grafana_id: Mapped[Optional[int]] = mapped_column(Integer)
+    grafana_id: Mapped[int | None] = mapped_column(Integer)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="private", index=True)
     allow_dashboard_writes: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -387,9 +385,9 @@ class GrafanaFolder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now, nullable=False)
 
-    tenant: Mapped["Tenant"] = relationship("Tenant")
-    creator: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
-    shared_groups: Mapped[List["Group"]] = relationship("Group", secondary=folder_groups)
+    tenant: Mapped[Tenant] = relationship("Tenant")
+    creator: Mapped[User | None] = relationship("User", foreign_keys=[created_by])
+    shared_groups: Mapped[list[Group]] = relationship("Group", secondary=folder_groups)
 
     __table_args__ = (
         Index("idx_grafana_folders_tenant", "tenant_id"),

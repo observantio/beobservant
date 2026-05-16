@@ -8,9 +8,8 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-import pytest
 import httpx
-
+import pytest
 from tests._env import ensure_test_env
 
 ensure_test_env()

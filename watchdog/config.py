@@ -1,18 +1,10 @@
-"""
-Configuration management for Watchdog server application.
-
-Copyright (c) 2026 Stefan Kumarasinghe
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
-License. You may obtain a copy of the License at
-http://www.apache.org/licenses/LICENSE-2.0
-"""
+"""Configuration management for the Watchdog server application."""
 
 import importlib
 import logging
 import os
 import secrets
-from typing import Any
+from typing import Any, ClassVar
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
@@ -363,8 +355,8 @@ def _populate_config(cfg: "Config") -> None:
 
 
 class Config:
-    ALLOWED_JWT_ALGORITHMS = {"RS256", "ES256"}
-    ALLOWED_CONTEXT_ALGORITHMS = {"HS256", "HS384", "HS512"}
+    ALLOWED_JWT_ALGORITHMS: ClassVar[set[str]] = {"RS256", "ES256"}
+    ALLOWED_CONTEXT_ALGORITHMS: ClassVar[set[str]] = {"HS256", "HS384", "HS512"}
     EXAMPLE_DATABASE_URL = "postgresql://watchdog:changeme123@localhost:5432/watchdog"
 
     secret_provider: Any | None
@@ -612,39 +604,48 @@ class Config:
 
     def apply_security_defaults(self) -> None:
         default_admin_password = getattr(self, "DEFAULT_ADMIN_PASSWORD", "")
-        if _is_placeholder(default_admin_password, placeholders=["admin123", "admin", "password", "changeme"]):
-            if not self.IS_PRODUCTION and self.DEFAULT_ADMIN_BOOTSTRAP_ENABLED:
-                setattr(self, "DEFAULT_ADMIN_PASSWORD", secrets.token_urlsafe(18))
-                logger.warning(
-                    "Generated runtime DEFAULT_ADMIN_PASSWORD for non-production startup.",
-                )
+        if (
+            _is_placeholder(default_admin_password, placeholders=["admin123", "admin", "password", "changeme"])
+            and not self.IS_PRODUCTION
+            and self.DEFAULT_ADMIN_BOOTSTRAP_ENABLED
+        ):
+            setattr(self, "DEFAULT_ADMIN_PASSWORD", secrets.token_urlsafe(18))
+            logger.warning(
+                "Generated runtime DEFAULT_ADMIN_PASSWORD for non-production startup.",
+            )
 
         jwt_secret_key = getattr(self, "JWT_SECRET_KEY", "")
-        if _is_placeholder(
-            jwt_secret_key, placeholders=["change-this-secret-key-in-production", "changeme", "secret", ""]
+        if (
+            _is_placeholder(
+                jwt_secret_key, placeholders=["change-this-secret-key-in-production", "changeme", "secret", ""]
+            )
+            and not self.IS_PRODUCTION
         ):
-            if not self.IS_PRODUCTION:
-                setattr(self, "JWT_SECRET_KEY", secrets.token_urlsafe(32))
-                logger.info("Generated runtime JWT_SECRET_KEY for local compatibility.")
+            setattr(self, "JWT_SECRET_KEY", secrets.token_urlsafe(32))
+            logger.info("Generated runtime JWT_SECRET_KEY for local compatibility.")
 
         jwt_private_key = getattr(self, "JWT_PRIVATE_KEY", None)
         jwt_public_key = getattr(self, "JWT_PUBLIC_KEY", None)
-        if self.JWT_ALGORITHM in self.ALLOWED_JWT_ALGORITHMS and (not jwt_private_key or not jwt_public_key):
-            if self.JWT_AUTO_GENERATE_KEYS and not self.IS_PRODUCTION:
-                if self.JWT_ALGORITHM == "RS256":
-                    private_key, public_key = _generate_rsa_keypair()
-                elif self.JWT_ALGORITHM == "ES256":
-                    private_key, public_key = _generate_ec_keypair()
-                else:
-                    raise ValueError("Unsupported JWT_ALGORITHM for auto key generation")
+        if (
+            self.JWT_ALGORITHM in self.ALLOWED_JWT_ALGORITHMS
+            and (not jwt_private_key or not jwt_public_key)
+            and self.JWT_AUTO_GENERATE_KEYS
+            and not self.IS_PRODUCTION
+        ):
+            if self.JWT_ALGORITHM == "RS256":
+                private_key, public_key = _generate_rsa_keypair()
+            elif self.JWT_ALGORITHM == "ES256":
+                private_key, public_key = _generate_ec_keypair()
+            else:
+                raise ValueError("Unsupported JWT_ALGORITHM for auto key generation")
 
-                setattr(self, "JWT_PRIVATE_KEY", private_key)
-                setattr(self, "JWT_PUBLIC_KEY", public_key)
-                logger.warning(
-                    "Generated ephemeral JWT keypair for %s. Persist JWT_PRIVATE_KEY and "
-                    "JWT_PUBLIC_KEY in a secret manager to avoid token invalidation on restart.",
-                    self.JWT_ALGORITHM,
-                )
+            setattr(self, "JWT_PRIVATE_KEY", private_key)
+            setattr(self, "JWT_PUBLIC_KEY", public_key)
+            logger.warning(
+                "Generated ephemeral JWT keypair for %s. Persist JWT_PRIVATE_KEY and "
+                "JWT_PUBLIC_KEY in a secret manager to avoid token invalidation on restart.",
+                self.JWT_ALGORITHM,
+            )
 
     def _validate_identity_and_security(self) -> None:
         if self.DATABASE_URL == self.EXAMPLE_DATABASE_URL or "changeme123" in self.DATABASE_URL:
@@ -674,8 +675,10 @@ class Config:
         if self.IS_PRODUCTION and self.DEFAULT_ADMIN_BOOTSTRAP_ENABLED:
             raise ValueError("DEFAULT_ADMIN_BOOTSTRAP_ENABLED must be false in production")
 
-        if self.IS_PRODUCTION and self.DEFAULT_ADMIN_PASSWORD and _is_placeholder(
-            self.DEFAULT_ADMIN_PASSWORD, placeholders=["admin123", "admin", "password", "changeme"]
+        if (
+            self.IS_PRODUCTION
+            and self.DEFAULT_ADMIN_PASSWORD
+            and _is_placeholder(self.DEFAULT_ADMIN_PASSWORD, placeholders=["admin123", "admin", "password", "changeme"])
         ):
             raise ValueError("DEFAULT_ADMIN_PASSWORD must be set to a strong value in production")
 

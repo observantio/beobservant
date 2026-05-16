@@ -9,15 +9,13 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 import types
 
+import pytest
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-import pytest
-
 from tests._env import ensure_test_env
 
 ensure_test_env()

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
+
 from .in_memory import InMemoryRateLimiter
 from .models import RateLimitHitResult
 from .observability import record_fallback_event
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class HybridRateLimiter:
     def __init__(
         self,
-        redis_limiter: Optional[RedisFixedWindowRateLimiter],
+        redis_limiter: RedisFixedWindowRateLimiter | None,
         fallback_limiter: InMemoryRateLimiter,
     ) -> None:
         self._redis_limiter = redis_limiter

@@ -1,39 +1,36 @@
-"""
-Api key management operations for creating, updating, deleting, rotating, and sharing API keys, as well as backfilling
-missing OTLP tokens for existing keys.
-Copyright (c) 2026 Stefan Kumarasinghe
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
-License. You may obtain a copy of the License at
-http://www.apache.org/licenses/LICENSE-2.0
-"""
+"""API key management operations and OTLP token backfilling."""
 
 from __future__ import annotations
-from dataclasses import dataclass
+
 import re
 import uuid
-from datetime import datetime, timezone
-from typing import List, Optional, TYPE_CHECKING
-from fastapi import HTTPException, status
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from dataclasses import dataclass
+from datetime import datetime
+from typing import TYPE_CHECKING
+
 from config import config
 from database import get_db_session
 from db_models import ApiKeyShare, Group, HiddenApiKey, User, UserApiKey
+from fastapi import HTTPException, status
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUser, ApiKeyUpdate
 from services.auth.api_key_schema import ApiKeySchemaContext, api_key_to_schema, list_api_key_shares_in_session
+from services.auth.time_utils import utcnow
 from services.database_auth.audit import AuditLogRecord
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
+
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
-BACKFILL_BATCH_SIZE = 500
-ORG_SCOPE_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,199}$")
+BACKFILL_BATCH_SIZE, ORG_SCOPE_KEY_RE = 500, re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,199}$")
+
 
 @dataclass(frozen=True, slots=True)
 class ApiKeyShareReplaceRequest:
     tenant_id: str
     key_id: str
-    user_ids: List[str]
-    group_ids: Optional[List[str]] = None
+    user_ids: list[str]
+    group_ids: list[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,10 +43,7 @@ class ApiKeyUpdateContext:
     key_update: ApiKeyUpdate
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-def _normalize_scope_key(raw: Optional[str]) -> Optional[str]:
+def _normalize_scope_key(raw: str | None) -> str | None:
     if raw is None:
         return None
     value = str(raw).strip()
@@ -61,11 +55,13 @@ def _normalize_scope_key(raw: Optional[str]) -> Optional[str]:
         )
     return value
 
+
 def _require_user(db: Session, user_id: str) -> User:
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         raise ValueError("User not found")
     return user
+
 
 def _require_user_in_tenant(db: Session, user_id: str, tenant_id: str) -> User:
     user = db.query(User).filter_by(id=user_id, tenant_id=tenant_id).first()
@@ -73,14 +69,16 @@ def _require_user_in_tenant(db: Session, user_id: str, tenant_id: str) -> User:
         raise ValueError("User not found")
     return user
 
+
 def _require_api_key_in_tenant(db: Session, key_id: str, tenant_id: str) -> UserApiKey:
     api_key = db.query(UserApiKey).filter_by(id=key_id, tenant_id=tenant_id).first()
     if not api_key:
         raise ValueError("API key not found")
     return api_key
 
+
 def _disable_other_enabled_keys(
-    db: Session, user_id: str, tenant_id: str, now: datetime, *, exclude_key_id: Optional[str] = None
+    db: Session, user_id: str, tenant_id: str, now: datetime, *, exclude_key_id: str | None = None
 ) -> None:
     q = db.query(UserApiKey).filter(
         UserApiKey.user_id == user_id,
@@ -91,18 +89,21 @@ def _disable_other_enabled_keys(
         q = q.filter(UserApiKey.id != exclude_key_id)
     q.update({"is_enabled": False, "updated_at": now})
 
-def _set_org_id(user: User, new_org_id: Optional[str], now: datetime) -> None:
+
+def _set_org_id(user: User, new_org_id: str | None, now: datetime) -> None:
     if new_org_id is None:
         return
     if str(user.org_id or "") != str(new_org_id or ""):
         user.org_id = new_org_id
         user.updated_at = now
 
-def _normalize_api_key_name(name: Optional[str]) -> str:
+
+def _normalize_api_key_name(name: str | None) -> str:
     normalized = str(name or "").strip()
     if not normalized:
         raise ValueError("API key name is required")
     return normalized
+
 
 def _assert_unique_api_key_name(
     db: Session,
@@ -110,7 +111,7 @@ def _assert_unique_api_key_name(
     tenant_id: str,
     owner_user_id: str,
     name: str,
-    exclude_key_id: Optional[str] = None,
+    exclude_key_id: str | None = None,
 ) -> None:
     query = db.query(UserApiKey.id).filter(
         UserApiKey.tenant_id == tenant_id,
@@ -122,7 +123,8 @@ def _assert_unique_api_key_name(
     if query.first():
         raise ValueError("API key name already exists")
 
-def list_api_keys(service: DatabaseAuthService, user_id: str, show_hidden: bool = False) -> List[ApiKey]:
+
+def list_api_keys(service: DatabaseAuthService, user_id: str, show_hidden: bool = False) -> list[ApiKey]:
     service.ensure_initialized()
     with get_db_session() as db:
         viewer = db.query(User).filter_by(id=user_id).first()
@@ -147,7 +149,7 @@ def list_api_keys(service: DatabaseAuthService, user_id: str, show_hidden: bool 
             .all()
         )
 
-        output: List[ApiKey] = []
+        output: list[ApiKey] = []
         seen_ids = set()
         has_enabled_owned_key = any(bool(getattr(k, "is_enabled", False)) for k in own_keys)
         hidden_key_ids = {
@@ -175,7 +177,7 @@ def list_api_keys(service: DatabaseAuthService, user_id: str, show_hidden: bool 
             seen_ids.add(getattr(owned_key, "id", None))
 
         for link in shared_links:
-            shared_key: Optional[UserApiKey] = getattr(link, "api_key", None)
+            shared_key: UserApiKey | None = getattr(link, "api_key", None)
             if not shared_key:
                 continue
             key_id = getattr(shared_key, "id", None)
@@ -191,13 +193,12 @@ def list_api_keys(service: DatabaseAuthService, user_id: str, show_hidden: bool 
             is_hidden = key_id in hidden_key_ids
             if is_hidden and not show_hidden:
                 continue
-            output.append(
-                api_key_to_schema(shared_key, ApiKeySchemaContext(True, can_use, viewer_enabled, is_hidden))
-            )
+            output.append(api_key_to_schema(shared_key, ApiKeySchemaContext(True, can_use, viewer_enabled, is_hidden)))
             seen_ids.add(key_id)
 
         output.sort(key=lambda item: item.created_at)
         return output
+
 
 def set_api_key_hidden(service: DatabaseAuthService, user_id: str, key_id: str, hidden: bool) -> bool:
     service.ensure_initialized()
@@ -291,7 +292,7 @@ def create_api_key(service: DatabaseAuthService, user_id: str, tenant_id: str, k
         else:
             key_value = str(uuid.uuid4())
 
-        now = _utcnow()
+        now = utcnow()
         _disable_other_enabled_keys(db, user_id=user_id, tenant_id=tenant_id, now=now)
 
         raw_otlp_token = service.generate_otlp_token()
@@ -357,7 +358,7 @@ def _update_shared_api_key_selection(service: DatabaseAuthService, ctx: ApiKeyUp
     if ctx.key_update.is_enabled is not True:
         raise ValueError("Shared API key selection requires is_enabled=true")
 
-    now = _utcnow()
+    now = utcnow()
     _disable_other_enabled_keys(db, user_id=ctx.user_id, tenant_id=ctx.viewer.tenant_id, now=now)
     _set_org_id(ctx.viewer, getattr(ctx.api_key, "key", None), now)
     db.flush()
@@ -477,7 +478,7 @@ def update_api_key(service: DatabaseAuthService, user_id: str, key_id: str, key_
         if not is_owner:
             return _update_shared_api_key_selection(service, update_ctx)
 
-        now = _utcnow()
+        now = utcnow()
         _update_owned_api_key_fields(update_ctx, now=now)
 
         api_key.updated_at = now
@@ -516,7 +517,7 @@ def regenerate_api_key_otlp_token(service: DatabaseAuthService, user_id: str, ke
                 detail="Default key OTLP token cannot be regenerated",
             )
 
-        now = _utcnow()
+        now = utcnow()
         raw_otlp_token = service.generate_otlp_token()
         api_key.otlp_token_hash = service.hash_otlp_token(raw_otlp_token)
         api_key.otlp_token = None
@@ -586,7 +587,7 @@ def delete_api_key(service: DatabaseAuthService, user_id: str, key_id: str) -> b
             )
             if default_key:
                 default_key.is_enabled = True
-                now = _utcnow()
+                now = utcnow()
                 default_key.updated_at = now
                 if str(getattr(viewer, "org_id", "") or "") == deleted_scope_key:
                     _set_org_id(viewer, getattr(default_key, "key", None), now)
@@ -608,7 +609,7 @@ def delete_api_key(service: DatabaseAuthService, user_id: str, key_id: str) -> b
 
 def list_api_key_shares(
     service: DatabaseAuthService, owner_user_id: str, tenant_id: str, key_id: str
-) -> List[ApiKeyShareUser]:
+) -> list[ApiKeyShareUser]:
     service.ensure_initialized()
     with get_db_session() as db:
         api_key = db.query(UserApiKey).filter_by(id=key_id, user_id=owner_user_id, tenant_id=tenant_id).first()
@@ -622,7 +623,7 @@ def replace_api_key_shares(
     service: DatabaseAuthService,
     owner_user_id: str,
     request: ApiKeyShareReplaceRequest,
-) -> List[ApiKeyShareUser]:
+) -> list[ApiKeyShareUser]:
     tenant_id = request.tenant_id
     key_id = request.key_id
     user_ids = request.user_ids
@@ -640,7 +641,7 @@ def replace_api_key_shares(
         )
 
         normalized_group_ids = [gid.strip() for gid in (group_ids or []) if gid and gid.strip()]
-        member_user_ids_from_groups: List[str] = []
+        member_user_ids_from_groups: list[str] = []
 
         if normalized_group_ids:
             groups = (
@@ -696,7 +697,7 @@ def replace_api_key_shares(
             synchronize_session=False
         )
 
-        now = _utcnow()
+        now = utcnow()
         for shared_user_id in combined_user_ids:
             db.add(
                 ApiKeyShare(
@@ -731,8 +732,7 @@ def delete_api_key_share(
     key_id: str,
     *,
     shared_user_id: str,
-
- ) -> bool:
+) -> bool:
     service.ensure_initialized()
     with get_db_session() as db:
         api_key = db.query(UserApiKey).filter_by(id=key_id, user_id=owner_user_id, tenant_id=tenant_id).first()
@@ -782,7 +782,7 @@ def backfill_otlp_tokens(service: DatabaseAuthService) -> None:
             if not batch:
                 break
 
-            now = _utcnow()
+            now = utcnow()
             try:
                 for key in batch:
                     source_token = getattr(key, "otlp_token", None) or service.generate_otlp_token()

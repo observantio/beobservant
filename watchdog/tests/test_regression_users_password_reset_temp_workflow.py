@@ -104,7 +104,9 @@ async def test_reset_temp_password_sends_email_when_target_email_exists(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_reset_temp_password_returns_out_of_band_message_when_email_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reset_temp_password_returns_out_of_band_message_when_email_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(users_router, "rtp", run_in_threadpool_inline)
     monkeypatch.setattr(
         users_router.auth_service,

@@ -6,6 +6,6 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from . import parsers, promql, metrics, params
+from . import metrics, params, parsers, promql
 
-__all__ = ["parsers", "promql", "metrics", "params"]
+__all__ = ["metrics", "params", "parsers", "promql"]

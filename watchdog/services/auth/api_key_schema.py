@@ -11,13 +11,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import List, Optional
-
-from sqlalchemy.orm import Session, joinedload
+from datetime import UTC, datetime
 
 from db_models import ApiKeyShare, UserApiKey
 from models.access.api_key_models import ApiKey, ApiKeyShareUser
+from sqlalchemy.orm import Session, joinedload
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,12 +24,12 @@ class ApiKeySchemaContext:
     can_use: bool
     viewer_enabled: bool
     is_hidden: bool = False
-    revealed_otlp_token: Optional[str] = None
+    revealed_otlp_token: str | None = None
 
 
 def share_created_at(share: ApiKeyShare) -> datetime:
     created_at = getattr(share, "created_at", None)
-    return created_at if isinstance(created_at, datetime) else datetime.now(timezone.utc)
+    return created_at if isinstance(created_at, datetime) else datetime.now(UTC)
 
 
 def list_api_key_shares_in_session(db: Session, *, tenant_id: str, key_id: str) -> list[ApiKeyShareUser]:
@@ -58,7 +56,7 @@ def api_key_to_schema(
     api_key: UserApiKey,
     context: ApiKeySchemaContext,
 ) -> ApiKey:
-    shared_with: List[ApiKeyShareUser] = []
+    shared_with: list[ApiKeyShareUser] = []
     if not context.is_shared:
         for share in getattr(api_key, "shares", None) or []:
             shared_user = getattr(share, "shared_user", None)

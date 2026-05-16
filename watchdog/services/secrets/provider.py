@@ -17,18 +17,19 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import os
-from typing import Dict, Optional, Protocol, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 
 class SecretProvider(Protocol):
-    def get(self, key: str) -> Optional[str]: ...
-    def get_many(self, keys: Sequence[str]) -> Dict[str, Optional[str]]: ...
+    def get(self, key: str) -> str | None: ...
+    def get_many(self, keys: Sequence[str]) -> dict[str, str | None]: ...
 
 
 class EnvSecretProvider:
-    def get(self, key: str) -> Optional[str]:
+    def get(self, key: str) -> str | None:
         val = os.environ.get(key)
         return val if val else None
 
-    def get_many(self, keys: Sequence[str]) -> Dict[str, Optional[str]]:
+    def get_many(self, keys: Sequence[str]) -> dict[str, str | None]:
         return {k: self.get(k) for k in keys}

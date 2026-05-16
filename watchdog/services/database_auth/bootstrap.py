@@ -14,19 +14,18 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Iterable, Optional, Set, TYPE_CHECKING
-
-from sqlalchemy.orm import Session
-
-from sqlalchemy import func, inspect, text
-from sqlalchemy.exc import SQLAlchemyError, NoSuchTableError
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from config import config
 from database import get_db_session
 from db_models import Permission, Tenant, User, UserApiKey
 from models.access.auth_models import Role
 from services.auth.permission_defs import PERMISSION_DEFS
+from sqlalchemy import func, inspect, text
+from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -35,10 +34,10 @@ BOOTSTRAP_PG_LOCK_KEY = 947201
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
-def _norm_lower(value: Optional[str]) -> str:
+def _norm_lower(value: str | None) -> str:
     return (value or "").strip().lower()
 
 
@@ -72,7 +71,7 @@ def _pg_advisory_unlock(db: Session, key: int) -> None:
     db.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": key})
 
 
-def _table_columns(db: Session, table_name: str) -> Set[str]:
+def _table_columns(db: Session, table_name: str) -> set[str]:
     bind = _session_bind(db)
     if bind is None:
         return set()

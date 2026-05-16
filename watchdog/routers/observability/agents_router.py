@@ -12,16 +12,15 @@ http://www.apache.org/licenses/LICENSE-2.0
 import asyncio
 
 import httpx
+from config import config
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
-
-from config import config
 from middleware.dependencies import (
     PublicEndpointSecurityConfig,
     auth_service,
-    require_permission_with_scope,
-    enforce_public_endpoint_security,
     enforce_header_token,
+    enforce_public_endpoint_security,
+    require_permission_with_scope,
 )
 from models.access.auth_models import Permission, TokenData
 from models.observability.agent_models import AgentHeartbeat
@@ -46,7 +45,7 @@ async def close_mimir_client() -> None:
 
 @router.get("/")
 async def list_agents(
-    _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents"))
+    _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "agents")),
 ) -> list[dict[str, object]]:
     return [agent.model_dump() for agent in agent_service.list_agents()]
 
@@ -86,7 +85,7 @@ async def list_active_agents(
             host_names_by_tenant.setdefault(agent.tenant_id, set()).add(agent.host_name)
 
     activity: list[dict[str, object]] = []
-    for key, result in zip(api_keys, results):
+    for key, result in zip(api_keys, results, strict=False):
         if isinstance(result, BaseException):
             activity.append(
                 {

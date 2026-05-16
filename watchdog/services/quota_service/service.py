@@ -10,8 +10,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Literal
 
 from db_models import UserApiKey
 from models.access.auth_models import TokenData
@@ -149,7 +150,7 @@ class QuotaService:
     async def get_quotas(
         self,
         current_user: TokenData,
-        tenant_scope: Optional[str] = None,
+        tenant_scope: str | None = None,
     ) -> QuotasResponse:
         cfg = self._get_config()
         resolved_scope = str(tenant_scope or current_user.org_id or current_user.tenant_id or cfg.DEFAULT_ORG_ID)

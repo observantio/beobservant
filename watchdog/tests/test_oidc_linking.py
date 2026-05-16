@@ -9,16 +9,15 @@ http://www.apache.org/licenses/LICENSE-2.0
 from tests._env import ensure_test_env
 
 ensure_test_env()
-import pytest
 import database
-from database import get_db_session
+import pytest
 from config import config
-from services.database_auth_service import DatabaseAuthService
-from models.access.user_models import UserCreate
-from models.access.auth_models import Role
-from services.auth.actor_caps import AuthActorCaps
+from database import get_db_session
 from db_models import Tenant, User
-
+from models.access.auth_models import Role
+from models.access.user_models import UserCreate
+from services.auth.actor_caps import AuthActorCaps
+from services.database_auth_service import DatabaseAuthService
 
 ADMIN_ACTOR = AuthActorCaps(is_superuser=True)
 
@@ -139,8 +138,7 @@ def test_oidc_auto_provisions_with_viewer_role(monkeypatch):
     svc.ensure_initialized()
 
     with get_db_session() as db:
-        tenant = db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
-        tenant_id = tenant.id
+        db.query(Tenant).filter_by(name=config.DEFAULT_ADMIN_TENANT).first()
 
     monkeypatch.setattr(config, "AUTH_PROVIDER", "oidc")
     monkeypatch.setattr(config, "OIDC_AUTO_PROVISION_USERS", True)

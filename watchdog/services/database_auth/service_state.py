@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Optional
 
 from services.auth.oidc_service import OIDCService
 from services.secrets.provider import SecretProvider
@@ -30,4 +29,4 @@ class DatabaseAuthServiceState:
     _initialized: bool
     _init_lock: threading.Lock
     _password_op_semaphore: threading.Semaphore
-    _secret_provider: Optional[SecretProvider]
+    _secret_provider: SecretProvider | None

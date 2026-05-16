@@ -10,21 +10,21 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
 import secrets
 import string
 import threading
-from typing import Callable, Dict, TYPE_CHECKING, TypeVar
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, TypeVar
 
 import bcrypt
-from fastapi import HTTPException, status
-from sqlalchemy.orm import Session, joinedload
-
 from config import config
 from database import get_db_session
 from db_models import User
+from fastapi import HTTPException, status
 from models.access.auth_models import Role
+from sqlalchemy.orm import Session, joinedload
 
 from .audit import AuditLogRecord
 
@@ -148,12 +148,10 @@ def _require_user_in_tenant(db: Session, user_id: str, tenant_id: str, *, for_up
 
 def reset_user_password_temp(
     service: DatabaseAuthService, actor_user_id: str, target_user_id: str, tenant_id: str
-) -> Dict[str, str]:
+) -> dict[str, str]:
     with get_db_session() as db:
         actor_query = (
-            db.query(User)
-            .options(joinedload(User.permissions))
-            .filter_by(id=actor_user_id, tenant_id=tenant_id)
+            db.query(User).options(joinedload(User.permissions)).filter_by(id=actor_user_id, tenant_id=tenant_id)
         )
         actor = actor_query.first()
         if not actor:
@@ -180,7 +178,7 @@ def reset_user_password_temp(
         length = getattr(config, "TEMP_PASSWORD_LENGTH", 20)
         temporary_password = _generate_temp_password(length)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         target.hashed_password = hash_password(service, temporary_password)
         target.auth_provider = "local"
         target.needs_password_change = True

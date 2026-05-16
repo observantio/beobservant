@@ -7,17 +7,17 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from tests._env import ensure_test_env
 from fastapi.testclient import TestClient
+from tests._env import ensure_test_env
 
 ensure_test_env()
 
-from models.access.auth_models import Permission, ROLE_PERMISSIONS, Role
-from services.auth.permission_defs import PERMISSION_DEFS
-from services.auth.auth_ops import validate_otlp_token
 from config import config
+from models.access.auth_models import ROLE_PERMISSIONS, Permission, Role
+from services.auth.auth_ops import validate_otlp_token
+from services.auth.permission_defs import PERMISSION_DEFS
 
 
 class _BrokenContext:

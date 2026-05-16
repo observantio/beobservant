@@ -8,10 +8,10 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class Visibility(str, Enum):
+class Visibility(StrEnum):
     PRIVATE = "private"
     GROUP = "group"
     TENANT = "tenant"

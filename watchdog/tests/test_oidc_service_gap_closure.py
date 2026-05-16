@@ -11,7 +11,6 @@ from __future__ import annotations
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-
 from tests._env import ensure_test_env
 
 ensure_test_env()

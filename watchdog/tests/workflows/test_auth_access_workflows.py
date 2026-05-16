@@ -11,7 +11,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-
 from routers import internal_router
 from routers.access.auth_router import authentication as auth_routes
 

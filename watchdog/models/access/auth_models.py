@@ -8,19 +8,19 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from enum import Enum
-from typing import List, Optional
+from enum import StrEnum
+
 from pydantic import BaseModel, Field
 
 
-class Role(str, Enum):
+class Role(StrEnum):
     PROVISIONING = "provisioning"
     ADMIN = "admin"
     USER = "user"
     VIEWER = "viewer"
 
 
-class Permission(str, Enum):
+class Permission(StrEnum):
     READ_AUDIT_LOGS = "read:audit_logs"
     READ_ALERTS = "read:alerts"
     CREATE_ALERTS = "create:alerts"
@@ -142,34 +142,34 @@ class TokenData(BaseModel):
     org_id: str
     role: Role
     is_superuser: bool = False
-    permissions: List[str]
-    group_ids: List[str] = Field(default_factory=list)
-    iat: Optional[int] = None
+    permissions: list[str]
+    group_ids: list[str] = Field(default_factory=list)
+    iat: int | None = None
     is_mfa_setup: bool = False
 
 
 class OIDCAuthURLRequest(BaseModel):
     redirect_uri: str = Field(..., min_length=1)
-    state: Optional[str] = None
-    nonce: Optional[str] = None
-    code_challenge: Optional[str] = None
-    code_challenge_method: Optional[str] = None
+    state: str | None = None
+    nonce: str | None = None
+    code_challenge: str | None = None
+    code_challenge_method: str | None = None
 
 
 class OIDCCodeExchangeRequest(BaseModel):
     code: str
     redirect_uri: str
-    state: Optional[str] = None
-    transaction_id: Optional[str] = None
-    code_verifier: Optional[str] = None
-    mfa_code: Optional[str] = None
-    mfa_challenge_id: Optional[str] = None
+    state: str | None = None
+    transaction_id: str | None = None
+    code_verifier: str | None = None
+    mfa_code: str | None = None
+    mfa_challenge_id: str | None = None
 
 
 class OIDCAuthURLResponse(BaseModel):
     authorization_url: str
-    transaction_id: Optional[str] = None
-    state: Optional[str] = None
+    transaction_id: str | None = None
+    state: str | None = None
 
 
 class AuthModeResponse(BaseModel):

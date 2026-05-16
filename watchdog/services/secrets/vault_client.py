@@ -12,36 +12,36 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from importlib import import_module
 import threading
 import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from importlib import import_module
 from types import ModuleType
-from typing import Callable, Optional, Sequence
 
 
 @dataclass
 class VaultSecretProviderSettings:
     address: str
-    token: Optional[str] = None
-    role_id: Optional[str] = None
-    secret_id_fn: Optional[Callable[[], str]] = None
+    token: str | None = None
+    role_id: str | None = None
+    secret_id_fn: Callable[[], str] | None = None
     prefix: str = "secret"
     kv_version: int = 2
     timeout: float = 2.0
-    cacert: Optional[str] = None
+    cacert: str | None = None
     cache_ttl: float = 30.0
 
 
-class _VaultForbiddenFallback(Exception):
+class _VaultForbiddenFallbackError(Exception):
     pass
 
 
-class _VaultInvalidPathFallback(Exception):
+class _VaultInvalidPathFallbackError(Exception):
     pass
 
 
-class _VaultErrorFallback(Exception):
+class _VaultErrorFallbackError(Exception):
     pass
 
 
@@ -50,29 +50,29 @@ hvac: ModuleType | None
 try:
     hvac = import_module("hvac")
     hvac_exceptions = import_module("hvac.exceptions")
-    forbidden_exc = getattr(hvac_exceptions, "Forbidden", _VaultForbiddenFallback)
-    invalid_path_exc = getattr(hvac_exceptions, "InvalidPath", _VaultInvalidPathFallback)
-    vault_error_exc = getattr(hvac_exceptions, "VaultError", _VaultErrorFallback)
+    forbidden_exc = getattr(hvac_exceptions, "Forbidden", _VaultForbiddenFallbackError)
+    invalid_path_exc = getattr(hvac_exceptions, "InvalidPath", _VaultInvalidPathFallbackError)
+    vault_error_exc = getattr(hvac_exceptions, "VaultError", _VaultErrorFallbackError)
     Forbidden = (
         forbidden_exc
         if isinstance(forbidden_exc, type) and issubclass(forbidden_exc, Exception)
-        else _VaultForbiddenFallback
+        else _VaultForbiddenFallbackError
     )
     InvalidPath = (
         invalid_path_exc
         if isinstance(invalid_path_exc, type) and issubclass(invalid_path_exc, Exception)
-        else _VaultInvalidPathFallback
+        else _VaultInvalidPathFallbackError
     )
     VaultError = (
         vault_error_exc
         if isinstance(vault_error_exc, type) and issubclass(vault_error_exc, Exception)
-        else _VaultErrorFallback
+        else _VaultErrorFallbackError
     )
 except ImportError:
     hvac = None
-    Forbidden = _VaultForbiddenFallback
-    InvalidPath = _VaultInvalidPathFallback
-    VaultError = _VaultErrorFallback
+    Forbidden = _VaultForbiddenFallbackError
+    InvalidPath = _VaultInvalidPathFallbackError
+    VaultError = _VaultErrorFallbackError
 
 
 class VaultClientError(RuntimeError):
@@ -111,7 +111,7 @@ class VaultSecretProvider:
         self._prefix = prefix.strip("/")
         self._kv_version = kv_version
         self._cache_ttl = float(cache_ttl)
-        self._cache: dict[str, tuple[float, Optional[str]]] = {}
+        self._cache: dict[str, tuple[float, str | None]] = {}
         self._lock = threading.Lock()
 
         self._role_id = role_id
@@ -163,11 +163,11 @@ class VaultSecretProvider:
                 return _S
             return value
 
-    def _to_cache(self, key: str, value: Optional[str]) -> None:
+    def _to_cache(self, key: str, value: str | None) -> None:
         with self._lock:
             self._cache[key] = (time.monotonic(), value)
 
-    def get(self, key: str) -> Optional[str]:
+    def get(self, key: str) -> str | None:
         cached = self._from_cache(key)
         if cached is not _S:
             return cached if isinstance(cached, str) or cached is None else None
@@ -211,5 +211,5 @@ class VaultSecretProvider:
         self._to_cache(key, val)
         return val
 
-    def get_many(self, keys: Sequence[str]) -> dict[str, Optional[str]]:
+    def get_many(self, keys: Sequence[str]) -> dict[str, str | None]:
         return {k: self.get(k) for k in keys}

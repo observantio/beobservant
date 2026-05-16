@@ -10,8 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status, Path
-
+from fastapi import Depends, HTTPException, Path, status
 from middleware.dependencies import (
     auth_service,
     get_current_user_or_mfa_setup,
@@ -44,7 +43,9 @@ async def mfa_verify(
         detail = (
             "TOTP not enrolled for user"
             if "not enrolled" in msg
-            else "Invalid TOTP code" if "Invalid TOTP code" in msg else msg
+            else "Invalid TOTP code"
+            if "Invalid TOTP code" in msg
+            else msg
         )
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail) from exc
 

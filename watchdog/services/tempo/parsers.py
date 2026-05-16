@@ -9,8 +9,8 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from itertools import pairwise
 from dataclasses import dataclass
+from itertools import pairwise
 
 from custom_types.json import JSONDict
 from models.observability.tempo_models import Span, SpanAttribute, Trace
@@ -214,9 +214,7 @@ def parse_span(
         or "unknown"
     )
     span_service_name = (
-        span_service_name_value
-        if isinstance(span_service_name_value, str)
-        else str(span_service_name_value)
+        span_service_name_value if isinstance(span_service_name_value, str) else str(span_service_name_value)
     )
 
     if span_service_name and (SERVICE_NAME_KEY not in attr_map or preferred_service_name is not None):

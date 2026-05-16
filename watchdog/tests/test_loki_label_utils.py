@@ -7,10 +7,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from services.loki.label_utils import (
-    parse_labelset_value,
+    normalize_label_dict,
     normalize_label_value,
     normalize_label_values,
-    normalize_label_dict,
+    parse_labelset_value,
 )
 
 

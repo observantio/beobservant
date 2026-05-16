@@ -11,33 +11,35 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import List, Optional
-
-from fastapi import Body, Depends, HTTPException, Path, Query
-from pydantic import StrictBool
-from sqlalchemy.orm import Session
 
 from config import config
 from custom_types.json import JSONDict
 from database import get_db
+from fastapi import Body, Depends, HTTPException, Path, Query
 from middleware.dependencies import require_any_permission_with_scope, require_permission_with_scope
 from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, TokenData
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from models.observability.grafana_request_models import GrafanaDatasourceQueryRequest, GrafanaHiddenToggleRequest
+from pydantic import StrictBool
 from services.grafana.grafana_bundles import (
-    DatasourceCreateRequest as DatasourceCreateBundle,
     DatasourceCreateOptions,
     DatasourceListParams,
     DatasourceQueryEnforcement,
-    DatasourceUpdateRequest as DatasourceUpdateBundle,
     DatasourceUpdateOptions,
     GrafanaUserScope,
     HiddenToggleParams,
     HiddenToggleRequest,
 )
+from services.grafana.grafana_bundles import (
+    DatasourceCreateRequest as DatasourceCreateBundle,
+)
+from services.grafana.grafana_bundles import (
+    DatasourceUpdateRequest as DatasourceUpdateBundle,
+)
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.route_payloads import validate_visibility
+from sqlalchemy.orm import Session
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
 
@@ -149,12 +151,12 @@ async def get_datasource_by_name(
     return datasource
 
 
-@router.get("/datasources", response_model=List[Datasource])
+@router.get("/datasources", response_model=list[Datasource])
 async def get_datasources(
     list_params: DatasourceListParams = Depends(_datasource_list_params_dep),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),
-) -> List[Datasource]:
+) -> list[Datasource]:
     user_id, tenant_id, group_ids, _ = scope_context(current_user)
     datasource_context = await rtp(proxy.build_datasource_list_context, db, tenant_id=tenant_id, uid=list_params.uid)
     params = replace(list_params, datasource_context=datasource_context)
@@ -188,7 +190,7 @@ async def get_datasource_by_uid(
 async def create_datasource(
     datasource: DatasourceCreate = Body(...),
     visibility: str = Query("private"),
-    shared_group_ids: Optional[List[str]] = Query(None),
+    shared_group_ids: list[str] | None = Query(None),
     *,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),
@@ -216,8 +218,8 @@ async def create_datasource(
 @handle_route_errors()
 async def update_datasource(
     request: DatasourceUpdateRequest = Depends(_datasource_update_request_dep),
-    visibility: Optional[str] = Query(None),
-    shared_group_ids: Optional[List[str]] = Query(None),
+    visibility: str | None = Query(None),
+    shared_group_ids: list[str] | None = Query(None),
     *,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.UPDATE_DATASOURCES, "grafana")),
     db: Session = Depends(get_db),

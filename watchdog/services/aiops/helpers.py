@@ -8,17 +8,15 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from typing import Optional
+from custom_types.json import JSONDict
 from fastapi import Request
 
-from custom_types.json import JSONDict
 
-
-def inject_tenant(payload: Optional[JSONDict], tenant_id: str) -> JSONDict:
+def inject_tenant(payload: JSONDict | None, tenant_id: str) -> JSONDict:
     data: JSONDict = dict(payload or {})
     data["tenant_id"] = tenant_id
     return data
 
 
-def correlation_id(request: Request) -> Optional[str]:
+def correlation_id(request: Request) -> str | None:
     return request.headers.get("x-correlation-id")

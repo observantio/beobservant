@@ -10,12 +10,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import Iterable, List
+from collections.abc import Iterable
 
 from sqlalchemy.orm import Session
 
 
-def group_id_strs(group_ids: Iterable[str] | None) -> List[str]:
+def group_id_strs(group_ids: Iterable[str] | None) -> list[str]:
     return [str(group_id) for group_id in (group_ids or [])]
 
 

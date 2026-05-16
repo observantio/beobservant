@@ -98,4 +98,3 @@ def fake_user(
         must_setup_mfa=False,
         auth_provider="local",
     )
-

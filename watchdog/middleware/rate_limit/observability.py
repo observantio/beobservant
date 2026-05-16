@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Dict
 
 logger = logging.getLogger(__name__)
 
 _fallback_lock = threading.Lock()
 _RATE_LIMIT_FALLBACK_TOTAL = 0
-_rate_limit_fallback_by_mode: Dict[str, int] = {"memory": 0, "deny": 0, "allow": 0}
+_rate_limit_fallback_by_mode: dict[str, int] = {"memory": 0, "deny": 0, "allow": 0}
 
 
 def record_fallback_event(mode: str, reason: str) -> None:
@@ -34,7 +33,7 @@ def record_fallback_event(mode: str, reason: str) -> None:
     )
 
 
-def get_rate_limit_observability_snapshot() -> Dict[str, int]:
+def get_rate_limit_observability_snapshot() -> dict[str, int]:
     with _fallback_lock:
         return {
             "fallback_total": _RATE_LIMIT_FALLBACK_TOTAL,

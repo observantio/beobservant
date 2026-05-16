@@ -14,7 +14,6 @@ import logging
 
 from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
-
 from services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)

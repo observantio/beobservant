@@ -10,11 +10,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple
 
 import httpx
-
 from config import config
 from custom_types.json import JSONDict
 
@@ -28,27 +27,27 @@ def _empty_response() -> JSONDict:
     return {"status": "error", "data": {"result": []}}
 
 
-def _default_scope_headers(tenant_id: str) -> Dict[str, str]:
+def _default_scope_headers(tenant_id: str) -> dict[str, str]:
     return {"X-Scope-OrgID": tenant_id}
 
 
 @dataclass
 class QueryMetricsRangeParams:
     promql: str
-    start_us: Optional[int] = None
-    end_us: Optional[int] = None
+    start_us: int | None = None
+    end_us: int | None = None
     step_s: int = 300
     tenant_id: str = field(default_factory=lambda: config.DEFAULT_ORG_ID)
     mimir_url: str = field(default_factory=lambda: config.MIMIR_URL)
-    get_headers: Optional[Callable[[str], Dict[str, str]]] = None
-    observe: Optional[Callable[[str, float], None]] = None
+    get_headers: Callable[[str], dict[str, str]] | None = None
+    observe: Callable[[str, float], None] | None = None
     metrics_enabled: bool = True
 
 
 async def query_metrics_range(
     client: httpx.AsyncClient,
     params: QueryMetricsRangeParams,
-) -> Tuple[JSONDict, bool]:
+) -> tuple[JSONDict, bool]:
     if not params.metrics_enabled:
         return _empty_response(), False
 
@@ -77,14 +76,14 @@ async def query_metrics_range(
         return _empty_response(), False
 
 
-def extract_metric_values(metrics_resp: object) -> List[List[object]]:
+def extract_metric_values(metrics_resp: object) -> list[list[object]]:
     if not isinstance(metrics_resp, dict):
         return []
     results = (metrics_resp.get("data") or {}).get("result")
     if not results:
         return []
 
-    ts_map: Dict[int, int] = {}
+    ts_map: dict[int, int] = {}
     for series in results:
         for ts, v in series.get("values") or []:
             try:

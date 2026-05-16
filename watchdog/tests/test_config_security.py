@@ -10,7 +10,9 @@ import importlib
 import os
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
+
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -18,7 +20,7 @@ try:
     import services
 
     if not hasattr(services, "__path__"):
-        services.__path__ = [os.path.join(os.path.dirname(__file__), "..", "services")]
+        services.__path__ = [str(Path(__file__).resolve().parent.parent / "services")]
 except ImportError:
     pass
 
@@ -53,32 +55,36 @@ def _rsa_keypair_pem() -> tuple[str, str]:
 
 class ConfigSecurityTests(unittest.TestCase):
     def test_rejects_example_database_url(self):
-        with patch.dict(
-            os.environ,
-            {
-                "DATABASE_URL": "postgresql://watchdog:changeme123@localhost:5432/watchdog",
-                "CORS_ORIGINS": "http://localhost:5173",
-                "CORS_ALLOW_CREDENTIALS": "true",
-                "JWT_ALGORITHM": "RS256",
-            },
-            clear=False,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "DATABASE_URL": "postgresql://watchdog:changeme123@localhost:5432/watchdog",
+                    "CORS_ORIGINS": "http://localhost:5173",
+                    "CORS_ALLOW_CREDENTIALS": "true",
+                    "JWT_ALGORITHM": "RS256",
+                },
+                clear=False,
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                _reload_config_module()
+            _reload_config_module()
 
     def test_rejects_wildcard_cors_with_credentials(self):
-        with patch.dict(
-            os.environ,
-            {
-                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
-                "CORS_ORIGINS": "*",
-                "CORS_ALLOW_CREDENTIALS": "true",
-                "JWT_ALGORITHM": "RS256",
-            },
-            clear=False,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                    "CORS_ORIGINS": "*",
+                    "CORS_ALLOW_CREDENTIALS": "true",
+                    "JWT_ALGORITHM": "RS256",
+                },
+                clear=False,
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                _reload_config_module()
+            _reload_config_module()
 
     def test_generates_runtime_admin_password_when_missing(self):
         with patch.dict(
@@ -103,18 +109,20 @@ class ConfigSecurityTests(unittest.TestCase):
             self.assertIn("BEGIN", module.config.JWT_PUBLIC_KEY)
 
     def test_rejects_non_asymmetric_jwt_algorithm(self):
-        with patch.dict(
-            os.environ,
-            {
-                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
-                "CORS_ORIGINS": "http://localhost:5173",
-                "CORS_ALLOW_CREDENTIALS": "true",
-                "JWT_ALGORITHM": "HS256",
-            },
-            clear=False,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                    "CORS_ORIGINS": "http://localhost:5173",
+                    "CORS_ALLOW_CREDENTIALS": "true",
+                    "JWT_ALGORITHM": "HS256",
+                },
+                clear=False,
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                _reload_config_module()
+            _reload_config_module()
 
     def test_generates_es256_keypair_when_enabled(self):
         with patch.dict(
@@ -138,22 +146,24 @@ class ConfigSecurityTests(unittest.TestCase):
             self.assertIn("BEGIN PUBLIC KEY", module.config.JWT_PUBLIC_KEY)
 
     def test_rejects_bootstrap_and_auto_keys_in_production(self):
-        with patch.dict(
-            os.environ,
-            {
-                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
-                "CORS_ORIGINS": "https://app.example.com",
-                "CORS_ALLOW_CREDENTIALS": "true",
-                "JWT_ALGORITHM": "RS256",
-                "APP_ENV": "production",
-                "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "true",
-                "JWT_AUTO_GENERATE_KEYS": "true",
-                "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
-            },
-            clear=False,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                    "CORS_ORIGINS": "https://app.example.com",
+                    "CORS_ALLOW_CREDENTIALS": "true",
+                    "JWT_ALGORITHM": "RS256",
+                    "APP_ENV": "production",
+                    "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "true",
+                    "JWT_AUTO_GENERATE_KEYS": "true",
+                    "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
+                },
+                clear=False,
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                _reload_config_module()
+            _reload_config_module()
 
     def test_allows_restart_without_default_admin_password(self):
         private_key, public_key = _rsa_keypair_pem()
@@ -184,42 +194,46 @@ class ConfigSecurityTests(unittest.TestCase):
             self.assertEqual(module.config.DEFAULT_ADMIN_PASSWORD, "")
 
     def test_rejects_missing_jwt_keypair_when_auto_generation_disabled_in_production(self):
-        with patch.dict(
-            os.environ,
-            {
-                "APP_ENV": "production",
-                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
-                "CORS_ORIGINS": "https://app.example.com",
-                "CORS_ALLOW_CREDENTIALS": "true",
-                "JWT_ALGORITHM": "RS256",
-                "JWT_AUTO_GENERATE_KEYS": "false",
-                "JWT_PRIVATE_KEY": "",
-                "JWT_PUBLIC_KEY": "",
-            },
-            clear=False,
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "APP_ENV": "production",
+                    "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                    "CORS_ORIGINS": "https://app.example.com",
+                    "CORS_ALLOW_CREDENTIALS": "true",
+                    "JWT_ALGORITHM": "RS256",
+                    "JWT_AUTO_GENERATE_KEYS": "false",
+                    "JWT_PRIVATE_KEY": "",
+                    "JWT_PUBLIC_KEY": "",
+                },
+                clear=False,
+            ),
+            self.assertRaisesRegex(
                 ValueError,
                 "JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be configured for RS256/ES256 tokens",
-            ):
-                _reload_config_module()
+            ),
+        ):
+            _reload_config_module()
 
     def test_vault_enabled_in_production_without_addr_raises(self):
-        with patch.dict(
-            os.environ,
-            {
-                "CORS_ORIGINS": "http://localhost:5173",
-                "CORS_ALLOW_CREDENTIALS": "true",
-                "JWT_ALGORITHM": "RS256",
-                "APP_ENV": "production",
-                "VAULT_ENABLED": "true",
-                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
-                "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
-            },
-            clear=False,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "CORS_ORIGINS": "http://localhost:5173",
+                    "CORS_ALLOW_CREDENTIALS": "true",
+                    "JWT_ALGORITHM": "RS256",
+                    "APP_ENV": "production",
+                    "VAULT_ENABLED": "true",
+                    "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                    "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
+                },
+                clear=False,
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                _reload_config_module()
+            _reload_config_module()
 
     def test_loads_secrets_from_vault_when_enabled(self):
         class FakeVaultProvider:
@@ -248,8 +262,8 @@ class ConfigSecurityTests(unittest.TestCase):
             },
             clear=False,
         ):
-            import types
             import sys
+            import types
 
             fake = types.SimpleNamespace(
                 VaultSecretProvider=FakeVaultProvider,
@@ -271,117 +285,125 @@ class ConfigSecurityTests(unittest.TestCase):
 
     def test_production_requires_notifier_service_token(self):
         private_key, public_key = _rsa_keypair_pem()
-        with patch.dict(
-            os.environ,
-            {
-                "APP_ENV": "production",
-                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
-                "CORS_ORIGINS": "https://app.example.com",
-                "CORS_ALLOW_CREDENTIALS": "true",
-                "JWT_ALGORITHM": "RS256",
-                "JWT_PRIVATE_KEY": private_key,
-                "JWT_PUBLIC_KEY": public_key,
-                "JWT_AUTO_GENERATE_KEYS": "false",
-                "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
-                "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "false",
-                "DATA_ENCRYPTION_KEY": "9j95_Fl__by42XjEQ03cNIw1MNfK8gxjhEC5Q8ru4ZE=",
-                "NOTIFIER_SERVICE_TOKEN": "",
-                "NOTIFIER_CONTEXT_SIGNING_KEY": "strong_context_signing_key_123",
-                "RESOLVER_SERVICE_TOKEN": "strong_resolver_service_token_123",
-                "RESOLVER_CONTEXT_SIGNING_KEY": "strong_resolver_context_signing_key_123",
-                "GATEWAY_INTERNAL_SERVICE_TOKEN": "strong_gateway_token_123",
-                "INBOUND_WEBHOOK_TOKEN": "strong_webhook_token_123",
-            },
-            clear=False,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "APP_ENV": "production",
+                    "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                    "CORS_ORIGINS": "https://app.example.com",
+                    "CORS_ALLOW_CREDENTIALS": "true",
+                    "JWT_ALGORITHM": "RS256",
+                    "JWT_PRIVATE_KEY": private_key,
+                    "JWT_PUBLIC_KEY": public_key,
+                    "JWT_AUTO_GENERATE_KEYS": "false",
+                    "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
+                    "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "false",
+                    "DATA_ENCRYPTION_KEY": "9j95_Fl__by42XjEQ03cNIw1MNfK8gxjhEC5Q8ru4ZE=",
+                    "NOTIFIER_SERVICE_TOKEN": "",
+                    "NOTIFIER_CONTEXT_SIGNING_KEY": "strong_context_signing_key_123",
+                    "RESOLVER_SERVICE_TOKEN": "strong_resolver_service_token_123",
+                    "RESOLVER_CONTEXT_SIGNING_KEY": "strong_resolver_context_signing_key_123",
+                    "GATEWAY_INTERNAL_SERVICE_TOKEN": "strong_gateway_token_123",
+                    "INBOUND_WEBHOOK_TOKEN": "strong_webhook_token_123",
+                },
+                clear=False,
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                _reload_config_module()
+            _reload_config_module()
 
     def test_rejects_invalid_notifier_context_algorithm(self):
         private_key, public_key = _rsa_keypair_pem()
-        with patch.dict(
-            os.environ,
-            {
-                "APP_ENV": "production",
-                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
-                "CORS_ORIGINS": "https://app.example.com",
-                "CORS_ALLOW_CREDENTIALS": "true",
-                "JWT_ALGORITHM": "RS256",
-                "JWT_PRIVATE_KEY": private_key,
-                "JWT_PUBLIC_KEY": public_key,
-                "JWT_AUTO_GENERATE_KEYS": "false",
-                "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
-                "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "false",
-                "DATA_ENCRYPTION_KEY": "9j95_Fl__by42XjEQ03cNIw1MNfK8gxjhEC5Q8ru4ZE=",
-                "NOTIFIER_SERVICE_TOKEN": "strong_notifier_service_token_123",
-                "NOTIFIER_CONTEXT_SIGNING_KEY": "strong_context_signing_key_123",
-                "NOTIFIER_CONTEXT_ALGORITHM": "RS256",
-                "RESOLVER_SERVICE_TOKEN": "strong_resolver_service_token_123",
-                "RESOLVER_CONTEXT_SIGNING_KEY": "strong_resolver_context_signing_key_123",
-                "GATEWAY_INTERNAL_SERVICE_TOKEN": "strong_gateway_token_123",
-                "INBOUND_WEBHOOK_TOKEN": "strong_webhook_token_123",
-            },
-            clear=False,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "APP_ENV": "production",
+                    "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                    "CORS_ORIGINS": "https://app.example.com",
+                    "CORS_ALLOW_CREDENTIALS": "true",
+                    "JWT_ALGORITHM": "RS256",
+                    "JWT_PRIVATE_KEY": private_key,
+                    "JWT_PUBLIC_KEY": public_key,
+                    "JWT_AUTO_GENERATE_KEYS": "false",
+                    "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
+                    "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "false",
+                    "DATA_ENCRYPTION_KEY": "9j95_Fl__by42XjEQ03cNIw1MNfK8gxjhEC5Q8ru4ZE=",
+                    "NOTIFIER_SERVICE_TOKEN": "strong_notifier_service_token_123",
+                    "NOTIFIER_CONTEXT_SIGNING_KEY": "strong_context_signing_key_123",
+                    "NOTIFIER_CONTEXT_ALGORITHM": "RS256",
+                    "RESOLVER_SERVICE_TOKEN": "strong_resolver_service_token_123",
+                    "RESOLVER_CONTEXT_SIGNING_KEY": "strong_resolver_context_signing_key_123",
+                    "GATEWAY_INTERNAL_SERVICE_TOKEN": "strong_gateway_token_123",
+                    "INBOUND_WEBHOOK_TOKEN": "strong_webhook_token_123",
+                },
+                clear=False,
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                _reload_config_module()
+            _reload_config_module()
 
     def test_rejects_production_allowlist_fail_open(self):
         private_key, public_key = _rsa_keypair_pem()
-        with patch.dict(
-            os.environ,
-            {
-                "APP_ENV": "production",
-                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
-                "CORS_ORIGINS": "https://app.example.com",
-                "CORS_ALLOW_CREDENTIALS": "true",
-                "JWT_ALGORITHM": "RS256",
-                "JWT_PRIVATE_KEY": private_key,
-                "JWT_PUBLIC_KEY": public_key,
-                "JWT_AUTO_GENERATE_KEYS": "false",
-                "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
-                "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "false",
-                "DATA_ENCRYPTION_KEY": "9j95_Fl__by42XjEQ03cNIw1MNfK8gxjhEC5Q8ru4ZE=",
-                "NOTIFIER_SERVICE_TOKEN": "strong_notifier_service_token_123",
-                "NOTIFIER_CONTEXT_SIGNING_KEY": "strong_context_signing_key_123",
-                "RESOLVER_SERVICE_TOKEN": "strong_resolver_service_token_123",
-                "RESOLVER_CONTEXT_SIGNING_KEY": "strong_resolver_context_signing_key_123",
-                "GATEWAY_INTERNAL_SERVICE_TOKEN": "strong_gateway_token_123",
-                "INBOUND_WEBHOOK_TOKEN": "strong_webhook_token_123",
-                "ALLOWLIST_FAIL_OPEN": "true",
-            },
-            clear=False,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "APP_ENV": "production",
+                    "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                    "CORS_ORIGINS": "https://app.example.com",
+                    "CORS_ALLOW_CREDENTIALS": "true",
+                    "JWT_ALGORITHM": "RS256",
+                    "JWT_PRIVATE_KEY": private_key,
+                    "JWT_PUBLIC_KEY": public_key,
+                    "JWT_AUTO_GENERATE_KEYS": "false",
+                    "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
+                    "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "false",
+                    "DATA_ENCRYPTION_KEY": "9j95_Fl__by42XjEQ03cNIw1MNfK8gxjhEC5Q8ru4ZE=",
+                    "NOTIFIER_SERVICE_TOKEN": "strong_notifier_service_token_123",
+                    "NOTIFIER_CONTEXT_SIGNING_KEY": "strong_context_signing_key_123",
+                    "RESOLVER_SERVICE_TOKEN": "strong_resolver_service_token_123",
+                    "RESOLVER_CONTEXT_SIGNING_KEY": "strong_resolver_context_signing_key_123",
+                    "GATEWAY_INTERNAL_SERVICE_TOKEN": "strong_gateway_token_123",
+                    "INBOUND_WEBHOOK_TOKEN": "strong_webhook_token_123",
+                    "ALLOWLIST_FAIL_OPEN": "true",
+                },
+                clear=False,
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                _reload_config_module()
+            _reload_config_module()
 
     def test_rejects_invalid_data_encryption_key_in_production(self):
         private_key, public_key = _rsa_keypair_pem()
-        with patch.dict(
-            os.environ,
-            {
-                "APP_ENV": "production",
-                "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
-                "CORS_ORIGINS": "https://app.example.com",
-                "CORS_ALLOW_CREDENTIALS": "true",
-                "JWT_ALGORITHM": "RS256",
-                "JWT_PRIVATE_KEY": private_key,
-                "JWT_PUBLIC_KEY": public_key,
-                "JWT_AUTO_GENERATE_KEYS": "false",
-                "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
-                "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "false",
-                "DATA_ENCRYPTION_KEY": "not-a-fernet-key",
-                "NOTIFIER_SERVICE_TOKEN": "strong_notifier_service_token_123",
-                "NOTIFIER_CONTEXT_SIGNING_KEY": "strong_context_signing_key_123",
-                "RESOLVER_SERVICE_TOKEN": "strong_resolver_service_token_123",
-                "RESOLVER_CONTEXT_SIGNING_KEY": "strong_resolver_context_signing_key_123",
-                "GATEWAY_INTERNAL_SERVICE_TOKEN": "strong_gateway_token_123",
-                "INBOUND_WEBHOOK_TOKEN": "strong_webhook_token_123",
-            },
-            clear=False,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "APP_ENV": "production",
+                    "DATABASE_URL": "postgresql://safeuser:safePass_123@db:5432/watchdog",
+                    "CORS_ORIGINS": "https://app.example.com",
+                    "CORS_ALLOW_CREDENTIALS": "true",
+                    "JWT_ALGORITHM": "RS256",
+                    "JWT_PRIVATE_KEY": private_key,
+                    "JWT_PUBLIC_KEY": public_key,
+                    "JWT_AUTO_GENERATE_KEYS": "false",
+                    "DEFAULT_ADMIN_PASSWORD": "strongProdPassword_123!",
+                    "DEFAULT_ADMIN_BOOTSTRAP_ENABLED": "false",
+                    "DATA_ENCRYPTION_KEY": "not-a-fernet-key",
+                    "NOTIFIER_SERVICE_TOKEN": "strong_notifier_service_token_123",
+                    "NOTIFIER_CONTEXT_SIGNING_KEY": "strong_context_signing_key_123",
+                    "RESOLVER_SERVICE_TOKEN": "strong_resolver_service_token_123",
+                    "RESOLVER_CONTEXT_SIGNING_KEY": "strong_resolver_context_signing_key_123",
+                    "GATEWAY_INTERNAL_SERVICE_TOKEN": "strong_gateway_token_123",
+                    "INBOUND_WEBHOOK_TOKEN": "strong_webhook_token_123",
+                },
+                clear=False,
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                _reload_config_module()
+            _reload_config_module()
 
 
 if __name__ == "__main__":

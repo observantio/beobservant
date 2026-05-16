@@ -9,13 +9,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from contextlib import contextmanager
-from types import SimpleNamespace
 
 import httpx
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from tests._env import ensure_test_env
 
 ensure_test_env()

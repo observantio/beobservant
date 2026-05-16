@@ -8,31 +8,29 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
-from typing import List, Optional, Set, TypeAlias
 import importlib
 import logging
-
-from sqlalchemy import String, or_
-from sqlalchemy.orm import Session
-from sqlalchemy.orm.query import RowReturningQuery
-
-from fastapi import Depends, HTTPException, Request, Response, status
-
-from db_models import AuditLog, User
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TypeAlias
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from config import config
-from models.access.auth_models import TokenData, Permission, Role, ROLE_PERMISSIONS
 from custom_types.json import JSONDict
-from services.common.cookies import cookie_secure
-from services.auth.delegation import is_admin_actor as _is_admin_actor, role_to_text as _role_to_text
+from db_models import AuditLog, User
+from fastapi import Depends, HTTPException, Request, Response, status
 from middleware.dependencies import (
     PublicEndpointSecurityConfig,
     enforce_public_endpoint_security,
     require_permission_with_scope,
 )
+from models.access.auth_models import ROLE_PERMISSIONS, Permission, Role, TokenData
+from services.auth.delegation import is_admin_actor as _is_admin_actor
+from services.auth.delegation import role_to_text as _role_to_text
+from services.common.cookies import cookie_secure
+from sqlalchemy import String, or_
+from sqlalchemy.orm import Session
+from sqlalchemy.orm.query import RowReturningQuery
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +41,10 @@ AuditLogQueryRow: TypeAlias = tuple[AuditLog, str, str]
 class AuditLogFilterParams:
     start: object
     end: object
-    user_id: Optional[str]
-    action: Optional[str]
-    resource_type: Optional[str]
-    q: Optional[str] = None
+    user_id: str | None
+    action: str | None
+    resource_type: str | None
+    q: str | None = None
 
 
 AUDIT_SENSITIVE_SUBSTRINGS = (
@@ -77,7 +75,7 @@ def invalidate_grafana_proxy_auth_cache() -> None:
 
 
 def require_admin_with_audit_permission(
-    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AUDIT_LOGS, "auth"))
+    current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AUDIT_LOGS, "auth")),
 ) -> TokenData:
     if not is_admin_check(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required to view audit logs")
@@ -116,7 +114,7 @@ def redact_query_string(raw: str) -> str:
     return urlencode(sanitized, doseq=True)
 
 
-def sanitize_resource_id(resource_id: Optional[str]) -> str:
+def sanitize_resource_id(resource_id: str | None) -> str:
     text = str(resource_id or "")
     if not text or "?" not in text:
         return text
@@ -126,7 +124,7 @@ def sanitize_resource_id(resource_id: Optional[str]) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, redact_query_string(parsed.query), parsed.fragment))
 
 
-def sanitize_audit_details(details: Optional[JSONDict]) -> JSONDict:
+def sanitize_audit_details(details: JSONDict | None) -> JSONDict:
     source = details if isinstance(details, dict) else {}
     sanitized: JSONDict = {}
     for key, value in source.items():
@@ -157,7 +155,7 @@ def clear_auth_cookie(request: Request, response: Response) -> None:
 def build_audit_log_query(
     db: Session,
     current_user: TokenData,
-    tenant_id: Optional[str],
+    tenant_id: str | None,
     actor: type[User],
 ) -> RowReturningQuery[AuditLogQueryRow]:
     query = db.query(AuditLog, actor.username, actor.email).outerjoin(actor, actor.id == AuditLog.user_id)
@@ -168,13 +166,13 @@ def build_audit_log_query(
     return query
 
 
-def role_permission_strings(role: object) -> List[str]:
+def role_permission_strings(role: object) -> list[str]:
     if not isinstance(role, Role):
         return []
     return [p.value for p in ROLE_PERMISSIONS.get(role, [])]
 
 
-def perms_check(user: TokenData) -> Set[str]:
+def perms_check(user: TokenData) -> set[str]:
     return {str(permission) for permission in (getattr(user, "permissions", []) or [])}
 
 
@@ -195,7 +193,7 @@ def apply_audit_filters_func(
         normalized = value
         if normalized.tzinfo is not None:
             # Audit timestamps are stored as timezone-naive UTC in the DB.
-            normalized = normalized.astimezone(timezone.utc).replace(tzinfo=None)
+            normalized = normalized.astimezone(UTC).replace(tzinfo=None)
         if end_of_minute and normalized.second == 0 and normalized.microsecond == 0:
             # Datetime-local inputs are minute precision; make "end" inclusive.
             normalized = normalized.replace(second=59, microsecond=999999)

@@ -11,52 +11,18 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, cast
+from typing import cast
 
 import httpx
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-
 from config import config
 from custom_types.json import JSONDict
 from db_models import GrafanaDashboard, GrafanaFolder
+from fastapi import HTTPException
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardSearchResult
-from services.grafana.proxy_client import GrafanaProxyClient
-from services.grafana.dashboard_helpers import (
-    _cap,
-    _dashboard_has_datasource,
-    _db_dashboard_by_uid,
-    _has_accessible_title_conflict,
-    _is_hidden_for,
-    _is_general_folder_id,
-    _is_non_general_folder_id,
-    _json_dict,
-    _purge_stale_dashboards,
-    _resolve_folder_uid_by_id,
-    _shared_group_ids,
-    _to_safe_int32,
-    _to_search_result,
-    DashboardSearchContext,
-    build_dashboard_search_context,
-    check_dashboard_access,
-    get_accessible_dashboard_uids,
-)
-from services.grafana.grafana_bundles import (
-    AccessibleTitleConflictParams,
-    DashboardAccessCriteria,
-    DashboardCreateOptions,
-    DashboardSearchAppendContext,
-    DashboardSearchParams,
-    DashboardUpdateRequest,
-    HiddenToggleParams,
-    FolderAccessCriteria,
-    GrafanaUserScope,
-)
-from services.grafana.grafana_service import GrafanaAPIError, GrafanaDashboardSearchRequest
 from services.grafana.dashboard_complexity_helpers import (
+    CreateDashboardAccessContext,
     DashboardUpdateMoveVisibilityContext,
     DashboardVisibilityUpdateContext,
-    CreateDashboardAccessContext,
     UpdateScopeAccessContext,
     apply_dashboard_visibility_update,
     create_dashboard_in_grafana,
@@ -66,9 +32,43 @@ from services.grafana.dashboard_complexity_helpers import (
     validate_create_dashboard_access,
     validate_update_move_and_visibility,
 )
+from services.grafana.dashboard_helpers import (
+    DashboardSearchContext,
+    _cap,
+    _dashboard_has_datasource,
+    _db_dashboard_by_uid,
+    _has_accessible_title_conflict,
+    _is_general_folder_id,
+    _is_hidden_for,
+    _is_non_general_folder_id,
+    _json_dict,
+    _purge_stale_dashboards,
+    _resolve_folder_uid_by_id,
+    _shared_group_ids,
+    _to_safe_int32,
+    _to_search_result,
+    build_dashboard_search_context,
+    check_dashboard_access,
+    get_accessible_dashboard_uids,
+)
 from services.grafana.folder_ops import check_folder_access, is_folder_accessible
+from services.grafana.grafana_bundles import (
+    AccessibleTitleConflictParams,
+    DashboardAccessCriteria,
+    DashboardCreateOptions,
+    DashboardSearchAppendContext,
+    DashboardSearchParams,
+    DashboardUpdateRequest,
+    FolderAccessCriteria,
+    GrafanaUserScope,
+    HiddenToggleParams,
+)
+from services.grafana.grafana_service import GrafanaAPIError, GrafanaDashboardSearchRequest
+from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
 from services.grafana.visibility import resolve_visibility_groups_for_scope, visibility_group_resolve_context
+from sqlalchemy.orm import Session
+
 
 def _append_dashboard_search_match(d: DashboardSearchResult, ctx: DashboardSearchAppendContext) -> None:
     db_dash = ctx.db_dashboards.get(d.uid)
@@ -114,22 +114,27 @@ def _append_dashboard_search_match(d: DashboardSearchResult, ctx: DashboardSearc
     if db_dash and folder_uid and db_dash.folder_uid != folder_uid:
         db_dash.folder_uid = str(folder_uid)
         ctx.folder_updates.append(db_dash)
-    if not skip and folder_uid and not is_folder_accessible(
-        ctx.db,
-        folder_uid,
-        GrafanaUserScope(ctx.user_id, ctx.tenant_id, ctx.gids),
-        FolderAccessCriteria(require_write=False, is_admin=ctx.is_admin, include_hidden=False),
+    if (
+        not skip
+        and folder_uid
+        and not is_folder_accessible(
+            ctx.db,
+            folder_uid,
+            GrafanaUserScope(ctx.user_id, ctx.tenant_id, ctx.gids),
+            FolderAccessCriteria(require_write=False, is_admin=ctx.is_admin, include_hidden=False),
+        )
     ):
         skip = True
     if not skip and d.uid not in ctx.accessible and not (ctx.allow_system and d.uid not in ctx.all_registered_uids):
         skip = True
     if not skip and db_dash and not ctx.show_hidden and _is_hidden_for(db_dash, ctx.user_id):
         skip = True
-    if not skip and ctx.team_id_s:
-        if not db_dash:
-            skip = True
-        elif ctx.team_id_s not in {str(g.id) for g in (db_dash.shared_groups or [])}:
-            skip = True
+    if (
+        not skip
+        and ctx.team_id_s
+        and (not db_dash or ctx.team_id_s not in {str(g.id) for g in (db_dash.shared_groups or [])})
+    ):
+        skip = True
     if not skip:
         ctx.out.append(_to_search_result(d, db_dash=db_dash, user_id=ctx.user_id))
 
@@ -142,14 +147,14 @@ class DashboardUidSearchRequest:
     gids: list[str]
     is_admin: bool
     show_hidden: bool
-    search_context: Optional[object]
+    search_context: object | None
 
 
 async def _search_dashboard_by_uid(
     service: GrafanaProxyClient,
     db: Session,
     request: DashboardUidSearchRequest,
-) -> List[DashboardSearchResult]:
+) -> list[DashboardSearchResult]:
     result = await service.grafana_service.get_dashboard(request.uid)
     if not result:
         return []
@@ -178,7 +183,8 @@ async def _search_dashboard_by_uid(
             request.uid,
             GrafanaUserScope(user_id=request.user_id, tenant_id=request.tenant_id, group_ids=request.gids),
             DashboardAccessCriteria(),
-        ) is None
+        )
+        is None
         or (not request.show_hidden and _is_hidden_for(db_dash, request.user_id))
     ):
         return []
@@ -219,7 +225,7 @@ def _resolve_dashboard_folder_uid(
     tenant_id: str,
     db_dashboard: GrafanaDashboard,
     meta: JSONDict,
-) -> Optional[str]:
+) -> str | None:
     meta_folder_uid = meta.get("folderUid")
     folder_uid = meta_folder_uid if isinstance(meta_folder_uid, str) and meta_folder_uid else db_dashboard.folder_uid
     folder_id = meta.get("folderId")
@@ -245,7 +251,7 @@ async def search_dashboards(
     db: Session,
     scope: GrafanaUserScope,
     params: DashboardSearchParams,
-) -> List[DashboardSearchResult]:
+) -> list[DashboardSearchResult]:
     user_id = scope.user_id
     tenant_id = scope.tenant_id
     group_ids = scope.group_ids
@@ -322,8 +328,8 @@ async def search_dashboards(
     all_registered_uids = effective_context.get("all_registered_uids") or set()
     db_dashboards = effective_context.get("db_dashboards") or {}
 
-    out: List[DashboardSearchResult] = []
-    folder_updates: List[GrafanaDashboard] = []
+    out: list[DashboardSearchResult] = []
+    folder_updates: list[GrafanaDashboard] = []
     append_ctx = DashboardSearchAppendContext(
         db=db,
         tenant_id=tenant_id,
@@ -358,7 +364,7 @@ async def get_dashboard(
     scope: GrafanaUserScope,
     *,
     is_admin: bool = False,
-) -> Optional[JSONDict]:
+) -> JSONDict | None:
     user_id = scope.user_id
     tenant_id = scope.tenant_id
     gids = group_id_strs(scope.group_ids)
@@ -404,7 +410,7 @@ def _merge_grafana_update_into_db_dashboard(
     *,
     requested_title: str,
     target_folder_id: object,
-    target_folder_uid: Optional[str],
+    target_folder_uid: str | None,
 ) -> None:
     dashboard_data = _json_dict(result.get("dashboard", {}))
     title_value = dashboard_data.get("title", db_dashboard.title)
@@ -427,7 +433,7 @@ async def create_dashboard(
     *,
     scope: GrafanaUserScope,
     options: DashboardCreateOptions,
-) -> Optional[JSONDict]:
+) -> JSONDict | None:
     user_id = scope.user_id
     tenant_id = scope.tenant_id
     group_ids = scope.group_ids
@@ -538,7 +544,7 @@ async def update_dashboard(
     service: GrafanaProxyClient,
     db: Session,
     request: DashboardUpdateRequest,
-) -> Optional[JSONDict]:
+) -> JSONDict | None:
     uid = request.uid
     dashboard_update = request.dashboard_update
     scope = request.scope

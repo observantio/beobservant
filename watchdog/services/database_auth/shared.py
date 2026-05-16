@@ -10,10 +10,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from models.access.auth_models import Role
 from custom_types.json import JSONValue
+from models.access.auth_models import Role
 
 if TYPE_CHECKING:
     from db_models import User
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 def sync_active_user_from_claims(
     service: DatabaseAuthService,
-    claims: Optional[dict[str, JSONValue]],
+    claims: dict[str, JSONValue] | None,
 ) -> User | None:
     if not claims:
         return None
@@ -33,8 +33,10 @@ def sync_active_user_from_claims(
     return user
 
 
-def safe_role(raw_role: Optional[str]) -> Role:
+def safe_role(raw_role: str | None) -> Role:
     try:
+        if raw_role is None:
+            raise TypeError
         return Role(raw_role)
     except (TypeError, ValueError):
         return Role.USER

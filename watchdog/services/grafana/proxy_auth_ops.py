@@ -15,20 +15,19 @@ import re
 import threading
 import time
 from dataclasses import dataclass
-from typing import Dict, Optional, Set, TYPE_CHECKING, TypedDict
-
-from fastapi import HTTPException, Request
-from fastapi.concurrency import run_in_threadpool
-from sqlalchemy.orm import joinedload
+from typing import TYPE_CHECKING, TypedDict
 
 from config import config
+from custom_types.json import JSONDict
 from database import get_db_session
 from db_models import GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, User
+from fastapi import HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from models.access.auth_models import Permission, Role, TokenData
-from custom_types.json import JSONDict
 from services.auth.delegation import role_to_text as _role_to_text
 from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.proxy_path_permissions import required_permissions_for_path as _required_permissions_for_path
+from sqlalchemy.orm import joinedload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -36,7 +35,7 @@ if TYPE_CHECKING:
 
 class ProxyAuthCacheEntry(TypedDict):
     expires: float
-    headers: Dict[str, str]
+    headers: dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +61,7 @@ def _json_dict(value: object) -> JSONDict:
     return value if isinstance(value, dict) else {}
 
 
-PROXY_AUTH_CACHE: Dict[str, ProxyAuthCacheEntry] = {}
+PROXY_AUTH_CACHE: dict[str, ProxyAuthCacheEntry] = {}
 PROXY_AUTH_CACHE_TTL = int(getattr(config, "GRAFANA_PROXY_CACHE_TTL", 60))
 PROXY_AUTH_CACHE_LOCK = threading.Lock()
 PROXY_AUTH_CACHE_GC_EVERY = 500
@@ -144,7 +143,7 @@ def _is_static_path(path: str) -> bool:
     return any(p.startswith(pref) for pref in STATIC_PREFIXES)
 
 
-def _cache_get(token: str, method: str, path: str, tenant_id: str) -> Optional[Dict[str, str]]:
+def _cache_get(token: str, method: str, path: str, tenant_id: str) -> dict[str, str] | None:
     key = _cache_key(token, method, path, tenant_id)
     now = time.monotonic()
     with PROXY_AUTH_CACHE_LOCK:
@@ -156,7 +155,7 @@ def _cache_get(token: str, method: str, path: str, tenant_id: str) -> Optional[D
     return None
 
 
-def _cache_set(token: str, method: str, path: str, tenant_id: str, *, headers: Dict[str, str]) -> None:
+def _cache_set(token: str, method: str, path: str, tenant_id: str, *, headers: dict[str, str]) -> None:
     key = _cache_key(token, method, path, tenant_id)
     now = time.monotonic()
     with PROXY_AUTH_CACHE_LOCK:
@@ -174,7 +173,7 @@ def clear_proxy_auth_cache() -> None:
         PROXY_AUTH_CACHE.clear()
 
 
-def _has_any_permission(token_data: TokenData, required: Set[str]) -> bool:
+def _has_any_permission(token_data: TokenData, required: set[str]) -> bool:
     if not required:
         return True
     if getattr(token_data, "is_superuser", False):
@@ -201,9 +200,7 @@ def _is_datasource_write_intent(path: str, method: str) -> bool:
     m = (method or "GET").upper()
     if p.startswith("/grafana/api/datasources/uid/") and m in {"PUT", "PATCH", "DELETE"}:
         return True
-    if p.startswith("/grafana/connections/datasources/edit/"):
-        return True
-    return False
+    return bool(p.startswith("/grafana/connections/datasources/edit/"))
 
 
 def _is_folder_write_intent(path: str, method: str) -> bool:
@@ -257,7 +254,7 @@ def is_resource_accessible(
     return accessible
 
 
-def extract_dashboard_uid(path: str) -> Optional[str]:
+def extract_dashboard_uid(path: str) -> str | None:
     for pattern in (
         r"^/grafana/d/([^/]+)",
         r"^/grafana/d-solo/([^/]+)",
@@ -269,7 +266,7 @@ def extract_dashboard_uid(path: str) -> Optional[str]:
     return None
 
 
-def extract_datasource_uid(path: str) -> Optional[str]:
+def extract_datasource_uid(path: str) -> str | None:
     for pattern in (
         r"^/grafana/api/datasources/uid/([^/?]+)",
         r"^/grafana/api/datasources/proxy/uid/([^/?]+)",
@@ -281,7 +278,7 @@ def extract_datasource_uid(path: str) -> Optional[str]:
     return None
 
 
-def extract_datasource_id(path: str) -> Optional[int]:
+def extract_datasource_id(path: str) -> int | None:
     m = re.match(r"^/grafana/api/datasources/proxy/(\d+)(?:/|$)", path or "")
     if not m:
         return None
@@ -291,7 +288,7 @@ def extract_datasource_id(path: str) -> Optional[int]:
         return None
 
 
-def extract_folder_uid(path: str) -> Optional[str]:
+def extract_folder_uid(path: str) -> str | None:
     m = re.match(r"^/grafana/api/folders/([^/?]+)", path or "")
     if not m:
         return None
@@ -301,7 +298,7 @@ def extract_folder_uid(path: str) -> Optional[str]:
     return uid
 
 
-def extract_proxy_token(request: Request, token: Optional[str] = None) -> Optional[str]:
+def extract_proxy_token(request: Request, token: str | None = None) -> str | None:
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         return str(auth_header.split(" ", 1)[1].strip())
@@ -331,7 +328,7 @@ def _grafana_role(token_data: TokenData) -> str:
     return "Editor" if perms & editor_perms else "Viewer"
 
 
-def _headers_for(token_data: TokenData) -> Dict[str, str]:
+def _headers_for(token_data: TokenData) -> dict[str, str]:
     return {
         "X-WEBAUTH-USER": _sanitize_header_value(token_data.username),
         "X-WEBAUTH-TENANT": _sanitize_header_value(str(token_data.tenant_id)),
@@ -465,7 +462,7 @@ def _db_load_context(
         )
 
 
-def _db_load_folder(tenant_id: str, folder_uid: Optional[str]) -> Optional[GrafanaFolder]:
+def _db_load_folder(tenant_id: str, folder_uid: str | None) -> GrafanaFolder | None:
     if not folder_uid:
         return None
     with get_db_session() as s:
@@ -480,7 +477,7 @@ def _db_load_folder(tenant_id: str, folder_uid: Optional[str]) -> Optional[Grafa
         )
 
 
-def _db_load_folder_by_id(tenant_id: str, folder_id: Optional[int]) -> Optional[GrafanaFolder]:
+def _db_load_folder_by_id(tenant_id: str, folder_id: int | None) -> GrafanaFolder | None:
     if folder_id is None:
         return None
     try:
@@ -543,7 +540,7 @@ def _is_safe_system_datasource(datasource: object) -> bool:
 
 
 async def _lookup_safe_system_datasource(
-    service: GrafanaProxyClient, *, datasource_uid: Optional[str], datasource_id: Optional[int]
+    service: GrafanaProxyClient, *, datasource_uid: str | None, datasource_id: int | None
 ) -> bool:
     if datasource_uid:
         ds = await service.grafana_service.get_datasource(datasource_uid)
@@ -650,13 +647,9 @@ async def _authorize_datasource_access(
 
     if ctx.datasource_uid:
         if ctx.datasource_by_uid:
-            if not is_resource_accessible(
-                ctx.datasource_by_uid, token_data, require_write=datasource_write_intent
-            ):
+            if not is_resource_accessible(ctx.datasource_by_uid, token_data, require_write=datasource_write_intent):
                 raise HTTPException(status_code=403, detail="Datasource access denied")
-        elif not await _lookup_safe_system_datasource(
-            service, datasource_uid=ctx.datasource_uid, datasource_id=None
-        ):
+        elif not await _lookup_safe_system_datasource(service, datasource_uid=ctx.datasource_uid, datasource_id=None):
             raise HTTPException(status_code=403, detail="Datasource access denied")
         if datasource_write_intent:
             if not ctx.datasource_by_uid:
@@ -665,13 +658,9 @@ async def _authorize_datasource_access(
 
     if ctx.datasource_id is not None:
         if ctx.datasource_by_id:
-            if not is_resource_accessible(
-                ctx.datasource_by_id, token_data, require_write=datasource_write_intent
-            ):
+            if not is_resource_accessible(ctx.datasource_by_id, token_data, require_write=datasource_write_intent):
                 raise HTTPException(status_code=403, detail="Datasource access denied")
-        elif not await _lookup_safe_system_datasource(
-            service, datasource_uid=None, datasource_id=ctx.datasource_id
-        ):
+        elif not await _lookup_safe_system_datasource(service, datasource_uid=None, datasource_id=ctx.datasource_id):
             raise HTTPException(status_code=403, detail="Datasource access denied")
         if datasource_write_intent:
             if not ctx.datasource_by_id:
@@ -696,9 +685,9 @@ async def authorize_proxy_request(
     request: Request,
     auth_service: DatabaseAuthService,
     *,
-    token: Optional[str] = None,
-    orig: Optional[str] = None,
-) -> Dict[str, str]:
+    token: str | None = None,
+    orig: str | None = None,
+) -> dict[str, str]:
     token_to_verify = extract_proxy_token(request, token)
     if not token_to_verify:
         raise HTTPException(status_code=401, detail="You need to log in to access this resource.")

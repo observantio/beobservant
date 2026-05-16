@@ -15,21 +15,20 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import List, Optional, Set, TYPE_CHECKING
-
-from sqlalchemy.orm import selectinload
+from typing import TYPE_CHECKING
 
 from database import get_db_session
 from db_models import Group, Permission, User
 from models.access.auth_models import ROLE_PERMISSIONS, Role
 from models.access.user_models import User as UserSchema
 from services.database_auth.shared import safe_role
+from sqlalchemy.orm import selectinload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
 
 
-def get_user_permissions(_service: DatabaseAuthService, user: User | UserSchema) -> List[str]:
+def get_user_permissions(_service: DatabaseAuthService, user: User | UserSchema) -> list[str]:
     user_id = getattr(user, "id", None)
     if not user_id:
         return []
@@ -47,7 +46,7 @@ def get_user_permissions(_service: DatabaseAuthService, user: User | UserSchema)
         return collect_permissions(db_user) if db_user else []
 
 
-def get_user_direct_permissions(user: User | UserSchema) -> List[str]:
+def get_user_direct_permissions(user: User | UserSchema) -> list[str]:
     user_id = getattr(user, "id", None)
     if not user_id:
         return []
@@ -59,8 +58,8 @@ def get_user_direct_permissions(user: User | UserSchema) -> List[str]:
         return sorted({p.name for p in (db_user.permissions or []) if getattr(p, "name", None)})
 
 
-def collect_permissions(user: User | None) -> List[str]:
-    perms: Set[str] = set()
+def collect_permissions(user: User | None) -> list[str]:
+    perms: set[str] = set()
 
     role = safe_role(getattr(user, "role", None))
     for p in ROLE_PERMISSIONS.get(role, []):
@@ -84,7 +83,7 @@ def collect_permissions(user: User | None) -> List[str]:
     return sorted(perms)
 
 
-def list_all_permissions() -> List[dict[str, object]]:
+def list_all_permissions() -> list[dict[str, object]]:
     with get_db_session() as db:
         perms = db.query(Permission).order_by(Permission.resource_type, Permission.action).all()
         return [
@@ -100,5 +99,5 @@ def list_all_permissions() -> List[dict[str, object]]:
         ]
 
 
-def _safe_role(raw_role: Optional[str]) -> Role:
+def _safe_role(raw_role: str | None) -> Role:
     return safe_role(raw_role)

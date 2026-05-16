@@ -9,13 +9,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import inspect
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 from fastapi import HTTPException, Request, Response
-from pydantic import ValidationError
 
 try:
     from ._env import ensure_test_env
@@ -260,7 +259,7 @@ async def test_register_is_blocked_for_external_auth(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_api_key_routes_cover_not_found_and_transformations(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     current_user = _current_user()
     api_key = ApiKey(id="k1", name="Key", key="secret", created_at=now)
 
@@ -349,7 +348,7 @@ async def test_api_key_routes_cover_not_found_and_transformations(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch):
-    current_user = _current_user(is_superuser=False, permissions=[Permission.MANAGE_USERS.value])
+    _current_user(is_superuser=False, permissions=[Permission.MANAGE_USERS.value])
     admin_user = _current_user()
     response_obj = SimpleNamespace(api_keys=[])
     user_obj = SimpleNamespace(
@@ -375,7 +374,7 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     monkeypatch.setattr(
         users_router.auth_service,
         "list_users",
-        lambda *_args, **kwargs: (captured_user_list_kwargs.update(kwargs) or [user_obj]),
+        lambda *_args, **kwargs: captured_user_list_kwargs.update(kwargs) or [user_obj],
     )
     users = await users_router.list_users(10, 0, admin_user)
     assert users == [response_obj]
@@ -568,7 +567,7 @@ async def test_user_group_and_mfa_routes_cover_admin_and_error_paths(monkeypatch
     monkeypatch.setattr(
         groups_router.auth_service,
         "list_groups",
-        lambda *_args, **kwargs: (captured_group_list_kwargs.update(kwargs) or [group_obj]),
+        lambda *_args, **kwargs: captured_group_list_kwargs.update(kwargs) or [group_obj],
     )
     assert await groups_router.list_groups(admin_user) == [group_obj]
     assert await groups_router.list_groups(admin_user, "ops") == [group_obj]

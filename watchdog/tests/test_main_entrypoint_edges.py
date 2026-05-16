@@ -13,10 +13,9 @@ import json
 import runpy
 import sys
 import types
-
-import pytest
 from datetime import datetime
 
+import pytest
 from tests._env import ensure_test_env
 
 ensure_test_env()

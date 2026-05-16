@@ -10,16 +10,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 import httpx
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-
 from config import config
-from db_models import GrafanaFolder
-from models.grafana.grafana_folder_models import Folder
 from custom_types.json import JSONDict
+from db_models import GrafanaFolder
+from fastapi import HTTPException
+from models.grafana.grafana_folder_models import Folder
 from services.grafana.grafana_bundles import (
     FolderAccessCriteria,
     FolderCreateRequest,
@@ -31,12 +27,14 @@ from services.grafana.grafana_bundles import (
     GroupVisibilityValidation,
     HiddenToggleParams,
 )
-from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.grafana_service import GrafanaAPIError
+from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
 from services.grafana.visibility import resolve_visibility_groups_for_scope, visibility_group_resolve_context
+from sqlalchemy.orm import Session
 
-def _db_folder_by_uid(db: Session, tenant_id: str, uid: str) -> Optional[GrafanaFolder]:
+
+def _db_folder_by_uid(db: Session, tenant_id: str, uid: str) -> GrafanaFolder | None:
     return (
         db.query(GrafanaFolder).filter(GrafanaFolder.tenant_id == tenant_id, GrafanaFolder.grafana_uid == uid).first()
     )
@@ -47,7 +45,7 @@ def check_folder_access(
     uid: str,
     scope: GrafanaUserScope,
     criteria: FolderAccessCriteria,
-) -> Optional[GrafanaFolder]:
+) -> GrafanaFolder | None:
     folder = _db_folder_by_uid(db, scope.tenant_id, uid)
     has_access = False
     if folder is not None:
@@ -67,7 +65,7 @@ def check_folder_access(
 
 def is_folder_accessible(
     db: Session,
-    uid: Optional[str],
+    uid: str | None,
     scope: GrafanaUserScope,
     criteria: FolderAccessCriteria,
 ) -> bool:
@@ -85,7 +83,7 @@ def is_folder_accessible(
     return folder is not None
 
 
-def _folder_payload(folder_obj: object, *, db_folder: Optional[GrafanaFolder], user_id: str) -> JSONDict:
+def _folder_payload(folder_obj: object, *, db_folder: GrafanaFolder | None, user_id: str) -> JSONDict:
     if hasattr(folder_obj, "model_dump"):
         payload = folder_obj.model_dump()
     elif isinstance(folder_obj, dict):
@@ -106,7 +104,7 @@ async def get_folders(
     db: Session,
     scope: GrafanaUserScope,
     params: FolderListParams,
-) -> List[Folder]:
+) -> list[Folder]:
     user_id = scope.user_id
     tenant_id = scope.tenant_id
     show_hidden = params.show_hidden
@@ -122,7 +120,7 @@ async def get_folders(
         include_hidden=show_hidden,
     )
 
-    out: List[Folder] = []
+    out: list[Folder] = []
     for folder in folders:
         uid = str(getattr(folder, "uid", "") or "")
         db_folder = db_map.get(uid)
@@ -138,7 +136,7 @@ async def get_folder(
     service: GrafanaProxyClient,
     db: Session,
     request: FolderGetRequest,
-) -> Optional[Folder]:
+) -> Folder | None:
     user_id = request.scope.user_id
     tenant_id = request.scope.tenant_id
     db_folder = _db_folder_by_uid(db, tenant_id, request.uid)
@@ -165,7 +163,7 @@ async def create_folder(
     service: GrafanaProxyClient,
     db: Session,
     request: FolderCreateRequest,
-) -> Optional[Folder]:
+) -> Folder | None:
     user_id = request.scope.user_id
     tenant_id = request.scope.tenant_id
     visibility = request.options.visibility
@@ -222,7 +220,7 @@ async def update_folder(
     service: GrafanaProxyClient,
     db: Session,
     request: FolderUpdateRequest,
-) -> Optional[Folder]:
+) -> Folder | None:
     user_id = request.scope.user_id
     tenant_id = request.scope.tenant_id
     group_ids = request.scope.group_ids

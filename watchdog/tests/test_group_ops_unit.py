@@ -15,7 +15,6 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
@@ -79,7 +78,7 @@ def _seed(db):
 
 def test_group_helper_functions_and_access_rules(monkeypatch):
     db = _session()
-    admin, member, other = _seed(db)
+    _admin, member, other = _seed(db)
     group = Group(id="g1", tenant_id="t1", name="Ops", is_active=True)
     group.members.append(member)
     db.add(group)
@@ -117,7 +116,7 @@ def test_group_helper_functions_and_access_rules(monkeypatch):
 
 def test_create_list_get_update_and_delete_group(monkeypatch):
     db = _session()
-    admin, member, other = _seed(db)
+    admin, _member, other = _seed(db)
 
     @contextmanager
     def fake_session():
@@ -141,9 +140,7 @@ def test_create_list_get_update_and_delete_group(monkeypatch):
     )
 
     assert len(group_ops.list_groups(service, "t1", actor=AuthActorCaps(user_id=admin.id, role="admin"))) == 2
-    assert (
-        len(group_ops.list_groups(service, "t1", actor=AuthActorCaps(user_id=admin.id, role="admin"), q="ops")) == 1
-    )
+    assert len(group_ops.list_groups(service, "t1", actor=AuthActorCaps(user_id=admin.id, role="admin"), q="ops")) == 1
     assert (
         len(
             group_ops.list_groups(service, "t1", actor=AuthActorCaps(user_id=admin.id, role="admin"), q="platform"),
@@ -235,7 +232,7 @@ def test_create_list_get_update_and_delete_group(monkeypatch):
 
 def test_group_permission_and_member_updates(monkeypatch):
     db = _session()
-    admin, member, other = _seed(db)
+    admin, member, _other = _seed(db)
     perm = Permission(id="p1", name="read:users", display_name="Read Users", resource_type="users", action="read")
     admin_perm = Permission(
         id="p2", name="manage:users", display_name="Manage Users", resource_type="users", action="manage"

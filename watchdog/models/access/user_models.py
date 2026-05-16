@@ -7,13 +7,13 @@ Licensed under the Apache License, Version 2.0 (the "License"); you may not use 
 License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
-from datetime import datetime, timezone
-import re
-from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, field_validator, field_serializer
+import re
+from datetime import UTC, datetime
 
 from config import config
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, field_serializer, field_validator
+
 from .api_key_models import ApiKey
 from .auth_models import Permission, Role
 
@@ -22,7 +22,7 @@ _USERNAME_RE = re.compile(r"^[a-z0-9._-]{3,50}$")
 
 def _serialize_datetime(value: datetime) -> str:
     if getattr(value, "tzinfo", None) is None:
-        value = value.replace(tzinfo=timezone.utc)
+        value = value.replace(tzinfo=UTC)
     return value.isoformat()
 
 
@@ -50,12 +50,12 @@ def _normalize_username_input(value: object, *, full_check: bool) -> str:
 class UserBase(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    full_name: Optional[str] = None
+    full_name: str | None = None
     org_id: str = Field(
         default=config.DEFAULT_ORG_ID, max_length=100, description="Organization ID for multi-tenant observability"
     )
     role: Role = Role.USER
-    group_ids: List[str] = Field(default_factory=list)
+    group_ids: list[str] = Field(default_factory=list)
     is_active: StrictBool = True
 
     @field_validator("username", mode="before")
@@ -65,32 +65,32 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: Optional[str] = Field(None, min_length=8)
-    must_setup_mfa: Optional[StrictBool] = None
+    password: str | None = Field(None, min_length=8)
+    must_setup_mfa: StrictBool | None = None
     model_config = ConfigDict(extra="forbid")
 
 
 class UserUpdate(BaseModel):
-    username: Optional[str] = Field(None, min_length=3, max_length=50)
-    email: Optional[EmailStr] = None
-    full_name: Optional[str] = None
-    org_id: Optional[str] = None
-    role: Optional[Role] = None
-    group_ids: Optional[List[str]] = None
-    is_active: Optional[StrictBool] = None
-    must_setup_mfa: Optional[StrictBool] = None
+    username: str | None = Field(None, min_length=3, max_length=50)
+    email: EmailStr | None = None
+    full_name: str | None = None
+    org_id: str | None = None
+    role: Role | None = None
+    group_ids: list[str] | None = None
+    is_active: StrictBool | None = None
+    must_setup_mfa: StrictBool | None = None
     model_config = ConfigDict(extra="forbid")
 
     @field_validator("username", mode="before")
     @classmethod
-    def normalize_update_username(cls, v: object) -> Optional[str]:
+    def normalize_update_username(cls, v: object) -> str | None:
         if v is None:
             return None
         return _normalize_username_input(v, full_check=True)
 
 
 class UserPasswordUpdate(BaseModel):
-    current_password: Optional[str] = None
+    current_password: str | None = None
     new_password: str = Field(..., min_length=8)
 
 
@@ -99,15 +99,15 @@ class User(UserBase):
     tenant_id: str
     created_at: datetime
     updated_at: datetime
-    last_login: Optional[datetime] = None
+    last_login: datetime | None = None
     needs_password_change: bool = False
-    password_changed_at: Optional[datetime] = None
-    session_invalid_before: Optional[datetime] = None
-    grafana_user_id: Optional[int] = None
-    api_keys: List[ApiKey] = Field(default_factory=list)
+    password_changed_at: datetime | None = None
+    session_invalid_before: datetime | None = None
+    grafana_user_id: int | None = None
+    api_keys: list[ApiKey] = Field(default_factory=list)
     mfa_enabled: bool = False
     must_setup_mfa: bool = False
-    auth_provider: Optional[str] = "local"
+    auth_provider: str | None = "local"
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -119,28 +119,28 @@ class UserResponse(BaseModel):
     id: str
     username: str
     email: str
-    full_name: Optional[str]
+    full_name: str | None
     role: Role
-    group_ids: List[str]
+    group_ids: list[str]
     is_active: bool
     org_id: str
     tenant_id: str
     created_at: datetime
-    last_login: Optional[datetime]
-    permissions: List[Permission]
-    direct_permissions: List[str] = Field(default_factory=list)
+    last_login: datetime | None
+    permissions: list[Permission]
+    direct_permissions: list[str] = Field(default_factory=list)
     needs_password_change: bool = False
-    api_keys: List[ApiKey] = Field(default_factory=list)
+    api_keys: list[ApiKey] = Field(default_factory=list)
     mfa_enabled: bool = False
     must_setup_mfa: bool = False
-    auth_provider: Optional[str] = "local"
+    auth_provider: str | None = "local"
 
     @field_serializer(
         "created_at",
         "last_login",
         when_used="json",
     )
-    def _serialize_datetimes(self, value: Optional[datetime]) -> Optional[str]:
+    def _serialize_datetimes(self, value: datetime | None) -> str | None:
         if value is None:
             return None
         return _serialize_datetime(value)
@@ -149,7 +149,7 @@ class UserResponse(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
-    mfa_code: Optional[str] = None
+    mfa_code: str | None = None
 
     @field_validator("username", mode="before")
     @classmethod
@@ -161,7 +161,7 @@ class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     password: str = Field(..., min_length=8)
-    full_name: Optional[str] = None
+    full_name: str | None = None
 
     @field_validator("username", mode="before")
     @classmethod
@@ -179,12 +179,12 @@ class MfaVerifyRequest(BaseModel):
 
 
 class MfaDisableRequest(BaseModel):
-    current_password: Optional[str] = None
-    code: Optional[str] = None
+    current_password: str | None = None
+    code: str | None = None
 
 
 class RecoveryCodesResponse(BaseModel):
-    recovery_codes: List[str]
+    recovery_codes: list[str]
 
 
 class TempPasswordResetResponse(BaseModel):

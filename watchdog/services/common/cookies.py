@@ -11,13 +11,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
 import re
-from typing import Sequence
-
-from fastapi import Request
+from collections.abc import Sequence
+from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
 
 from config import config
+from fastapi import Request
 
 Network = IPv4Network | IPv6Network
 

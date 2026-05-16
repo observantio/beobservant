@@ -8,8 +8,6 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import httpx
 
 try:

@@ -9,14 +9,15 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import Awaitable, Callable, TypeVar
-import logging
-import asyncio
+from typing import TypeVar
 
 import httpx
-from fastapi import HTTPException, status, Request
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)

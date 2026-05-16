@@ -10,13 +10,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 import asyncio
 import time
-from typing import Optional
 
 import httpx
+from custom_types.json import JSONDict
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.concurrency import run_in_threadpool
-
-from custom_types.json import JSONDict
 from middleware.dependencies import auth_service, require_permission_with_scope
 from middleware.error_handlers import RouteErrorHandlerOptions, handle_route_errors
 from models.access.auth_models import Permission, TokenData
@@ -29,7 +27,7 @@ system_service = SystemService()
 GITHUB_OJO_LATEST_RELEASE_URL = "https://api.github.com/repos/observantio/ojo/releases/latest"
 GITHUB_OJO_RELEASES_URL = "https://api.github.com/repos/observantio/ojo/releases"
 OJO_RELEASE_CACHE_TTL_SECONDS = 3600
-OJO_RELEASE_CACHE_PAYLOAD: Optional[JSONDict] = None
+OJO_RELEASE_CACHE_PAYLOAD: JSONDict | None = None
 OJO_RELEASE_CACHE_EXPIRES_AT: float = 0.0
 ojo_release_cache_lock = asyncio.Lock()
 
@@ -37,7 +35,7 @@ ojo_release_cache_lock = asyncio.Lock()
 @router.get("/metrics", response_model=JSONDict)
 @handle_route_errors(RouteErrorHandlerOptions(internal_detail="Failed to retrieve system metrics"))
 async def get_system_metrics(
-    _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
+    _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system")),
 ) -> JSONDict:
     return system_service.get_all_metrics()
 
@@ -45,7 +43,7 @@ async def get_system_metrics(
 @router.get("/quotas", response_model=QuotasResponse)
 @handle_route_errors(RouteErrorHandlerOptions(internal_detail="Failed to retrieve system quotas"))
 async def get_system_quotas(
-    org_id: Optional[str] = Query(default=None, alias="orgId"),
+    org_id: str | None = Query(default=None, alias="orgId"),
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system")),
 ) -> QuotasResponse:
     requested_org = org_id if isinstance(org_id, str) else None
@@ -72,9 +70,9 @@ async def get_system_quotas(
 @router.get("/ojo/releases", response_model=JSONDict)
 @handle_route_errors(RouteErrorHandlerOptions(internal_detail="Failed to retrieve Ojo release metadata"))
 async def get_ojo_releases(
-    _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system"))
+    _current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_AGENTS, "system")),
 ) -> JSONDict:
-    def _fallback_payload(*, cached_payload: Optional[JSONDict] = None) -> JSONDict:
+    def _fallback_payload(*, cached_payload: JSONDict | None = None) -> JSONDict:
         payload: JSONDict = {
             "latest": {},
             "releases": [],

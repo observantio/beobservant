@@ -7,16 +7,16 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from .grafana_dashboard_models import (
-    DashboardMeta,
     Dashboard,
     DashboardCreate,
-    DashboardUpdate,
+    DashboardMeta,
     DashboardSearchResult,
+    DashboardUpdate,
 )
 from .grafana_datasource_models import (
-    DatasourceType,
     Datasource,
     DatasourceCreate,
+    DatasourceType,
     DatasourceUpdate,
 )
 from .grafana_folder_models import (
@@ -24,14 +24,14 @@ from .grafana_folder_models import (
 )
 
 __all__ = [
-    "DashboardMeta",
     "Dashboard",
     "DashboardCreate",
-    "DashboardUpdate",
+    "DashboardMeta",
     "DashboardSearchResult",
-    "DatasourceType",
+    "DashboardUpdate",
     "Datasource",
     "DatasourceCreate",
+    "DatasourceType",
     "DatasourceUpdate",
     "Folder",
 ]

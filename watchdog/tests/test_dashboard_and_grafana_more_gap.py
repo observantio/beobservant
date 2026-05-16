@@ -10,11 +10,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
 import httpx
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
@@ -105,12 +104,15 @@ async def test_dashboard_ops_get_delete_toggle_and_uid_search_paths():
 
     assert await dashboard_ops.delete_dashboard(service, db, "missing", GrafanaUserScope("u1", "t1", [])) is False
     assert await dashboard_ops.delete_dashboard(service, db, "d1", GrafanaUserScope("u1", "t1", [])) is True
-    assert dashboard_ops.toggle_dashboard_hidden(
-        db,
-        "missing",
-        GrafanaUserScope("u1", "t1", []),
-        HiddenToggleParams(hidden=True),
-    ) is False
+    assert (
+        dashboard_ops.toggle_dashboard_hidden(
+            db,
+            "missing",
+            GrafanaUserScope("u1", "t1", []),
+            HiddenToggleParams(hidden=True),
+        )
+        is False
+    )
 
 
 @pytest.mark.asyncio

@@ -8,15 +8,16 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
 
+from models.access import group_models, user_models
+from models.access.api_key_models import ApiKeyUpdate
 from models.access.user_models import (
     LoginRequest,
     RegisterRequest,
@@ -26,9 +27,6 @@ from models.access.user_models import (
     _normalize_username,
     _normalize_username_input,
 )
-from models.access.api_key_models import ApiKeyUpdate
-from models.access import group_models
-from models.access import user_models
 from models.observability.agent_models import AgentHeartbeat, AgentInfo
 from models.observability.resolver_models import (
     AnalyzeJobCreateResponse,
@@ -78,7 +76,7 @@ def test_misc_model_payloads_cover_status_aliases_and_time_validation():
         job_id="job-1",
         report_id="report-1",
         status="success",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         tenant_id="tenant-a",
         requested_by="user-1",
     )
@@ -113,5 +111,5 @@ def test_datetime_serializers_and_agent_model_edges():
     heartbeat = AgentHeartbeat(name="agent-a", tenant_id="tenant-a", timestamp="2026-01-01T00:00:00Z")
     assert heartbeat.timestamp is not None
 
-    info = AgentInfo(id="a1", name="agent-a", tenant_id="tenant-a", last_seen=datetime.now(timezone.utc))
+    info = AgentInfo(id="a1", name="agent-a", tenant_id="tenant-a", last_seen=datetime.now(UTC))
     assert info.signals == []

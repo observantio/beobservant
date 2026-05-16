@@ -133,7 +133,10 @@ def test_bootstrap_indexes_and_api_key_helpers(monkeypatch):
     monkeypatch.setattr(boot_mod.config, "DEFAULT_OTLP_TOKEN", "configured", raising=False)
     monkeypatch.setattr(boot_mod.config, "DEFAULT_ORG_ID", "org-default", raising=False)
     monkeypatch.setattr(boot_mod, "_is_default_admin_user", lambda _db, user: user.username == "admin")
-    fake_api_key = lambda **kwargs: SimpleNamespace(id="new-key", **kwargs)
+
+    def fake_api_key(**kwargs):
+        return SimpleNamespace(id="new-key", **kwargs)
+
     monkeypatch.setattr(boot_mod, "UserApiKey", fake_api_key)
 
     existing = SimpleNamespace(

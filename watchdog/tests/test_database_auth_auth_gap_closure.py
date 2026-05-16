@@ -12,7 +12,6 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-
 from tests._env import ensure_test_env
 
 ensure_test_env()

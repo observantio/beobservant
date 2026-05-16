@@ -9,8 +9,8 @@ http://www.apache.org/licenses/LICENSE-2.0
 from tests._env import ensure_test_env
 
 ensure_test_env()
-from services.tempo import parsers as tempo_parsers
 from models.observability.tempo_models import Span, Trace
+from services.tempo import parsers as tempo_parsers
 
 
 def test_parse_attributes_and_span_and_trace():
@@ -55,7 +55,7 @@ def test_parse_attributes_and_span_and_trace():
     trace = tempo_parsers.parse_tempo_trace("t1", trace_data)
     assert isinstance(trace, Trace)
     assert len(trace.spans) == 1
-    assert list(trace.processes.keys())[0] == "svcA"
+    assert next(iter(trace.processes.keys())) == "svcA"
 
 
 def test_build_summary_trace_returns_trace_or_none():
@@ -75,14 +75,8 @@ def test_build_summary_trace_returns_trace_or_none():
 
 
 def test_systrace_stack_component_and_duration_floor():
-    assert (
-        tempo_parsers._derive_systrace_component_from_line("=> exc_page_fault")
-        == "kernel.exc_page_fault"
-    )
-    assert (
-        tempo_parsers._derive_systrace_component_from_line("=>  <000077aab70ac772>")
-        == "kernel.userstack"
-    )
+    assert tempo_parsers._derive_systrace_component_from_line("=> exc_page_fault") == "kernel.exc_page_fault"
+    assert tempo_parsers._derive_systrace_component_from_line("=>  <000077aab70ac772>") == "kernel.userstack"
 
     span_data = {
         "spanId": "s2",
@@ -112,11 +106,7 @@ def test_parse_tempo_trace_derives_systrace_line_timing_from_trace_text():
         {
             "batches": [
                 {
-                    "resource": {
-                        "attributes": [
-                            {"key": "service.name", "value": {"stringValue": "ojo-systrace"}}
-                        ]
-                    },
+                    "resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "ojo-systrace"}}]},
                     "scopeSpans": [
                         {
                             "spans": [
@@ -129,9 +119,7 @@ def test_parse_tempo_trace_derives_systrace_line_timing_from_trace_text():
                                     "attributes": [
                                         {
                                             "key": "systrace.trace.line",
-                                            "value": {
-                                                "stringValue": "task-1 [000] .... 10.000000: foo"
-                                            },
+                                            "value": {"stringValue": "task-1 [000] .... 10.000000: foo"},
                                         }
                                     ],
                                 },
@@ -144,9 +132,7 @@ def test_parse_tempo_trace_derives_systrace_line_timing_from_trace_text():
                                     "attributes": [
                                         {
                                             "key": "systrace.trace.line",
-                                            "value": {
-                                                "stringValue": "task-1 [000] .... 10.000250: bar"
-                                            },
+                                            "value": {"stringValue": "task-1 [000] .... 10.000250: bar"},
                                         }
                                     ],
                                 },
@@ -174,7 +160,7 @@ def test_parse_tempo_trace_distributes_sparse_systrace_timestamps():
     for i, line in enumerate(lines):
         spans.append(
             {
-                "spanId": f"p{i+1}",
+                "spanId": f"p{i + 1}",
                 "parentSpanId": "root" if i == 0 else f"p{i}",
                 "name": "systrace.trace.line",
                 "startTimeUnixNano": "1000",

@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -21,8 +21,9 @@ except ImportError:
 
 ensure_test_env()
 
-from models.access.auth_models import Permission as PermissionEnum, Role, TokenData
 import database as database_module
+from models.access.auth_models import Permission as PermissionEnum
+from models.access.auth_models import Role, TokenData
 from services.database_auth import schema_converters as schema_mod
 from services.database_auth import shared as shared_mod
 from services.database_auth import token as token_mod
@@ -81,7 +82,7 @@ def test_database_lifecycle_and_session_paths(monkeypatch):
         "create_engine",
         lambda *args, **kwargs: create_engine_calls.append((args, kwargs)) or fake_engine,
     )
-    monkeypatch.setattr(database_module, "create_session_factory", lambda **kwargs: (lambda: fake_session))
+    monkeypatch.setattr(database_module, "create_session_factory", lambda **kwargs: lambda: fake_session)
     monkeypatch.setattr(database_module.Base.metadata, "create_all", lambda bind: created.append(("create_all", bind)))
 
     database_module.init_database("sqlite:///tmp.db", echo=True, pool_size=5)
@@ -96,9 +97,8 @@ def test_database_lifecycle_and_session_paths(monkeypatch):
         assert session is fake_session
     assert session_events[-2:] == ["commit", "close"]
 
-    with pytest.raises(RuntimeError, match="boom"):
-        with database_module.get_db_session():
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError, match="boom"), database_module.get_db_session():
+        raise RuntimeError("boom")
     assert session_events[-2:] == ["rollback", "close"]
 
     failed_commit_events = []
@@ -108,9 +108,8 @@ def test_database_lifecycle_and_session_paths(monkeypatch):
         close=lambda: failed_commit_events.append("close"),
     )
     database_module._SESSION_LOCAL = lambda: failing_commit_session
-    with pytest.raises(RuntimeError, match="commit failed"):
-        with database_module.get_db_session() as session:
-            assert session is failing_commit_session
+    with pytest.raises(RuntimeError, match="commit failed"), database_module.get_db_session() as session:
+        assert session is failing_commit_session
     assert failed_commit_events == ["rollback", "close"]
 
     database_module._SESSION_LOCAL = lambda: fake_session
@@ -153,7 +152,7 @@ def test_database_remaining_helper_branches(monkeypatch):
         "create_engine",
         lambda *args, **kwargs: create_engine_calls.append((args, kwargs)) or fake_engine,
     )
-    monkeypatch.setattr(database_module, "create_session_factory", lambda **kwargs: (lambda: SimpleNamespace()))
+    monkeypatch.setattr(database_module, "create_session_factory", lambda **kwargs: lambda: SimpleNamespace())
     database_module.init_database("postgresql://db/app", echo=False, pool_size=7)
     engine_kwargs = create_engine_calls[0][1]
     assert engine_kwargs["pool_size"] == 7
@@ -180,9 +179,8 @@ def test_database_remaining_helper_branches(monkeypatch):
     assert session_events == ["commit", "close"]
 
     session_events.clear()
-    with pytest.raises(RuntimeError, match="boom"):
-        with database_module._session_scope():
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError, match="boom"), database_module._session_scope():
+        raise RuntimeError("boom")
     assert session_events == ["rollback", "close"]
 
     context = database_module._SessionContext()
@@ -240,7 +238,7 @@ def test_init_database_returns_when_initialized_inside_lock(monkeypatch):
 
 
 def test_schema_converters_and_shared_helper_paths():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     service = SimpleNamespace(
         to_api_key_schema=lambda key: {
             "id": "k1",
@@ -354,7 +352,7 @@ def test_token_helpers_and_decode_paths(monkeypatch):
         oidc_service=SimpleNamespace(
             verify_access_token=lambda token: {"iat": 123, "scp": [PermissionEnum.READ_USERS.value, "unknown"]}
         ),
-            extract_permissions_from_oidc_claims=lambda claims: [PermissionEnum.READ_USERS.value, "unknown"],
+        extract_permissions_from_oidc_claims=lambda claims: [PermissionEnum.READ_USERS.value, "unknown"],
         list_all_permissions=lambda: [
             {"name": PermissionEnum.READ_USERS.value},
             {"name": PermissionEnum.READ_GROUPS.value},

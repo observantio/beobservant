@@ -10,10 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import List
-
-from fastapi import Depends, HTTPException, Query, Response, status, Path
-
+from fastapi import Depends, HTTPException, Path, Query, Response, status
 from middleware.dependencies import auth_service, require_any_permission_with_scope, require_permission_with_scope
 from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, TokenData
@@ -24,7 +21,7 @@ from services.auth.helper import invalidate_grafana_proxy_auth_cache, perms_chec
 from .shared import GROUP_NOT_FOUND, router, rtp
 
 
-@router.get("/groups", response_model=List[Group])
+@router.get("/groups", response_model=list[Group])
 async def list_groups(
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_GROUPS, "auth")),
     q: str | None = Query(
@@ -32,7 +29,7 @@ async def list_groups(
         max_length=200,
         pattern=r"^[^\x00-\x1F]*$",
     ),
-) -> List[Group]:
+) -> list[Group]:
     query_text = str(q or "").strip()
     caps = AuthActorCaps(
         user_id=current_user.user_id,
@@ -131,7 +128,7 @@ async def delete_group(
 @handle_route_errors()
 async def update_group_permissions(
     group_id: str,
-    permission_names: List[Permission],
+    permission_names: list[Permission],
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.UPDATE_GROUP_PERMISSIONS, Permission.MANAGE_GROUPS], "auth")
     ),

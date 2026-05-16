@@ -8,8 +8,6 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import httpx
 import pytest
 from fastapi import HTTPException, Response

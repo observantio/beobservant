@@ -12,7 +12,6 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any, cast
 
-import httpx
 import pytest
 from fastapi import HTTPException, Request, Response
 
@@ -266,7 +265,7 @@ def test_password_and_permissions_modules(monkeypatch):
 
 
 def test_auth_helper_edges(monkeypatch):
-    monkeypatch.setattr(auth_helper, "require_permission_with_scope", lambda *args, **kwargs: (lambda: None))
+    monkeypatch.setattr(auth_helper, "require_permission_with_scope", lambda *args, **kwargs: lambda: None)
     with pytest.raises(HTTPException):
         auth_helper.require_admin_with_audit_permission(_user())
     assert auth_helper.require_admin_with_audit_permission(_user(role=Role.ADMIN))

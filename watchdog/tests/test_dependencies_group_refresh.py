@@ -6,8 +6,8 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-import types
 import os
+import types
 
 from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request

@@ -13,7 +13,6 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
-
 from tests._env import ensure_test_env
 
 ensure_test_env()

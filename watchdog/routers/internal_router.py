@@ -12,10 +12,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.concurrency import run_in_threadpool
 from models.internal.otlp_validate import OtlpValidateRequest
-
 from services.internal_service import InternalService
 
 logger = logging.getLogger(__name__)

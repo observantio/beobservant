@@ -9,14 +9,14 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 def _serialize_datetime(value: datetime) -> str:
     if getattr(value, "tzinfo", None) is None:
-        value = value.replace(tzinfo=timezone.utc)
+        value = value.replace(tzinfo=UTC)
     return value.isoformat()
 
 
@@ -25,7 +25,7 @@ class ApiKeyBase(BaseModel):
 
 
 class ApiKeyCreate(ApiKeyBase):
-    key: Optional[str] = Field(
+    key: str | None = Field(
         None,
         min_length=3,
         max_length=100,
@@ -37,15 +37,15 @@ class ApiKeyCreate(ApiKeyBase):
 class ApiKeyUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: Optional[str] = Field(None, min_length=1, max_length=100, pattern=r"^[^\x00-\x1F]+$")
-    is_enabled: Optional[bool] = None
-    is_default: Optional[bool] = None
+    name: str | None = Field(None, min_length=1, max_length=100, pattern=r"^[^\x00-\x1F]+$")
+    is_enabled: bool | None = None
+    is_default: bool | None = None
 
 
 class ApiKeyShareUser(BaseModel):
     user_id: str
-    username: Optional[str] = None
-    email: Optional[str] = None
+    username: str | None = None
+    email: str | None = None
     can_use: bool = True
     created_at: datetime
 
@@ -55,27 +55,27 @@ class ApiKeyShareUser(BaseModel):
 
 
 class ApiKeyShareUpdateRequest(BaseModel):
-    user_ids: List[str] = Field(default_factory=list)
-    group_ids: List[str] = Field(default_factory=list)
+    user_ids: list[str] = Field(default_factory=list)
+    group_ids: list[str] = Field(default_factory=list)
 
 
 class ApiKey(ApiKeyBase):
     id: str
     key: str
-    otlp_token: Optional[str] = Field(None, description="Secure OTLP ingest token for gateway authentication")
-    owner_user_id: Optional[str] = None
-    owner_username: Optional[str] = None
+    otlp_token: str | None = Field(None, description="Secure OTLP ingest token for gateway authentication")
+    owner_user_id: str | None = None
+    owner_username: str | None = None
     is_shared: bool = False
     can_use: bool = True
-    shared_with: List[ApiKeyShareUser] = Field(default_factory=list)
+    shared_with: list[ApiKeyShareUser] = Field(default_factory=list)
     is_default: bool = False
     is_enabled: bool = True
     is_hidden: bool = False
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     @field_serializer("created_at", "updated_at", when_used="json")
-    def _serialize_datetimes(self, value: Optional[datetime]) -> Optional[str]:
+    def _serialize_datetimes(self, value: datetime | None) -> str | None:
         if value is None:
             return None
         return _serialize_datetime(value)

@@ -10,13 +10,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import Optional
 from urllib.parse import quote
 
+from config import config
 from fastapi import Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, Response
-
-from config import config
 from middleware.dependencies import (
     PublicEndpointSecurityConfig,
     enforce_public_endpoint_security,
@@ -28,8 +26,9 @@ from models.observability.grafana_request_models import (
     GrafanaBootstrapSessionResponse,
 )
 from services.common.cookies import cookie_secure
-from services.grafana_proxy_service import ProxyAuthorizationRequest
 from services.grafana.normalize import normalize_grafana_next_path
+from services.grafana_proxy_service import ProxyAuthorizationRequest
+
 from .shared import auth_service, proxy, router
 
 
@@ -47,8 +46,8 @@ from .shared import auth_service, proxy, router
 )
 async def grafana_auth(
     request: Request,
-    token: Optional[str] = Query(None),
-    orig: Optional[str] = Query(None),
+    token: str | None = Query(None),
+    orig: str | None = Query(None),
 ) -> Response:
     enforce_public_endpoint_security(
         request,

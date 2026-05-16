@@ -10,9 +10,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Callable, Optional, cast
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, cast
 
 from .parsing import (
     extract_from_text,
@@ -42,9 +43,9 @@ class NativeQuotaFetchParams:
 @dataclass
 class QuotaProbe:
     source: str
-    limit: Optional[float]
-    used: Optional[float]
-    message: Optional[str] = None
+    limit: float | None
+    used: float | None
+    message: str | None = None
 
     def complete(self) -> bool:
         return self.limit is not None and self.used is not None
@@ -70,7 +71,7 @@ class RuntimeQuotaProbe:
         payload: object,
         configured_path: str,
         tenant_id: str,
-    ) -> Optional[float]:
+    ) -> float | None:
         configured = extract_path(payload, configured_path)
         if configured is not None:
             return configured
@@ -123,7 +124,7 @@ class RuntimeQuotaProbe:
         payload: object,
         configured_path: str,
         tenant_id: str,
-    ) -> Optional[float]:
+    ) -> float | None:
         configured = extract_path(payload, configured_path)
         if configured is not None:
             return configured
@@ -178,7 +179,7 @@ class RuntimeQuotaProbe:
         payload: object,
         configured_path: str,
         tenant_id: str,
-    ) -> Optional[float]:
+    ) -> float | None:
         configured = extract_path(payload, configured_path)
         if configured is not None:
             return configured
@@ -216,7 +217,7 @@ class RuntimeQuotaProbe:
         payload: object,
         configured_path: str,
         tenant_id: str,
-    ) -> Optional[float]:
+    ) -> float | None:
         configured = extract_path(payload, configured_path)
         if configured is not None:
             return configured
@@ -248,7 +249,7 @@ class RuntimeQuotaProbe:
             ],
         )
 
-    async def fetch_loki_used_streams(self, *, tenant_id: str) -> Optional[float]:
+    async def fetch_loki_used_streams(self, *, tenant_id: str) -> float | None:
         cfg = self._get_config()
         httpx_module = self._get_httpx()
         end_ns = int(time.time() * 1_000_000_000)
@@ -281,7 +282,7 @@ class RuntimeQuotaProbe:
                 return streams
         return None
 
-    async def fetch_tempo_used_traces(self, *, tenant_id: str) -> Optional[float]:
+    async def fetch_tempo_used_traces(self, *, tenant_id: str) -> float | None:
         cfg = self._get_config()
         httpx_module = self._get_httpx()
         end_us = int(time.time() * 1_000_000)
@@ -385,14 +386,12 @@ class RuntimeQuotaProbe:
         if not candidate_paths:
             return QuotaProbe(source="none", limit=None, used=None, message=None)
 
-        last_error: Optional[str] = None
-        collected_limit: Optional[float] = None
-        collected_used: Optional[float] = None
+        last_error: str | None = None
+        collected_limit: float | None = None
+        collected_used: float | None = None
 
         for candidate_path in candidate_paths:
-            target = (
-                f"{params.base_url.rstrip('/')}/" f"{format_with_tenant(candidate_path, params.tenant_id).lstrip('/')}"
-            )
+            target = f"{params.base_url.rstrip('/')}/{format_with_tenant(candidate_path, params.tenant_id).lstrip('/')}"
             try:
                 async with httpx_module.AsyncClient(timeout=float(cfg.QUOTA_NATIVE_TIMEOUT_SECONDS)) as client:
                     response = await client.get(
@@ -449,16 +448,14 @@ class RuntimeQuotaProbe:
             source="native",
             limit=None,
             used=None,
-            message=(
-                f"{params.service_name.capitalize()} runtime quota endpoint unavailable" if last_error else None
-            ),
+            message=(f"{params.service_name.capitalize()} runtime quota endpoint unavailable" if last_error else None),
         )
 
     async def query_prometheus_value(
         self,
         query_template: str,
         tenant_id: str,
-    ) -> Optional[float]:
+    ) -> float | None:
         cfg = self._get_config()
         httpx_module = self._get_httpx()
 

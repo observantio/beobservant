@@ -59,7 +59,9 @@ async def _configure_register_common(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         auth_router.auth_service,
         "create_user",
-        lambda *_args: SimpleNamespace(username="new-user", email="new@example.com", full_name="New User", role=Role.USER),
+        lambda *_args: SimpleNamespace(
+            username="new-user", email="new@example.com", full_name="New User", role=Role.USER
+        ),
     )
     monkeypatch.setattr(auth_router.auth_service, "build_user_response", lambda *_args: SimpleNamespace(api_keys=[]))
 

@@ -11,36 +11,48 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import secrets
-from typing import List, Optional, Set, TYPE_CHECKING
-
-from fastapi import HTTPException, status
-from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import joinedload, Session
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from config import config
 from database import get_db_session
-from db_models import User, Group, Permission
-from models.access.user_models import UserCreate, UserUpdate, User as UserSchema
-from models.access.auth_models import Role, ROLE_PERMISSIONS
+from db_models import Group, Permission, User
+from fastapi import HTTPException, status
+from models.access.auth_models import ROLE_PERMISSIONS, Role
+from models.access.user_models import User as UserSchema
+from models.access.user_models import UserCreate, UserUpdate
+from services.auth.actor_caps import AuthActorCaps
 from services.auth.delegation import (
     is_admin_actor as _is_admin_actor,
+)
+from services.auth.delegation import (
     is_admin_user as _is_admin_user,
+)
+from services.auth.delegation import (
     normalize_permissions as _normalize_permissions,
+)
+from services.auth.delegation import (
     permission_is_admin_only as _permission_is_admin_only,
+)
+from services.auth.delegation import (
     resolve_actor_permissions as _resolve_actor_permissions,
+)
+from services.auth.delegation import (
     role_rank as _shared_role_rank,
+)
+from services.auth.delegation import (
     role_to_text as _role_to_text,
 )
-from services.auth.actor_caps import AuthActorCaps
 from services.auth.group_ops import (
     _load_usernames_for_ids,
     _propagate_removed_member_group_shares,
     _prune_removed_member_grafana_group_shares,
 )
 from services.database_auth.audit import AuditLogRecord
+from sqlalchemy import and_, func, or_
+from sqlalchemy.orm import Session, joinedload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -74,7 +86,7 @@ class UserLoadOptions:
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _role_rank(value: object) -> int:
@@ -86,8 +98,8 @@ def _get_user(
     *,
     user_id: str,
     tenant_id: str,
-    load: Optional[UserLoadOptions] = None,
-) -> Optional[User]:
+    load: UserLoadOptions | None = None,
+) -> User | None:
     options = load or UserLoadOptions()
     opts = []
     if options.with_groups:
@@ -104,9 +116,9 @@ def _get_user(
 
 def _enforce_permission_delegation(
     *,
-    requested_permissions: Set[str],
-    actor_permissions: Set[str],
-    actor_role: Optional[str],
+    requested_permissions: set[str],
+    actor_permissions: set[str],
+    actor_role: str | None,
     actor_is_superuser: bool,
 ) -> None:
     if actor_is_superuser:
@@ -132,7 +144,7 @@ def _enforce_permission_delegation(
         )
 
 
-def _role_default_permissions(role_value: str) -> Set[str]:
+def _role_default_permissions(role_value: str) -> set[str]:
     role_text = _role_to_text(role_value)
     try:
         role_enum = Role(role_text)
@@ -152,7 +164,7 @@ def _resolve_create_user_actor_context(
     user_create: UserCreate,
     tenant_id: str,
     actor: AuthActorCaps,
-) -> tuple[str, str, bool, Set[str]]:
+) -> tuple[str, str, bool, set[str]]:
     creator_id = actor.user_id
     actor_role = actor.role
     actor_permissions = actor.permissions
@@ -190,7 +202,7 @@ def _enforce_create_user_policy(
     user_create: UserCreate,
     requested_role: str,
     actor_role_text: str,
-    actor_perm_set: Set[str],
+    actor_perm_set: set[str],
     actor_is_superuser: bool,
 ) -> None:
     actor_is_admin = _is_admin_actor(actor_role=actor_role_text, actor_is_superuser=actor_is_superuser)
@@ -241,14 +253,14 @@ def _normalize_unique_user_identity(db: Session, user_create: UserCreate) -> tup
 
 
 def get_user_by_id(
-    service: DatabaseAuthService, user_id: str, tenant_id: Optional[str] = None, db: Optional[Session] = None
-) -> Optional[UserSchema]:
+    service: DatabaseAuthService, user_id: str, tenant_id: str | None = None, db: Session | None = None
+) -> UserSchema | None:
     if not user_id:
         return None
 
     service.ensure_initialized()
 
-    def _query(session: Session) -> Optional[UserSchema]:
+    def _query(session: Session) -> UserSchema | None:
         q = (
             session.query(User)
             .options(
@@ -271,7 +283,7 @@ def get_user_by_id(
         return _query(s)
 
 
-def get_user_by_username(service: DatabaseAuthService, username: str) -> Optional[UserSchema]:
+def get_user_by_username(service: DatabaseAuthService, username: str) -> UserSchema | None:
     service.ensure_initialized()
     username = (username or "").strip().lower()
     with get_db_session() as db:
@@ -285,7 +297,7 @@ def create_user(
     service: DatabaseAuthService,
     user_create: UserCreate,
     tenant_id: str,
-    actor: Optional[AuthActorCaps] = None,
+    actor: AuthActorCaps | None = None,
 ) -> UserSchema:
     actor = actor or AuthActorCaps()
     creator_id = actor.user_id
@@ -381,7 +393,7 @@ def create_user(
 def _validate_user_update_data(
     update_data: dict[str, object],
     *,
-    updater_id: Optional[str],
+    updater_id: str | None,
     user_id: str,
 ) -> None:
     for field in ("username", "email", "org_id", "role", "is_active", "must_setup_mfa", "needs_password_change"):
@@ -405,8 +417,8 @@ def _enforce_user_update_actor_policy(
     *,
     user: User,
     user_id: str,
-    updater_id: Optional[str],
-    updater_user: Optional[User],
+    updater_id: str | None,
+    updater_user: User | None,
     update_data: dict[str, object],
 ) -> None:
     updater_is_superuser = bool(getattr(updater_user, "is_superuser", False))
@@ -442,10 +454,10 @@ def list_users(
     service: DatabaseAuthService,
     tenant_id: str,
     *,
-    limit: Optional[int] = None,
+    limit: int | None = None,
     offset: int = 0,
-    q: Optional[str] = None,
-) -> List[UserSchema]:
+    q: str | None = None,
+) -> list[UserSchema]:
     service.ensure_initialized()
     try:
         requested_limit = int(limit) if limit is not None else int(getattr(config, "DEFAULT_QUERY_LIMIT", 100))
@@ -479,8 +491,8 @@ def update_user(
     user_update: UserUpdate,
     tenant_id: str,
     *,
-    updater_id: Optional[str] = None,
-) -> Optional[UserSchema]:
+    updater_id: str | None = None,
+) -> UserSchema | None:
     service.ensure_initialized()
     with get_db_session() as db:
         user = _get_user(
@@ -600,7 +612,7 @@ def set_grafana_user_id(user_id: str, grafana_user_id: int, tenant_id: str) -> b
         return True
 
 
-def delete_user(service: DatabaseAuthService, user_id: str, tenant_id: str, deleter_id: Optional[str] = None) -> bool:
+def delete_user(service: DatabaseAuthService, user_id: str, tenant_id: str, deleter_id: str | None = None) -> bool:
     service.ensure_initialized()
     if deleter_id and user_id == deleter_id:
         raise ValueError("Users cannot delete their own account")
@@ -648,10 +660,10 @@ def delete_user(service: DatabaseAuthService, user_id: str, tenant_id: str, dele
 def update_user_permissions(
     service: DatabaseAuthService,
     user_id: str,
-    permission_names: List[str],
+    permission_names: list[str],
     tenant_id: str,
     *,
-    actor: Optional[AuthActorCaps] = None,
+    actor: AuthActorCaps | None = None,
 ) -> bool:
     actor = actor or AuthActorCaps()
     actor_user_id = actor.user_id

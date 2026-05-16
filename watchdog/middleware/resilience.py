@@ -13,11 +13,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Awaitable, Callable, ParamSpec, TypeVar
+from typing import ParamSpec, TypeVar
 
 import httpx
-
 from config import config
 
 logger = logging.getLogger(__name__)
@@ -32,12 +32,8 @@ def _is_retriable_httpx(exc: Exception) -> bool:
         if resp is None:
             return True
         status = resp.status_code
-        if 400 <= status < 500 and status not in (408, 429):
-            return False
-        return True
-    if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.TransportError)):
-        return True
-    return False
+        return not (400 <= status < 500 and status not in (408, 429))
+    return bool(isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.TransportError)))
 
 
 def _backoff_delay(attempt: int, base: float, cap: float, jitter_ratio: float) -> float:
@@ -67,7 +63,7 @@ def with_retry(
             for attempt in range(max_retries + 1):
                 try:
                     return await func(*args, **kwargs)
-                except (httpx.HTTPError, asyncio.TimeoutError, OSError, RuntimeError, ValueError) as e:
+                except (TimeoutError, httpx.HTTPError, OSError, RuntimeError, ValueError) as e:
                     if not retriable(e):
                         raise
 
@@ -113,7 +109,7 @@ def with_timeout(
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             try:
                 return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
-            except asyncio.TimeoutError as e:
+            except TimeoutError as e:
                 logger.error("Timeout: fn=%s timeout=%.3fs", func.__name__, timeout)
                 raise e
 

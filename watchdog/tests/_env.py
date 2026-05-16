@@ -15,7 +15,6 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
-
 _TEST_SQLITE_DIR = Path(tempfile.mkdtemp(prefix="observantio-watchdog-tests-"))
 _TEST_SQLITE_URL = f"sqlite:///{_TEST_SQLITE_DIR / 'watchdog.sqlite3'}"
 _TEST_DATABASE_INITIALIZED = False

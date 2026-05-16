@@ -12,11 +12,10 @@ import unittest
 os.environ.setdefault("DATABASE_URL", "postgresql://safeuser:safePass_123@db:5432/watchdog")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
 
-from fastapi import HTTPException
-from starlette.requests import Request
-
-from middleware.dependencies import enforce_ip_allowlist
 from config import config
+from fastapi import HTTPException
+from middleware.dependencies import enforce_ip_allowlist
+from starlette.requests import Request
 
 
 def _request_with_ip(ip_value: str) -> Request:

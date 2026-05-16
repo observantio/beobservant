@@ -10,16 +10,14 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
-import pytest
 import pyotp
-
-from database import get_db_session
+import pytest
 from config import config
-from services.database_auth_service import DatabaseAuthService
+from database import get_db_session
+from db_models import Tenant, User
 from models.access.user_models import UserCreate
 from services.auth.actor_caps import AuthActorCaps
-from db_models import Tenant, User
-
+from services.database_auth_service import DatabaseAuthService
 
 ADMIN_ACTOR = AuthActorCaps(is_superuser=True)
 
@@ -42,7 +40,7 @@ def test_enroll_and_verify_mfa_flow():
         ADMIN_ACTOR,
     )
     payload = svc.enroll_totp(user.id)
-    assert "secret" in payload and payload["secret"]
+    assert payload.get("secret")
     secret = payload["secret"]
     code = pyotp.TOTP(secret).now()
     recovery_codes = svc.verify_enable_totp(user.id, code)

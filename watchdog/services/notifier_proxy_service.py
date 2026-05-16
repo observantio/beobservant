@@ -14,18 +14,16 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Optional
 
 import httpx
+from config import config
 from fastapi import HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy.exc import SQLAlchemyError
-
-from config import config
 from middleware.dependencies import auth_service
 from middleware.resilience import with_retry, with_timeout
 from models.access.auth_models import TokenData
 from services.proxy.base_proxy import BaseProxyService
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +32,11 @@ logger = logging.getLogger(__name__)
 class NotifierForwardRequest:
     request: Request
     upstream_path: str
-    current_user: Optional[TokenData]
+    current_user: TokenData | None
     require_api_key: bool
     audit_action: str
-    correlation_id: Optional[str] = None
-    request_body: Optional[bytes] = None
+    correlation_id: str | None = None
+    request_body: bytes | None = None
 
 
 class NotifierProxyService(BaseProxyService):
@@ -56,7 +54,7 @@ class NotifierProxyService(BaseProxyService):
     def http_client(self) -> httpx.AsyncClient:
         return self._client
 
-    def _resolve_actor_api_key_id(self, current_user: TokenData) -> Optional[str]:
+    def _resolve_actor_api_key_id(self, current_user: TokenData) -> str | None:
         try:
             keys = auth_service.list_api_keys(current_user.user_id)
         except SQLAlchemyError:
@@ -71,7 +69,7 @@ class NotifierProxyService(BaseProxyService):
         self,
         *,
         current_user: TokenData,
-        api_key_id: Optional[str],
+        api_key_id: str | None,
     ) -> str:
         key = config.get_secret("NOTIFIER_CONTEXT_SIGNING_KEY")
         if not key:
@@ -137,8 +135,8 @@ class NotifierProxyService(BaseProxyService):
                 detail="Notifier service token not configured",
             )
 
-        api_key_id: Optional[str] = None
-        context_token: Optional[str] = None
+        api_key_id: str | None = None
+        context_token: str | None = None
         if current_user:
             api_key_id = await run_in_threadpool(self._resolve_actor_api_key_id, current_user)
             if require_api_key and not api_key_id:

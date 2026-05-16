@@ -11,15 +11,15 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 import logging
 import os
+
 import psutil
 from custom_types.json import JSONDict
-
 from services.system.helpers import (
     cpu_metrics,
-    memory_metrics,
-    disk_metrics,
-    network_metrics,
     determine_stress_status,
+    disk_metrics,
+    memory_metrics,
+    network_metrics,
 )
 
 logger = logging.getLogger(__name__)

@@ -12,7 +12,6 @@ from typing import Any
 
 import pytest
 from fastapi.responses import JSONResponse
-
 from routers import internal_router
 from routers.observability import alertmanager_router
 

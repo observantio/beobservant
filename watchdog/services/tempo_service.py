@@ -14,14 +14,13 @@ import json
 import logging
 import time
 from collections import defaultdict
-from typing import Dict, List, Mapping, Optional
+from collections.abc import Mapping
 
 import httpx
-
 from config import config
+from custom_types.json import JSONDict
 from middleware.resilience import with_retry, with_timeout
 from models.observability.tempo_models import Trace, TraceQuery, TraceResponse
-from custom_types.json import JSONDict
 from services.common.http_client import create_async_client
 from services.common.ttl_cache import TTLCache
 from services.tempo import params as tempo_params
@@ -61,7 +60,7 @@ class TempoService:
         self._client = create_async_client(config.DEFAULT_TIMEOUT)
         self._cache_ttl_seconds = max(1, int(config.SERVICE_CACHE_TTL_SECONDS))
         self._services_cache = TTLCache()
-        self._metrics: Dict[str, float] = defaultdict(float)
+        self._metrics: dict[str, float] = defaultdict(float)
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -69,15 +68,15 @@ class TempoService:
     def _observe(self, metric: str, value: float = 1.0) -> None:
         self._metrics[metric] += value
 
-    def _get_headers(self, tenant_id: str = config.DEFAULT_ORG_ID) -> Dict[str, str]:
+    def _get_headers(self, tenant_id: str = config.DEFAULT_ORG_ID) -> dict[str, str]:
         return {"X-Scope-OrgID": tenant_id}
 
     async def _get_json(
         self,
         url: str,
         *,
-        params: Optional[Mapping[str, QueryParamValue]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        params: Mapping[str, QueryParamValue] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> JSONDict:
         started = time.perf_counter()
         try:
@@ -163,7 +162,7 @@ class TempoService:
 
     @with_retry(max_retries=1, backoff=0.2)
     @with_timeout()
-    async def get_trace(self, trace_id: str, tenant_id: str = config.DEFAULT_ORG_ID) -> Optional[Trace]:
+    async def get_trace(self, trace_id: str, tenant_id: str = config.DEFAULT_ORG_ID) -> Trace | None:
         headers = self._get_headers(tenant_id)
         try:
             response = await self._client.get(f"{self.tempo_url}/api/traces/{trace_id}", headers=headers)
@@ -184,9 +183,9 @@ class TempoService:
             logger.error("Error fetching trace %s: %s", trace_id, e)
             return None
 
-    async def _service_names_from_tag_values_payload(self, vd: object) -> List[str]:
-        out: List[str] = []
-        raw_values: List[object] = []
+    async def _service_names_from_tag_values_payload(self, vd: object) -> list[str]:
+        out: list[str] = []
+        raw_values: list[object] = []
         if isinstance(vd, dict):
             raw_values = vd.get("tagValues") or vd.get("values") or vd.get("data") or []
         elif isinstance(vd, list):
@@ -200,8 +199,8 @@ class TempoService:
                 out.append(str(v))
         return out
 
-    async def _collect_services_from_service_tags(self, tag_names: List[str], headers: Dict[str, str]) -> List[str]:
-        services: List[str] = []
+    async def _collect_services_from_service_tags(self, tag_names: list[str], headers: dict[str, str]) -> list[str]:
+        services: list[str] = []
         for tag in tag_names:
             if tag not in SERVICE_KEYS:
                 continue
@@ -213,30 +212,25 @@ class TempoService:
                 logger.warning("Failed to fetch tag values for %s: %s", tag, e)
         return services
 
-    async def _infer_services_from_recent_traces(self, tenant_id: str) -> List[str]:
+    async def _infer_services_from_recent_traces(self, tenant_id: str) -> list[str]:
         try:
             trace_response = await self.search_traces(
                 TraceQuery.model_validate({"limit": 50}),
                 tenant_id=tenant_id,
                 fetch_full_traces=False,
             )
-            return [
-                span.service_name
-                for trace in trace_response.data
-                for span in trace.spans
-                if span.service_name
-            ]
+            return [span.service_name for trace in trace_response.data for span in trace.spans if span.service_name]
         except (httpx.HTTPError, OSError, RuntimeError, ValueError) as e:
             logger.warning("Failed to infer services from traces: %s", e)
             return []
 
-    async def _discover_tempo_services(self, tenant_id: str) -> Optional[List[str]]:
+    async def _discover_tempo_services(self, tenant_id: str) -> list[str] | None:
         headers = self._get_headers(tenant_id)
         try:
             data = await self._get_json(f"{self.tempo_url}/api/search/tags", headers=headers)
             logger.debug("Tempo /api/search/tags response: %s", data)
 
-            tag_names: List[str] = []
+            tag_names: list[str] = []
             if isinstance(data, dict):
                 tag_names = _string_list(data.get("tagNames"))
                 if not tag_names:
@@ -252,7 +246,7 @@ class TempoService:
 
     @with_retry()
     @with_timeout()
-    async def get_services(self, tenant_id: str = config.DEFAULT_ORG_ID) -> List[str]:
+    async def get_services(self, tenant_id: str = config.DEFAULT_ORG_ID) -> list[str]:
         result = await self._services_cache.get_or_set(
             tenant_id,
             lambda: self._discover_tempo_services(tenant_id),
@@ -262,7 +256,7 @@ class TempoService:
 
     @with_retry()
     @with_timeout()
-    async def get_operations(self, service: str, tenant_id: str = config.DEFAULT_ORG_ID) -> List[str]:
+    async def get_operations(self, service: str, tenant_id: str = config.DEFAULT_ORG_ID) -> list[str]:
         headers = self._get_headers(tenant_id)
         svc_escaped = _escape_traceql(service)
         for tag in ("span.name", "name"):
@@ -274,7 +268,7 @@ class TempoService:
                 )
                 resp.raise_for_status()
                 vd = resp.json()
-                values: List[str] = []
+                values: list[str] = []
                 if isinstance(vd, dict):
                     values = _string_list(vd.get("tagValues") or vd.get("values") or vd.get("data"))
                 elif isinstance(vd, list):

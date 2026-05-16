@@ -9,7 +9,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 __all__ = [
-    "label_utils",
-    "http_client",
     "fallback",
+    "http_client",
+    "label_utils",
 ]

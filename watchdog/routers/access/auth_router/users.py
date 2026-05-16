@@ -11,11 +11,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import re
-from typing import List
-
-from fastapi import BackgroundTasks, Body, Depends, HTTPException, Path, Query, status
 
 from config import config
+from fastapi import BackgroundTasks, Body, Depends, HTTPException, Path, Query, status
 from middleware.dependencies import (
     apply_scoped_rate_limit,
     auth_service,
@@ -24,7 +22,7 @@ from middleware.dependencies import (
     require_authenticated_with_scope,
 )
 from middleware.error_handlers import handle_route_errors
-from models.access.auth_models import Permission, ROLE_PERMISSIONS, Role, TokenData
+from models.access.auth_models import ROLE_PERMISSIONS, Permission, Role, TokenData
 from models.access.user_models import (
     TempPasswordResetResponse,
     UserCreate,
@@ -40,8 +38,8 @@ from services.auth.helper import (
     role_permission_strings,
 )
 from services.notification_service import TemporaryPasswordEmailRequest, WelcomeEmailRequest
-from .shared import USER_NOT_FOUND, notification_service, router, rtp
-from .shared import SAFE_PATH_ID_PATTERN
+
+from .shared import SAFE_PATH_ID_PATTERN, USER_NOT_FOUND, notification_service, router, rtp
 
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F]")
 
@@ -90,7 +88,7 @@ async def update_current_user_info(
     return user_response
 
 
-@router.get("/users", response_model=List[UserResponse])
+@router.get("/users", response_model=list[UserResponse])
 async def list_users(
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
     offset: int = Query(0, ge=0, le=1_000_000),
@@ -101,7 +99,7 @@ async def list_users(
         )
     ),
     q: str | None = Query(None),
-) -> List[UserResponse]:
+) -> list[UserResponse]:
     query_text = _sanitize_query_text(q)
     if query_text:
         users = await rtp(
@@ -169,11 +167,8 @@ async def update_user(
     can_manage = Permission.MANAGE_USERS.value in perms or Permission.UPDATE_USERS.value in perms
     update_fields = set(user_update.model_dump(exclude_unset=True).keys())
 
-    if Permission.MANAGE_TENANTS.value in perms and not can_manage and not is_admin:
-        if update_fields - {"is_active"}:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "manage:tenants can only activate/deactivate non-admin users"
-            )
+    if Permission.MANAGE_TENANTS.value in perms and not can_manage and not is_admin and (update_fields - {"is_active"}):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "manage:tenants can only activate/deactivate non-admin users")
 
     if (update_fields & {"role", "org_id", "group_ids"}) and not is_admin:
         raise HTTPException(
@@ -274,7 +269,7 @@ async def delete_user(
 @router.put("/users/{user_id}/permissions")
 async def update_user_permissions(
     user_id: str = Path(..., min_length=1, max_length=200, pattern=SAFE_PATH_ID_PATTERN),
-    permission_names: List[str] = Body(...),
+    permission_names: list[str] = Body(...),
     current_user: TokenData = Depends(
         require_any_permission_with_scope([Permission.UPDATE_USER_PERMISSIONS, Permission.MANAGE_USERS], "auth")
     ),
@@ -304,7 +299,7 @@ async def list_all_permissions(
             "auth",
         )
     ),
-) -> List[dict[str, object]]:
+) -> list[dict[str, object]]:
     all_permissions = await rtp(auth_service.list_all_permissions)
     if getattr(current_user, "is_superuser", False):
         return all_permissions
@@ -321,7 +316,7 @@ async def list_role_defaults(
             "auth",
         )
     ),
-) -> dict[str, List[str]]:
+) -> dict[str, list[str]]:
     defaults = {role.value: [permission.value for permission in perms] for role, perms in ROLE_PERMISSIONS.items()}
     if getattr(current_user, "is_superuser", False):
         return defaults

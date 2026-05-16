@@ -10,9 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import List, Optional, Protocol
-
-from sqlalchemy.orm import Session
+from typing import Protocol
 
 from db_models import Group
 from services.grafana.grafana_bundles import (
@@ -21,17 +19,18 @@ from services.grafana.grafana_bundles import (
     GroupVisibilityValidation,
     VisibilityGroupResolveContext,
 )
+from sqlalchemy.orm import Session
 
 
 class _GroupVisibilityService(Protocol):
-    def validate_group_visibility(self, db: Session, validation: GroupVisibilityValidation) -> List[Group]: ...
+    def validate_group_visibility(self, db: Session, validation: GroupVisibilityValidation) -> list[Group]: ...
 
 
 def resolve_visibility_groups_for_scope(
     service: _GroupVisibilityService,
     db: Session,
     ctx: VisibilityGroupResolveContext,
-) -> List[Group]:
+) -> list[Group]:
     return resolve_visibility_groups(
         service,
         db,
@@ -43,7 +42,7 @@ def resolve_visibility_groups(
     service: _GroupVisibilityService,
     db: Session,
     ctx: VisibilityGroupResolveContext,
-) -> List[Group]:
+) -> list[Group]:
     if ctx.visibility != "group":
         return []
     return service.validate_group_visibility(
@@ -62,7 +61,7 @@ def resolve_group_share_on_visibility_change(
     service: _GroupVisibilityService,
     db: Session,
     spec: GroupVisibilityShareChange,
-) -> List[Group]:
+) -> list[Group]:
     if spec.visibility != "group" or spec.shared_group_ids is None:
         return []
     return service.validate_group_visibility(
@@ -81,7 +80,7 @@ def visibility_group_resolve_context(
     scope: GrafanaUserScope,
     *,
     visibility: str,
-    shared_group_ids: Optional[List[str]],
+    shared_group_ids: list[str] | None,
     is_admin: bool,
 ) -> VisibilityGroupResolveContext:
     return VisibilityGroupResolveContext(
@@ -98,7 +97,7 @@ def group_share_change_for_scope(
     scope: GrafanaUserScope,
     *,
     visibility: str,
-    shared_group_ids: Optional[List[str]],
+    shared_group_ids: list[str] | None,
     is_admin: bool,
 ) -> GroupVisibilityShareChange:
     return GroupVisibilityShareChange(

@@ -11,12 +11,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import Annotated, Optional
-
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status, Path
-from pydantic import StrictBool
+from typing import Annotated
 
 from config import config
+from custom_types.json import JSONDict, JSONValue
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
 from middleware.dependencies import require_permission_with_scope, resolve_tenant_id
 from models.access.auth_models import Permission, TokenData
 from models.observability.resolver_models import (
@@ -24,16 +23,16 @@ from models.observability.resolver_models import (
     AnalyzeJobCreateResponse,
     AnalyzeJobListResponse,
     AnalyzeJobResultResponse,
-    AnalyzeReportDeleteResponse,
-    AnalyzeReportResponse,
     AnalyzeJobStatus,
     AnalyzeJobSummary,
-    AnalyzeRequestPayload,
     AnalyzeProxyPayload,
+    AnalyzeReportDeleteResponse,
+    AnalyzeReportResponse,
+    AnalyzeRequestPayload,
 )
+from pydantic import StrictBool
+from services.aiops.helpers import correlation_id, inject_tenant
 from services.resolver_proxy_service import ResolverProxyJsonRequest, resolver_proxy_service
-from services.aiops.helpers import inject_tenant, correlation_id
-from custom_types.json import JSONDict, JSONValue
 
 QueryParams = dict[str, str | int | float | bool]
 
@@ -59,9 +58,9 @@ router = APIRouter(prefix="/api/resolver", tags=["resolver"])
 class AnalyzeJobQueryParams:
     def __init__(
         self,
-        status_filter: Optional[AnalyzeJobStatus] = Query(default=None, alias="status"),
+        status_filter: AnalyzeJobStatus | None = Query(default=None, alias="status"),
         limit: int = Query(default=20, ge=1, le=100),
-        cursor: Optional[str] = Query(default=None),
+        cursor: str | None = Query(default=None),
     ) -> None:
         self.status_filter = status_filter
         self.limit = limit

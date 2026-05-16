@@ -9,24 +9,22 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from threading import RLock
 from types import SimpleNamespace
 from typing import Any
 
 from fastapi import HTTPException, status
-
 from models.access.api_key_models import ApiKey, ApiKeyShareUser, ApiKeyUpdate
-from models.access.auth_models import Permission, ROLE_PERMISSIONS, Role, Token, TokenData
-from models.access.group_models import Group
-from models.access.group_models import PermissionInfo
+from models.access.auth_models import ROLE_PERMISSIONS, Permission, Role, Token, TokenData
+from models.access.group_models import Group, PermissionInfo
 from models.access.user_models import UserResponse
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from models.grafana.grafana_folder_models import Folder
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass
@@ -393,7 +391,7 @@ class WorkflowState:
 
     def build_user_response(self, user: object, _permissions: list[str]) -> UserResponse:
         with self._lock:
-            state = self.users[str(getattr(user, "id"))]
+            state = self.users[str(user.id)]
             return UserResponse(
                 id=state.id,
                 username=state.username,
@@ -746,9 +744,9 @@ class WorkflowState:
         user_id: str,
         request: object,
     ) -> list[dict[str, object]]:
-        key_id = str(getattr(request, "key_id"))
-        user_ids = list(getattr(request, "user_ids"))
-        group_ids = list(getattr(request, "group_ids"))
+        key_id = str(request.key_id)
+        user_ids = list(request.user_ids)
+        group_ids = list(request.group_ids)
         with self._lock:
             key = self.api_keys[key_id]
             if key.owner_user_id != user_id:
@@ -1122,9 +1120,7 @@ class WorkflowState:
             }
         )
 
-    async def get_datasource_by_name(
-        self, db: object, name: str, scope: Any, **_kwargs: Any
-    ) -> Datasource | None:
+    async def get_datasource_by_name(self, db: object, name: str, scope: Any, **_kwargs: Any) -> Datasource | None:
         del db
         user_id = scope.user_id
         tenant_id = scope.tenant_id
@@ -1145,9 +1141,7 @@ class WorkflowState:
             return None
         return self._datasource_model(item, self.users[user_id])
 
-    async def get_datasources(
-        self, db: object, scope: Any, params: Any, **_kwargs: Any
-    ) -> list[Datasource]:
+    async def get_datasources(self, db: object, scope: Any, params: Any, **_kwargs: Any) -> list[Datasource]:
         del db
         user_id = scope.user_id
         tenant_id = scope.tenant_id
@@ -1179,9 +1173,7 @@ class WorkflowState:
             results = [row for row in results if row.uid == uid_filter]
         return results
 
-    async def get_datasource(
-        self, db: object, uid: str, scope: Any, **_kwargs: Any
-    ) -> Datasource | None:
+    async def get_datasource(self, db: object, uid: str, scope: Any, **_kwargs: Any) -> Datasource | None:
         del db
         user_id = scope.user_id
         tenant_id = scope.tenant_id

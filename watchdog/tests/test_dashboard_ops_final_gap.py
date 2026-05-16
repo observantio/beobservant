@@ -10,18 +10,17 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
 import httpx
+import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
 
 from db_models import Base, GrafanaDashboard, GrafanaFolder, Group, Tenant, User
-from models.grafana.grafana_dashboard_models import Dashboard, DashboardCreate, DashboardUpdate, DashboardSearchResult
+from models.grafana.grafana_dashboard_models import Dashboard, DashboardCreate, DashboardUpdate
 from services.grafana import dashboard_ops
 from services.grafana.grafana_bundles import (
     DashboardCreateOptions,
@@ -210,25 +209,6 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
         await dashboard_ops.update_dashboard(
             service,
             db,
-                DashboardUpdateRequest(
-                    uid="d1",
-                    dashboard_update=DashboardUpdate(
-                        dashboard=Dashboard(
-                            title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
-                        ),
-                        folderId=11,
-                        overwrite=True,
-                ),
-                    scope=GrafanaUserScope(owner.id, "t1", ["g1"]),
-                    options=DashboardUpdateOptions(),
-            ),
-        )
-
-    # normal update with visibility change to group and then tenant clear branch
-    monkeypatch.setattr(dashboard_ops, "check_folder_access", lambda *args, **kwargs: folder)
-    out = await dashboard_ops.update_dashboard(
-        service,
-        db,
             DashboardUpdateRequest(
                 uid="d1",
                 dashboard_update=DashboardUpdate(
@@ -237,9 +217,28 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
                     ),
                     folderId=11,
                     overwrite=True,
-            ),
+                ),
                 scope=GrafanaUserScope(owner.id, "t1", ["g1"]),
-                options=DashboardUpdateOptions(visibility="group", shared_group_ids=["g1"]),
+                options=DashboardUpdateOptions(),
+            ),
+        )
+
+    # normal update with visibility change to group and then tenant clear branch
+    monkeypatch.setattr(dashboard_ops, "check_folder_access", lambda *args, **kwargs: folder)
+    out = await dashboard_ops.update_dashboard(
+        service,
+        db,
+        DashboardUpdateRequest(
+            uid="d1",
+            dashboard_update=DashboardUpdate(
+                dashboard=Dashboard(
+                    title="U", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                ),
+                folderId=11,
+                overwrite=True,
+            ),
+            scope=GrafanaUserScope(owner.id, "t1", ["g1"]),
+            options=DashboardUpdateOptions(visibility="group", shared_group_ids=["g1"]),
         ),
     )
     assert out and out.get("visibility") == "group"
@@ -247,17 +246,17 @@ async def test_update_dashboard_owner_folder_access_and_result_paths(monkeypatch
     out2 = await dashboard_ops.update_dashboard(
         service,
         db,
-            DashboardUpdateRequest(
-                uid="d1",
-                dashboard_update=DashboardUpdate(
-                    dashboard=Dashboard(
-                        title="U2", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
-                    ),
-                    folderId=0,
-                    overwrite=True,
+        DashboardUpdateRequest(
+            uid="d1",
+            dashboard_update=DashboardUpdate(
+                dashboard=Dashboard(
+                    title="U2", tags=[], panels=[{"targets": [{"expr": "up"}], "datasource": {"uid": "ds"}}]
+                ),
+                folderId=0,
+                overwrite=True,
             ),
-                scope=GrafanaUserScope(owner.id, "t1", ["g1"]),
-                options=DashboardUpdateOptions(visibility="tenant"),
+            scope=GrafanaUserScope(owner.id, "t1", ["g1"]),
+            options=DashboardUpdateOptions(visibility="tenant"),
         ),
     )
     assert out2 and out2.get("visibility") == "tenant"
@@ -330,7 +329,6 @@ async def test_search_get_delete_additional_branches(monkeypatch):
             class _Dash:
                 uid = "d1"
                 folder_uid = None
-                folderUid = None
 
                 def model_dump(self):
                     return {

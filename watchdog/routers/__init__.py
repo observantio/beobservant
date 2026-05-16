@@ -6,22 +6,24 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from .observability import tempo_router
-from .observability import loki_router
-from .observability import alertmanager_router
-from .observability import grafana_router
-from .observability import resolver_router
 from .access import auth_router
-from .observability import agents_router
+from .observability import (
+    agents_router,
+    alertmanager_router,
+    grafana_router,
+    loki_router,
+    resolver_router,
+    tempo_router,
+)
 from .platform import system_router
 
 __all__ = [
-    "tempo_router",
-    "loki_router",
-    "alertmanager_router",
-    "grafana_router",
-    "resolver_router",
-    "auth_router",
     "agents_router",
+    "alertmanager_router",
+    "auth_router",
+    "grafana_router",
+    "loki_router",
+    "resolver_router",
     "system_router",
+    "tempo_router",
 ]

@@ -10,10 +10,9 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 import pytest
-from starlette.requests import Request
-
 from models.access.auth_models import Role, TokenData
 from routers.observability import resolver_router
+from starlette.requests import Request
 from tests._proxy_stubs import unpack_resolver_json_request
 
 
@@ -23,8 +22,7 @@ def _request(
     headers: dict[str, str] | None = None,
 ) -> Request:
     encoded_headers = [
-        (name.lower().encode("latin-1"), value.encode("latin-1"))
-        for name, value in (headers or {}).items()
+        (name.lower().encode("latin-1"), value.encode("latin-1")) for name, value in (headers or {}).items()
     ]
     scope = {
         "type": "http",

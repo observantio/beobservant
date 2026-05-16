@@ -11,8 +11,6 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from fastapi import Body, Depends, HTTPException, Path, Query, status
-from pydantic import BaseModel
-
 from middleware.dependencies import (
     apply_scoped_rate_limit,
     auth_service,
@@ -22,6 +20,7 @@ from middleware.dependencies import (
 from middleware.error_handlers import handle_route_errors
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUpdateRequest, ApiKeyShareUser, ApiKeyUpdate
 from models.access.auth_models import Permission, TokenData
+from pydantic import BaseModel
 from services.database_auth_service import ApiKeyShareReplaceRequest
 
 from .shared import SAFE_PATH_ID_PATTERN, router, rtp

@@ -14,10 +14,9 @@ from typing import Any, Literal
 
 import httpx
 import pytest
-from fastapi.responses import JSONResponse
-
 from config import config
 from database import get_db
+from fastapi.responses import JSONResponse
 from main import app
 from middleware import dependencies
 from routers.access.auth_router import authentication as auth_routes

@@ -18,9 +18,9 @@ os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:
 os.environ.setdefault("CORS_ALLOW_CREDENTIALS", "False")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 
-from services.grafana import proxy_auth_ops
-from models.access.auth_models import Permission, Role, TokenData
 from fastapi import HTTPException
+from models.access.auth_models import Permission, Role, TokenData
+from services.grafana import proxy_auth_ops
 
 
 class _GrafanaServiceStub:
@@ -529,7 +529,7 @@ async def test_proxy_authorization_helper_branches(monkeypatch):
     folder = await proxy_auth_ops._resolve_dashboard_folder_context(
         service, _token_data(), dashboard_uid="dash-2", folder_obj=None
     )
-    assert getattr(folder, "grafana_uid") == "fold-3"
+    assert folder.grafana_uid == "fold-3"
 
     service = _ProxyStub(_GrafanaDashServiceStub(dashboard={"meta": {"folderId": 3}}))
     monkeypatch.setattr(

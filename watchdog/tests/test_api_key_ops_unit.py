@@ -8,24 +8,22 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from datetime import datetime, timezone
-from types import SimpleNamespace
 import uuid
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
 
-from db_models import ApiKeyShare, Base, Group, HiddenApiKey, Tenant, User, UserApiKey
+from db_models import ApiKeyShare, Base, HiddenApiKey, Tenant, User, UserApiKey
 from models.access.api_key_models import ApiKeyCreate, ApiKeyUpdate
-from services.auth import api_key_ops
-from services.auth import api_key_schema
+from services.auth import api_key_ops, api_key_schema
 
 
 def _session():
@@ -76,7 +74,7 @@ def test_api_key_helper_functions_cover_edge_cases():
     with pytest.raises(ValueError, match="must be 3-200 chars"):
         api_key_ops._normalize_scope_key("a$")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     assert api_key_schema.share_created_at(SimpleNamespace(created_at=now)) == now
     assert isinstance(api_key_schema.share_created_at(SimpleNamespace(created_at=None)), datetime)
     assert api_key_ops._normalize_api_key_name(" name ") == "name"
@@ -161,7 +159,7 @@ def test_api_key_state_helpers_update_org_and_enabled_flags():
     db.add_all([key_a, key_b])
     db.commit()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     api_key_ops._disable_other_enabled_keys(db, owner.id, "t1", now, exclude_key_id="a")
     db.commit()
     assert db.query(UserApiKey).filter_by(id="a").first().is_enabled is True

@@ -15,15 +15,16 @@ import json
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Dict, Optional, TypeAlias
+from typing import TypeAlias
+
 import httpx
-from fastapi import HTTPException, status
 from config import config
-from models.access.auth_models import TokenData
 from custom_types.json import JSONDict, JSONValue, is_json_value
+from fastapi import HTTPException, status
+from middleware.resilience import with_retry, with_timeout
+from models.access.auth_models import TokenData
 from services.common.ttl_cache import TTLCache
 from services.proxy.base_proxy import BaseProxyService
-from middleware.resilience import with_retry, with_timeout
 
 QueryParamValue: TypeAlias = str | int | float | bool
 QueryParams: TypeAlias = dict[str, QueryParamValue]
@@ -35,11 +36,11 @@ class ResolverProxyJsonRequest:
     upstream_path: str
     current_user: TokenData
     tenant_id: str
-    payload: Optional[JSONDict] = None
-    params: Optional[QueryParams] = None
+    payload: JSONDict | None = None
+    params: QueryParams | None = None
     audit_action: str = "resolver.proxy"
-    correlation_id: Optional[str] = None
-    cache_ttl_seconds: Optional[int] = None
+    correlation_id: str | None = None
+    cache_ttl_seconds: int | None = None
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,7 @@ class ResolverProxyService(BaseProxyService):
         )
         self._cache_ttl_seconds = max(0, int(getattr(config, "RESOLVER_PROXY_CACHE_TTL_SECONDS", 15)))
         self._read_cache = TTLCache()
-        self._read_inflight: Dict[str, asyncio.Future[JSONValue]] = {}
+        self._read_inflight: dict[str, asyncio.Future[JSONValue]] = {}
         self._read_inflight_lock = asyncio.Lock()
 
     @staticmethod
@@ -98,7 +99,7 @@ class ResolverProxyService(BaseProxyService):
         *,
         method: str,
         upstream_path: str,
-        cache_ttl_seconds: Optional[int],
+        cache_ttl_seconds: int | None,
     ) -> int:
         configured_cache_ttl = self._cache_ttl_seconds if cache_ttl_seconds is None else max(0, int(cache_ttl_seconds))
         if method.upper() == "GET" and self._is_volatile_read(upstream_path):
@@ -111,8 +112,8 @@ class ResolverProxyService(BaseProxyService):
         method: str,
         upstream_path: str,
         tenant_id: str,
-        params: Optional[QueryParams],
-        payload: Optional[JSONDict],
+        params: QueryParams | None,
+        payload: JSONDict | None,
     ) -> str:
         return json.dumps(
             {
@@ -149,7 +150,7 @@ class ResolverProxyService(BaseProxyService):
     def _resolve_inflight_error(
         self,
         owner: bool,
-        future: Optional[asyncio.Future[JSONValue]],
+        future: asyncio.Future[JSONValue] | None,
         exc: HTTPException,
     ) -> None:
         if owner and future is not None and not future.done():
@@ -159,11 +160,11 @@ class ResolverProxyService(BaseProxyService):
     async def _prepare_read_cache(
         self,
         context: ResolverReadCacheContext,
-    ) -> tuple[Optional[str], Optional[asyncio.Future[JSONValue]], bool, Optional[JSONValue]]:
-        cache_key: Optional[str] = None
-        inflight_future: Optional[asyncio.Future[JSONValue]] = None
+    ) -> tuple[str | None, asyncio.Future[JSONValue] | None, bool, JSONValue | None]:
+        cache_key: str | None = None
+        inflight_future: asyncio.Future[JSONValue] | None = None
         owner = False
-        cached: Optional[JSONValue] = None
+        cached: JSONValue | None = None
         if context.method_upper == "GET" and context.effective_cache_ttl > 0:
             cache_key = self._cache_key(
                 method=context.method_upper,
@@ -211,7 +212,7 @@ class ResolverProxyService(BaseProxyService):
         self,
         context: ResolverUpstreamRequestContext,
         owner: bool,
-        inflight_future: Optional[asyncio.Future[JSONValue]],
+        inflight_future: asyncio.Future[JSONValue] | None,
     ) -> httpx.Response:
         started = time.time()
         try:

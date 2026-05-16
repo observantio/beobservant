@@ -5,9 +5,9 @@ Licensed under the Apache License, Version 2.0 (the "License"); you may not use 
 License.
 """
 
-from contextlib import contextmanager
 import os
 import types
+from contextlib import contextmanager
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

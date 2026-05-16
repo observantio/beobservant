@@ -123,7 +123,9 @@ async def test_register_calls_welcome_email_with_user_identity(monkeypatch: pyte
     monkeypatch.setattr(
         auth_router.auth_service,
         "create_user",
-        lambda *_args: SimpleNamespace(username="new-user", email="new@example.com", full_name="New User", role=Role.USER),
+        lambda *_args: SimpleNamespace(
+            username="new-user", email="new@example.com", full_name="New User", role=Role.USER
+        ),
     )
     monkeypatch.setattr(auth_router.auth_service, "build_user_response", lambda *_args: SimpleNamespace(api_keys=[]))
 

@@ -11,10 +11,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 import asyncio
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Protocol
+from typing import Protocol
 
 import httpx
-
 from custom_types.json import JSONDict
 from services.loki.http_client import LokiGetJsonRequest, QueryParams
 
@@ -42,9 +41,9 @@ def _expand_exact_to_prefix(query: str) -> str:
     return EXACT_LABEL_RE.sub(lambda m: f'{m.group("label")}=~"{re.escape(m.group("value"))}.*"', query)
 
 
-def build_service_fallback_queries(query: str) -> List[str]:
+def build_service_fallback_queries(query: str) -> list[str]:
     seen = {query}
-    candidates: List[str] = []
+    candidates: list[str] = []
 
     for transform in (
         _normalize_service_label,
@@ -59,9 +58,9 @@ def build_service_fallback_queries(query: str) -> List[str]:
     return candidates
 
 
-def build_volume_fallback_queries(query: str, max_candidates: int = 6) -> List[str]:
+def build_volume_fallback_queries(query: str, max_candidates: int = 6) -> list[str]:
     seen: set[str] = set()
-    candidates: List[str] = []
+    candidates: list[str] = []
 
     def _add(q: str) -> None:
         if q not in seen:
@@ -80,14 +79,14 @@ def build_volume_fallback_queries(query: str, max_candidates: int = 6) -> List[s
 
 
 class _LokiHttpClientLike(Protocol):
-    async def safe_get_json(self, request: LokiGetJsonRequest) -> Optional[JSONDict]: ...
+    async def safe_get_json(self, request: LokiGetJsonRequest) -> JSONDict | None: ...
 
 
 @dataclass(frozen=True, slots=True)
 class LokiFallbackQueryRun:
     endpoint: str
     base_params: QueryParams
-    headers: Dict[str, str]
+    headers: dict[str, str]
     query_str: str
     client: httpx.AsyncClient
     http_client: _LokiHttpClientLike
@@ -95,14 +94,14 @@ class LokiFallbackQueryRun:
     concurrency: int = 4
 
 
-async def run_fallback_queries(run: LokiFallbackQueryRun) -> Optional[JSONDict]:
+async def run_fallback_queries(run: LokiFallbackQueryRun) -> JSONDict | None:
     candidates = build_service_fallback_queries(run.query_str)[: max(0, run.max_fallbacks)]
     if not candidates:
         return None
 
     semaphore = asyncio.Semaphore(max(1, run.concurrency))
 
-    async def _query(candidate: str) -> Optional[JSONDict]:
+    async def _query(candidate: str) -> JSONDict | None:
         async with semaphore:
             payload = await run.http_client.safe_get_json(
                 LokiGetJsonRequest(
@@ -116,7 +115,7 @@ async def run_fallback_queries(run: LokiFallbackQueryRun) -> Optional[JSONDict]:
             return payload if isinstance(payload, dict) or payload is None else None
 
     tasks = [asyncio.create_task(_query(c)) for c in candidates]
-    result: Optional[JSONDict] = None
+    result: JSONDict | None = None
     try:
         for coro in asyncio.as_completed(tasks):
             payload = await coro

@@ -10,13 +10,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import re
-from typing import Optional
+from datetime import UTC, datetime
 
 
 def now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def format_with_tenant(template: str, tenant_id: str) -> str:
@@ -26,7 +25,7 @@ def format_with_tenant(template: str, tenant_id: str) -> str:
         return str(template)
 
 
-def extract_path(payload: object, path: str) -> Optional[float]:
+def extract_path(payload: object, path: str) -> float | None:
     if not path:
         return None
     current: object = payload
@@ -36,7 +35,7 @@ def extract_path(payload: object, path: str) -> Optional[float]:
         current = current[part]
 
     if isinstance(current, bool):
-        normalized: Optional[float] = float(int(current))
+        normalized: float | None = float(int(current))
     elif isinstance(current, (int, float)):
         normalized = float(current)
     elif isinstance(current, str):
@@ -49,7 +48,7 @@ def extract_path(payload: object, path: str) -> Optional[float]:
     return normalized
 
 
-def extract_from_text(text: str, key: str) -> Optional[float]:
+def extract_from_text(text: str, key: str) -> float | None:
     if not text or not key:
         return None
     pattern = re.compile(rf"(?im)^\s*{re.escape(key)}\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*$")
@@ -73,7 +72,7 @@ def response_payload(response: object) -> object:
     return {"__raw_text": raw_text} if raw_text else {}
 
 
-def extract_nested_numeric(payload: object, candidates: list[str]) -> Optional[float]:
+def extract_nested_numeric(payload: object, candidates: list[str]) -> float | None:
     for path in candidates:
         value = extract_path(payload, path)
         if value is not None:
@@ -86,7 +85,7 @@ def extract_tenant_scoped_numeric(
     *,
     tenant_id: str,
     key_candidates: list[str],
-) -> Optional[float]:
+) -> float | None:
     if not isinstance(payload, dict):
         return None
 
@@ -110,7 +109,7 @@ def extract_tenant_scoped_numeric(
     return None
 
 
-def compute_remaining(limit: Optional[float], used: Optional[float]) -> Optional[float]:
+def compute_remaining(limit: float | None, used: float | None) -> float | None:
     if limit is None or used is None:
         return None
     return max(0.0, float(limit) - float(used))
@@ -127,7 +126,7 @@ def prom_query_url(config_obj: object) -> str:
     return f"{base}/prometheus/api/v1/query"
 
 
-def extract_prom_result(payload: object) -> Optional[float]:
+def extract_prom_result(payload: object) -> float | None:
     if not isinstance(payload, dict):
         return None
     data = payload.get("data")
@@ -140,7 +139,7 @@ def extract_prom_result(payload: object) -> Optional[float]:
     if not isinstance(first, dict):
         return None
     value = first.get("value")
-    parsed: Optional[float] = None
+    parsed: float | None = None
     if isinstance(value, (list, tuple)) and len(value) >= 2:
         try:
             parsed = float(value[1])

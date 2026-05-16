@@ -11,14 +11,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
-
-from fastapi import Body, Depends, HTTPException, Path, Query
-from sqlalchemy.orm import Session
 
 from config import config
 from custom_types.json import JSONDict
 from database import get_db
+from fastapi import Body, Depends, HTTPException, Path, Query
 from middleware.dependencies import (
     require_any_permission_with_scope,
     require_authenticated_with_scope,
@@ -34,20 +31,25 @@ from routers.observability.grafana_router.param_helpers import (
     show_hidden_enabled,
 )
 from services.grafana.grafana_bundles import (
-    DashboardCreateRequest as DashboardCreateBundle,
     DashboardCreateOptions,
     DashboardSearchParams,
-    DashboardUpdateRequest as DashboardUpdateBundle,
     DashboardUpdateOptions,
     GrafanaUserScope,
     HiddenToggleParams,
     HiddenToggleRequest,
+)
+from services.grafana.grafana_bundles import (
+    DashboardCreateRequest as DashboardCreateBundle,
+)
+from services.grafana.grafana_bundles import (
+    DashboardUpdateRequest as DashboardUpdateBundle,
 )
 from services.grafana.route_payloads import (
     parse_dashboard_create_payload,
     parse_dashboard_update_payload,
     validate_visibility,
 )
+from sqlalchemy.orm import Session
 
 from .shared import dashboard_payload, dashboard_uid, hidden_toggle_context, proxy, router, rtp, scope_context
 
@@ -62,23 +64,23 @@ async def get_dashboard_filter_metadata(
 
 @dataclass(frozen=True, slots=True)
 class SearchDashboardsTextParams:
-    query: Optional[str]
-    tag: Optional[str]
-    uid: Optional[str]
-    team_id: Optional[str]
+    query: str | None
+    tag: str | None
+    uid: str | None
+    team_id: str | None
 
 
 @dataclass(frozen=True, slots=True)
 class SearchDashboardsFolderParams:
-    folder_ids: Optional[List[int]]
-    folder_uids: Optional[List[str]]
-    dashboard_uids: Optional[List[str]]
-    search_type: Optional[str]
+    folder_ids: list[int] | None
+    folder_uids: list[str] | None
+    dashboard_uids: list[str] | None
+    search_type: str | None
 
 
 @dataclass(frozen=True, slots=True)
 class SearchDashboardsPagingParams:
-    starred: Optional[bool]
+    starred: bool | None
     show_hidden: str
     limit: int
     offset: int
@@ -104,19 +106,19 @@ class DashboardUpdateRequest:
 
 
 def _search_dashboards_text_dep(
-    query: Optional[str] = Query(None),
-    tag: Optional[str] = Query(None),
-    uid: Optional[str] = Query(None),
-    team_id: Optional[str] = Query(None),
+    query: str | None = Query(None),
+    tag: str | None = Query(None),
+    uid: str | None = Query(None),
+    team_id: str | None = Query(None),
 ) -> SearchDashboardsTextParams:
     return SearchDashboardsTextParams(query=query, tag=tag, uid=uid, team_id=team_id)
 
 
 def _search_dashboards_folder_dep(
-    folder_ids: Optional[List[int]] = Query(None, alias="folderIds"),
-    folder_uids: Optional[List[str]] = Query(None, alias="folderUIDs"),
-    dashboard_uids: Optional[List[str]] = Query(None, alias="dashboardUID"),
-    search_type: Optional[str] = Query(None, alias="type"),
+    folder_ids: list[int] | None = Query(None, alias="folderIds"),
+    folder_uids: list[str] | None = Query(None, alias="folderUIDs"),
+    dashboard_uids: list[str] | None = Query(None, alias="dashboardUID"),
+    search_type: str | None = Query(None, alias="type"),
 ) -> SearchDashboardsFolderParams:
     return SearchDashboardsFolderParams(
         folder_ids=folder_ids,
@@ -127,7 +129,7 @@ def _search_dashboards_folder_dep(
 
 
 def _search_dashboards_paging_dep(
-    starred: Optional[bool] = Query(None),
+    starred: bool | None = Query(None),
     show_hidden: str = Query("false", pattern=r"^(true|false)$"),
     limit: int = Query(config.DEFAULT_QUERY_LIMIT, ge=1, le=config.MAX_QUERY_LIMIT),
     offset: int = Query(0, ge=0),
@@ -145,14 +147,14 @@ def _search_dashboards_request_dep(
 
 def _dashboard_create_visibility_dep(
     visibility: str = Query("private"),
-    shared_group_ids: Optional[List[str]] = Query(None),
+    shared_group_ids: list[str] | None = Query(None),
 ) -> DashboardVisibilityParams:
     return DashboardVisibilityParams(visibility=visibility, shared_group_ids=shared_group_ids)
 
 
 def _dashboard_update_visibility_dep(
-    visibility: Optional[str] = Query(None),
-    shared_group_ids: Optional[List[str]] = Query(None),
+    visibility: str | None = Query(None),
+    shared_group_ids: list[str] | None = Query(None),
 ) -> DashboardVisibilityParams:
     return DashboardVisibilityParams(visibility=visibility, shared_group_ids=shared_group_ids)
 
@@ -172,7 +174,7 @@ async def search_dashboards(
     *,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.READ_DASHBOARDS, "grafana")),
     db: Session = Depends(get_db),
-) -> List[DashboardSearchResult]:
+) -> list[DashboardSearchResult]:
     query = normalize_optional_param(dash_text.query)
     tag = normalize_optional_param(dash_text.tag)
     search_type = normalize_optional_param(dash_folders.search_type)
@@ -231,7 +233,7 @@ async def get_dashboard(
 async def create_dashboard(
     payload: GrafanaDashboardPayloadRequest,
     visibility: str = Query("private"),
-    shared_group_ids: Optional[List[str]] = Query(None),
+    shared_group_ids: list[str] | None = Query(None),
     *,
     current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
@@ -315,8 +317,8 @@ async def save_dashboard_from_grafana_ui(
 @handle_route_errors()
 async def update_dashboard(
     request: DashboardUpdateRequest = Depends(_dashboard_update_request_dep),
-    visibility: Optional[str] = Query(None),
-    shared_group_ids: Optional[List[str]] = Query(None),
+    visibility: str | None = Query(None),
+    shared_group_ids: list[str] | None = Query(None),
     *,
     current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),

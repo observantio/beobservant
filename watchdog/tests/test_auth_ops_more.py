@@ -9,7 +9,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -188,7 +188,7 @@ def test_jwt_helpers_create_and_decode_token(monkeypatch):
 
 
 def test_authenticate_update_password_and_validate_otlp(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     monkeypatch.setattr(auth_mod, "_utcnow", lambda: now)
     monkeypatch.setattr(auth_mod.config, "DEFAULT_ADMIN_USERNAME", "admin", raising=False)
     monkeypatch.setattr(auth_mod.config, "DEFAULT_ADMIN_PASSWORD", "pw", raising=False)

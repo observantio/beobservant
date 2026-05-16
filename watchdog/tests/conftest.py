@@ -6,11 +6,11 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-import os
 import sys
+from pathlib import Path
 from typing import Any
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ROOT = str(Path(__file__).resolve().parent.parent)
 if ROOT in sys.path:
     sys.path.remove(ROOT)
 sys.path.insert(0, ROOT)
@@ -21,10 +21,9 @@ ensure_test_env()
 
 import pytest
 import sqlalchemy
-from sqlalchemy.engine import Engine
-
 from services.auth.actor_caps import AuthActorCaps
 from services.database_auth_service import DatabaseAuthService
+from sqlalchemy.engine import Engine
 
 _ORIGINAL_CREATE_ENGINE = sqlalchemy.create_engine
 _TRACKED_ENGINES: list[Engine] = []

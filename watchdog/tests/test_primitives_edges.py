@@ -9,11 +9,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import asyncio
-from contextlib import contextmanager
 import importlib
-import os
 import sys
 import types
+from contextlib import contextmanager
 
 import httpx
 import pytest
@@ -21,40 +20,39 @@ from cryptography.fernet import Fernet
 from fastapi import HTTPException
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
 
+import middleware.rate_limit as rate_limit_module
 from custom_types import json as json_types
 from middleware import audit as audit_middleware
 from middleware import error_handlers as error_handlers_module
 from middleware import resilience as resilience_module
 from middleware.concurrency_limit import ConcurrencyLimitMiddleware
-from middleware.request_size_limit import RequestSizeLimitMiddleware
 from middleware.rate_limit import hybrid as hybrid_module
 from middleware.rate_limit import in_memory as memory_module
 from middleware.rate_limit import ip as ip_module
 from middleware.rate_limit import observability as observability_module
 from middleware.rate_limit import redis_fixed_window as redis_module
-import middleware.rate_limit as rate_limit_module
+from middleware.request_size_limit import RequestSizeLimitMiddleware
 from models.internal.otlp_validate import OtlpValidateRequest
 from models.observability.agent_models import AgentHeartbeat
+from models.observability.tempo_models import TraceQuery
 from routers import internal_router
 from routers.platform import system_router
+from services import audit_context as audit_context_service
+from services import system_service as system_service_module
 from services.agent import helpers as agent_helpers
 from services.common import cookies as cookie_helpers
 from services.common import encryption as encryption_module
 from services.secrets.provider import EnvSecretProvider
-from services import audit_context as audit_context_service
-from services import system_service as system_service_module
 from services.system import helpers as system_helpers
 from services.tempo import metrics as tempo_metrics
-from services.tempo.metrics import QueryMetricsRangeParams
 from services.tempo import params as tempo_params
 from services.tempo import parsers as tempo_parsers
 from services.tempo import promql as tempo_promql
-from models.observability.tempo_models import TraceQuery
+from services.tempo.metrics import QueryMetricsRangeParams
 
 
 def _request(
@@ -156,7 +154,7 @@ async def test_request_size_and_concurrency_extra_branches(monkeypatch):
 
     warnings = []
     monkeypatch.setattr(
-    importlib.import_module("middleware.request_size_limit").logger,
+        importlib.import_module("middleware.request_size_limit").logger,
         "warning",
         lambda message, *args: warnings.append((message, args)),
     )
@@ -842,7 +840,7 @@ async def test_resilience_edges(monkeypatch):
 
     async def fake_wait_for(coro, timeout):
         await coro
-        raise asyncio.TimeoutError()
+        raise TimeoutError()
 
     monkeypatch.setattr(resilience_module.asyncio, "wait_for", fake_wait_for)
 
@@ -981,9 +979,7 @@ async def test_tempo_utility_edges(monkeypatch):
             "attributes": [
                 {
                     "key": "systrace.trace.line",
-                    "value": {
-                        "stringValue": "Chrome_ChildIOT-120922 [000] d..2. 12680.501510: sched_switch"
-                    },
+                    "value": {"stringValue": "Chrome_ChildIOT-120922 [000] d..2. 12680.501510: sched_switch"},
                 }
             ],
         },
@@ -1019,10 +1015,7 @@ async def test_tempo_utility_edges(monkeypatch):
     )
     assert short_span.duration == 1
 
-    assert (
-        tempo_parsers._derive_systrace_component_from_line("kworker/0:1-123 [000] ....")
-        == "kernel.kworker.0"
-    )
+    assert tempo_parsers._derive_systrace_component_from_line("kworker/0:1-123 [000] ....") == "kernel.kworker.0"
     assert tempo_parsers._derive_systrace_component_from_line("") is None
     assert tempo_parsers._derive_systrace_component_from_line(None) is None
 

@@ -11,12 +11,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
 
-from fastapi import Body, Depends, HTTPException, Query, Path
-from sqlalchemy.orm import Session
-
+from custom_types.json import JSONDict
 from database import get_db
+from fastapi import Body, Depends, HTTPException, Path, Query
 from middleware.dependencies import (
     require_any_permission_with_scope,
     require_authenticated_with_scope,
@@ -32,21 +30,29 @@ from models.observability.grafana_request_models import (
 )
 from routers.observability.grafana_router.param_helpers import show_hidden_enabled
 from services.grafana.grafana_bundles import (
-    FolderCreateRequest as FolderCreateBundle,
-    FolderDeleteRequest as FolderDeleteBundle,
-    FolderGetRequest as FolderGetBundle,
     FolderCreateOptions,
     FolderDeleteOptions,
     FolderGetParams,
     FolderListParams,
-    FolderUpdateRequest as FolderUpdateBundle,
     FolderUpdateOptions,
     GrafanaUserScope,
     HiddenToggleParams,
     HiddenToggleRequest,
 )
+from services.grafana.grafana_bundles import (
+    FolderCreateRequest as FolderCreateBundle,
+)
+from services.grafana.grafana_bundles import (
+    FolderDeleteRequest as FolderDeleteBundle,
+)
+from services.grafana.grafana_bundles import (
+    FolderGetRequest as FolderGetBundle,
+)
+from services.grafana.grafana_bundles import (
+    FolderUpdateRequest as FolderUpdateBundle,
+)
 from services.grafana.route_payloads import validate_visibility
-from custom_types.json import JSONDict
+from sqlalchemy.orm import Session
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
 
@@ -64,12 +70,12 @@ def _folder_update_request_dep(
     return FolderUpdateRequest(uid=uid, payload=payload)
 
 
-@router.get("/folders", response_model=List[Folder])
+@router.get("/folders", response_model=list[Folder])
 async def get_folders(
     show_hidden: str = Query("false", pattern=r"^(true|false)$"),
     current_user: TokenData = Depends(require_authenticated_with_scope("grafana")),
     db: Session = Depends(get_db),
-) -> List[Folder]:
+) -> list[Folder]:
     user_id, tenant_id, group_ids, is_admin = scope_context(current_user)
     scope = GrafanaUserScope(user_id=user_id, tenant_id=tenant_id, group_ids=group_ids)
     params = FolderListParams(show_hidden=show_hidden_enabled(show_hidden), is_admin=is_admin)
@@ -101,7 +107,7 @@ async def get_folder_by_uid(
 async def create_folder(
     payload: GrafanaCreateFolderRequest,
     visibility: str = Query("private"),
-    shared_group_ids: Optional[List[str]] = Query(None),
+    shared_group_ids: list[str] | None = Query(None),
     *,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_FOLDERS, "grafana")),
     db: Session = Depends(get_db),
@@ -151,8 +157,8 @@ async def delete_folder(
 @handle_route_errors()
 async def update_folder(
     request: FolderUpdateRequest = Depends(_folder_update_request_dep),
-    visibility: Optional[str] = Query(None),
-    shared_group_ids: Optional[List[str]] = Query(None),
+    visibility: str | None = Query(None),
+    shared_group_ids: list[str] | None = Query(None),
     *,
     current_user: TokenData = Depends(require_permission_with_scope(Permission.CREATE_FOLDERS, "grafana")),
     db: Session = Depends(get_db),

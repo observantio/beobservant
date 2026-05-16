@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from pathlib import Path
-from types import ModuleType
 from email.message import EmailMessage
 from email.utils import formataddr, parseaddr
 from html import escape as html_escape
+from pathlib import Path
 from string import Template
-from typing import Optional, TypedDict
+from types import ModuleType
+from typing import TypedDict
 
 from config import config
 from services.common.http_client import create_async_client
@@ -51,8 +51,8 @@ class SMTPConfig(TypedDict):
 class WelcomeEmailRequest:
     recipient_email: str
     username: str
-    full_name: Optional[str] = None
-    login_url: Optional[str] = None
+    full_name: str | None = None
+    login_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +60,7 @@ class TemporaryPasswordEmailRequest:
     recipient_email: str
     username: str
     temporary_password: str
-    login_url: Optional[str] = None
+    login_url: str | None = None
 
 
 def _as_bool(value: object) -> bool:
@@ -73,7 +73,7 @@ def _as_bool(value: object) -> bool:
     return False
 
 
-def _first_secret(*keys: str) -> Optional[str]:
+def _first_secret(*keys: str) -> str | None:
     for key in keys:
         v = config.get_secret(key)
         if v:
@@ -87,7 +87,7 @@ def _is_enabled(*keys: str) -> bool:
 
 
 def _smtp_config(*prefixes: str) -> SMTPConfig:
-    def get(*suffixes: str) -> Optional[str]:
+    def get(*suffixes: str) -> str | None:
         return _first_secret(*(f"{p}_{s}" for p in prefixes for s in suffixes))
 
     try:
@@ -121,17 +121,14 @@ def _smtp_config(*prefixes: str) -> SMTPConfig:
     }
 
 
-def _render_html_template(template_name: str, values: dict[str, str]) -> Optional[str]:
+def _render_html_template(template_name: str, values: dict[str, str]) -> str | None:
     path = _EMAIL_TEMPLATE_ROOT / template_name
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:
         logger.warning("Email template %s could not be loaded: %s", path, exc)
         return None
-    safe_values = {
-        k: (str(v or "") if k.endswith("_html") else html_escape(str(v or "")))
-        for k, v in values.items()
-    }
+    safe_values = {k: (str(v or "") if k.endswith("_html") else html_escape(str(v or ""))) for k, v in values.items()}
     return Template(raw).safe_substitute(safe_values)
 
 

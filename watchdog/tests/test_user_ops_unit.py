@@ -15,7 +15,6 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
@@ -118,7 +117,7 @@ def _seed(db):
 
 def test_user_ops_helpers_and_getters(monkeypatch):
     db = _session()
-    admin, user, viewer, external, group, perm, admin_perm = _seed(db)
+    admin, user, viewer, external, _group, _perm, _admin_perm = _seed(db)
     service = _service()
 
     @contextmanager
@@ -143,7 +142,7 @@ def test_user_ops_helpers_and_getters(monkeypatch):
 
 def test_create_user_policy_and_external_branches(monkeypatch):
     db = _session()
-    admin, user, viewer, external_user, group, perm, admin_perm = _seed(db)
+    admin, user, _viewer, _external_user, group, _perm, _admin_perm = _seed(db)
 
     @contextmanager
     def fake_session():
@@ -316,7 +315,7 @@ def test_create_user_policy_and_external_branches(monkeypatch):
 
 def test_update_user_and_delete_user_paths(monkeypatch):
     db = _session()
-    admin, user, viewer, external_user, group, perm, admin_perm = _seed(db)
+    admin, user, viewer, external_user, group, _perm, _admin_perm = _seed(db)
     group.members.append(user)
     db.commit()
 
@@ -389,7 +388,7 @@ def test_update_user_and_delete_user_paths(monkeypatch):
 
 def test_update_user_permissions_paths(monkeypatch):
     db = _session()
-    admin, user, viewer, external_user, group, perm, admin_perm = _seed(db)
+    admin, user, viewer, _external_user, _group, perm, admin_perm = _seed(db)
     user.permissions.append(perm)
     admin.permissions.extend([perm, admin_perm])
     db.commit()
@@ -403,7 +402,9 @@ def test_update_user_permissions_paths(monkeypatch):
 
     with pytest.raises(HTTPException, match="Actor context is required"):
         user_ops.update_user_permissions(service, user.id, [], "t1", actor=None)
-    assert user_ops.update_user_permissions(service, "missing", [], "t1", actor=AuthActorCaps(user_id=admin.id)) is False
+    assert (
+        user_ops.update_user_permissions(service, "missing", [], "t1", actor=AuthActorCaps(user_id=admin.id)) is False
+    )
     with pytest.raises(HTTPException, match="Actor not found"):
         user_ops.update_user_permissions(service, user.id, [], "t1", actor=AuthActorCaps(user_id="missing"))
     with pytest.raises(HTTPException, match="cannot change their own permissions"):
@@ -472,7 +473,7 @@ def test_update_user_permissions_paths(monkeypatch):
 
 def test_set_grafana_user_id(monkeypatch):
     db = _session()
-    admin, user, viewer, external_user, group, perm, admin_perm = _seed(db)
+    _admin, user, _viewer, _external_user, _group, _perm, _admin_perm = _seed(db)
 
     @contextmanager
     def fake_session():

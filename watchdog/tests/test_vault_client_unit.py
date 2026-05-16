@@ -11,15 +11,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-
 from services.secrets import vault_client
 
 
-class FakeInvalidPath(Exception):
+class FakeInvalidPathError(Exception):
     pass
 
 
-class FakeForbidden(Exception):
+class FakeForbiddenError(Exception):
     pass
 
 
@@ -68,8 +67,8 @@ class FakeHVACClient:
 
 def _patch_hvac(monkeypatch, *, client):
     monkeypatch.setattr(vault_client, "hvac", SimpleNamespace(Client=lambda **kwargs: client))
-    monkeypatch.setattr(vault_client, "Forbidden", FakeForbidden)
-    monkeypatch.setattr(vault_client, "InvalidPath", FakeInvalidPath)
+    monkeypatch.setattr(vault_client, "Forbidden", FakeForbiddenError)
+    monkeypatch.setattr(vault_client, "InvalidPath", FakeInvalidPathError)
     monkeypatch.setattr(vault_client, "VaultError", FakeVaultError)
 
 
@@ -139,7 +138,7 @@ def test_vault_provider_get_cache_and_payload_shapes(monkeypatch):
             ("v2", "gamma"): {"data": {"data": {"only": "one"}}},
             ("v2", "empty"): {"data": {"data": {}}},
             ("v1", "plain"): {"data": {"value": "plain-secret"}},
-            ("v1", "missing"): FakeInvalidPath(),
+            ("v1", "missing"): FakeInvalidPathError(),
         }
     )
     _patch_hvac(monkeypatch, client=client)
@@ -164,8 +163,8 @@ def test_vault_provider_get_cache_and_payload_shapes(monkeypatch):
 def test_vault_provider_errors_not_found_and_cache_cleanup(monkeypatch):
     client = FakeHVACClient(
         read_map={
-            ("v2", "missing"): FakeInvalidPath(),
-            ("v2", "forbidden"): FakeForbidden(),
+            ("v2", "missing"): FakeInvalidPathError(),
+            ("v2", "forbidden"): FakeForbiddenError(),
             ("v2", "error"): FakeVaultError(),
             ("v2", "weird"): {"data": {"data": {"a": 1, "b": 2}}},
         }

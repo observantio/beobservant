@@ -14,8 +14,8 @@ os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:
 os.environ.setdefault("CORS_ALLOW_CREDENTIALS", "False")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 
-from services.grafana.grafana_service import GrafanaAPIError, GrafanaService
 from models.grafana.grafana_folder_models import Folder
+from services.grafana.grafana_service import GrafanaAPIError, GrafanaService
 
 
 @pytest.mark.asyncio

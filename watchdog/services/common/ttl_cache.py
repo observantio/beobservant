@@ -12,7 +12,8 @@ import asyncio
 import json
 import logging
 import time
-from typing import AsyncIterator, Awaitable, Callable, Dict, Optional, Protocol, Sequence, runtime_checkable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from typing import Protocol, runtime_checkable
 
 from config import config
 from custom_types.json import JSONValue, is_json_value
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
 class RedisAsyncClient(Protocol):
     async def ping(self) -> object: ...
     async def set(self, key: str, value: bytes, ex: int) -> object: ...
-    async def get(self, key: str) -> Optional[bytes]: ...
+    async def get(self, key: str) -> bytes | None: ...
     async def keys(self, pattern: str) -> list[str] | list[bytes]: ...
     def scan_iter(self, match: str | None = None) -> AsyncIterator[str | bytes]: ...
     async def delete(self, *keys: str | bytes) -> object: ...
@@ -42,15 +43,15 @@ class RedisAsyncClient(Protocol):
 
 class TTLCache:
     def __init__(self) -> None:
-        self._data: Dict[str, tuple[JSONValue, float]] = {}
+        self._data: dict[str, tuple[JSONValue, float]] = {}
         self._lock = asyncio.Lock()
         self._redis_url = (config.TTL_CACHE_REDIS_URL or config.RATE_LIMIT_REDIS_URL or "").strip()
         self._key_prefix = (config.TTL_CACHE_KEY_PREFIX or "watchdog:ttl").strip()
-        self._redis_client: Optional[RedisAsyncClient] = None
+        self._redis_client: RedisAsyncClient | None = None
         self._redis_connected = False
-        self._redis_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._redis_loop: asyncio.AbstractEventLoop | None = None
         self._redis_init_lock = asyncio.Lock()
-        self._pending: Dict[str, asyncio.Future[Optional[JSONValue]]] = {}
+        self._pending: dict[str, asyncio.Future[JSONValue | None]] = {}
 
     def _redis_key(self, key: str) -> str:
         return f"{self._key_prefix}:{key}"
@@ -61,7 +62,7 @@ class TTLCache:
         except (TypeError, ValueError) as exc:
             raise ValueError("TTL cache only supports JSON-serializable values") from exc
 
-    def _deserialize_value(self, raw: Optional[bytes]) -> Optional[JSONValue]:
+    def _deserialize_value(self, raw: bytes | None) -> JSONValue | None:
         if not raw:
             return None
         if raw.startswith(b"j:"):
@@ -160,7 +161,7 @@ class TTLCache:
             if self._redis_client is not None:
                 self._data.clear()
 
-    async def get(self, key: str) -> Optional[JSONValue]:
+    async def get(self, key: str) -> JSONValue | None:
         if await self._ensure_redis():
             try:
                 client = self._redis_client
@@ -206,8 +207,8 @@ class TTLCache:
                 await self._close_redis_client()
 
     async def get_or_set(
-        self, key: str, factory: Callable[[], Awaitable[Optional[JSONValue]]], ttl_seconds: int
-    ) -> Optional[JSONValue]:
+        self, key: str, factory: Callable[[], Awaitable[JSONValue | None]], ttl_seconds: int
+    ) -> JSONValue | None:
         v = await self.get(key)
         if v is not None:
             return v

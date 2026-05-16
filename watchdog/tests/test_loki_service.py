@@ -7,6 +7,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import os
+
 import httpx
 
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost/testdb")
@@ -52,7 +53,7 @@ def test_escape_and_build_label_selector():
 
 
 def test_normalize_and_expand_service_labels():
-    from services.loki.fallback import _normalize_service_label, _expand_exact_to_prefix, build_service_fallback_queries
+    from services.loki.fallback import _expand_exact_to_prefix, _normalize_service_label, build_service_fallback_queries
 
     q = '{service.name="myservice"}'
     assert "service_name" in _normalize_service_label(q)
@@ -63,16 +64,16 @@ def test_normalize_and_expand_service_labels():
 
 def test_parse_and_normalize_labelset_and_values():
     from services.loki.label_utils import (
-        parse_labelset_value,
-        normalize_label_value,
         normalize_label_dict,
+        normalize_label_value,
         normalize_label_values,
+        parse_labelset_value,
     )
 
     raw = 'app="web",env="prod",extra="x"'
     parsed = parse_labelset_value("app", raw)
     assert parsed and parsed["app"] == "web"
-    nv, parsed2 = normalize_label_value("app", 'app="web",other="y",')
+    nv, _parsed2 = normalize_label_value("app", 'app="web",other="y",')
     assert nv == "web"
     labels = {"app": 'app="web",other="y",', "env": "prod"}
     extra = normalize_label_dict(labels)

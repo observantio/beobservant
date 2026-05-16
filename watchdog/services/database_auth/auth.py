@@ -10,25 +10,25 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-import secrets
 import re
+import secrets
 import threading
 import time
-from typing import Dict, Mapping, Optional, TYPE_CHECKING, Union
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import httpx
-
+from custom_types.json import JSONDict
 from db_models import User
 from models.access.auth_models import Token
-from custom_types.json import JSONDict
-from services.database_auth.shared import sync_active_user_from_claims
 from services.auth.oidc_service import OidcTransactionStartRequest
+from services.database_auth.shared import sync_active_user_from_claims
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
 
-AuthResult = Optional[Union[Token, JSONDict]]
+AuthResult = Token | JSONDict | None
 PKCE_CODE_VERIFIER_PATTERN = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 EXTERNAL_USERNAME_PATTERN = re.compile(r"^[a-z0-9._-]{3,50}$")
 EXTERNAL_EMAIL_PATTERN = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}$")
@@ -44,7 +44,7 @@ class _OidcTokens:
     id_token: str
 
     @classmethod
-    def from_mapping(cls, payload: Mapping[str, object]) -> "_OidcTokens":
+    def from_mapping(cls, payload: Mapping[str, object]) -> _OidcTokens:
         return cls(
             access_token=str(payload.get("access_token") or ""),
             id_token=str(payload.get("id_token") or ""),
@@ -54,7 +54,7 @@ class _OidcTokens:
         return not self.access_token and not self.id_token
 
 
-def _prune_oidc_mfa_challenges(now: Optional[float] = None) -> None:
+def _prune_oidc_mfa_challenges(now: float | None = None) -> None:
     t = time.monotonic() if now is None else now
     for challenge_id, (expires_at, _user) in list(_OIDC_MFA_CHALLENGES.items()):
         if expires_at <= t:
@@ -70,7 +70,7 @@ def _create_oidc_mfa_challenge(user: User) -> str:
     return challenge_id
 
 
-def _get_oidc_mfa_challenge_user(challenge_id: str) -> Optional[User]:
+def _get_oidc_mfa_challenge_user(challenge_id: str) -> User | None:
     key = str(challenge_id or "").strip()
     if not key:
         return None
@@ -91,9 +91,7 @@ def _clear_oidc_mfa_challenge(challenge_id: str) -> None:
         _OIDC_MFA_CHALLENGES.pop(key, None)
 
 
-def _mfa_gate(
-    service: DatabaseAuthService, user: User, mfa_code: Optional[str]
-) -> Optional[Union[bool, JSONDict, Token]]:
+def _mfa_gate(service: DatabaseAuthService, user: User, mfa_code: str | None) -> bool | JSONDict | Token | None:
     if service.needs_mfa_setup(user):
         return service.mfa_setup_challenge(user)
 
@@ -108,7 +106,7 @@ def _mfa_gate(
 
 def _resolve_oidc_claims(
     service: DatabaseAuthService, *, tokens: _OidcTokens, expected_nonce: str, enforce_nonce: bool
-) -> Optional[JSONDict]:
+) -> JSONDict | None:
     if enforce_nonce and not expected_nonce:
         service.logger.warning("OIDC nonce enforcement requested but expected nonce is missing")
         return None
@@ -125,7 +123,7 @@ def _resolve_oidc_claims(
     return claims
 
 
-def _normalize_pkce_code_verifier(code_verifier: Optional[str]) -> Optional[str]:
+def _normalize_pkce_code_verifier(code_verifier: str | None) -> str | None:
     if code_verifier is None:
         return None
     value = str(code_verifier).strip()
@@ -139,9 +137,9 @@ def _normalize_pkce_code_verifier(code_verifier: Optional[str]) -> Optional[str]
 def _normalize_external_provisioning_inputs(
     *,
     email: str,
-    username: Optional[str],
-    full_name: Optional[str],
-) -> Optional[tuple[str, str, Optional[str]]]:
+    username: str | None,
+    full_name: str | None,
+) -> tuple[str, str, str | None] | None:
     email_value = str(email or "").strip().lower()
     if not EXTERNAL_EMAIL_PATTERN.fullmatch(email_value):
         return None
@@ -152,7 +150,7 @@ def _normalize_external_provisioning_inputs(
     if not EXTERNAL_USERNAME_PATTERN.fullmatch(username_value):
         return None
 
-    normalized_full_name: Optional[str] = None
+    normalized_full_name: str | None = None
     if full_name is not None:
         collapsed = " ".join(str(full_name).split()).strip()
         if collapsed:
@@ -162,7 +160,7 @@ def _normalize_external_provisioning_inputs(
 
 
 def login(  # pylint: disable=too-many-return-statements
-    service: DatabaseAuthService, username: str, password: str, mfa_code: Optional[str] = None
+    service: DatabaseAuthService, username: str, password: str, mfa_code: str | None = None
 ) -> AuthResult:
     external_flow = service.is_external_auth_enabled()
 
@@ -218,11 +216,11 @@ def exchange_oidc_authorization_code(
     service: DatabaseAuthService,
     code: str,
     redirect_uri: str,
-    transaction_id: Optional[str] = None,
-    state: Optional[str] = None,
-    code_verifier: Optional[str] = None,
-    mfa_code: Optional[str] = None,
-    mfa_challenge_id: Optional[str] = None,
+    transaction_id: str | None = None,
+    state: str | None = None,
+    code_verifier: str | None = None,
+    mfa_code: str | None = None,
+    mfa_challenge_id: str | None = None,
 ) -> AuthResult:
     if not service.is_external_auth_enabled():
         return None
@@ -315,8 +313,8 @@ def exchange_oidc_authorization_code(
 
 def get_oidc_authorization_url(
     service: DatabaseAuthService,
-    request: "OidcAuthorizationUrlRequest",
-) -> Dict[str, str]:
+    request: OidcAuthorizationUrlRequest,
+) -> dict[str, str]:
     result = service.oidc_service.start_authorization_transaction(
         request=OidcTransactionStartRequest(
             redirect_uri=request.redirect_uri,
@@ -339,15 +337,15 @@ def get_oidc_authorization_url(
 @dataclass(frozen=True, slots=True)
 class OidcAuthorizationUrlRequest:
     redirect_uri: str
-    state: Optional[str] = None
-    nonce: Optional[str] = None
-    code_challenge: Optional[str] = None
-    code_challenge_method: Optional[str] = None
+    state: str | None = None
+    nonce: str | None = None
+    code_challenge: str | None = None
+    code_challenge_method: str | None = None
 
 
 def provision_external_user(
-    service: DatabaseAuthService, *, email: str, username: str, full_name: Optional[str]
-) -> Optional[str]:
+    service: DatabaseAuthService, *, email: str, username: str, full_name: str | None
+) -> str | None:
     if not service.is_external_auth_enabled():
         return None
 

@@ -9,16 +9,14 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
-import httpx
 import pytest
 from fastapi.responses import JSONResponse
-
 from routers import internal_router
-from routers.observability import agents_router, alertmanager_router, resolver_router, loki_router, tempo_router
+from routers.observability import agents_router, alertmanager_router, loki_router, resolver_router, tempo_router
 from routers.platform import system_router
 from tests._proxy_stubs import unpack_notifier_forward, unpack_resolver_json_request
 
@@ -570,7 +568,7 @@ def test_resolver_alertmanager_and_agents_workflow(client, monkeypatch: pytest.M
             "name": "edge",
             "tenant_id": agent_key.key,
             "signal": "logs",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         },
     )
     assert heartbeat_response.status_code == 200

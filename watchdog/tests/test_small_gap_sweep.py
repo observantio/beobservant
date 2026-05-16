@@ -15,7 +15,6 @@ import httpx
 from fastapi import Request
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
@@ -27,14 +26,14 @@ from services.common import cookies as cookie_helpers
 from services.database_auth import audit as db_audit
 from services.grafana import folder_ops
 from services.grafana.grafana_bundles import (
-    FolderCreateRequest,
     FolderCreateOptions,
-    FolderDeleteRequest,
+    FolderCreateRequest,
     FolderDeleteOptions,
-    FolderGetRequest,
+    FolderDeleteRequest,
     FolderGetParams,
-    FolderUpdateRequest,
+    FolderGetRequest,
     FolderUpdateOptions,
+    FolderUpdateRequest,
     GrafanaUserScope,
     GroupVisibilityValidation,
 )

@@ -11,18 +11,17 @@ import os
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost/testdb")
 os.environ.setdefault("CORS_ALLOW_CREDENTIALS", "False")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost")
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from models.observability.agent_models import AgentHeartbeat, AgentInfo
-from services.agent_service import AgentService
 from services.agent import helpers
+from services.agent_service import AgentService
 
 
 def test_update_registry_new_and_existing():
     registry: dict[str, AgentInfo] = {}
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     hb = AgentHeartbeat(name="a", tenant_id="t", timestamp=now, attributes={"host.name": "h"}, signal="s")
     helpers.update_agent_registry(registry, hb)
     assert "t:a" in registry

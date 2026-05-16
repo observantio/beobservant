@@ -9,11 +9,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 from __future__ import annotations
-from typing import Optional
+
 from urllib.parse import parse_qsl, urlencode
 
 
-def normalize_grafana_next_path(path: Optional[str]) -> str:
+def normalize_grafana_next_path(path: str | None) -> str:
     candidate = (path or "/dashboards").strip() or "/dashboards"
     if candidate.startswith(("http://", "https://", "//")):
         return "/dashboards"

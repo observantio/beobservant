@@ -12,17 +12,15 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import jwt
-from fastapi.concurrency import run_in_threadpool
-
+from custom_types.json import JSONDict
 from database import get_db_session
 from db_models import AuditLog
+from fastapi.concurrency import run_in_threadpool
 from models.access.auth_models import TokenData
-from custom_types.json import JSONDict
 
 
 class BaseProxyService:
@@ -34,7 +32,7 @@ class BaseProxyService:
         base_url: str,
         timeout: float,
         tls_enabled: bool,
-        ca_cert_path: Optional[str] = None,
+        ca_cert_path: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -48,7 +46,7 @@ class BaseProxyService:
     def write_audit(
         self,
         *,
-        current_user: Optional[TokenData],
+        current_user: TokenData | None,
         action: str,
         resource_id: str,
         details: JSONDict,
@@ -68,7 +66,7 @@ class BaseProxyService:
     async def write_audit_async(
         self,
         *,
-        current_user: Optional[TokenData],
+        current_user: TokenData | None,
         action: str,
         resource_id: str,
         details: JSONDict,
@@ -90,7 +88,7 @@ class BaseProxyService:
         audience: str,
         ttl_seconds: int,
     ) -> JSONDict:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return {
             "iss": issuer,
             "aud": audience,

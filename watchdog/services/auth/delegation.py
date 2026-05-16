@@ -10,13 +10,13 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Set, TYPE_CHECKING
-
-from fastapi import HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from db_models import Group, User
+from fastapi import HTTPException, status
 from models.access.auth_models import Role
+from sqlalchemy.orm import Session, joinedload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -38,11 +38,11 @@ def role_rank(value: object, role_rank_map: dict[str, int]) -> int:
     return role_rank_map.get(role_to_text(value), 0)
 
 
-def is_admin_actor(*, actor_role: Optional[str], actor_is_superuser: bool) -> bool:
+def is_admin_actor(*, actor_role: str | None, actor_is_superuser: bool) -> bool:
     return bool(actor_is_superuser or role_to_text(actor_role) == Role.ADMIN.value)
 
 
-def is_admin_user(user: Optional[User]) -> bool:
+def is_admin_user(user: User | None) -> bool:
     if not user:
         return False
     return bool(getattr(user, "is_superuser", False) or role_to_text(getattr(user, "role", None)) == Role.ADMIN.value)
@@ -59,11 +59,11 @@ def permission_is_admin_only(name: str) -> bool:
     return perm.startswith("update:") and perm.endswith("permissions")
 
 
-def normalize_permissions(values: Optional[Iterable[str]]) -> Set[str]:
+def normalize_permissions(values: Iterable[str] | None) -> set[str]:
     return {str(value).strip() for value in (values or []) if str(value).strip()}
 
 
-def require_actor(actor_user_id: Optional[str], *, purpose: str) -> str:
+def require_actor(actor_user_id: str | None, *, purpose: str) -> str:
     if actor_user_id:
         return actor_user_id
     raise HTTPException(
@@ -76,10 +76,10 @@ def resolve_actor_permissions(
     service: DatabaseAuthService,
     *,
     db: Session,
-    actor_user_id: Optional[str],
+    actor_user_id: str | None,
     tenant_id: str,
-    actor_permissions: Optional[list[str]],
-) -> Set[str]:
+    actor_permissions: list[str] | None,
+) -> set[str]:
     provided = normalize_permissions(actor_permissions)
     if provided:
         return provided

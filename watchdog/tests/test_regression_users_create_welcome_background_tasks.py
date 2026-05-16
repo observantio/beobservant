@@ -53,7 +53,9 @@ async def test_create_user_schedules_welcome_email_task(monkeypatch: pytest.Monk
     monkeypatch.setattr(
         users_router.auth_service,
         "create_user",
-        lambda *_args: SimpleNamespace(username="new-user", email="new@example.com", full_name="New User", role=Role.USER),
+        lambda *_args: SimpleNamespace(
+            username="new-user", email="new@example.com", full_name="New User", role=Role.USER
+        ),
     )
     monkeypatch.setattr(users_router.auth_service, "build_user_response", lambda *_args: SimpleNamespace(api_keys=[]))
     monkeypatch.setattr(users_router, "invalidate_grafana_proxy_auth_cache", lambda: None)
@@ -71,7 +73,9 @@ async def test_create_user_scheduled_task_contains_expected_kwargs(monkeypatch: 
     monkeypatch.setattr(
         users_router.auth_service,
         "create_user",
-        lambda *_args: SimpleNamespace(username="new-user", email="new@example.com", full_name="New User", role=Role.USER),
+        lambda *_args: SimpleNamespace(
+            username="new-user", email="new@example.com", full_name="New User", role=Role.USER
+        ),
     )
     monkeypatch.setattr(users_router.auth_service, "build_user_response", lambda *_args: SimpleNamespace(api_keys=[]))
     monkeypatch.setattr(users_router, "invalidate_grafana_proxy_auth_cache", lambda: None)
@@ -117,7 +121,9 @@ async def test_create_user_invalidates_proxy_cache_once(monkeypatch: pytest.Monk
     monkeypatch.setattr(
         users_router.auth_service,
         "create_user",
-        lambda *_args: SimpleNamespace(username="new-user", email="new@example.com", full_name="New User", role=Role.USER),
+        lambda *_args: SimpleNamespace(
+            username="new-user", email="new@example.com", full_name="New User", role=Role.USER
+        ),
     )
     monkeypatch.setattr(users_router.auth_service, "build_user_response", lambda *_args: SimpleNamespace(api_keys=[]))
 
@@ -140,7 +146,9 @@ async def test_create_user_returns_built_response(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(
         users_router.auth_service,
         "create_user",
-        lambda *_args: SimpleNamespace(username="new-user", email="new@example.com", full_name="New User", role=Role.USER),
+        lambda *_args: SimpleNamespace(
+            username="new-user", email="new@example.com", full_name="New User", role=Role.USER
+        ),
     )
     response_obj = SimpleNamespace(id="user-1", username="new-user", api_keys=[])
     monkeypatch.setattr(users_router.auth_service, "build_user_response", lambda *_args: response_obj)

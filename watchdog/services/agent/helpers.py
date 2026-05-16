@@ -11,14 +11,14 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 from urllib.parse import quote
 
 import httpx
 from config import config
-from models.observability.agent_models import AgentHeartbeat, AgentInfo
 from custom_types.json import JSONDict
+from models.observability.agent_models import AgentHeartbeat, AgentInfo
 
 
 class KeyActivity(TypedDict):
@@ -59,7 +59,7 @@ def mimir_prometheus_url(base_url: str, path: str) -> str:
 
 
 def update_agent_registry(registry: dict[str, AgentInfo], heartbeat: AgentHeartbeat) -> None:
-    ts = heartbeat.timestamp or datetime.now(timezone.utc)
+    ts = heartbeat.timestamp or datetime.now(UTC)
     agent_id = make_agent_id(heartbeat.name, heartbeat.tenant_id)
     attributes = heartbeat.attributes or {}
     host_name = attributes.get(ATTR_HOST_NAME) or attributes.get(ATTR_HOST_HOSTNAME)
@@ -216,7 +216,7 @@ async def query_key_volume_series(
     minutes: int = 60,
     step_seconds: int = 300,
 ) -> list[KeyVolumePoint]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = now - timedelta(minutes=max(5, minutes))
 
     try:

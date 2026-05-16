@@ -11,37 +11,34 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set
-
-from sqlalchemy.orm import Session
 
 from db_models import GrafanaDashboard
-from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardUpdate
+from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardSearchResult, DashboardUpdate
 from models.grafana.grafana_datasource_models import DatasourceCreate, DatasourceUpdate
-from models.grafana.grafana_dashboard_models import DashboardSearchResult
+from sqlalchemy.orm import Session
 
 
 @dataclass(frozen=True, slots=True)
 class GrafanaUserScope:
     user_id: str
     tenant_id: str
-    group_ids: List[str]
+    group_ids: list[str]
 
 
 @dataclass(frozen=True, slots=True)
 class DashboardSearchParams:
-    query: Optional[str] = None
-    tag: Optional[str] = None
-    starred: Optional[bool] = None
-    folder_ids: Optional[List[int]] = None
-    folder_uids: Optional[List[str]] = None
-    dashboard_uids: Optional[List[str]] = None
-    uid: Optional[str] = None
-    team_id: Optional[str] = None
+    query: str | None = None
+    tag: str | None = None
+    starred: bool | None = None
+    folder_ids: list[int] | None = None
+    folder_uids: list[str] | None = None
+    dashboard_uids: list[str] | None = None
+    uid: str | None = None
+    team_id: str | None = None
     show_hidden: bool = False
-    limit: Optional[int] = None
+    limit: int | None = None
     offset: int = 0
-    search_context: Optional[object] = None
+    search_context: object | None = None
     is_admin: bool = False
     exclude_foldered_dashboards: bool = False
 
@@ -51,27 +48,27 @@ class DashboardSearchAppendContext:
     db: Session
     tenant_id: str
     user_id: str
-    gids: List[str]
+    gids: list[str]
     is_admin: bool
-    folder_uid_set: Set[str]
-    folder_id_set: Set[int]
+    folder_uid_set: set[str]
+    folder_id_set: set[int]
     exclude_foldered_dashboards: bool
-    accessible: Set[str]
+    accessible: set[str]
     allow_system: bool
-    all_registered_uids: Set[str]
-    db_dashboards: Dict[str, GrafanaDashboard]
+    all_registered_uids: set[str]
+    db_dashboards: dict[str, GrafanaDashboard]
     show_hidden: bool
-    team_id_s: Optional[str]
-    out: List[DashboardSearchResult]
-    folder_updates: List[GrafanaDashboard]
+    team_id_s: str | None
+    out: list[DashboardSearchResult]
+    folder_updates: list[GrafanaDashboard]
 
 
 @dataclass(frozen=True, slots=True)
 class GroupVisibilityValidation:
-    user_id: Optional[str]
+    user_id: str | None
     tenant_id: str
-    group_ids: Optional[List[str]]
-    shared_group_ids: Optional[List[str]]
+    group_ids: list[str] | None
+    shared_group_ids: list[str] | None
     is_admin: bool
 
 
@@ -80,8 +77,8 @@ class VisibilityGroupResolveContext:
     user_id: str
     tenant_id: str
     visibility: str
-    group_ids: List[str]
-    shared_group_ids: Optional[List[str]]
+    group_ids: list[str]
+    shared_group_ids: list[str] | None
     is_admin: bool
 
 
@@ -89,27 +86,27 @@ class VisibilityGroupResolveContext:
 class AccessibleTitleConflictParams:
     tenant_id: str
     user_id: str
-    group_ids: List[str]
+    group_ids: list[str]
     title: str
-    visibility: Optional[str] = None
-    shared_group_ids: Optional[List[str]] = None
-    exclude_uid: Optional[str] = None
+    visibility: str | None = None
+    shared_group_ids: list[str] | None = None
+    exclude_uid: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class DashboardCreateOptions:
     visibility: str = "private"
-    shared_group_ids: Optional[List[str]] = None
+    shared_group_ids: list[str] | None = None
     is_admin: bool = False
-    actor_permissions: Optional[List[str]] = None
+    actor_permissions: list[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class DashboardUpdateOptions:
-    visibility: Optional[str] = None
-    shared_group_ids: Optional[List[str]] = None
+    visibility: str | None = None
+    shared_group_ids: list[str] | None = None
     is_admin: bool = False
-    actor_permissions: Optional[List[str]] = None
+    actor_permissions: list[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,26 +126,26 @@ class DashboardUpdateRequest:
 
 @dataclass(frozen=True, slots=True)
 class DatasourceListParams:
-    uid: Optional[str] = None
-    query: Optional[str] = None
-    team_id: Optional[str] = None
+    uid: str | None = None
+    query: str | None = None
+    team_id: str | None = None
     show_hidden: bool = False
-    limit: Optional[int] = None
+    limit: int | None = None
     offset: int = 0
-    datasource_context: Optional[object] = None
+    datasource_context: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class DatasourceCreateOptions:
     visibility: str = "private"
-    shared_group_ids: Optional[List[str]] = None
+    shared_group_ids: list[str] | None = None
     is_admin: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class DatasourceUpdateOptions:
-    visibility: Optional[str] = None
-    shared_group_ids: Optional[List[str]] = None
+    visibility: str | None = None
+    shared_group_ids: list[str] | None = None
     is_admin: bool = False
 
 
@@ -183,9 +180,9 @@ class DatasourceQueryEnforcement:
 class AccessibleDsNameConflictParams:
     tenant_id: str
     user_id: str
-    group_ids: List[str]
+    group_ids: list[str]
     name: str
-    exclude_uid: Optional[str] = None
+    exclude_uid: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,17 +194,17 @@ class FolderListParams:
 @dataclass(frozen=True, slots=True)
 class FolderCreateOptions:
     visibility: str = "private"
-    shared_group_ids: Optional[List[str]] = None
+    shared_group_ids: list[str] | None = None
     allow_dashboard_writes: bool = False
     is_admin: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class FolderUpdateOptions:
-    title: Optional[str] = None
-    visibility: Optional[str] = None
-    shared_group_ids: Optional[List[str]] = None
-    allow_dashboard_writes: Optional[bool] = None
+    title: str | None = None
+    visibility: str | None = None
+    shared_group_ids: list[str] | None = None
+    allow_dashboard_writes: bool | None = None
     is_admin: bool = False
 
 
@@ -265,7 +262,7 @@ class FolderAccessRequest:
 
 @dataclass(frozen=True, slots=True)
 class FolderAccessibilityRequest:
-    uid: Optional[str]
+    uid: str | None
     scope: GrafanaUserScope
     criteria: FolderAccessCriteria
 
@@ -290,8 +287,8 @@ class DashboardAccessCriteria:
 @dataclass(frozen=True, slots=True)
 class GroupVisibilityShareChange:
     visibility: str
-    shared_group_ids: Optional[List[str]]
+    shared_group_ids: list[str] | None
     user_id: str
     tenant_id: str
-    group_ids: List[str]
+    group_ids: list[str]
     is_admin: bool

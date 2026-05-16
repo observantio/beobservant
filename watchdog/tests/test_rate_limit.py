@@ -10,8 +10,8 @@ import importlib
 import os
 import sys
 import time
-import unittest
 import types
+import unittest
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -94,9 +94,11 @@ class RateLimitTests(unittest.TestCase):
 
         fake_redis_mod = types.SimpleNamespace(from_url=lambda url, **kwargs: _FakeClient())
 
-        with patch.dict(sys.modules, {"redis": fake_redis_mod}):
-            with self.assertLogs("middleware.rate_limit", level="INFO") as cm:
-                module = _reload_rate_limit_module()
+        with (
+            patch.dict(sys.modules, {"redis": fake_redis_mod}),
+            self.assertLogs("middleware.rate_limit", level="INFO") as cm,
+        ):
+            module = _reload_rate_limit_module()
 
         self.assertTrue(
             any(

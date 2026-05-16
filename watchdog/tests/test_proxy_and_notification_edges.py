@@ -26,16 +26,16 @@ from models.access.auth_models import Role, TokenData
 from routers.observability.grafana_router import proxy as proxy_router
 from services import notification_service as notification_mod
 from services.grafana.grafana_bundles import (
-    FolderAccessibilityRequest,
-    FolderAccessRequest,
-    FolderGetRequest,
-    HiddenToggleParams,
-    HiddenToggleRequest,
     DashboardSearchParams,
     DatasourceListParams,
     FolderAccessCriteria,
+    FolderAccessibilityRequest,
+    FolderAccessRequest,
     FolderGetParams,
+    FolderGetRequest,
     GrafanaUserScope,
+    HiddenToggleParams,
+    HiddenToggleRequest,
 )
 from services.grafana_proxy_service import GrafanaProxyService, ProxyAuthorizationRequest
 
@@ -129,7 +129,7 @@ async def test_notification_service_email_flows(monkeypatch):
         )
         is True
     )
-    assert "Welcome to Watchdog" == sent[-1][1]["Subject"]
+    assert sent[-1][1]["Subject"] == "Welcome to Watchdog"
     welcome_plain = sent[-1][1].get_body(preferencelist=("plain",))
     assert welcome_plain is not None
     assert "Login URL: https://app/login" in welcome_plain.get_content()

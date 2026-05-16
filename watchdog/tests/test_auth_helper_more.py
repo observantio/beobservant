@@ -8,17 +8,16 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 import sys
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException, Request, Response
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
 
-from db_models import AuditLog, User
+from db_models import User
 from models.access.auth_models import Permission, Role, TokenData
 from services.auth import helper as auth_helper
 

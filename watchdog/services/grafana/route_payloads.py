@@ -17,17 +17,15 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import List, Optional
-
+from custom_types.json import JSONDict
 from models.access.auth_models import Role, TokenData
 from models.grafana.grafana_dashboard_models import Dashboard, DashboardCreate, DashboardUpdate
-from custom_types.json import JSONDict
 from services.auth.delegation import role_to_text as _role_to_text
 
 VALID_VISIBILITIES = {"private", "group", "tenant"}
 
 
-def user_group_ids(current_user: TokenData) -> List[str]:
+def user_group_ids(current_user: TokenData) -> list[str]:
     gids = getattr(current_user, "group_ids", None) or []
     return list(gids)
 
@@ -39,7 +37,7 @@ def is_admin_user(token_data: TokenData) -> bool:
     )
 
 
-def validate_visibility(visibility: Optional[str]) -> None:
+def validate_visibility(visibility: str | None) -> None:
     if visibility is not None and visibility not in VALID_VISIBILITIES:
         raise ValueError("Invalid visibility value")
 
@@ -62,7 +60,7 @@ def _coerce_int(value: object, default: int = 0) -> int:
         return default
 
 
-def _coerce_optional_str(value: object) -> Optional[str]:
+def _coerce_optional_str(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 

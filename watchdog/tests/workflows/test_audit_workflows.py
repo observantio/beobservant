@@ -9,12 +9,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
-
 from routers.access.auth_router import audit as audit_routes
 
 from .helpers import WorkflowState, patch_auth_service
@@ -33,7 +32,7 @@ class FakeAuditQuery:
         action: str | None,
         resource_type: str | None,
         q: str | None,
-    ) -> "FakeAuditQuery":
+    ) -> FakeAuditQuery:
         filtered = []
         for log, username, email in self.rows:
             if start and log.created_at < start:
@@ -74,7 +73,7 @@ def test_audit_list_and_export_workflow(client, monkeypatch: pytest.MonkeyPatch)
     state = WorkflowState()
     patch_auth_service(monkeypatch, state)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     audit_rows = [
         (
             SimpleNamespace(

@@ -7,6 +7,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
+
 import httpx
 import pytest
 from fastapi import HTTPException
@@ -56,7 +57,7 @@ def test_resolver_proxy_helper_methods(monkeypatch):
 
 def test_resolver_proxy_inflight_error_resolution():
     service = ResolverProxyService()
-    future = service._client._transport = None  # keep the instance referenced without affecting behavior
+    service._client._transport = None  # keep the instance referenced without affecting behavior
     loop = __import__("asyncio").new_event_loop()
     try:
         inflight = loop.create_future()

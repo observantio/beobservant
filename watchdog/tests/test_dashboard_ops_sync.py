@@ -17,8 +17,7 @@ os.environ.setdefault("CORS_ALLOW_CREDENTIALS", "False")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 
 from db_models import Base, GrafanaDashboard, GrafanaFolder, Tenant, User
-from models.grafana.grafana_dashboard_models import Dashboard, DashboardUpdate
-from models.grafana.grafana_dashboard_models import DashboardSearchResult
+from models.grafana.grafana_dashboard_models import Dashboard, DashboardSearchResult, DashboardUpdate
 from services.grafana import dashboard_ops
 from services.grafana.grafana_bundles import (
     AccessibleTitleConflictParams,

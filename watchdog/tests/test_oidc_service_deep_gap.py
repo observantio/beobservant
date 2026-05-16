@@ -9,13 +9,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import pytest
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
 
-from services.auth.oidc_service import OIDCService
 from services.auth import oidc_service as mod
+from services.auth.oidc_service import OIDCService
 
 
 def test_oidc_select_jwk_cache_refresh_and_candidate_paths(monkeypatch):

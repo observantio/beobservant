@@ -13,7 +13,6 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-
 from config import config
 from database import get_db_session
 
@@ -46,8 +45,8 @@ quota_service = QuotaService(
 
 __all__ = [
     "QuotaService",
-    "quota_service",
     "config",
     "get_db_session",
     "httpx",
+    "quota_service",
 ]

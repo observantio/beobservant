@@ -15,15 +15,14 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import re
-from typing import Dict, List, Optional, Tuple
 
 from custom_types.json import JSONDict
 
 KEY_RE = re.compile(r"[A-Za-z0-9_.:-]+")
 
 
-def _parse_pairs(s: str) -> Dict[str, str]:
-    pairs: Dict[str, str] = {}
+def _parse_pairs(s: str) -> dict[str, str]:
+    pairs: dict[str, str] = {}
     i = 0
     n = len(s)
 
@@ -48,7 +47,7 @@ def _parse_pairs(s: str) -> Dict[str, str]:
             break
         i += 1
 
-        val_chars: List[str] = []
+        val_chars: list[str] = []
         while i < n:
             ch = s[i]
             if ch == "\\":
@@ -85,7 +84,7 @@ def _parse_pairs(s: str) -> Dict[str, str]:
     return pairs
 
 
-def parse_labelset_value(label_key: str, raw_value: str) -> Optional[Dict[str, str]]:
+def parse_labelset_value(label_key: str, raw_value: str) -> dict[str, str] | None:
     if not isinstance(raw_value, str) or '="' not in raw_value:
         return None
     candidate = raw_value if f'{label_key}="' in raw_value else f'{label_key}="{raw_value}'
@@ -93,7 +92,7 @@ def parse_labelset_value(label_key: str, raw_value: str) -> Optional[Dict[str, s
     return pairs or None
 
 
-def normalize_label_value(label_key: str, value: object) -> Tuple[Optional[str], Optional[dict[str, str]]]:
+def normalize_label_value(label_key: str, value: object) -> tuple[str | None, dict[str, str] | None]:
     if not isinstance(value, str) or '="' not in value or '",' not in value:
         return None, None
 
@@ -105,8 +104,8 @@ def normalize_label_value(label_key: str, value: object) -> Tuple[Optional[str],
     return (value[:cut_index], None) if cut_index > 0 else (None, None)
 
 
-def normalize_label_dict(labels: JSONDict) -> Dict[str, str]:
-    extra: Dict[str, str] = {}
+def normalize_label_dict(labels: JSONDict) -> dict[str, str]:
+    extra: dict[str, str] = {}
     for key, value in list(labels.items()):
         _, parsed = normalize_label_value(key, value)
         if isinstance(parsed, dict):
@@ -116,8 +115,8 @@ def normalize_label_dict(labels: JSONDict) -> Dict[str, str]:
     return extra
 
 
-def normalize_label_values(label: str, values: List[str]) -> List[str]:
-    cleaned: List[str] = []
+def normalize_label_values(label: str, values: list[str]) -> list[str]:
+    cleaned: list[str] = []
     for value in values:
         parsed = parse_labelset_value(label, value)
         if isinstance(parsed, dict):

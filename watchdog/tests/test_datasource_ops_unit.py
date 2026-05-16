@@ -9,15 +9,13 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import asyncio
-from contextlib import contextmanager
-from types import SimpleNamespace
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from tests._env import ensure_test_env
 
 ensure_test_env()
@@ -30,8 +28,8 @@ from services.grafana.grafana_bundles import (
     DatasourceCreateOptions,
     DatasourceListParams,
     DatasourceQueryEnforcement,
-    DatasourceUpdateRequest,
     DatasourceUpdateOptions,
+    DatasourceUpdateRequest,
     GrafanaUserScope,
     HiddenToggleParams,
 )
@@ -255,7 +253,7 @@ def test_datasource_helper_functions(monkeypatch):
 
 def test_datasource_access_scope_and_metadata_helpers():
     db = _session()
-    owner, viewer, outsider, group, ds_private, ds_group, ds_tenant = _seed(db)
+    owner, viewer, _outsider, group, ds_private, ds_group, ds_tenant = _seed(db)
 
     assert datasource_ops._db_datasource_by_uid(db, "t1", ds_private.grafana_uid).id == ds_private.id
     default_scope, scopes = datasource_ops._load_allowed_scope_org_ids(db, user_id=viewer.id, tenant_id="t1")
@@ -265,8 +263,16 @@ def test_datasource_access_scope_and_metadata_helpers():
 
     owner_scope = GrafanaUserScope(owner.id, "t1", [])
     viewer_group_scope = GrafanaUserScope(viewer.id, "t1", [group.id])
-    assert datasource_ops.check_datasource_access(db, ds_private.grafana_uid, owner_scope, DatasourceAccessCriteria()) is not None
-    assert datasource_ops.check_datasource_access(db, ds_private.grafana_uid, viewer_group_scope, DatasourceAccessCriteria()) is None
+    assert (
+        datasource_ops.check_datasource_access(db, ds_private.grafana_uid, owner_scope, DatasourceAccessCriteria())
+        is not None
+    )
+    assert (
+        datasource_ops.check_datasource_access(
+            db, ds_private.grafana_uid, viewer_group_scope, DatasourceAccessCriteria()
+        )
+        is None
+    )
     assert (
         datasource_ops.check_datasource_access(
             db,
@@ -307,19 +313,22 @@ def test_datasource_access_scope_and_metadata_helpers():
     assert datasource_ops.collect_datasource_refs_from_query_payload(
         {"queries": [{"datasourceUid": "uid-group"}, {"datasource": {"uid": "uid-tenant"}}]}
     ) == {"uid-group", "uid-tenant"}
-    assert datasource_ops.toggle_datasource_hidden(
-        db,
-        ds_group.grafana_uid,
-        GrafanaUserScope(viewer.id, "t1", []),
-        HiddenToggleParams(hidden=True),
-    ) is True
+    assert (
+        datasource_ops.toggle_datasource_hidden(
+            db,
+            ds_group.grafana_uid,
+            GrafanaUserScope(viewer.id, "t1", []),
+            HiddenToggleParams(hidden=True),
+        )
+        is True
+    )
     assert viewer.id in db.query(GrafanaDatasource).filter_by(id=ds_group.id).first().hidden_by
     assert datasource_ops.get_datasource_metadata(db, "t1") == {"team_ids": [group.id]}
 
 
 def test_allowed_scope_org_ids_excludes_non_usable_shares():
     db = _session()
-    owner, viewer, outsider, group, ds_private, ds_group, ds_tenant = _seed(db)
+    owner, viewer, _outsider, _group, _ds_private, _ds_group, _ds_tenant = _seed(db)
 
     blocked_share = ApiKeyShare(
         id="s-blocked",
@@ -339,7 +348,7 @@ def test_allowed_scope_org_ids_excludes_non_usable_shares():
 
 def test_get_datasources_filters_hidden_for_current_user():
     db = _session()
-    owner, viewer, outsider, group, ds_private, ds_group, ds_tenant = _seed(db)
+    _owner, viewer, _outsider, group, _ds_private, ds_group, _ds_tenant = _seed(db)
     ds_group.hidden_by = [viewer.id]
     db.commit()
 
@@ -369,22 +378,18 @@ def test_get_datasources_filters_hidden_for_current_user():
     service = _service(stub)
 
     viewer_scope = GrafanaUserScope(viewer.id, "t1", [group.id])
-    visible = asyncio.run(
-        datasource_ops.get_datasources(service, db, viewer_scope, DatasourceListParams())
-    )
+    visible = asyncio.run(datasource_ops.get_datasources(service, db, viewer_scope, DatasourceListParams()))
     assert {item.uid for item in visible} == {"uid-tenant"}
 
     with_hidden = asyncio.run(
-        datasource_ops.get_datasources(
-            service, db, viewer_scope, DatasourceListParams(show_hidden=True)
-        )
+        datasource_ops.get_datasources(service, db, viewer_scope, DatasourceListParams(show_hidden=True))
     )
     assert {item.uid for item in with_hidden} == {"uid-group", "uid-tenant"}
 
 
 def test_enforce_query_access_and_read_paths():
     db = _session()
-    owner, viewer, outsider, group, ds_private, ds_group, ds_tenant = _seed(db)
+    _owner, viewer, outsider, group, _ds_private, _ds_group, _ds_tenant = _seed(db)
     stub = GrafanaServiceStub()
     stub.items = {
         "uid-private": FakeGrafanaDatasource(
@@ -476,13 +481,9 @@ def test_enforce_query_access_and_read_paths():
             )
         )
 
-    visible = asyncio.run(
-        datasource_ops.get_datasources(service, db, viewer_scope, DatasourceListParams())
-    )
+    visible = asyncio.run(datasource_ops.get_datasources(service, db, viewer_scope, DatasourceListParams()))
     assert {item.uid for item in visible} == {"uid-group", "uid-tenant", "uid-system"}
-    hidden_filtered = asyncio.run(
-        datasource_ops.get_datasources(service, db, outsider_scope, DatasourceListParams())
-    )
+    hidden_filtered = asyncio.run(datasource_ops.get_datasources(service, db, outsider_scope, DatasourceListParams()))
     assert all(item.uid != "uid-group" for item in hidden_filtered)
     grouped_only = asyncio.run(
         datasource_ops.get_datasources(
@@ -494,23 +495,11 @@ def test_enforce_query_access_and_read_paths():
     )
     assert [item.uid for item in grouped_only] == ["uid-group"]
     single = asyncio.run(
-        datasource_ops.get_datasources(
-            service, db, viewer_scope, DatasourceListParams(uid="uid-group")
-        )
+        datasource_ops.get_datasources(service, db, viewer_scope, DatasourceListParams(uid="uid-group"))
     )
     assert single[0].uid == "uid-group"
-    assert (
-        asyncio.run(
-            datasource_ops.get_datasource(service, db, "uid-private", viewer_scope)
-        )
-        is None
-    )
-    assert (
-        asyncio.run(
-            datasource_ops.get_datasource_by_name(service, db, "Grouped", viewer_scope)
-        ).uid
-        == "uid-group"
-    )
+    assert asyncio.run(datasource_ops.get_datasource(service, db, "uid-private", viewer_scope)) is None
+    assert asyncio.run(datasource_ops.get_datasource_by_name(service, db, "Grouped", viewer_scope)).uid == "uid-group"
     assert asyncio.run(datasource_ops.query_datasource(service, {"a": 1})) == {"ok": True}
     stub.query_result = [1]
     assert asyncio.run(datasource_ops.query_datasource(service, {"a": 1})) == {}
@@ -518,7 +507,7 @@ def test_enforce_query_access_and_read_paths():
 
 def test_create_update_and_delete_datasource_branches(monkeypatch):
     db = _session()
-    owner, viewer, outsider, group, ds_private, ds_group, ds_tenant = _seed(db)
+    _owner, viewer, _outsider, group, _ds_private, _ds_group, _ds_tenant = _seed(db)
     stub = GrafanaServiceStub()
     stub.items = {
         "uid-existing": FakeGrafanaDatasource(
@@ -629,6 +618,4 @@ def test_create_update_and_delete_datasource_branches(monkeypatch):
     with pytest.raises(HTTPException, match="cannot be deleted"):
         asyncio.run(datasource_ops.delete_datasource(service, db, "uid-created", viewer_scope))
     stub.items["uid-created"].readOnly = False
-    assert (
-        asyncio.run(datasource_ops.delete_datasource(service, db, "uid-created", viewer_scope)) is True
-    )
+    assert asyncio.run(datasource_ops.delete_datasource(service, db, "uid-created", viewer_scope)) is True

@@ -14,16 +14,16 @@ http://www.apache.org/licenses/LICENSE-2.0
 import logging
 import os
 import threading
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from types import TracebackType
-from typing import Any, Generator, Iterator, Optional, Protocol, cast
+from typing import Any, Protocol, cast
 
+from db_models import Base
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-
-from db_models import Base
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +61,8 @@ def create_session_factory(**kwargs: Any) -> _SessionFactory:
 sessionmaker = create_session_factory
 
 
-_ENGINE: Optional[Engine] = None
-_SESSION_LOCAL: Optional[_SessionFactory] = None
+_ENGINE: Engine | None = None
+_SESSION_LOCAL: _SessionFactory | None = None
 _INIT_LOCK = threading.Lock()
 
 
@@ -80,7 +80,7 @@ def _env_int(name: str, default: int) -> int:
 def init_database(
     database_url: str,
     echo: bool = False,
-    pool_size: Optional[int] = None,
+    pool_size: int | None = None,
 ) -> None:
     global _ENGINE, _SESSION_LOCAL  # pylint: disable=global-statement
 
@@ -147,7 +147,7 @@ def _session_scope() -> Iterator[Session]:
 
 class _SessionContext:
     def __init__(self) -> None:
-        self._session: Optional[Session] = None
+        self._session: Session | None = None
 
     def __enter__(self) -> Session:
         maker = _require_session_factory()

@@ -13,34 +13,35 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import hashlib
 import logging
 import secrets
 import threading
 import time
+from collections.abc import Coroutine
 from dataclasses import dataclass
-from typing import Optional, Set, Tuple, Coroutine, TypeVar, cast
+from typing import TypeVar, cast
 from urllib.parse import urlencode
 
 import httpx
 import jwt
-
 from config import config
 from custom_types.json import JSONDict
 from services.auth.oidc_jwt_support import (
     VerificationKey,
     decode_jwt_header,
     issuer_candidates,
-    jwk_to_verification_key,
     json_dict,
+    jwk_to_verification_key,
     looks_like_jwt,
 )
 from services.common.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_ALGORITHMS: Set[str] = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}
-ALLOWED_CODE_CHALLENGE_METHODS: Set[str] = {"S256", "plain"}
+ALLOWED_ALGORITHMS: set[str] = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}
+ALLOWED_CODE_CHALLENGE_METHODS: set[str] = {"S256", "plain"}
 RunResult = TypeVar("RunResult")
 
 _json_dict = json_dict
@@ -52,7 +53,7 @@ _looks_like_jwt = looks_like_jwt
 class OidcClaimDecodeContext:
     header_alg: str
     issuer: str
-    audience: Optional[str]
+    audience: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,28 +61,28 @@ class OidcAuthorizationUrlBuildRequest:
     redirect_uri: str
     state: str
     nonce: str
-    code_challenge: Optional[str] = None
-    code_challenge_method: Optional[str] = None
+    code_challenge: str | None = None
+    code_challenge_method: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class OidcTransactionStartRequest:
     redirect_uri: str
-    state: Optional[str] = None
-    nonce: Optional[str] = None
-    code_challenge: Optional[str] = None
-    code_challenge_method: Optional[str] = None
+    state: str | None = None
+    nonce: str | None = None
+    code_challenge: str | None = None
+    code_challenge_method: str | None = None
 
 
 class OIDCService:
     def __init__(self) -> None:
-        self._well_known_cache: Optional[JSONDict] = None
+        self._well_known_cache: JSONDict | None = None
         self._well_known_cache_at: float = 0.0
-        self._jwks_cache: Optional[JSONDict] = None
+        self._jwks_cache: JSONDict | None = None
         self._jwks_cache_at: float = 0.0
         self._jwks_by_kid: dict[str, JSONDict] = {}
-        self._verification_key_cache: dict[Tuple[str, str], VerificationKey] = {}
-        self._admin_token_cache: Optional[str] = None
+        self._verification_key_cache: dict[tuple[str, str], VerificationKey] = {}
+        self._admin_token_cache: str | None = None
         self._admin_token_expires_at: float = 0.0
         self._cache_lock = threading.RLock()
         self._cache_ttl_seconds = 600
@@ -89,23 +90,19 @@ class OIDCService:
         self._timeout = max(float(config.DEFAULT_TIMEOUT), 5.0)
         self._http = httpx.Client(timeout=self._timeout)
         self._ttl_cache = TTLCache()
-        self._bg_loop: Optional[asyncio.AbstractEventLoop] = None
-        self._bg_thread: Optional[threading.Thread] = None
+        self._bg_loop: asyncio.AbstractEventLoop | None = None
+        self._bg_thread: threading.Thread | None = None
         self._bg_ready = threading.Event()
         self._bg_lock = threading.Lock()
 
     def close(self) -> None:
-        try:
+        with contextlib.suppress(RuntimeError):
             self._http.close()
-        except RuntimeError:
-            pass
 
         loop = self._bg_loop
         if loop and loop.is_running():
-            try:
+            with contextlib.suppress(RuntimeError):
                 loop.call_soon_threadsafe(loop.stop)
-            except RuntimeError:
-                pass
 
     def is_enabled(self) -> bool:
         return config.AUTH_PROVIDER in {"oidc", "keycloak"} and bool(config.OIDC_ISSUER_URL and config.OIDC_CLIENT_ID)
@@ -177,11 +174,11 @@ class OIDCService:
     def _select_jwk(
         self,
         *,
-        kid: Optional[str],
-        x5t: Optional[str] = None,
-        x5t_s256: Optional[str] = None,
-        alg: Optional[str] = None,
-    ) -> Optional[JSONDict]:
+        kid: str | None,
+        x5t: str | None = None,
+        x5t_s256: str | None = None,
+        alg: str | None = None,
+    ) -> JSONDict | None:
         jwks = self._get_jwks()
         raw_keys = jwks.get("keys")
         keys_raw = raw_keys if isinstance(raw_keys, list) else []
@@ -194,7 +191,7 @@ class OIDCService:
         ]
         requested_ids = [value for value in requested_ids if value]
 
-        def lookup_by_identifier() -> Optional[JSONDict]:
+        def lookup_by_identifier() -> JSONDict | None:
             with self._cache_lock:
                 for key_id in requested_ids:
                     if key_id in self._jwks_by_kid:
@@ -231,7 +228,7 @@ class OIDCService:
             selected = keys[0]
         return selected
 
-    def _verification_key_for(self, jwk_key: JSONDict, alg: str, kid: Optional[str]) -> VerificationKey:
+    def _verification_key_for(self, jwk_key: JSONDict, alg: str, kid: str | None) -> VerificationKey:
         cache_kid = kid or "__single__"
         cache_key = (cache_kid, alg)
         with self._cache_lock:
@@ -244,7 +241,7 @@ class OIDCService:
             self._verification_key_cache[cache_key] = vk
         return vk
 
-    def _read_oidc_jwt_header(self, token: str) -> Optional[JSONDict]:
+    def _read_oidc_jwt_header(self, token: str) -> JSONDict | None:
         try:
             raw_header = jwt.get_unverified_header(token)
             if isinstance(raw_header, dict):
@@ -278,9 +275,9 @@ class OIDCService:
         token: str,
         verification_key: VerificationKey,
         context: OidcClaimDecodeContext,
-    ) -> Optional[dict[str, object]]:
+    ) -> dict[str, object] | None:
         claims = None
-        issuer_error: Optional[jwt.InvalidIssuerError] = None
+        issuer_error: jwt.InvalidIssuerError | None = None
         for issuer_candidate in issuer_candidates(context.issuer):
             try:
                 claims = jwt.decode(
@@ -310,7 +307,7 @@ class OIDCService:
         self,
         claims: dict[str, object],
         *,
-        nonce: Optional[str],
+        nonce: str | None,
         require_nonce: bool,
     ) -> bool:
         token_nonce = str(claims.get("nonce") or "")
@@ -329,13 +326,13 @@ class OIDCService:
         self,
         token: str,
         *,
-        nonce: Optional[str] = None,
+        nonce: str | None = None,
         require_nonce: bool = False,
-    ) -> Optional[JSONDict]:
+    ) -> JSONDict | None:
         if not token or not looks_like_jwt(token):
             return None
 
-        claims_result: Optional[JSONDict] = None
+        claims_result: JSONDict | None = None
 
         try:
             unverified_header = self._read_oidc_jwt_header(token)
@@ -383,13 +380,13 @@ class OIDCService:
             logger.error("OIDC token validation error")
         return claims_result
 
-    def verify_id_token(self, token: str, *, nonce: Optional[str] = None) -> Optional[JSONDict]:
+    def verify_id_token(self, token: str, *, nonce: str | None = None) -> JSONDict | None:
         return self._verify_jwt(token, nonce=nonce, require_nonce=bool(nonce))
 
-    def verify_access_token(self, token: str) -> Optional[JSONDict]:
+    def verify_access_token(self, token: str) -> JSONDict | None:
         return self._verify_jwt(token)
 
-    def fetch_userinfo(self, access_token: str) -> Optional[JSONDict]:
+    def fetch_userinfo(self, access_token: str) -> JSONDict | None:
         if not access_token:
             return None
         try:
@@ -433,7 +430,7 @@ class OIDCService:
         code: str,
         redirect_uri: str,
         *,
-        code_verifier: Optional[str] = None,
+        code_verifier: str | None = None,
     ) -> JSONDict:
         well_known = self._get_well_known()
         token_endpoint = well_known.get("token_endpoint")
@@ -592,10 +589,10 @@ class OIDCService:
     async def consume_authorization_transaction_async(
         self,
         *,
-        transaction_id: Optional[str],
-        state: Optional[str],
+        transaction_id: str | None,
+        state: str | None,
         redirect_uri: str,
-        code_verifier: Optional[str] = None,
+        code_verifier: str | None = None,
     ) -> JSONDict:
         tx_id = str(transaction_id or "").strip()
         state_value = str(state or "").strip()
@@ -652,10 +649,10 @@ class OIDCService:
     def consume_authorization_transaction(
         self,
         *,
-        transaction_id: Optional[str],
-        state: Optional[str],
+        transaction_id: str | None,
+        state: str | None,
         redirect_uri: str,
-        code_verifier: Optional[str] = None,
+        code_verifier: str | None = None,
     ) -> JSONDict:
         result = self._run_async(
             self.consume_authorization_transaction_async(
@@ -667,7 +664,7 @@ class OIDCService:
         )
         return dict(result)
 
-    def _get_admin_token(self) -> Optional[str]:
+    def _get_admin_token(self) -> str | None:
         if not (
             config.KEYCLOAK_ADMIN_URL
             and config.KEYCLOAK_ADMIN_REALM
@@ -711,9 +708,9 @@ class OIDCService:
         self,
         *,
         email: str,
-        username: Optional[str],
-        full_name: Optional[str] = None,
-    ) -> Optional[str]:
+        username: str | None,
+        full_name: str | None = None,
+    ) -> str | None:
         if not config.KEYCLOAK_USER_PROVISIONING_ENABLED:
             return None
 

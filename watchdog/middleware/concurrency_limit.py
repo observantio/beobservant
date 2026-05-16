@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import suppress
-from typing import Optional
 
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -39,7 +38,7 @@ class ConcurrencyLimitMiddleware:
         self.app = app
         self._max_concurrent = int(max_concurrent)
         self._timeout = float(acquire_timeout)
-        self._sem: Optional[asyncio.Semaphore] = None
+        self._sem: asyncio.Semaphore | None = None
 
     def _get_semaphore(self) -> asyncio.Semaphore:
         if self._sem is None:
@@ -54,7 +53,7 @@ class ConcurrencyLimitMiddleware:
         acquire_task = asyncio.create_task(self._get_semaphore().acquire())
         try:
             await asyncio.wait_for(acquire_task, timeout=self._timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             acquire_task.cancel()
             with suppress(asyncio.CancelledError):
                 await acquire_task

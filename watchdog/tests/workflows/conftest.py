@@ -8,14 +8,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any
 
 import pytest
 from fastapi.dependencies.models import Dependant
 from fastapi.testclient import TestClient
-
 from tests._env import ensure_test_env
 
 ensure_test_env()

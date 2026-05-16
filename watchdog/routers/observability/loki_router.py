@@ -9,14 +9,13 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-import asyncio
-from typing import Annotated, Awaitable, Optional, TypeVar
-
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
+from collections.abc import Awaitable
+from typing import Annotated, TypeVar
 
 from config import config
 from custom_types.json import JSONDict
-from middleware.dependencies import resolve_tenant_id, require_permission_with_scope
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
+from middleware.dependencies import require_permission_with_scope, resolve_tenant_id
 from models.access.auth_models import Permission, TokenData
 from models.observability.loki_models import (
     LogDirection,
@@ -31,10 +30,12 @@ from services.loki_service import (
     AggregateLogsParams,
     FilterLogsParams,
     InstantLogQueryParams,
-    LabelValuesParams as ServiceLabelValuesParams,
-    LokiService,
     LogVolumeParams,
+    LokiService,
     SearchLogsByPatternParams,
+)
+from services.loki_service import (
+    LabelValuesParams as ServiceLabelValuesParams,
 )
 
 START_TIME_DESC = "Start time in nanoseconds"
@@ -50,7 +51,7 @@ ResponseT = TypeVar("ResponseT")
 async def _handle_timeout(coro: Awaitable[ResponseT], detail: str) -> ResponseT:
     try:
         return await coro
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=detail,
@@ -81,9 +82,9 @@ class QueryLogsCoreParams:
 class QueryLogsRangeParams:
     def __init__(
         self,
-        start: Optional[int] = Query(None, description=START_TIME_DESC),
-        end: Optional[int] = Query(None, description=END_TIME_DESC),
-        step: Optional[int] = Query(None, description="Query resolution step in seconds"),
+        start: int | None = Query(None, description=START_TIME_DESC),
+        end: int | None = Query(None, description=END_TIME_DESC),
+        step: int | None = Query(None, description="Query resolution step in seconds"),
     ) -> None:
         self.start = start
         self.end = end
@@ -94,7 +95,7 @@ class InstantQueryParams:
     def __init__(
         self,
         query: str = Query(..., description="LogQL query string"),
-        time: Optional[int] = Query(None, description="Query time in nanoseconds"),
+        time: int | None = Query(None, description="Query time in nanoseconds"),
         limit: int = Query(
             config.DEFAULT_QUERY_LIMIT,
             ge=1,
@@ -110,9 +111,9 @@ class InstantQueryParams:
 class LabelValuesParams:
     def __init__(
         self,
-        start: Optional[int] = Query(None, description=START_TIME_DESC),
-        end: Optional[int] = Query(None, description=END_TIME_DESC),
-        query: Optional[str] = Query(None, description="Optional LogQL query filter"),
+        start: int | None = Query(None, description=START_TIME_DESC),
+        end: int | None = Query(None, description=END_TIME_DESC),
+        query: str | None = Query(None, description="Optional LogQL query filter"),
     ) -> None:
         self.start = start
         self.end = end
@@ -180,8 +181,8 @@ async def query_logs_instant(
 @router.get("/labels", response_model=LogLabelsResponse)
 async def get_labels(
     tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
-    start: Optional[int] = Query(None, description=START_TIME_DESC),
-    end: Optional[int] = Query(None, description=END_TIME_DESC),
+    start: int | None = Query(None, description=START_TIME_DESC),
+    end: int | None = Query(None, description=END_TIME_DESC),
 ) -> LogLabelsResponse:
     return await _handle_timeout(
         loki_service.get_labels(start, end, tenant_id=tenant_id),
@@ -253,8 +254,8 @@ async def filter_logs(
 async def aggregate_logs(
     tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
     query_params: Annotated[AggregateQueryParams, Depends()],
-    start: Optional[int] = Query(None, description=START_TIME_DESC),
-    end: Optional[int] = Query(None, description=END_TIME_DESC),
+    start: int | None = Query(None, description=START_TIME_DESC),
+    end: int | None = Query(None, description=END_TIME_DESC),
 ) -> JSONDict:
     return await _handle_timeout(
         loki_service.aggregate_logs(
@@ -274,8 +275,8 @@ async def aggregate_logs(
 async def get_log_volume(
     tenant_id: Annotated[str, Depends(_read_logs_tenant_id)],
     query_params: Annotated[VolumeQueryParams, Depends()],
-    start: Optional[int] = Query(None, description=START_TIME_DESC),
-    end: Optional[int] = Query(None, description=END_TIME_DESC),
+    start: int | None = Query(None, description=START_TIME_DESC),
+    end: int | None = Query(None, description=END_TIME_DESC),
 ) -> JSONDict:
     return await _handle_timeout(
         loki_service.get_log_volume(

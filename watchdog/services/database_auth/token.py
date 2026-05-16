@@ -14,13 +14,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from typing import Optional, Set, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
+from db_models import User
 from models.access.auth_models import Role, TokenData
 from services.auth.auth_ops import decode_token as decode_token_op
 from services.database_auth.shared import safe_role, sync_active_user_from_claims
-
-from db_models import User
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -41,7 +40,7 @@ def build_token_data_for_user(service: DatabaseAuthService, user: User) -> Token
     )
 
 
-def decode_token(service: DatabaseAuthService, token: str) -> Optional[TokenData]:
+def decode_token(service: DatabaseAuthService, token: str) -> TokenData | None:
     local_token = decode_token_op(service, token)
     if local_token:
         return local_token
@@ -69,13 +68,13 @@ def decode_token(service: DatabaseAuthService, token: str) -> Optional[TokenData
     return token_data
 
 
-def _safe_role(raw_role: Optional[str]) -> Role:
+def _safe_role(raw_role: str | None) -> Role:
     return safe_role(raw_role)
 
 
-def _known_permission_names(service: DatabaseAuthService) -> Set[str]:
+def _known_permission_names(service: DatabaseAuthService) -> set[str]:
     perms = service.list_all_permissions() or []
-    names: Set[str] = set()
+    names: set[str] = set()
     for p in perms:
         name = p.get("name") if isinstance(p, dict) else None
         if isinstance(name, str) and name:

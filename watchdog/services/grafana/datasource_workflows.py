@@ -10,14 +10,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
-from sqlalchemy.orm import Session
-
+from custom_types.json import JSONDict
 from db_models import GrafanaDatasource, Group
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
-from custom_types.json import JSONDict
 from services.grafana.datasource_payloads import (
     build_internal_datasource_name,
     is_safe_system_datasource,
@@ -27,6 +25,7 @@ from services.grafana.grafana_bundles import DatasourceAccessCriteria, GrafanaUs
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.visibility import resolve_visibility_groups_for_scope, visibility_group_resolve_context
+from sqlalchemy.orm import Session
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,7 +33,7 @@ class DatasourceLookupContext:
     uid: str
     scope: GrafanaUserScope
     datasource: object
-    db_ds: Optional[GrafanaDatasource]
+    db_ds: GrafanaDatasource | None
     show_hidden: bool
 
 
@@ -51,15 +50,15 @@ class DatasourceScopeDefaultsContext:
     datasource: DatasourceCreate | DatasourceUpdate
     user_id: str
     tenant_id: str
-    existing_json: Optional[JSONDict] = None
-    existing_type: Optional[str] = None
+    existing_json: JSONDict | None = None
+    existing_type: str | None = None
 
 
 def validate_datasource_lookup(
     db: Session,
     ctx: DatasourceLookupContext,
     *,
-    access_check: Callable[..., Optional[GrafanaDatasource]],
+    access_check: Callable[..., GrafanaDatasource | None],
 ) -> bool:
     if ctx.db_ds:
         has_access = access_check(db, ctx.uid, ctx.scope, DatasourceAccessCriteria()) is not None
@@ -72,7 +71,7 @@ def validate_datasource_lookup(
 def matches_datasource_query(
     datasource: object,
     *,
-    db_ds: Optional[GrafanaDatasource],
+    db_ds: GrafanaDatasource | None,
     uid: str,
     query_lc: str,
 ) -> bool:
@@ -90,7 +89,7 @@ def matches_datasource_query(
     )
 
 
-def matches_datasource_team_filter(*, db_ds: Optional[GrafanaDatasource], team_id: object) -> bool:
+def matches_datasource_team_filter(*, db_ds: GrafanaDatasource | None, team_id: object) -> bool:
     if team_id is None:
         return True
     if not db_ds:
@@ -153,7 +152,7 @@ async def persist_datasource_create(
     *,
     requested_name: str,
     user_id: str,
-) -> Optional[Datasource]:
+) -> Datasource | None:
     try:
         return await service.grafana_service.create_datasource(datasource_create)
     except GrafanaAPIError as exc:
@@ -175,9 +174,9 @@ async def persist_datasource_update(
     uid: str,
     datasource_update: DatasourceUpdate,
     *,
-    requested_name: Optional[str],
+    requested_name: str | None,
     user_id: str,
-) -> Optional[Datasource]:
+) -> Datasource | None:
     try:
         return await service.grafana_service.update_datasource(uid, datasource_update)
     except GrafanaAPIError as exc:

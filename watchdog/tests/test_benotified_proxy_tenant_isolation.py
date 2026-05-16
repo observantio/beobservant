@@ -10,15 +10,15 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
-import pytest
-import httpx
-from fastapi import Response
-from fastapi import HTTPException
-from starlette.requests import Request
+from typing import ClassVar
 
-from models.access.auth_models import TokenData, Role
-from services.notifier_proxy_service import NotifierForwardRequest, NotifierProxyService
+import httpx
+import pytest
 from config import config
+from fastapi import HTTPException, Response
+from models.access.auth_models import Role, TokenData
+from services.notifier_proxy_service import NotifierForwardRequest, NotifierProxyService
+from starlette.requests import Request
 
 
 def _user(tenant_id: str = "tenant-a", user_id: str = "u1") -> TokenData:
@@ -60,7 +60,7 @@ def _request(
 class _DummyResponse:
     status_code = 200
     content = b'{"ok":true}'
-    headers = {"content-type": "application/json"}
+    headers: ClassVar[dict[str, str]] = {"content-type": "application/json"}
 
 
 class _DummyTimeout(httpx.TimeoutException):

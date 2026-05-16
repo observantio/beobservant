@@ -9,8 +9,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import inspect
-import io
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -28,8 +27,7 @@ from config import config
 from models.access.auth_models import Permission, Role, TokenData
 from models.observability.agent_models import AgentHeartbeat
 from routers.access.auth_router import audit as audit_router
-from routers.observability import agents_router
-from routers.observability import alertmanager_router
+from routers.observability import agents_router, alertmanager_router
 from tests._proxy_stubs import unpack_notifier_forward
 
 
@@ -154,6 +152,7 @@ async def test_alertmanager_public_rules_and_proxy_branches(monkeypatch):
     assert exc.value.status_code == 400
 
     forwarded_silence = []
+
     async def fake_forward_silence(fwd, **_kwargs):
         forwarded_silence.append(unpack_notifier_forward(fwd))
         return {"ok": True}
@@ -165,7 +164,11 @@ async def test_alertmanager_public_rules_and_proxy_branches(monkeypatch):
     monkeypatch.setattr(alertmanager_router, "is_mutating", lambda method: method.upper() != "GET")
 
     group_user = _user(group_ids=["g1", "g2"], is_superuser=False)
-    raw_body = b'{"matchers":[{"name":"service","value":"api","isRegex":false,"isEqual":true}],"startsAt":"2026-04-06T00:00:00Z","endsAt":"2026-04-06T01:00:00Z","comment":"maintenance","visibility":"group","shared_group_ids":["g1"]}'
+    raw_body = (
+        b'{"matchers":[{"name":"service","value":"api","isRegex":false,"isEqual":true}],'
+        b'"startsAt":"2026-04-06T00:00:00Z","endsAt":"2026-04-06T01:00:00Z",'
+        b'"comment":"maintenance","visibility":"group","shared_group_ids":["g1"]}'
+    )
     silence_request = _request(
         method="POST",
         path="/api/alertmanager/silences",
@@ -319,7 +322,7 @@ async def test_agents_router_close_mimir_client(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_audit_router_listing_and_export(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     current_user = _user()
 
     class FakeOrderedQuery:
@@ -425,5 +428,5 @@ async def test_audit_router_listing_and_export(monkeypatch):
     body = b"".join(chunks)
     text = body.decode("utf-8")
     assert "sanitized:resource-1" in text
-    assert "attachment; filename=audit-logs.csv" == response.headers["Content-Disposition"]
+    assert response.headers["Content-Disposition"] == "attachment; filename=audit-logs.csv"
     assert export_db.added

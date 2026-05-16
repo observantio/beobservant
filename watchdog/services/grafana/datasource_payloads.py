@@ -7,10 +7,10 @@ Licensed under the Apache License, Version 2.0 (the "License"); you may not use 
 License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
+
 from __future__ import annotations
 
 import uuid
-from typing import Optional
 
 from custom_types.json import JSONDict
 from db_models import GrafanaDatasource
@@ -35,7 +35,7 @@ def is_safe_system_datasource(datasource: object) -> bool:
     )
 
 
-def normalize_datasource_name(name: Optional[str]) -> str:
+def normalize_datasource_name(name: str | None) -> str:
     return str(name or "").strip().lower()
 
 
@@ -44,7 +44,7 @@ def build_internal_datasource_name(display_name: str, user_id: str) -> str:
     return f"{display_name}__bo_{str(user_id)[:8]}_{suffix}"
 
 
-def merge_json_payload(existing: Optional[JSONDict], incoming: Optional[JSONDict]) -> JSONDict:
+def merge_json_payload(existing: JSONDict | None, incoming: JSONDict | None) -> JSONDict:
     base = dict(existing or {})
     base.update(dict(incoming or {}))
     return base
@@ -53,7 +53,7 @@ def merge_json_payload(existing: Optional[JSONDict], incoming: Optional[JSONDict
 def enrich_datasource_payload(
     payload: JSONDict,
     *,
-    db_ds: Optional[GrafanaDatasource],
+    db_ds: GrafanaDatasource | None,
     user_id: str,
     is_unregistered_safe_system: bool = False,
 ) -> JSONDict:

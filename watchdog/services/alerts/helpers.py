@@ -7,14 +7,13 @@ Licensed under the Apache License, Version 2.0 (the "License");
 """
 
 import json
+from collections.abc import Awaitable, Callable
 from json import JSONDecodeError
-from typing import Awaitable, Callable, List, Optional, Set
 
 import httpx
-from fastapi import HTTPException, Request, status
-
 from config import config
 from custom_types.json import JSONDict, JSONValue
+from fastapi import HTTPException, Request, status
 from middleware.dependencies import (
     PublicEndpointSecurityConfig,
     enforce_header_token,
@@ -26,7 +25,7 @@ from services.notifier_proxy_service import NotifierForwardRequest, notifier_pro
 SILENCE_META_KEY = "watchdog_meta"
 
 
-def _perms_alerts(p: str, m: str) -> Optional[Set[str]]:
+def _perms_alerts(p: str, m: str) -> set[str] | None:
     if p in {"/alerts", "/alerts/groups", "/status", "/receivers"} and m == "GET":
         return {Permission.READ_ALERTS.value}
     if p == "/alerts" and m == "POST":
@@ -36,16 +35,16 @@ def _perms_alerts(p: str, m: str) -> Optional[Set[str]]:
     return None
 
 
-def _perms_incidents(p: str, m: str) -> Optional[Set[str]]:
+def _perms_incidents(p: str, m: str) -> set[str] | None:
     if p.startswith("/incidents"):
         return {Permission.READ_INCIDENTS.value} if m == "GET" else {Permission.UPDATE_INCIDENTS.value}
     return None
 
 
-def _perms_silences(p: str, m: str) -> Optional[Set[str]]:
+def _perms_silences(p: str, m: str) -> set[str] | None:
     if not p.startswith("/silences"):
         return None
-    mapping: dict[str, Set[str]] = {
+    mapping: dict[str, set[str]] = {
         "GET": {Permission.READ_SILENCES.value},
         "POST": {Permission.CREATE_SILENCES.value, Permission.WRITE_ALERTS.value},
         "PUT": {Permission.UPDATE_SILENCES.value, Permission.WRITE_ALERTS.value},
@@ -54,12 +53,12 @@ def _perms_silences(p: str, m: str) -> Optional[Set[str]]:
     return mapping.get(m)
 
 
-def _perms_rules(p: str, m: str) -> Optional[Set[str]]:
+def _perms_rules(p: str, m: str) -> set[str] | None:
     if p.startswith("/rules/import") and m == "POST":
         return {Permission.CREATE_RULES.value, Permission.WRITE_ALERTS.value}
     if not p.startswith("/rules"):
         return None
-    mapping: dict[str, Set[str]] = {
+    mapping: dict[str, set[str]] = {
         "GET": {Permission.READ_RULES.value},
         "POST": {Permission.CREATE_RULES.value, Permission.WRITE_ALERTS.value, Permission.TEST_RULES.value},
         "PUT": {Permission.UPDATE_RULES.value, Permission.WRITE_ALERTS.value},
@@ -68,10 +67,10 @@ def _perms_rules(p: str, m: str) -> Optional[Set[str]]:
     return mapping.get(m)
 
 
-def _perms_channels(p: str, m: str) -> Optional[Set[str]]:
+def _perms_channels(p: str, m: str) -> set[str] | None:
     if not p.startswith("/channels"):
         return None
-    mapping: dict[str, Set[str]] = {
+    mapping: dict[str, set[str]] = {
         "GET": {Permission.READ_CHANNELS.value},
         "POST": {Permission.CREATE_CHANNELS.value, Permission.WRITE_CHANNELS.value, Permission.TEST_CHANNELS.value},
         "PUT": {Permission.UPDATE_CHANNELS.value, Permission.WRITE_CHANNELS.value},
@@ -80,7 +79,7 @@ def _perms_channels(p: str, m: str) -> Optional[Set[str]]:
     return mapping.get(m)
 
 
-def _perms_jira_integrations(p: str, m: str) -> Optional[Set[str]]:
+def _perms_jira_integrations(p: str, m: str) -> set[str] | None:
     if not (p.startswith("/jira") or p.startswith("/integrations")):
         return None
     if p == "/jira/config":
@@ -90,7 +89,7 @@ def _perms_jira_integrations(p: str, m: str) -> Optional[Set[str]]:
     return {Permission.UPDATE_INCIDENTS.value}
 
 
-def _perms_metrics(p: str, _m: str) -> Optional[Set[str]]:
+def _perms_metrics(p: str, _m: str) -> set[str] | None:
     if p in {"/metrics/names", "/metrics/query", "/metrics/labels"} or p.startswith("/metrics/label-values/"):
         return {
             Permission.READ_METRICS.value,
@@ -101,11 +100,11 @@ def _perms_metrics(p: str, _m: str) -> Optional[Set[str]]:
     return None
 
 
-def _perms_public(_p: str, _m: str) -> Optional[Set[str]]:
+def _perms_public(_p: str, _m: str) -> set[str] | None:
     return set() if _p == "/public/rules" else None
 
 
-def required_permissions(path: str, method: str) -> Optional[Set[str]]:
+def required_permissions(path: str, method: str) -> set[str] | None:
     p = f"/{path.strip('/')}" if path else "/"
     m = method.upper()
     for fn in (
@@ -124,15 +123,14 @@ def required_permissions(path: str, method: str) -> Optional[Set[str]]:
     return None
 
 
-def check_permissions(current_user: TokenData, required: Set[str]) -> None:
+def check_permissions(current_user: TokenData, required: set[str]) -> None:
     if not required or current_user.is_superuser:
         return
     if not set(current_user.permissions or []).intersection(required):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                "You do not have permission to communicate with Notifier. "
-                f"Required permissions: {', '.join(required)}"
+                f"You do not have permission to communicate with Notifier. Required permissions: {', '.join(required)}"
             ),
         )
 
@@ -141,10 +139,10 @@ def is_mutating(method: str) -> bool:
     return method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
 
 
-def normalize_group_ids(raw: object) -> List[str]:
-    seen: Set[str] = set()
-    result: List[str] = []
-    for gid in (raw if isinstance(raw, list) else []):
+def normalize_group_ids(raw: object) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for gid in raw if isinstance(raw, list) else []:
         if gid is None:
             continue
         s = str(gid).strip()
@@ -157,7 +155,7 @@ def normalize_group_ids(raw: object) -> List[str]:
 def normalize_silence_matchers(raw: JSONValue) -> JSONValue:
     if not isinstance(raw, list):
         return raw
-    normalized: List[JSONDict] = []
+    normalized: list[JSONDict] = []
     for item in raw:
         if not isinstance(item, dict):
             normalized.append(item)
@@ -263,7 +261,7 @@ def assert_silence_owner(current_user: TokenData, silence: JSONDict) -> None:
         )
 
 
-def extract_silence_id(path: str, payload: Optional[JSONDict]) -> Optional[str]:
+def extract_silence_id(path: str, payload: JSONDict | None) -> str | None:
     parts = [p for p in path.strip("/").split("/") if p]
     if len(parts) >= 2 and parts[0] == "silences":
         return parts[1]
@@ -313,7 +311,7 @@ async def find_silence_for_mutation(*, request: Request, current_user: TokenData
             status_code=status.HTTP_502_BAD_GATEWAY, detail="Invalid silence response from Notifier"
         ) from exc
 
-    for item in (data if isinstance(data, list) else []):
+    for item in data if isinstance(data, list) else []:
         if isinstance(item, dict) and str(item.get("id", "")).strip() == silence_id:
             return item
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Silence not found")

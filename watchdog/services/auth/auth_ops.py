@@ -11,24 +11,22 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from functools import lru_cache
-from typing import Optional, TYPE_CHECKING
-
 import secrets
+from datetime import UTC, datetime, timedelta
+from functools import lru_cache
+from typing import TYPE_CHECKING
 
 import jwt
+from config import config
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from sqlalchemy import func
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import joinedload
-
-from config import config
 from database import get_db_session
 from db_models import Group, Tenant, User, UserApiKey
 from models.access.auth_models import Role, Token, TokenData
 from models.access.user_models import UserPasswordUpdate
+from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService
@@ -39,7 +37,7 @@ MAX_MFA_SETUP_TOKEN_MINUTES = 15
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _load_private_key(pem: str) -> SigningKey:
@@ -159,7 +157,7 @@ def create_mfa_setup_token(user: User, minutes: int = 10) -> Token:
     return Token(access_token=encoded_jwt, token_type="bearer", expires_in=expires_seconds)
 
 
-def decode_token(service: DatabaseAuthService, token: str) -> Optional[TokenData]:
+def decode_token(service: DatabaseAuthService, token: str) -> TokenData | None:
     try:
         payload = jwt.decode(token, _jwt_verification_key(), algorithms=[config.JWT_ALGORITHM])
     except jwt.PyJWTError:
@@ -203,7 +201,7 @@ def decode_token(service: DatabaseAuthService, token: str) -> Optional[TokenData
     return td
 
 
-def authenticate_user(service: DatabaseAuthService, username: str, password: str) -> Optional[User]:
+def authenticate_user(service: DatabaseAuthService, username: str, password: str) -> User | None:
     service.ensure_initialized()
     username_norm = _normalize_username(username)
     now = _utcnow()
@@ -226,20 +224,16 @@ def authenticate_user(service: DatabaseAuthService, username: str, password: str
 
         if interval_days > 0:
             if getattr(changed_at, "tzinfo", None) is None:
-                changed_at = changed_at.replace(tzinfo=timezone.utc)
+                changed_at = changed_at.replace(tzinfo=UTC)
             expiry_cutoff = now - timedelta(days=interval_days)
             if changed_at <= expiry_cutoff:
                 user.needs_password_change = True
 
         temp_expiry_minutes = int(getattr(config, "TEMP_PASSWORD_EXPIRY_MINUTES", 1440) or 0)
         reset_marker = getattr(user, "session_invalid_before", None)
-        if (
-            temp_expiry_minutes > 0
-            and bool(getattr(user, "needs_password_change", False))
-            and reset_marker is not None
-        ):
+        if temp_expiry_minutes > 0 and bool(getattr(user, "needs_password_change", False)) and reset_marker is not None:
             if getattr(changed_at, "tzinfo", None) is None:
-                changed_at = changed_at.replace(tzinfo=timezone.utc)
+                changed_at = changed_at.replace(tzinfo=UTC)
             temp_expiry_cutoff = now - timedelta(minutes=temp_expiry_minutes)
             if changed_at <= temp_expiry_cutoff:
                 service.logger.warning("Temporary password expired for user=%s", getattr(user, "id", "unknown"))
@@ -304,8 +298,8 @@ def update_password(
         return True
 
 
-def validate_otlp_token(service: DatabaseAuthService, token: str, *, suppress_errors: bool = True) -> Optional[str]:
-    resolved_key: Optional[str] = None
+def validate_otlp_token(service: DatabaseAuthService, token: str, *, suppress_errors: bool = True) -> str | None:
+    resolved_key: str | None = None
     token_str = str(token or "").strip()
 
     if token_str and len(token_str) <= 4096:
