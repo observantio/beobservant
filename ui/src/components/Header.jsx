@@ -141,13 +141,13 @@ export function NavItem({
 
   const activeClasses =
     variant === "sidebar"
-      ? "font-semibold text-sre-text rounded-none border-t-0 border-r-0 border-b-0 border-l-[3px] border-sre-highlight bg-transparent"
+      ? "font-medium text-sre-text rounded-none border-t-0 border-r-0 border-b-0 border-l-[3px] border-sre-highlight bg-transparent"
       : isMobile
         ? "text-sre-primary bg-sre-primary/12 border-sre-highlight border-2 rounded-xl transition-colors duration-200 ease-smooth"
         : "text-sre-primary border-sre-highlight border-b-[3px] bg-sre-primary/10 rounded-t-xl transition-colors duration-200 ease-smooth";
   const inactiveClasses =
     variant === "sidebar"
-      ? "font-medium text-sre-text-muted rounded-none border-t-0 border-r-0 border-b-0 border-l-[3px] border-transparent hover:text-sre-text hover:bg-sre-surface-light"
+      ? "text-sre-text-muted rounded-none border-t-0 border-r-0 border-b-0 border-l-[3px] border-transparent hover:text-sre-text hover:bg-sre-surface-light"
       : isMobile
         ? "text-sre-text-muted hover:text-sre-text hover:bg-sre-surface-light border-sre-border/50 border-2 rounded-xl transition-colors duration-200 ease-smooth"
         : "text-sre-text-muted hover:text-sre-text hover:border-sre-border/70 border-b-2 border-transparent rounded-t-lg transition-colors duration-200 ease-smooth";

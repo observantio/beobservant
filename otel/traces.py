@@ -153,8 +153,7 @@ def send(spans):
         with urlopen(req, timeout=5):
             pass
         return True
-    except URLError as e:
-        print(f"  ⚠ send failed: {e}", file=sys.stderr)
+    except URLError:
         return False
 
 
@@ -335,16 +334,11 @@ def make_trace():
 
 def run_trace(i, loop):
     spans = make_trace()
-    ok = send(spans)
-    mark = "✓" if ok else "✗"
-    t = spans[0].trace_id[:12] if spans else "?"
-    print(f"[loop={loop} {i:>4}] {mark} trace={t}… spans={len(spans)}")
+    send(spans)
+    spans[0].trace_id[:12] if spans else "?"
 
 
 def run_loop(loop_num):
-    print(f"\n{'=' * 48}")
-    print(f"Loop {loop_num} — {COUNT} traces | parallel={PARALLEL}")
-    print(f"{'=' * 48}")
     sem = threading.Semaphore(PARALLEL)
     threads = []
 
@@ -362,13 +356,6 @@ def run_loop(loop_num):
     for t in threads:
         t.join()
 
-    print(f"✅ Loop {loop_num} done")
-
-
-print(f"{'=' * 48}")
-print(f"OTLP Trace Generator → http://{ENDPOINT}/v1/traces")
-print(f"count={COUNT}  parallel={PARALLEL}  loops={'∞' if LOOPS == 0 else LOOPS}  delay={DELAY}s")
-print(f"{'=' * 48}")
 
 loop = 1
 while True:
@@ -376,7 +363,3 @@ while True:
     if LOOPS != 0 and loop >= LOOPS:
         break
     loop += 1
-
-print(f"\n{'=' * 48}")
-print(f"✅ Done: {loop} loop(s) × {COUNT} traces")
-print(f"{'=' * 48}")

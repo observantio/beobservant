@@ -367,7 +367,17 @@ line-ending = "auto"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "N", "PTH", "RUF", "ERA", "T20"]
-per-file-ignores = { "watchdog/config.py" = ["B010"] }
+
+[tool.ruff.lint.per-file-ignores]
+"watchdog/config.py" = ["B010"]
+"**/routers/**" = ["B008"]
+"**/routes/**" = ["B008"]
+"**/middleware/**" = ["B008"]
+"**/tests/**" = ["B008", "E402"]
+"watchdog/services/database_auth_service.py" = ["E402"]
+"resolver/tests/test_anomaly_stats.py" = ["E402"]
+"watchdog/services/auth/helper.py" = ["B008"]
+"**/models/**" = ["N815"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["resolver", "gatekeeper", "notifier", "watchdog"]

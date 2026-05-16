@@ -286,7 +286,7 @@ body[data-theme="dark"] .auth-login-shell {
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  padding: 0.875rem 1.35rem;
+  padding: 0.75rem 1.25rem;
   border-radius: 1rem;
   border: 2px solid rgb(var(--sre-primary-rgb) / 0.4);
   box-shadow: none;
@@ -297,10 +297,11 @@ body[data-theme="dark"] .auth-login-shell {
     rgb(245 158 11)
   );
   color: #fff;
-  font-weight: 700;
-  font-size: 1rem;
-  line-height: 1.35;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.4;
   letter-spacing: 0.01em;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     filter 0.2s ease,
@@ -343,6 +344,13 @@ body[data-theme="dark"] .auth-login-page .auth-sso-cartoon-button {
   .auth-login-page .auth-sso-cartoon-button {
     transition: none;
   }
+
+/* OIDC button text is one line — prevent wrapping */
+.auth-login-page .auth-sso-cartoon-button-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 }
 
 /* ReactFlow Custom Styles */

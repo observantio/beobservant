@@ -8,7 +8,7 @@ export default function PageHeader({
     <div className="mb-6 flex items-center justify-between">
       <div>
         {eyebrow ? (
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-sre-text-muted">
+          <div className="mb-1 text-xs font-medium uppercase tracking-wide text-sre-text-muted">
             {eyebrow}
           </div>
         ) : null}

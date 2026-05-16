@@ -71,7 +71,7 @@ export default function AppSidebar() {
       >
         {visibleNavItems.length > 0 && (
           <>
-            <div className="px-3 pb-1 pt-0.5 text-[11px] font-bold uppercase tracking-wide text-sre-text-muted">
+            <div className="px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted">
               Observability
             </div>
             {visibleNavItems.map((item) => (
@@ -93,7 +93,7 @@ export default function AppSidebar() {
             />
             {visibleManagementNav.length > 0 && (
               <>
-                <div className="px-3 pb-1 pt-0.5 text-[11px] font-bold uppercase tracking-wide text-sre-text-muted">
+                <div className="px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted">
                   Management
                 </div>
                 {visibleManagementNav.map((item) => (
@@ -116,7 +116,7 @@ export default function AppSidebar() {
                 <button
                   type="button"
                   onClick={() => setDocsExpanded((v) => !v)}
-                  className="flex w-full items-center justify-between px-3 pb-1 pt-0.5 text-[11px] font-bold uppercase tracking-wide text-sre-text-muted transition-colors duration-200 hover:text-sre-text"
+                  className="flex w-full items-center justify-between px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted transition-colors duration-200 hover:text-sre-text"
                   aria-expanded={docsExpanded}
                   aria-controls="docs-sidebar-section"
                 >

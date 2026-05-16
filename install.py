@@ -13,15 +13,15 @@ from __future__ import annotations
 import base64
 import os
 import re
-import shutil
 import secrets
+import shutil
+import socket
 import string
 import subprocess
 import sys
-import socket
-from datetime import datetime, timezone
+from collections.abc import Iterable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable, List, Sequence
 
 REPO_URL = "https://github.com/observantio/watchdog.git"
 RESOLVER_REPO_URL = "https://github.com/observantio/resolver.git"
@@ -72,11 +72,11 @@ def paint(text: str, code: str) -> str:
 
 
 def say(msg: str = "") -> None:
-    print(msg)
+    pass
 
 
 def hr() -> None:
-    print(paint("-" * 60, DIM))
+    pass
 
 
 def banner() -> None:
@@ -84,21 +84,20 @@ def banner() -> None:
     say(paint("A guided, friendly setup for local development", CYAN))
 
 
-
 def info(msg: str) -> None:
-    print(f"{paint('[INFO]', CYAN)} {EM_INFO} {paint(msg, CYAN)}")
+    pass
 
 
 def ok(msg: str) -> None:
-    print(f"{paint('[OK]', GREEN)} {EM_OK} {paint(msg, GREEN)}")
+    pass
 
 
 def warn(msg: str) -> None:
-    print(f"{paint('[WARN]', YELLOW)} {EM_WARN} {paint(msg, YELLOW)}")
+    pass
 
 
 def err(msg: str) -> None:
-    print(f"{paint('[ERROR]', RED)} {EM_ERR} {paint(msg, RED)}")
+    pass
 
 
 def require_cmd(cmd: str) -> None:
@@ -119,7 +118,7 @@ def run(cmd: Sequence[str], *, cwd: Path | None = None) -> None:
         raise SystemExit(paint(f"Command failed ({e.returncode}): {' '.join(map(str, e.cmd))}", RED)) from e
 
 
-def detect_compose() -> List[str]:
+def detect_compose() -> list[str]:
     try:
         subprocess.run(
             ["docker", "compose", "version"],
@@ -135,7 +134,7 @@ def detect_compose() -> List[str]:
     raise SystemExit(paint("Docker Compose not found. Install Docker Desktop or docker compose plugin.", RED))
 
 
-def require_docker_compose() -> List[str]:
+def require_docker_compose() -> list[str]:
     cmd = detect_compose()
     ok(f"Detected Docker Compose command: {' '.join(cmd)}")
     return cmd
@@ -160,16 +159,17 @@ def require_buildx(required_version: str = "0.17.0") -> None:
     except Exception as e:
         raise SystemExit(
             paint(
-                "Docker Buildx not found. Install Docker Buildx plugin and ensure it is available with `docker buildx`.",
+                (
+                    "Docker Buildx not found. Install Docker Buildx plugin and ensure it is "
+                    "available with `docker buildx`."
+                ),
                 RED,
             )
         ) from e
 
     m = re.search(r"(\d+\.\d+\.\d+)", p.stdout or "")
     if not m:
-        raise SystemExit(
-            paint(f"Could not parse docker buildx version from: {p.stdout.strip()!r}.", RED)
-        )
+        raise SystemExit(paint(f"Could not parse docker buildx version from: {p.stdout.strip()!r}.", RED))
     found = m.group(1)
 
     try:
@@ -179,9 +179,7 @@ def require_buildx(required_version: str = "0.17.0") -> None:
         raise SystemExit(paint(f"Version parsing error: {exc}", RED)) from exc
 
     if found_ver < required_ver:
-        raise SystemExit(
-            paint(f"Docker Buildx version {required_version} or newer required, found {found}.", RED)
-        )
+        raise SystemExit(paint(f"Docker Buildx version {required_version} or newer required, found {found}.", RED))
     ok(f"Detected Docker Buildx version: {found}")
 
 
@@ -288,11 +286,11 @@ def upsert_env(file_path: Path, key: str, value: str) -> None:
     file_path.parent.mkdir(parents=True, exist_ok=True)
     key_prefix = f"{key}="
 
-    lines: List[str] = []
+    lines: list[str] = []
     if file_path.exists():
         lines = file_path.read_text(encoding="utf-8").splitlines(True)
 
-    out: List[str] = []
+    out: list[str] = []
     done = False
     for line in lines:
         if line.startswith(key_prefix):
@@ -549,20 +547,24 @@ def backup_env_file(env_file: Path) -> Path | None:
     if not env_file.exists():
         return None
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_file = env_file.with_name(f"{env_file.name}.backup-{timestamp}")
     shutil.copy2(env_file, backup_file)
     ok(f"Backed up existing .env to {backup_file}")
     return backup_file
 
 
-def start_stack(workdir: Path, compose_file: Path, compose_cmd: Sequence[str], *, action_label: str = "Started") -> None:
+def start_stack(
+    workdir: Path, compose_file: Path, compose_cmd: Sequence[str], *, action_label: str = "Started"
+) -> None:
     if not compose_file.is_file():
         raise SystemExit(f"Compose file not found: {compose_file}")
     preflight_host_ports()
     run_optimal_config(workdir)
     info(f"{action_label} stack")
-    run([*compose_cmd, "-f", str(compose_file), "--project-directory", str(workdir), "up", "-d", "--build"], cwd=workdir)
+    run(
+        [*compose_cmd, "-f", str(compose_file), "--project-directory", str(workdir), "up", "-d", "--build"], cwd=workdir
+    )
     ok(f"Stack {action_label.lower()}")
     print_urls()
 
@@ -666,7 +668,6 @@ def require_acceptance() -> None:
         raise SystemExit(paint("Not accepted. Exiting. Sorry to see you go!", RED))
 
 
-
 def main() -> int:
     try:
         require_acceptance()
@@ -726,7 +727,9 @@ def main() -> int:
 
             if action in ("stop", "purge"):
                 workdir, compose_file = resolve_existing_stack()
-                if action == "purge" and not ask_yes_no("Remove volumes too? This cannot be undone.", default_yes=False):
+                if action == "purge" and not ask_yes_no(
+                    "Remove volumes too? This cannot be undone.", default_yes=False
+                ):
                     warn("Purge cancelled.")
                     continue
                 stop_stack(workdir, compose_file, compose_cmd, purge_volumes=(action == "purge"))

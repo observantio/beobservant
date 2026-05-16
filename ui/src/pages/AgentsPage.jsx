@@ -59,7 +59,7 @@ function AgentStatusBadge({ lastSeen }) {
 function SummaryStat({ label, value, hint }) {
   return (
     <div className="rounded-xl border border-sre-border bg-sre-surface/70 p-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-sre-text-muted">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-sre-text-muted">
         {label}
       </div>
       <div className="mt-2 text-2xl font-semibold text-sre-text">{value}</div>

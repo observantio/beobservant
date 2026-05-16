@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import * as api from "../api";
-import { Spinner } from "../components/ui";
+import { Button, Spinner } from "../components/ui";
 import PasswordLoginForm from "../components/auth/PasswordLoginForm";
 import OIDCLoginButton from "../components/auth/OIDCLoginButton";
 import { OIDC_PROVIDER_LABEL } from "../utils/constants";
@@ -260,7 +260,7 @@ export default function LoginPage() {
               className="h-[3px] flex-1 rounded-full bg-gradient-to-r from-transparent via-sre-primary/40 to-transparent dark:via-sre-highlight/35"
               aria-hidden
             />
-            <span className="whitespace-nowrap text-[11px] font-bold uppercase tracking-[0.12em] text-sre-text-muted">
+            <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.12em] text-sre-text-muted">
               or use password
             </span>
             <div
@@ -293,14 +293,15 @@ export default function LoginPage() {
                       ? "Your account requires MFA before you can continue with Single Sign-On. Click below to generate your authenticator setup."
                       : "Your account requires MFA before you can continue. Click below to generate your authenticator setup."}
                   </p>
-                  <button
+                  <Button
                     type="button"
-                    className="w-full px-4 py-2 bg-sre-primary text-white rounded"
+                    variant="primary"
+                    className="w-full"
                     onClick={startMfaSetup}
-                    disabled={setupLoading}
+                    loading={setupLoading}
                   >
                     {setupLoading ? "Preparing setup..." : "Start MFA setup"}
-                  </button>
+                  </Button>
                 </div>
               )}
 
@@ -357,13 +358,14 @@ export default function LoginPage() {
                     lose access to your authenticator.
                   </div>
 
-                  <button
+                  <Button
                     type="submit"
-                    className="w-full px-4 py-2 bg-sre-primary text-white rounded"
-                    disabled={setupLoading}
+                    variant="primary"
+                    className="w-full"
+                    loading={setupLoading}
                   >
                     {setupLoading ? "Verifying..." : "Verify"}
-                  </button>
+                  </Button>
                 </form>
               )}
 
@@ -391,9 +393,9 @@ export default function LoginPage() {
                   </div>
 
                   <div className="flex gap-2">
-                    <button
+                    <Button
                       type="button"
-                      className="px-3 py-2 bg-sre-surface rounded dark:bg-transparent"
+                      variant="secondary"
                       onClick={async () => {
                         const txt = setupRecoveryCodes.join("\n");
                         const ok = await clipboardCopy(txt);
@@ -402,11 +404,11 @@ export default function LoginPage() {
                       }}
                     >
                       Copy codes
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
                       type="button"
-                      className="px-3 py-2 bg-sre-surface rounded dark:bg-transparent"
+                      variant="secondary"
                       onClick={() => {
                         (async () => {
                           const { downloadFile } =
@@ -421,18 +423,18 @@ export default function LoginPage() {
                       }}
                     >
                       Download
-                    </button>
+                    </Button>
 
                     <div className="flex-1" />
 
-                    <button
+                    <Button
                       type="button"
-                      className="px-4 py-2 bg-sre-primary text-white rounded"
+                      variant="primary"
                       disabled={
                         !verifiedSetupCode ||
-                        setupRecoveryCodes.length === 0 ||
-                        setupLoading
+                        setupRecoveryCodes.length === 0
                       }
+                      loading={setupLoading}
                       onClick={async () => {
                         setSetupLoading(true);
                         setError("");
@@ -469,19 +471,10 @@ export default function LoginPage() {
                         }
                       }}
                     >
-                      {setupLoading ? (
-                        <span className="flex items-center gap-2">
-                          <Spinner size="sm" />
-                          {isOidcMfaSetupFlow
-                            ? "Continuing..."
-                            : "Logging in..."}
-                        </span>
-                      ) : (
-                        isOidcMfaSetupFlow
-                          ? "Continue with Single Sign-On"
-                          : "Login"
-                      )}
-                    </button>
+                      {isOidcMfaSetupFlow
+                        ? "Continue with Single Sign-On"
+                        : "Login"}
+                    </Button>
                   </div>
                 </div>
               )}
@@ -533,16 +526,16 @@ export default function LoginPage() {
                   : "Use recovery code instead"}
               </button>
               <div className="flex gap-2 justify-end">
-                <button
+                <Button
                   type="submit"
-                  className="px-4 py-2 bg-sre-primary text-white rounded"
-                  disabled={loading}
+                  variant="primary"
+                  loading={loading}
                 >
                   {loading ? "Verifying..." : "Verify"}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="px-4 py-2 bg-sre-surface rounded dark:bg-transparent"
+                  variant="secondary"
                   onClick={() => {
                     setMfaRequired(false);
                     setUseRecoveryCode(false);
@@ -550,7 +543,7 @@ export default function LoginPage() {
                   }}
                 >
                   Back
-                </button>
+                </Button>
               </div>
             </form>
           ) : (

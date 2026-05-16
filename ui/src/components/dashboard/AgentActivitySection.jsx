@@ -2,11 +2,11 @@ import PropTypes from "prop-types";
 import { Badge, Spinner } from "../ui";
 
 const AgentStatusBadges = ({ agent }) => (
-  <div className="flex flex-wrap items-center justify-end gap-2">
+  <div className="flex shrink-0 items-center gap-2">
     {agent.is_enabled && <Badge variant="warning">Focused</Badge>}
     <Badge
       variant={agent.active ? "success" : "default"}
-      className={agent.active ? "animate-pulse" : ""}
+      className={`whitespace-nowrap ${agent.active ? "animate-pulse" : ""}`}
     >
       {agent.active ? "Active" : "Idle"}
     </Badge>

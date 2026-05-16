@@ -35,7 +35,9 @@ export default function OIDCLoginButton({
           />
         </svg>
       )}
-      {loading ? "Redirecting..." : `Continue with ${providerLabel}`}
+      <span className="auth-sso-cartoon-button-text">
+        {loading ? "Redirecting..." : `Continue with ${providerLabel}`}
+      </span>
     </button>
   );
 }

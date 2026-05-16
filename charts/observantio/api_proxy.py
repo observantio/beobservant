@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import http.server
 import socketserver
 import ssl
 import sys
 import urllib.parse
-
 
 HOP_BY_HOP_HEADERS = {
     "connection",
@@ -48,11 +48,7 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
             except ValueError:
                 body = b""
 
-        headers = {
-            key: value
-            for key, value in self.headers.items()
-            if key.lower() not in HOP_BY_HOP_HEADERS
-        }
+        headers = {key: value for key, value in self.headers.items() if key.lower() not in HOP_BY_HOP_HEADERS}
         listen_port = self.server.server_address[1]
         client_host = self.headers.get("Host", f"127.0.0.1:{listen_port}")
         headers["Host"] = client_host
@@ -116,10 +112,7 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
 
 
 def _build_upstream_ssl_context(cafile: str | None) -> ssl.SSLContext:
-    if cafile:
-        context = ssl.create_default_context(cafile=cafile)
-    else:
-        context = ssl.create_default_context()
+    context = ssl.create_default_context(cafile=cafile) if cafile else ssl.create_default_context()
     # The port-forward terminates on localhost, so verify the internal CA without hostname matching.
     context.check_hostname = False
     return context
@@ -127,10 +120,6 @@ def _build_upstream_ssl_context(cafile: str | None) -> ssl.SSLContext:
 
 def main() -> int:
     if len(sys.argv) not in {4, 5}:
-        print(
-            "Usage: api_proxy.py <listen_port> <upstream_port> <upstream_is_https> [ca_bundle_path]",
-            file=sys.stderr,
-        )
         return 1
 
     listen_port = int(sys.argv[1])
@@ -143,16 +132,8 @@ def main() -> int:
     server.upstream_is_https = upstream_is_https
     server.upstream_ssl_context = _build_upstream_ssl_context(ca_bundle_path) if upstream_is_https else None
 
-    print(
-        f"API proxy listening on 127.0.0.1:{listen_port} -> 127.0.0.1:{upstream_port} "
-        f"({'https' if upstream_is_https else 'http'})",
-        flush=True,
-    )
-
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         server.serve_forever()
-    except KeyboardInterrupt:
-        pass
     return 0
 
 
