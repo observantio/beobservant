@@ -10,10 +10,6 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 @import "@fontsource/ubuntu-mono/400.css";
 @import "@fontsource/ubuntu-mono/700.css";
-@import "@fontsource/ubuntu/300.css";
-@import "@fontsource/ubuntu/400.css";
-@import "@fontsource/ubuntu/500.css";
-@import "@fontsource/ubuntu/700.css";
 @import "@fontsource/material-icons/index.css";
 
 /* Make Material Icons render crisply by ensuring standard icon-clas styles */
@@ -88,18 +84,24 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
     @apply h-full;
   }
 
+  /*
+   * Global UI: Ubuntu Mono via @fontsource (bundled). Matches Tailwind fontFamily.sans/mono.
+   */
+  html {
+    font-family:
+      "Ubuntu Mono",
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      "Courier New",
+      monospace;
+  }
+
   body {
     background: linear-gradient(to bottom, var(--sre-bg), var(--sre-bg-alt), var(--sre-bg));
     color: var(--sre-text);
-    font-family:
-      Ubuntu,
-      system-ui,
-      -apple-system,
-      "Segoe UI",
-      Roboto,
-      "Helvetica Neue",
-      Arial,
-      sans-serif;
+    font-family: inherit;
     @apply antialiased;
     transition: background-color 0.3s ease, color 0.3s ease;
     overflow-y: auto;

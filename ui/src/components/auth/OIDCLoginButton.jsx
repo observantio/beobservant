@@ -8,7 +8,7 @@ export default function OIDCLoginButton({
   return (
     <button
       type="button"
-      className="auth-sso-cartoon-button"
+      className="auth-sso-cartoon-button w-full"
       disabled={loading}
       onClick={onClick}
     >
