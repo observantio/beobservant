@@ -13,8 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import Body, Depends, HTTPException, Path, Query
-from routers.observability.grafana_router.param_helpers import show_hidden_enabled
 from sqlalchemy.orm import Session
+
+from routers.observability.grafana_router.param_helpers import show_hidden_enabled
 
 from custom_types.json import JSONDict
 from database import get_db
