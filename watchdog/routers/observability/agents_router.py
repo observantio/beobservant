@@ -12,9 +12,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 import asyncio
 
 import httpx
-from config import config
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
+
+from config import config
 from middleware.dependencies import (
     PublicEndpointSecurityConfig,
     auth_service,

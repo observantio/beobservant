@@ -17,15 +17,16 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlencode
 
-from database import get_db_session
-from db_models import AuditLog
 from fastapi import Request
 from fastapi.concurrency import run_in_threadpool
+from starlette.datastructures import MutableHeaders
+from starlette.responses import Response
+
+from database import get_db_session
+from db_models import AuditLog
 from middleware.dependencies import auth_service
 from middleware.rate_limit import client_ip
 from services.audit_context import reset_request_audit_context, set_request_audit_context
-from starlette.datastructures import MutableHeaders
-from starlette.responses import Response
 
 logger = logging.getLogger(__name__)
 

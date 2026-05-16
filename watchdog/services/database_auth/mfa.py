@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 import bcrypt
 import pyotp
 from cryptography.fernet import Fernet, InvalidToken
+
 from custom_types.json import JSONDict
 from database import get_db_session
 from db_models import User

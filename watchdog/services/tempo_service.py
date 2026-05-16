@@ -17,6 +17,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 
 import httpx
+
 from config import config
 from custom_types.json import JSONDict
 from middleware.resilience import with_retry, with_timeout

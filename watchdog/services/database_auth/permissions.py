@@ -17,12 +17,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from sqlalchemy.orm import selectinload
+
 from database import get_db_session
 from db_models import Group, Permission, User
 from models.access.auth_models import ROLE_PERMISSIONS, Role
 from models.access.user_models import User as UserSchema
 from services.database_auth.shared import safe_role
-from sqlalchemy.orm import selectinload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService

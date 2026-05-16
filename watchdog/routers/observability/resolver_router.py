@@ -13,9 +13,11 @@ from __future__ import annotations
 
 from typing import Annotated
 
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
+from pydantic import StrictBool
+
 from config import config
 from custom_types.json import JSONDict, JSONValue
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
 from middleware.dependencies import require_permission_with_scope, resolve_tenant_id
 from models.access.auth_models import Permission, TokenData
 from models.observability.resolver_models import (
@@ -30,7 +32,6 @@ from models.observability.resolver_models import (
     AnalyzeReportResponse,
     AnalyzeRequestPayload,
 )
-from pydantic import StrictBool
 from services.aiops.helpers import correlation_id, inject_tenant
 from services.resolver_proxy_service import ResolverProxyJsonRequest, resolver_proxy_service
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 
 import httpx
+
 from services.grafana.normalize import normalize_grafana_next_path
 from services.loki.http_client import LokiGetJsonRequest, LokiHttpClient
 

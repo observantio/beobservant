@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import re
 
-from config import config
 from fastapi import BackgroundTasks, Body, Depends, HTTPException, Path, Query, status
+
+from config import config
 from middleware.dependencies import (
     apply_scoped_rate_limit,
     auth_service,

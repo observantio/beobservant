@@ -8,17 +8,18 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from fastapi import HTTPException, status
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
+
 from config import config
 from database import get_db_session
 from db_models import ApiKeyShare, Group, HiddenApiKey, User, UserApiKey
-from fastapi import HTTPException, status
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUser, ApiKeyUpdate
 from services.auth.api_key_schema import ApiKeySchemaContext, api_key_to_schema, list_api_key_shares_in_session
 from services.auth.time_utils import utcnow
 from services.database_auth.audit import AuditLogRecord
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService

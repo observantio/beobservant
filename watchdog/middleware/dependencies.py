@@ -16,17 +16,18 @@ from datetime import UTC, datetime
 from hmac import compare_digest
 from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
 
-from config import config
-from database import get_db_session
-from db_models import ApiKeyShare, User, UserApiKey
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import SQLAlchemyError
+
+from config import config
+from database import get_db_session
+from db_models import ApiKeyShare, User, UserApiKey
 from middleware.rate_limit import client_ip, enforce_ip_rate_limit, enforce_rate_limit
 from models.access.auth_models import Permission, TokenData
 from models.access.user_models import User as UserSchema
 from services.database_auth_service import DatabaseAuthService
-from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 

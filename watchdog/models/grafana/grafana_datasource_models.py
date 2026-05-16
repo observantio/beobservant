@@ -10,8 +10,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from enum import StrEnum
 
-from custom_types.json import JSONDict
 from pydantic import BaseModel, ConfigDict, Field
+
+from custom_types.json import JSONDict
 
 DS_DISPLAY_NAME_DESC = "Display name of the datasource"
 DS_URL_DESC = "URL of the datasource"

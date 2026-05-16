@@ -12,6 +12,7 @@ import threading
 from typing import cast
 
 import httpx
+
 from config import config
 from custom_types.json import JSONDict, JSONValue
 from models.observability.agent_models import AgentHeartbeat, AgentInfo

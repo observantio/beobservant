@@ -18,6 +18,7 @@ from functools import wraps
 from typing import ParamSpec, TypeVar
 
 import httpx
+
 from config import config
 
 logger = logging.getLogger(__name__)

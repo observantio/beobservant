@@ -19,6 +19,7 @@ os.environ.setdefault("CORS_ALLOW_CREDENTIALS", "False")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost")
 
 from fastapi import HTTPException
+
 from models.access.auth_models import Permission, Role, TokenData
 from services.grafana import proxy_auth_ops
 

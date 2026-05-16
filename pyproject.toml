@@ -380,7 +380,19 @@ select = ["E", "F", "I", "UP", "B", "SIM", "N", "PTH", "RUF", "ERA", "T20"]
 "**/models/**" = ["N815"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["resolver", "gatekeeper", "notifier", "watchdog"]
+known-first-party = [
+  "resolver",
+  "gatekeeper",
+  "notifier",
+  "watchdog",
+  "config",
+  "database",
+  "db_models",
+  "custom_types",
+  "middleware",
+  "models",
+  "services",
+]
 
 [tool.mypy]
 python_version = "3.11"

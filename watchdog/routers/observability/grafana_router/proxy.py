@@ -12,9 +12,10 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from config import config
 from fastapi import Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, Response
+
+from config import config
 from middleware.dependencies import (
     PublicEndpointSecurityConfig,
     enforce_public_endpoint_security,

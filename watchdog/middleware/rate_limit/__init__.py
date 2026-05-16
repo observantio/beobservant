@@ -14,8 +14,9 @@ import hashlib
 import logging
 import os
 
-from config import config
 from fastapi import HTTPException, Request, status
+
+from config import config
 
 from .hybrid import HybridRateLimiter
 from .in_memory import InMemoryRateLimiter

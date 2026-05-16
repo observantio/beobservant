@@ -12,11 +12,12 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from models.access.auth_models import Permission
 from routers import internal_router
 from routers.observability import resolver_router
 from routers.observability.grafana_router import dashboards, datasources, folders
 from tests._proxy_stubs import unpack_resolver_json_request
+
+from models.access.auth_models import Permission
 
 from .helpers import WorkflowState, patch_auth_service
 

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
+
 from custom_types.json import JSONDict
 from services.loki.http_client import LokiGetJsonRequest, QueryParams
 

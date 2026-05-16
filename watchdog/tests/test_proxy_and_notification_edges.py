@@ -21,9 +21,10 @@ except ImportError:
 
 ensure_test_env()
 
+from routers.observability.grafana_router import proxy as proxy_router
+
 from config import config
 from models.access.auth_models import Role, TokenData
-from routers.observability.grafana_router import proxy as proxy_router
 from services import notification_service as notification_mod
 from services.grafana.grafana_bundles import (
     DashboardSearchParams,

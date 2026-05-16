@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import logging
 
-from custom_types.json import JSONDict
 from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
+
+from custom_types.json import JSONDict
 from models.access.auth_models import TokenData
 from models.observability.grafana_request_models import GrafanaDashboardPayloadRequest
 from services.database_auth_service import DatabaseAuthService

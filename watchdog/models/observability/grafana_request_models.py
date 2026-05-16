@@ -10,8 +10,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from custom_types.json import JSONDict
 from pydantic import BaseModel, ConfigDict, Field
+
+from custom_types.json import JSONDict
 
 
 class GrafanaBootstrapSessionRequest(BaseModel):

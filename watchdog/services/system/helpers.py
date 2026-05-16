@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 import logging
 
 import psutil
+
 from custom_types.json import JSONDict
 
 logger = logging.getLogger(__name__)

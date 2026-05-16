@@ -22,8 +22,9 @@ ROOT = str(Path(__file__).resolve().parent.parent.parent)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from db_models import Base, Group, Tenant, User
 from fastapi import HTTPException
+
+from db_models import Base, Group, Tenant, User
 from services.grafana import proxy_auth_ops
 from services.grafana.grafana_bundles import GroupVisibilityValidation
 from services.grafana.grafana_service import GrafanaAPIError

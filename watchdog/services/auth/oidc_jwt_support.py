@@ -15,8 +15,9 @@ import binascii
 import json
 
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from custom_types.json import JSONDict
 from jwt.algorithms import ECAlgorithm, RSAAlgorithm
+
+from custom_types.json import JSONDict
 
 VerificationKey = rsa.RSAPublicKey | ec.EllipticCurvePublicKey
 

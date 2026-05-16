@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Path, Query, Response, status
+
 from middleware.dependencies import auth_service, require_any_permission_with_scope, require_permission_with_scope
 from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, TokenData

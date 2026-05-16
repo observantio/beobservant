@@ -14,12 +14,13 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from routers.access.auth_router import users as users_router
+from starlette.requests import Request
+
 from middleware import dependencies
 from models.access.auth_models import Role, TokenData
 from models.access.user_models import UserUpdate
-from routers.access.auth_router import users as users_router
 from services.auth.helper import is_admin_check
-from starlette.requests import Request
 
 
 def _token_data(*, role: Role = Role.USER, perms=None) -> TokenData:

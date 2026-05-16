@@ -26,6 +26,7 @@ from urllib.parse import urlencode
 
 import httpx
 import jwt
+
 from config import config
 from custom_types.json import JSONDict
 from services.auth.oidc_jwt_support import (

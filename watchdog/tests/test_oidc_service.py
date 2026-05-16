@@ -15,6 +15,7 @@ from tests._env import ensure_test_env
 ensure_test_env()
 
 import pytest
+
 from services.auth.oidc_service import OidcAuthorizationUrlBuildRequest, OIDCService, OidcTransactionStartRequest
 
 _oidc_module = importlib.import_module(OIDCService.__module__)

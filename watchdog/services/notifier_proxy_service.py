@@ -16,14 +16,15 @@ import uuid
 from dataclasses import dataclass
 
 import httpx
-from config import config
 from fastapi import HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.exc import SQLAlchemyError
+
+from config import config
 from middleware.dependencies import auth_service
 from middleware.resilience import with_retry, with_timeout
 from models.access.auth_models import TokenData
 from services.proxy.base_proxy import BaseProxyService
-from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 

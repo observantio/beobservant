@@ -23,12 +23,13 @@ except ImportError:
 
 ensure_test_env()
 
-from config import config
-from models.access.auth_models import Permission, Role, TokenData
-from models.observability.agent_models import AgentHeartbeat
 from routers.access.auth_router import audit as audit_router
 from routers.observability import agents_router, alertmanager_router
 from tests._proxy_stubs import unpack_notifier_forward
+
+from config import config
+from models.access.auth_models import Permission, Role, TokenData
+from models.observability.agent_models import AgentHeartbeat
 
 
 def _request(

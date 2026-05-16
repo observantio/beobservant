@@ -16,10 +16,11 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import jwt
+from fastapi.concurrency import run_in_threadpool
+
 from custom_types.json import JSONDict
 from database import get_db_session
 from db_models import AuditLog
-from fastapi.concurrency import run_in_threadpool
 from models.access.auth_models import TokenData
 
 

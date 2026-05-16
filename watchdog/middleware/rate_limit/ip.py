@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from ipaddress import ip_address, ip_network
 
-from config import config
 from fastapi import Request
+
+from config import config
 
 
 def _valid_ip(value: str) -> str | None:

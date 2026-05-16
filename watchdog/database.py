@@ -19,11 +19,12 @@ from contextlib import contextmanager
 from types import TracebackType
 from typing import Any, Protocol, cast
 
-from db_models import Base
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+
+from db_models import Base
 
 logger = logging.getLogger(__name__)
 

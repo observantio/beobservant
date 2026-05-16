@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+
 from models.access.auth_models import Role
 from services.auth.helper import (
     audit_key_is_sensitive,

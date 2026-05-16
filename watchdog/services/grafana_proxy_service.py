@@ -14,9 +14,11 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from fastapi import HTTPException, Request
+from sqlalchemy.orm import Session
+
 from custom_types.json import JSONDict
 from db_models import GrafanaFolder, Group, User, user_groups
-from fastapi import HTTPException, Request
 from models.access.auth_models import TokenData
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
 from models.grafana.grafana_datasource_models import Datasource
@@ -76,7 +78,6 @@ from services.grafana.grafana_bundles import (
     HiddenToggleRequest,
 )
 from services.grafana.grafana_service import GrafanaService
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 

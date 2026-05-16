@@ -18,9 +18,10 @@ from dataclasses import dataclass
 from typing import TypeAlias
 
 import httpx
+from fastapi import HTTPException, status
+
 from config import config
 from custom_types.json import JSONDict, JSONValue, is_json_value
-from fastapi import HTTPException, status
 from middleware.resilience import with_retry, with_timeout
 from models.access.auth_models import TokenData
 from services.common.ttl_cache import TTLCache

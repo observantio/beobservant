@@ -12,9 +12,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 from collections.abc import Awaitable
 from typing import Annotated, TypeVar
 
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
+
 from config import config
 from custom_types.json import JSONDict
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, status
 from middleware.dependencies import require_permission_with_scope, resolve_tenant_id
 from models.access.auth_models import Permission, TokenData
 from models.observability.loki_models import (

@@ -16,6 +16,7 @@ from typing import TypedDict
 from urllib.parse import quote
 
 import httpx
+
 from config import config
 from custom_types.json import JSONDict
 from models.observability.agent_models import AgentHeartbeat, AgentInfo

@@ -20,6 +20,8 @@ except ImportError:
 
 ensure_test_env()
 
+from routers.observability.grafana_router import dashboards, datasources, folders
+
 from config import config
 from models.access.auth_models import Permission, Role, TokenData
 from models.grafana.grafana_datasource_models import DatasourceCreate, DatasourceUpdate
@@ -30,7 +32,6 @@ from models.observability.grafana_request_models import (
     GrafanaHiddenToggleRequest,
     GrafanaUpdateFolderRequest,
 )
-from routers.observability.grafana_router import dashboards, datasources, folders
 from services.grafana.grafana_bundles import DatasourceListParams
 
 

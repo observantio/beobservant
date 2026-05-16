@@ -21,13 +21,14 @@ except ImportError:
 
 ensure_test_env()
 
-from models.access.auth_models import Permission, Role
-from models.observability.grafana_request_models import GrafanaDashboardPayloadRequest
 from routers.access.auth_router import api_keys as api_keys_router
 from routers.observability import resolver_router
 from routers.observability.grafana_router import dashboards
 from tests._proxy_stubs import unpack_resolver_json_request
 from tests._regression_helpers import run_in_threadpool_inline, token_data
+
+from models.access.auth_models import Permission, Role
+from models.observability.grafana_request_models import GrafanaDashboardPayloadRequest
 
 
 def _request(path: str = "/api/resolver/analyze/jobs/job-1") -> Request:

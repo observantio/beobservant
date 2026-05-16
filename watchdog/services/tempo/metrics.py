@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import httpx
+
 from config import config
 from custom_types.json import JSONDict
 

@@ -11,8 +11,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 import re
 from datetime import UTC, datetime
 
-from config import config
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, field_serializer, field_validator
+
+from config import config
 
 from .api_key_models import ApiKey
 from .auth_models import Permission, Role

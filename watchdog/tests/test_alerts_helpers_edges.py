@@ -20,9 +20,10 @@ except ImportError:
 
 ensure_test_env()
 
+from tests._proxy_stubs import unpack_notifier_forward
+
 from models.access.auth_models import Permission, Role, TokenData
 from services.alerts import helpers as helpers_mod
-from tests._proxy_stubs import unpack_notifier_forward
 
 
 def _user(*, permissions=None, group_ids=None, is_superuser=False) -> TokenData:

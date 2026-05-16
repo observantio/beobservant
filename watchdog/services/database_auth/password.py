@@ -19,12 +19,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, TypeVar
 
 import bcrypt
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session, joinedload
+
 from config import config
 from database import get_db_session
 from db_models import User
-from fastapi import HTTPException, status
 from models.access.auth_models import Role
-from sqlalchemy.orm import Session, joinedload
 
 from .audit import AuditLogRecord
 

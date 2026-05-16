@@ -12,12 +12,13 @@ ensure_test_env()
 
 import uuid
 
-import database
 import pytest
+from fastapi import HTTPException
+
+import database
 from config import config
 from database import get_db_session
 from db_models import Tenant, User
-from fastapi import HTTPException
 from models.access.api_key_models import ApiKeyCreate, ApiKeyUpdate
 from models.access.user_models import UserCreate
 from services.auth.actor_caps import AuthActorCaps

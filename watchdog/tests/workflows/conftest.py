@@ -18,12 +18,13 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
-from config import config
-from database import get_db
-from middleware import dependencies
 from routers.access.auth_router import authentication as auth_routes
 from routers.access.auth_router import users as user_routes
 from routers.observability.grafana_router import proxy as grafana_proxy_router
+
+from config import config
+from database import get_db
+from middleware import dependencies
 
 
 def _collect_get_db_dependencies(root: Dependant) -> set[Callable[..., Any]]:

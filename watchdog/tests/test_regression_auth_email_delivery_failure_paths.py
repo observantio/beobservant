@@ -20,11 +20,12 @@ except ImportError:
 
 ensure_test_env()
 
-from models.access.auth_models import Permission, Role
-from models.access.user_models import RegisterRequest
 from routers.access.auth_router import authentication as auth_router
 from routers.access.auth_router import users as users_router
 from tests._regression_helpers import request_obj, run_in_threadpool_inline, token_data
+
+from models.access.auth_models import Permission, Role
+from models.access.user_models import RegisterRequest
 
 
 @contextmanager

@@ -24,6 +24,9 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
+from routers import internal_router
+from routers.platform import system_router
+
 import middleware.rate_limit as rate_limit_module
 from custom_types import json as json_types
 from middleware import audit as audit_middleware
@@ -39,8 +42,6 @@ from middleware.request_size_limit import RequestSizeLimitMiddleware
 from models.internal.otlp_validate import OtlpValidateRequest
 from models.observability.agent_models import AgentHeartbeat
 from models.observability.tempo_models import TraceQuery
-from routers import internal_router
-from routers.platform import system_router
 from services import audit_context as audit_context_service
 from services import system_service as system_service_module
 from services.agent import helpers as agent_helpers

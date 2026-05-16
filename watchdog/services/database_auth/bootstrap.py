@@ -18,14 +18,15 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import func, inspect, text
+from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from config import config
 from database import get_db_session
 from db_models import Permission, Tenant, User, UserApiKey
 from models.access.auth_models import Role
 from services.auth.permission_defs import PERMISSION_DEFS
-from sqlalchemy import func, inspect, text
-from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError
-from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService

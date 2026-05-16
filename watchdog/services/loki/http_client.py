@@ -14,6 +14,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import httpx
+
 from custom_types.json import JSONDict
 
 logger = logging.getLogger(__name__)

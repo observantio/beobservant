@@ -14,8 +14,9 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated
 
-from config import config
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query, Request, status
+
+from config import config
 from middleware.dependencies import require_permission_with_scope, resolve_tenant_id
 from models.access.auth_models import Permission, TokenData
 from models.observability.tempo_models import Trace, TraceQuery, TraceResponse

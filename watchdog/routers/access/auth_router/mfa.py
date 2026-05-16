@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Path, status
+
 from middleware.dependencies import (
     auth_service,
     get_current_user_or_mfa_setup,

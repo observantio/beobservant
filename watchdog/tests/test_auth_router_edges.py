@@ -23,6 +23,12 @@ except ImportError:
 
 ensure_test_env()
 
+from routers.access.auth_router import api_keys as api_keys_router
+from routers.access.auth_router import authentication as auth_router
+from routers.access.auth_router import groups as groups_router
+from routers.access.auth_router import mfa as mfa_router
+from routers.access.auth_router import users as users_router
+
 from models.access.api_key_models import ApiKey, ApiKeyCreate, ApiKeyShareUpdateRequest, ApiKeyUpdate
 from models.access.auth_models import Permission, Role, Token, TokenData
 from models.access.group_models import GroupCreate, GroupMembersUpdate, GroupUpdate
@@ -35,11 +41,6 @@ from models.access.user_models import (
     UserPasswordUpdate,
     UserUpdate,
 )
-from routers.access.auth_router import api_keys as api_keys_router
-from routers.access.auth_router import authentication as auth_router
-from routers.access.auth_router import groups as groups_router
-from routers.access.auth_router import mfa as mfa_router
-from routers.access.auth_router import users as users_router
 
 
 def _request(

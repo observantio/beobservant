@@ -19,9 +19,10 @@ except ImportError:
 
 ensure_test_env()
 
+from routers.observability.grafana_router import shared as shared_router
+
 from models.access.auth_models import Role, TokenData
 from models.observability.grafana_request_models import GrafanaDashboardPayloadRequest
-from routers.observability.grafana_router import shared as shared_router
 from services.grafana import route_payloads, shared_ops
 
 

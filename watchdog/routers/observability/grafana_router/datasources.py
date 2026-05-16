@@ -12,16 +12,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from fastapi import Body, Depends, HTTPException, Path, Query
+from pydantic import StrictBool
+from sqlalchemy.orm import Session
+
 from config import config
 from custom_types.json import JSONDict
 from database import get_db
-from fastapi import Body, Depends, HTTPException, Path, Query
 from middleware.dependencies import require_any_permission_with_scope, require_permission_with_scope
 from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, TokenData
 from models.grafana.grafana_datasource_models import Datasource, DatasourceCreate, DatasourceUpdate
 from models.observability.grafana_request_models import GrafanaDatasourceQueryRequest, GrafanaHiddenToggleRequest
-from pydantic import StrictBool
 from services.grafana.grafana_bundles import (
     DatasourceCreateOptions,
     DatasourceListParams,
@@ -39,7 +41,6 @@ from services.grafana.grafana_bundles import (
 )
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.route_payloads import validate_visibility
-from sqlalchemy.orm import Session
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
 

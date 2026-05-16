@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import httpx
+
 from custom_types.json import JSONDict
 from db_models import User
 from models.access.auth_models import Token

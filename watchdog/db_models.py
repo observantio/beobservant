@@ -14,8 +14,6 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from config import config
-from custom_types.json import JSONDict, JSONList
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -31,6 +29,9 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from config import config
+from custom_types.json import JSONDict, JSONList
 
 
 class Base(DeclarativeBase):

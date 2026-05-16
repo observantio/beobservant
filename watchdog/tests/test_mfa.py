@@ -12,6 +12,7 @@ ensure_test_env()
 
 import pyotp
 import pytest
+
 from config import config
 from database import get_db_session
 from db_models import Tenant, User

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import httpx
+
 from config import config
 from custom_types.json import JSONDict
 from middleware.resilience import with_retry, with_timeout

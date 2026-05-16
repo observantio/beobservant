@@ -13,8 +13,9 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
-from config import config
 from routers import internal_router
+
+from config import config
 from services.internal_service import InternalService
 
 

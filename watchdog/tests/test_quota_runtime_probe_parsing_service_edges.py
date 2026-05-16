@@ -17,6 +17,9 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 from db_models import Base, Tenant, User, UserApiKey
 from models.access.auth_models import Role, TokenData
 from services.quota_service import parsing as parsing_module
@@ -33,8 +36,6 @@ from services.quota_service.parsing import (
 )
 from services.quota_service.runtime_probe import NativeQuotaFetchParams, QuotaProbe, RuntimeQuotaProbe
 from services.quota_service.service import QuotaService, RuntimeQuotaResolveParams
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 
 class _Resp:

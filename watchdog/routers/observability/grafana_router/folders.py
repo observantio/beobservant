@@ -12,9 +12,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from fastapi import Body, Depends, HTTPException, Path, Query
+from routers.observability.grafana_router.param_helpers import show_hidden_enabled
+from sqlalchemy.orm import Session
+
 from custom_types.json import JSONDict
 from database import get_db
-from fastapi import Body, Depends, HTTPException, Path, Query
 from middleware.dependencies import (
     require_any_permission_with_scope,
     require_authenticated_with_scope,
@@ -28,7 +31,6 @@ from models.observability.grafana_request_models import (
     GrafanaHiddenToggleRequest,
     GrafanaUpdateFolderRequest,
 )
-from routers.observability.grafana_router.param_helpers import show_hidden_enabled
 from services.grafana.grafana_bundles import (
     FolderCreateOptions,
     FolderDeleteOptions,
@@ -52,7 +54,6 @@ from services.grafana.grafana_bundles import (
     FolderUpdateRequest as FolderUpdateBundle,
 )
 from services.grafana.route_payloads import validate_visibility
-from sqlalchemy.orm import Session
 
 from .shared import hidden_toggle_context, proxy, router, rtp, scope_context
 

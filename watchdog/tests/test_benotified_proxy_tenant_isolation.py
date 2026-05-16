@@ -14,11 +14,12 @@ from typing import ClassVar
 
 import httpx
 import pytest
-from config import config
 from fastapi import HTTPException, Response
+from starlette.requests import Request
+
+from config import config
 from models.access.auth_models import Role, TokenData
 from services.notifier_proxy_service import NotifierForwardRequest, NotifierProxyService
-from starlette.requests import Request
 
 
 def _user(tenant_id: str = "tenant-a", user_id: str = "u1") -> TokenData:

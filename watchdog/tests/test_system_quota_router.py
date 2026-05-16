@@ -13,9 +13,10 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
+from routers.platform import system_router
+
 from models.access.auth_models import Role, TokenData
 from models.access.quota_models import ApiKeyQuota, QuotasResponse, RuntimeQuota
-from routers.platform import system_router
 
 
 @pytest.mark.asyncio

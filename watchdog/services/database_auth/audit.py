@@ -13,10 +13,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 import json
 from dataclasses import dataclass
 
+from sqlalchemy.orm import Session
+
 from custom_types.json import JSONDict
 from db_models import AuditLog
 from services.audit_context import get_request_audit_context
-from sqlalchemy.orm import Session
 
 
 @dataclass(frozen=True, slots=True)

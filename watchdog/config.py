@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
+
 from services.secrets.provider import EnvSecretProvider, SecretProvider
 
 logger = logging.getLogger(__name__)

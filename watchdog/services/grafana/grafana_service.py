@@ -16,6 +16,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import httpx
+
 from config import config
 from custom_types.json import JSONDict, JSONValue
 from middleware.resilience import with_retry, with_timeout

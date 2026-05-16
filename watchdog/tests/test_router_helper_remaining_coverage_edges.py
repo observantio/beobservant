@@ -18,11 +18,12 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
+from routers.observability import agents_router
+from routers.platform import system_router
+
 from config import _slug_token
 from middleware import error_handlers as error_handlers_module
 from middleware.error_handlers import RouteErrorHandlerOptions, handle_route_errors
-from routers.observability import agents_router
-from routers.platform import system_router
 from services.agent import helpers as agent_helpers
 from services.common import encryption as encryption_module
 

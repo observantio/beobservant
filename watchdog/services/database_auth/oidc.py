@@ -15,15 +15,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from config import config
 from custom_types.json import JSONDict
 from database import get_db_session
 from db_models import Tenant, User
 from models.access.auth_models import Permission, Role
 from services.database_auth.audit import AuditLogRecord
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService

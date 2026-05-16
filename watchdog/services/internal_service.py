@@ -13,10 +13,11 @@ from __future__ import annotations
 import logging
 import secrets
 
-from config import config
 from fastapi import Header, HTTPException, status
-from services.database_auth_service import DatabaseAuthService
 from sqlalchemy.exc import SQLAlchemyError
+
+from config import config
+from services.database_auth_service import DatabaseAuthService
 
 logger = logging.getLogger(__name__)
 

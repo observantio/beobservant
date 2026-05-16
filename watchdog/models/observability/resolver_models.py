@@ -14,8 +14,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated
 
-from custom_types.json import JSONDict
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+
+from custom_types.json import JSONDict
 
 MAX_EPOCH_VALUE = 9_007_199_254_740_991
 EpochInt = Annotated[StrictInt, Field(ge=0, le=MAX_EPOCH_VALUE)]

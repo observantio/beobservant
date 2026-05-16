@@ -21,9 +21,10 @@ ensure_test_env()
 
 import pytest
 import sqlalchemy
+from sqlalchemy.engine import Engine
+
 from services.auth.actor_caps import AuthActorCaps
 from services.database_auth_service import DatabaseAuthService
-from sqlalchemy.engine import Engine
 
 _ORIGINAL_CREATE_ENGINE = sqlalchemy.create_engine
 _TRACKED_ENGINES: list[Engine] = []

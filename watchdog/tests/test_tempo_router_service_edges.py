@@ -19,8 +19,9 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 
-from models.observability.tempo_models import Trace, TraceQuery, TraceResponse
 from routers.observability import tempo_router
+
+from models.observability.tempo_models import Trace, TraceQuery, TraceResponse
 from services import tempo_service as tempo_service_module
 
 

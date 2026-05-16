@@ -15,9 +15,10 @@ import json
 from json import JSONDecodeError
 from typing import Any
 
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
 from config import config
 from custom_types.json import JSONDict
-from fastapi import APIRouter, Depends, HTTPException, Request, status
 from middleware.dependencies import (
     PublicEndpointSecurityConfig,
     apply_scoped_rate_limit,

@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from fastapi import HTTPException, status
+
 from models.access.api_key_models import ApiKey, ApiKeyShareUser, ApiKeyUpdate
 from models.access.auth_models import ROLE_PERMISSIONS, Permission, Role, Token, TokenData
 from models.access.group_models import Group, PermissionInfo

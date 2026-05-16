@@ -14,16 +14,17 @@ from typing import Any, Literal
 
 import httpx
 import pytest
-from config import config
-from database import get_db
 from fastapi.responses import JSONResponse
 from main import app
-from middleware import dependencies
 from routers.access.auth_router import authentication as auth_routes
 from routers.access.auth_router import users as user_routes
 from routers.observability import alertmanager_router, loki_router, tempo_router
 from routers.observability.grafana_router import proxy as grafana_proxy_router
 from tests._proxy_stubs import unpack_notifier_forward
+
+from config import config
+from database import get_db
+from middleware import dependencies
 
 from .helpers import WorkflowState, patch_auth_service
 

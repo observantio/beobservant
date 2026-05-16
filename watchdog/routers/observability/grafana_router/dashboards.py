@@ -12,10 +12,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from fastapi import Body, Depends, HTTPException, Path, Query
+from routers.observability.grafana_router.param_helpers import (
+    is_valid_uid_query,
+    normalize_optional_param,
+    show_hidden_enabled,
+)
+from sqlalchemy.orm import Session
+
 from config import config
 from custom_types.json import JSONDict
 from database import get_db
-from fastapi import Body, Depends, HTTPException, Path, Query
 from middleware.dependencies import (
     require_any_permission_with_scope,
     require_authenticated_with_scope,
@@ -25,11 +32,6 @@ from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import Permission, TokenData
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
 from models.observability.grafana_request_models import GrafanaDashboardPayloadRequest, GrafanaHiddenToggleRequest
-from routers.observability.grafana_router.param_helpers import (
-    is_valid_uid_query,
-    normalize_optional_param,
-    show_hidden_enabled,
-)
 from services.grafana.grafana_bundles import (
     DashboardCreateOptions,
     DashboardSearchParams,
@@ -49,7 +51,6 @@ from services.grafana.route_payloads import (
     parse_dashboard_update_payload,
     validate_visibility,
 )
-from sqlalchemy.orm import Session
 
 from .shared import dashboard_payload, dashboard_uid, hidden_toggle_context, proxy, router, rtp, scope_context
 

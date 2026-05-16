@@ -12,11 +12,12 @@ os.environ.setdefault("DATABASE_URL", "postgresql://safeuser:safePass_123@db:543
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
 import unittest
 
-from config import config
 from fastapi.responses import Response
+from starlette.requests import Request
+
+from config import config
 from services.auth.helper import set_auth_cookie
 from services.common.cookies import cookie_secure
-from starlette.requests import Request
 
 
 def _request_with_scheme_and_headers(scheme: str = "http", headers: dict | None = None) -> Request:

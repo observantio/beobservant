@@ -10,10 +10,11 @@ from tests._env import ensure_test_env
 
 ensure_test_env()
 import pytest
-from models.access.auth_models import Role, TokenData
 from routers.observability import resolver_router
 from starlette.requests import Request
 from tests._proxy_stubs import unpack_resolver_json_request
+
+from models.access.auth_models import Role, TokenData
 
 
 def _request(

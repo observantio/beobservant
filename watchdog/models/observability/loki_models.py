@@ -10,8 +10,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from enum import StrEnum
 
-from custom_types.json import JSONDict
 from pydantic import BaseModel, Field, StrictInt
+
+from custom_types.json import JSONDict
 
 MAX_LOG_ENTRIES_DESC = "Maximum number of log entries to return"
 TIME_NS_START_DESC = "Start time in nanoseconds"

@@ -22,6 +22,10 @@ except ImportError:
 
 ensure_test_env()
 
+from pydantic import ValidationError
+from routers.observability import loki_router, resolver_router
+from tests._proxy_stubs import unpack_resolver_json_request
+
 from models.access.auth_models import Permission, Role, TokenData
 from models.observability.loki_models import LogDirection, LogFilterRequest, LogSearchRequest
 from models.observability.resolver_models import (
@@ -30,9 +34,6 @@ from models.observability.resolver_models import (
     AnalyzeProxyPayload,
     AnalyzeRequestPayload,
 )
-from pydantic import ValidationError
-from routers.observability import loki_router, resolver_router
-from tests._proxy_stubs import unpack_resolver_json_request
 
 
 def _request(path: str = "/") -> Request:

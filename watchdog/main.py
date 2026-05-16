@@ -19,25 +19,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-import database as database_module
 import httpx
-from config import config, constants
 from fastapi import FastAPI, status
 from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
-from middleware.audit import security_headers_middleware
-from middleware.concurrency_limit import ConcurrencyLimitMiddleware
-from middleware.dependencies import auth_service
-from middleware.error_handlers import (
-    general_exception_handler,
-    validation_exception_handler,
-)
-from middleware.openapi import install_custom_openapi
-from middleware.request_size_limit import RequestSizeLimitMiddleware
-from middleware.runtime_ssl import RuntimeSSLOptions, run_uvicorn
 from pydantic import BaseModel
 from routers import (
     agents_router,
@@ -50,6 +38,19 @@ from routers import (
     system_router,
     tempo_router,
 )
+
+import database as database_module
+from config import config, constants
+from middleware.audit import security_headers_middleware
+from middleware.concurrency_limit import ConcurrencyLimitMiddleware
+from middleware.dependencies import auth_service
+from middleware.error_handlers import (
+    general_exception_handler,
+    validation_exception_handler,
+)
+from middleware.openapi import install_custom_openapi
+from middleware.request_size_limit import RequestSizeLimitMiddleware
+from middleware.runtime_ssl import RuntimeSSLOptions, run_uvicorn
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL.upper()), format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

@@ -11,10 +11,12 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import httpx
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
 from config import config
 from custom_types.json import JSONDict
 from db_models import GrafanaFolder
-from fastapi import HTTPException
 from models.grafana.grafana_folder_models import Folder
 from services.grafana.grafana_bundles import (
     FolderAccessCriteria,
@@ -31,7 +33,6 @@ from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.proxy_client import GrafanaProxyClient
 from services.grafana.shared_ops import commit_session, group_id_strs, update_hidden_members
 from services.grafana.visibility import resolve_visibility_groups_for_scope, visibility_group_resolve_context
-from sqlalchemy.orm import Session
 
 
 def _db_folder_by_uid(db: Session, tenant_id: str, uid: str) -> GrafanaFolder | None:

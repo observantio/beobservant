@@ -15,9 +15,10 @@ from typing import Any
 import pytest
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
-from models.access.auth_models import Permission, Role
 from routers.observability import alertmanager_router
 from tests._proxy_stubs import unpack_notifier_forward
+
+from models.access.auth_models import Permission, Role
 
 from .helpers import WorkflowState, patch_auth_service
 

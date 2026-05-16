@@ -10,10 +10,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
+from fastapi import HTTPException, Request, Response, status
+
 from config import config
 from database import get_db_session
 from db_models import Tenant
-from fastapi import HTTPException, Request, Response, status
 from middleware.dependencies import auth_service
 from middleware.error_handlers import handle_route_errors
 from models.access.auth_models import (

@@ -9,8 +9,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 from tests._env import ensure_test_env
 
 ensure_test_env()
-import database
 import pytest
+
+import database
 from config import config
 from database import get_db_session
 from db_models import Tenant, User
