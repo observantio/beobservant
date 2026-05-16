@@ -11,6 +11,6 @@ You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from services.secrets.provider import SecretProvider, EnvSecretProvider
+from services.secrets.provider import EnvSecretProvider, SecretProvider
 
-__all__ = ["SecretProvider", "EnvSecretProvider"]
+__all__ = ["EnvSecretProvider", "SecretProvider"]

@@ -8,6 +8,6 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-from .exceptions import DatabaseUnavailable
+from .exceptions import DatabaseUnavailableError
 
-__all__ = ["DatabaseUnavailable"]
+__all__ = ["DatabaseUnavailableError"]

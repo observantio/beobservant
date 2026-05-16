@@ -13,19 +13,18 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
-from typing import Optional
 
 import httpx
-from fastapi import HTTPException, Request, status
-
 import settings
-from models.exceptions import DatabaseUnavailable
+from fastapi import HTTPException, Request, status
+from models.exceptions import DatabaseUnavailableError
+
 from .rate_limit import make_default_rate_limiter
 from .token_cache import make_token_cache
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["GatewayAuthService", "DatabaseUnavailable"]
+__all__ = ["DatabaseUnavailableError", "GatewayAuthService"]
 
 
 def _parse_networks(allowlist: str) -> list[IPv4Network | IPv6Network]:
@@ -67,7 +66,7 @@ def _default_gateway_auth_config() -> GatewayAuthConfig:
 
 
 class GatewayAuthService:
-    __slots__ = ("_rate_limiter", "_networks", "_token_cache", "_http_verify", "_auth_api_url")
+    __slots__ = ("_auth_api_url", "_http_verify", "_networks", "_rate_limiter", "_token_cache")
 
     def __init__(
         self,
@@ -138,7 +137,7 @@ class GatewayAuthService:
         return request.client.host if request.client else "unknown"
 
     @staticmethod
-    def extract_otlp_token(value: Optional[str]) -> str:
+    def extract_otlp_token(value: str | None) -> str:
         return (value or "").strip()
 
     def enforce_ip_allowlist(self, request: Request) -> None:
@@ -170,7 +169,7 @@ class GatewayAuthService:
         return headers
 
     @staticmethod
-    def _extract_org_id(response: httpx.Response) -> Optional[str]:
+    def _extract_org_id(response: httpx.Response) -> str | None:
         try:
             payload = response.json()
         except ValueError:
@@ -180,15 +179,15 @@ class GatewayAuthService:
         org_id = payload.get("org_id")
         return str(org_id).strip() if org_id else None
 
-    def _resolve_auth_api_response(self, response: httpx.Response) -> Optional[str]:
+    def _resolve_auth_api_response(self, response: httpx.Response) -> str | None:
         status_code = response.status_code
         if status_code == 200:
             return self._extract_org_id(response)
         if status_code == 404:
             return None
-        raise DatabaseUnavailable(f"unexpected status {status_code}")
+        raise DatabaseUnavailableError(f"unexpected status {status_code}")
 
-    def _fetch_org_from_api(self, token: str) -> Optional[str]:
+    def _fetch_org_from_api(self, token: str) -> str | None:
         if not token:
             return None
         url = self._auth_api_url
@@ -198,14 +197,14 @@ class GatewayAuthService:
                 resp = client.post(url, headers=headers, json={"token": token})
         except httpx.HTTPError as exc:
             logger.warning("Auth API HTTP transport failure: %s", type(exc).__name__)
-            raise DatabaseUnavailable from exc
+            raise DatabaseUnavailableError from exc
 
         return self._resolve_auth_api_response(resp)
 
-    def probe_auth_api(self, token: str) -> Optional[str]:
+    def probe_auth_api(self, token: str) -> str | None:
         return self._fetch_org_from_api(token)
 
-    def validate_otlp_token(self, token: str) -> Optional[str]:
+    def validate_otlp_token(self, token: str) -> str | None:
         if not token:
             return None
 
@@ -216,13 +215,13 @@ class GatewayAuthService:
         try:
             logger.info("Token cache miss for token: %s", token[:4] + "..." if len(token) > 7 else token)
             org = self._fetch_org_from_api(token)
-        except DatabaseUnavailable:
+        except DatabaseUnavailableError:
             raise
         except Exception as exc:
-            if type(exc).__name__ == "DatabaseUnavailable":
+            if type(exc).__name__ == "DatabaseUnavailableError":
                 raise exc
             logger.warning("Auth API fetch unexpected error", exc_info=True)
-            raise DatabaseUnavailable from exc
+            raise DatabaseUnavailableError from exc
 
         self._token_cache.set(token, org)
         return org

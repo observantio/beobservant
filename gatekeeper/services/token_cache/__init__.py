@@ -16,7 +16,6 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from ._redis_compat import redis
 from .memory import TokenCache
@@ -24,10 +23,10 @@ from .redis import RedisTokenCache
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["TokenCache", "RedisTokenCache", "make_token_cache", "redis"]
+__all__ = ["RedisTokenCache", "TokenCache", "make_token_cache", "redis"]
 
 
-def make_token_cache(ttl: int, redis_url: Optional[str] = None) -> TokenCache | RedisTokenCache:
+def make_token_cache(ttl: int, redis_url: str | None = None) -> TokenCache | RedisTokenCache:
     if redis_url:
         try:
             cache = RedisTokenCache(ttl, redis_url)

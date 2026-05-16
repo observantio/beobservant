@@ -6,10 +6,10 @@ License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
 """
 
-import os
 import sys
+from pathlib import Path
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ROOT = str(Path(__file__).resolve().parent.parent)
 if ROOT in sys.path:  # pragma: no cover
     sys.path.remove(ROOT)
 sys.path.insert(0, ROOT)

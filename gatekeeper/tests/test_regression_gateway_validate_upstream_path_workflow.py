@@ -7,11 +7,9 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
-from starlette.requests import Request
-
 from routers import gateway_router
-from services.gateway_service import GatewayAuthService
-from services.gateway_service import DatabaseUnavailable
+from services.gateway_service import DatabaseUnavailableError, GatewayAuthService
+from starlette.requests import Request
 
 
 def _request(headers: list[tuple[bytes, bytes]] | None = None) -> Request:
@@ -72,7 +70,7 @@ async def test_validate_otlp_token_invalid_token_logs_expected_prefix(monkeypatc
 
     assert exc.value.status_code == 401
     assert exc.value.detail == "Invalid or disabled OTLP token"
-    assert warnings and warnings[0][0] == "OTLP token validation failed – token_prefix=%s"
+    assert warnings and warnings[0][0] == "OTLP token validation failed - token_prefix=%s"
     assert warnings[0][1] == ("abc...",)
 
 
@@ -123,10 +121,12 @@ async def test_validate_otlp_token_database_unavailable_maps_to_503(monkeypatch:
     monkeypatch.setattr(GatewayAuthService, "enforce_rate_limit", lambda self, request: None)
 
     def _raise_db_unavailable(self, token):
-        raise DatabaseUnavailable("db down")
+        raise DatabaseUnavailableError("db down")
 
     monkeypatch.setattr(GatewayAuthService, "validate_otlp_token", _raise_db_unavailable)
-    monkeypatch.setattr(gateway_router.logger, "warning", lambda msg, *args: warnings.append(msg % args if args else msg))
+    monkeypatch.setattr(
+        gateway_router.logger, "warning", lambda msg, *args: warnings.append(msg % args if args else msg)
+    )
 
     with pytest.raises(HTTPException) as exc:
         await gateway_router.validate_otlp_token_with_upstream_path(_request([(b"x-otlp-token", b"abc")]), "x", None)

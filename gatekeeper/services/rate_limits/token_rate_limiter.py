@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import time
 from threading import Lock
+
 from fastapi import HTTPException, status
 
 MAX_IN_MEMORY_KEYS = 50_000

@@ -10,10 +10,11 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-from importlib import import_module
 import time
+from importlib import import_module
 from types import ModuleType
 from urllib.parse import urlparse, urlunparse
+
 from fastapi import HTTPException, status
 
 _redis_module: ModuleType | None

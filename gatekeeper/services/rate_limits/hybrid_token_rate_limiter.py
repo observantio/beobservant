@@ -10,9 +10,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 from __future__ import annotations
 
-import time
-from fastapi import HTTPException
 import logging
+import time
+
+from fastapi import HTTPException
 
 from .redis_token_rate_limiter import RedisTokenRateLimiter
 from .token_rate_limiter import TokenRateLimiter

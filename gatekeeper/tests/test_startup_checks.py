@@ -7,9 +7,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 """
 
 import asyncio
-import pytest
+
 import main as gateway_main
-from models.exceptions import DatabaseUnavailable
+import pytest
+from models.exceptions import DatabaseUnavailableError
 
 
 @pytest.mark.asyncio
@@ -55,7 +56,7 @@ async def test_startup_warn_mode_continues_when_auth_api_unavailable(monkeypatch
 
     def fail_probe(_self, token):
         attempts.append(token)
-        raise DatabaseUnavailable("auth api unavailable")
+        raise DatabaseUnavailableError("auth api unavailable")
 
     service_cls = type(gateway_main.service)
     monkeypatch.setattr(service_cls, "_fetch_org_from_api", fail_probe)
@@ -78,10 +79,10 @@ async def test_startup_strict_mode_raises_when_auth_api_unavailable(monkeypatch)
     monkeypatch.setattr(
         service_cls,
         "_fetch_org_from_api",
-        lambda self, token: (_ for _ in ()).throw(DatabaseUnavailable("auth api unavailable")),
+        lambda self, token: (_ for _ in ()).throw(DatabaseUnavailableError("auth api unavailable")),
     )
 
-    with pytest.raises(DatabaseUnavailable):
+    with pytest.raises(DatabaseUnavailableError):
         async with gateway_main.lifespan(gateway_main.app):
             await asyncio.sleep(0)  # pragma: no cover
 

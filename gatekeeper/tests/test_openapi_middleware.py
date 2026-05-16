@@ -11,7 +11,6 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 from fastapi import FastAPI
-
 from middleware import openapi as openapi_middleware
 
 

@@ -11,21 +11,21 @@ from __future__ import annotations
 import importlib
 import time
 import types
+from typing import Any, ClassVar
 
 import pytest
 from fastapi import HTTPException
-from starlette.requests import Request
-
 from services import gateway_service as gateway_service_module
-from services.gateway_service import DatabaseUnavailable, GatewayAuthService
+from services.gateway_service import DatabaseUnavailableError, GatewayAuthService
 from services.rate_limit import make_default_rate_limiter
 from services.rate_limits import redis_token_rate_limiter as redis_rate_module
 from services.rate_limits import token_rate_limiter as token_rate_module
 from services.rate_limits.token_rate_limiter import TokenRateLimiter
+from services.secrets import vault_client as vault_module
 from services.token_cache import make_token_cache
 from services.token_cache import redis as token_cache_redis_module
 from services.token_cache.redis import RedisTokenCache
-from services.secrets import vault_client as vault_module
+from starlette.requests import Request
 
 
 def _request(client_host: str, headers: list[tuple[bytes, bytes]] | None = None) -> Request:
@@ -67,9 +67,9 @@ def test_validate_otlp_token_reraises_database_unavailable(monkeypatch):
     monkeypatch.setattr(
         GatewayAuthService,
         "_fetch_org_from_api",
-        lambda self, token: (_ for _ in ()).throw(DatabaseUnavailable("down")),
+        lambda self, token: (_ for _ in ()).throw(DatabaseUnavailableError("down")),
     )
-    with pytest.raises(DatabaseUnavailable):
+    with pytest.raises(DatabaseUnavailableError):
         service.validate_otlp_token("tok")
 
 
@@ -259,7 +259,7 @@ def test_vault_client_auth_and_payload_edge_branches(monkeypatch):
 
     class FakeClient:
         authenticated = True  # pragma: no cover
-        response = {"data": {"data": {}}}
+        response: ClassVar[dict[str, Any]] = {"data": {"data": {}}}
 
         def __init__(self, *_args, **_kwargs):
             self.auth = types.SimpleNamespace(approle=FakeAppRole())

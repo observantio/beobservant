@@ -42,50 +42,44 @@ def _base_prod_env() -> dict[str, str]:
 def test_production_rejects_non_https_auth_api():
     env = _base_prod_env()
     env["GATEWAY_AUTH_API_URL"] = "http://watchdog:4319/api/internal/otlp/validate"
-    with patch.dict(os.environ, env, clear=False):
-        with pytest.raises(ValueError):
-            _reload_config()
+    with patch.dict(os.environ, env, clear=False), pytest.raises(ValueError):
+        _reload_config()
 
 
 def test_production_rejects_ssl_verify_disabled():
     env = _base_prod_env()
     env["GATEWAY_SSL_VERIFY"] = "false"
-    with patch.dict(os.environ, env, clear=False):
-        with pytest.raises(ValueError):
-            _reload_config()
+    with patch.dict(os.environ, env, clear=False), pytest.raises(ValueError):
+        _reload_config()
 
 
 def test_production_rejects_missing_internal_token():
     env = _base_prod_env()
     env["GATEWAY_INTERNAL_SERVICE_TOKEN"] = ""
-    with patch.dict(os.environ, env, clear=False):
-        with pytest.raises(ValueError):
-            _reload_config()
+    with patch.dict(os.environ, env, clear=False), pytest.raises(ValueError):
+        _reload_config()
 
 
 def test_production_rejects_allowlist_fail_open():
     env = _base_prod_env()
     env["GATEWAY_ALLOWLIST_FAIL_OPEN"] = "true"
-    with patch.dict(os.environ, env, clear=False):
-        with pytest.raises(ValueError):
-            _reload_config()
+    with patch.dict(os.environ, env, clear=False), pytest.raises(ValueError):
+        _reload_config()
 
 
 def test_production_rejects_weak_internal_token():
     env = _base_prod_env()
     env["GATEWAY_INTERNAL_SERVICE_TOKEN"] = "replace_with_token"
-    with patch.dict(os.environ, env, clear=False):
-        with pytest.raises(ValueError):
-            _reload_config()
+    with patch.dict(os.environ, env, clear=False), pytest.raises(ValueError):
+        _reload_config()
 
 
 def test_production_rejects_missing_status_token_in_strict_mode():
     env = _base_prod_env()
     env["GATEWAY_STATUS_OTLP_TOKEN"] = ""
     env["GATEWAY_STARTUP_CHECK_MODE"] = "strict"
-    with patch.dict(os.environ, env, clear=False):
-        with pytest.raises(ValueError):
-            _reload_config()
+    with patch.dict(os.environ, env, clear=False), pytest.raises(ValueError):
+        _reload_config()
 
 
 def test_production_allows_missing_status_token_in_warn_mode():

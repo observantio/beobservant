@@ -10,10 +10,9 @@ http://www.apache.org/licenses/LICENSE-2.
 
 from __future__ import annotations
 
-import time
 import hashlib
+import time
 from threading import Lock
-from typing import Optional
 
 DEFAULT_MAX_SIZE = 50_000
 GC_INTERVAL = 512
@@ -23,7 +22,7 @@ class TokenCache:
     def __init__(self, ttl: int, max_size: int = DEFAULT_MAX_SIZE) -> None:
         self._ttl = int(ttl)
         self._max_size = max(256, int(max_size))
-        self._cache: dict[str, tuple[Optional[str], float]] = {}
+        self._cache: dict[str, tuple[str | None, float]] = {}
         self._lock = Lock()
         self._ops = 0
 
@@ -31,7 +30,7 @@ class TokenCache:
     def _cache_key(token: str) -> str:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-    def get(self, token: str) -> tuple[bool, Optional[str]]:
+    def get(self, token: str) -> tuple[bool, str | None]:
         key = self._cache_key(token)
         with self._lock:
             entry = self._cache.get(key)
@@ -44,7 +43,7 @@ class TokenCache:
             self._cache.pop(key, None)
         return False, None
 
-    def set(self, token: str, org_id: Optional[str]) -> None:
+    def set(self, token: str, org_id: str | None) -> None:
         key = self._cache_key(token)
         now = time.monotonic()
         with self._lock:

@@ -11,7 +11,6 @@ http://www.apache.org/licenses/LICENSE-2.
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
 
 from ._redis_compat import redis
 
@@ -47,11 +46,11 @@ class RedisTokenCache:
         digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
         return f"watchdog:tok:{digest}"
 
-    def get(self, token: str) -> tuple[bool, Optional[str]]:
+    def get(self, token: str) -> tuple[bool, str | None]:
         val = self._client.get(self._cache_key(token))
         if val is None:
             return False, None
         return True, val or None
 
-    def set(self, token: str, org_id: Optional[str]) -> None:
+    def set(self, token: str, org_id: str | None) -> None:
         self._client.setex(self._cache_key(token), self._ttl, org_id or "")

@@ -11,14 +11,13 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import logging
-from typing import Optional
 from urllib.parse import urlparse, urlunparse
 
 import settings
 
-from .rate_limits.token_rate_limiter import TokenRateLimiter
-from .rate_limits.redis_token_rate_limiter import RedisTokenRateLimiter
 from .rate_limits.hybrid_token_rate_limiter import HybridTokenRateLimiter
+from .rate_limits.redis_token_rate_limiter import RedisTokenRateLimiter
+from .rate_limits.token_rate_limiter import TokenRateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ def _sanitize_redis_url(url: str) -> str:
 def make_default_rate_limiter(
     limit: int,
     backend: str = "auto",
-    redis_url: Optional[str] = None,
+    redis_url: str | None = None,
     *,
     socket_timeout: float = 1.0,
     max_connections: int = 50,

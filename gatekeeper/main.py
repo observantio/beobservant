@@ -20,7 +20,7 @@ import start
 from fastapi import FastAPI
 from middleware.openapi import install_custom_openapi
 from middleware.runtime_ssl import RuntimeSSLOptions, run_uvicorn
-from models.exceptions import DatabaseUnavailable
+from models.exceptions import DatabaseUnavailableError
 from pydantic import BaseModel
 from routers import router as gateway_router
 from services.gateway_service import GatewayAuthService
@@ -35,7 +35,7 @@ logging.basicConfig(
 logger = logging.getLogger("gateway_auth")
 
 service = GatewayAuthService()
-STARTUP_CHECK_ERRORS = (RuntimeError, DatabaseUnavailable)
+STARTUP_CHECK_ERRORS = (RuntimeError, DatabaseUnavailableError)
 
 
 class HealthResponse(BaseModel):

@@ -9,30 +9,30 @@ http://www.apache.org/licenses/LICENSE-2.0
 import importlib
 import itertools
 import os
-from dataclasses import asdict
 import runpy
 import sys
 import types
+from dataclasses import asdict
+from typing import Any, ClassVar
 
 import httpx
-import pytest
-from fastapi import HTTPException
-from starlette.requests import Request
-
-import settings
 import main as gateway_main
+import pytest
+import settings
+from fastapi import HTTPException
 from middleware.runtime_ssl import RuntimeSSLOptions
 from routers import gateway_router
 from services import gateway_service as gateway_service_module
-from services.gateway_service import DatabaseUnavailable, GatewayAuthService
+from services.gateway_service import DatabaseUnavailableError, GatewayAuthService
 from services.rate_limit import make_default_rate_limiter
 from services.rate_limits.hybrid_token_rate_limiter import HybridTokenRateLimiter
 from services.rate_limits.redis_token_rate_limiter import RedisTokenRateLimiter
 from services.rate_limits.token_rate_limiter import TokenRateLimiter
+from services.secrets import vault_client as vault_module
 from services.secrets.provider import EnvSecretProvider
 from services.token_cache.memory import GC_INTERVAL, TokenCache
 from services.token_cache.redis import RedisTokenCache
-from services.secrets import vault_client as vault_module
+from starlette.requests import Request
 
 
 def _request(
@@ -244,13 +244,13 @@ def test_fetch_org_from_api_variants(monkeypatch):
     FakeClient.response = FakeResponse(404)
     assert service._fetch_org_from_api("tok") is None
     FakeClient.response = FakeResponse(405)
-    with pytest.raises(DatabaseUnavailable):
+    with pytest.raises(DatabaseUnavailableError):
         service._fetch_org_from_api("tok")
     FakeClient.response = FakeResponse(500)
-    with pytest.raises(DatabaseUnavailable):
+    with pytest.raises(DatabaseUnavailableError):
         service._fetch_org_from_api("tok")
     FakeClient.error = httpx.ReadTimeout("timeout")
-    with pytest.raises(DatabaseUnavailable):
+    with pytest.raises(DatabaseUnavailableError):
         service._fetch_org_from_api("tok")
     assert calls
 
@@ -268,9 +268,9 @@ def test_resolve_auth_api_response_variants():
 
     assert service._resolve_auth_api_response(FakeResponse(200, {"org_id": "org-2"})) == "org-2"
     assert service._resolve_auth_api_response(FakeResponse(404)) is None
-    with pytest.raises(DatabaseUnavailable):
+    with pytest.raises(DatabaseUnavailableError):
         service._resolve_auth_api_response(FakeResponse(405))
-    with pytest.raises(DatabaseUnavailable):
+    with pytest.raises(DatabaseUnavailableError):
         service._resolve_auth_api_response(FakeResponse(500))
 
 
@@ -278,14 +278,14 @@ def test_validate_otlp_token_handles_empty_and_unexpected_exceptions(monkeypatch
     service = GatewayAuthService(rate_limit_per_minute=10, ip_allowlist="127.0.0.1")
     assert service.validate_otlp_token("") is None
 
-    class WeirdFailure(Exception):
+    class WeirdFailureError(Exception):
         pass
 
     def boom(self, token):
-        raise WeirdFailure("nope")
+        raise WeirdFailureError("nope")
 
     monkeypatch.setattr(GatewayAuthService, "_fetch_org_from_api", boom)
-    with pytest.raises(DatabaseUnavailable):
+    with pytest.raises(DatabaseUnavailableError):
         service.validate_otlp_token("tok")
 
 
@@ -377,7 +377,9 @@ def test_gateway_runtime_ssl_options_rejects_partial_configuration():
         ValueError,
         match="GATEWAY_SSL_CERTFILE and GATEWAY_SSL_KEYFILE must be set together when TLS is enabled",
     ):
-        RuntimeSSLOptions.from_settings(types.SimpleNamespace(SSL_CERTFILE="/tmp/cert.pem", SSL_KEYFILE="", SSL_CA_CERTS=""))
+        RuntimeSSLOptions.from_settings(
+            types.SimpleNamespace(SSL_CERTFILE="/tmp/cert.pem", SSL_KEYFILE="", SSL_CA_CERTS="")
+        )
 
 
 def test_gateway_runtime_ssl_options_ca_only_preserves_ca_bundle():
@@ -416,17 +418,17 @@ def test_gateway_service_remaining_branches(monkeypatch):
 
     service = GatewayAuthService(rate_limit_per_minute=10, ip_allowlist="127.0.0.1")
 
-    class FakeNamedDatabaseUnavailable(Exception):
+    class FakeNamedDatabaseUnavailableError(Exception):
         pass
 
-    FakeNamedDatabaseUnavailable.__name__ = "DatabaseUnavailable"
+    FakeNamedDatabaseUnavailableError.__name__ = "DatabaseUnavailableError"
 
     monkeypatch.setattr(
         GatewayAuthService,
         "_fetch_org_from_api",
-        lambda self, token: (_ for _ in ()).throw(FakeNamedDatabaseUnavailable("same-name")),
+        lambda self, token: (_ for _ in ()).throw(FakeNamedDatabaseUnavailableError("same-name")),
     )
-    with pytest.raises(FakeNamedDatabaseUnavailable):
+    with pytest.raises(FakeNamedDatabaseUnavailableError):
         service.validate_otlp_token("tok")
 
 
@@ -684,7 +686,9 @@ def test_vault_provider_paths(monkeypatch):
     original_hvac = vault_module.hvac
     monkeypatch.setattr(vault_module, "hvac", None)
     with pytest.raises(vault_module.VaultClientError):
-        vault_module.VaultSecretProvider(vault_module.VaultSecretProviderSettings(address="https://vault", token="token"))
+        vault_module.VaultSecretProvider(
+            vault_module.VaultSecretProviderSettings(address="https://vault", token="token")
+        )
     monkeypatch.setattr(vault_module, "hvac", original_hvac)
 
     class FakeKVv2:
@@ -718,7 +722,7 @@ def test_vault_provider_paths(monkeypatch):
 
     class FakeClient:
         authenticated = True
-        kv_response = {"data": {"data": {"value": "secret-value"}}}
+        kv_response: ClassVar[dict[str, Any]] = {"data": {"data": {"value": "secret-value"}}}
         kv_error = None
         token = None
 
@@ -793,7 +797,9 @@ def test_vault_provider_paths(monkeypatch):
 
     FakeClient.authenticated = False
     with pytest.raises(vault_module.VaultClientError):
-        vault_module.VaultSecretProvider(vault_module.VaultSecretProviderSettings(address="https://vault", token="token"))
+        vault_module.VaultSecretProvider(
+            vault_module.VaultSecretProviderSettings(address="https://vault", token="token")
+        )
 
     FakeClient.authenticated = True
     provider = vault_module.VaultSecretProvider(
@@ -831,10 +837,9 @@ def test_reloadable_config_validation_errors(monkeypatch):
         "APP_ENV": "development",
         "GATEWAY_AUTH_API_URL": "ftp://invalid",
     }
-    with pytest.raises(ValueError):
-        with monkeypatch.context() as ctx:
-            for key, value in env.items():
-                ctx.setenv(key, value)
-            if "settings" in sys.modules:
-                del sys.modules["settings"]  # pragma: no cover
-            importlib.import_module("settings")
+    with pytest.raises(ValueError), monkeypatch.context() as ctx:
+        for key, value in env.items():
+            ctx.setenv(key, value)
+        if "settings" in sys.modules:
+            del sys.modules["settings"]  # pragma: no cover
+        importlib.import_module("settings")

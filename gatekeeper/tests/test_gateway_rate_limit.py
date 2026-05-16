@@ -9,10 +9,9 @@ http://www.apache.org/licenses/LICENSE-2.0
 import unittest
 
 from fastapi import HTTPException
-from starlette.requests import Request
-
 from services.gateway_service import GatewayAuthService
-from services.rate_limit import TokenRateLimiter, HybridTokenRateLimiter
+from services.rate_limit import HybridTokenRateLimiter, TokenRateLimiter
+from starlette.requests import Request
 
 
 class _BrokenPrimaryRateLimiter:
@@ -95,24 +94,25 @@ class GatewayRateLimitTests(unittest.TestCase):
         from services import gateway_service as gw_mod
 
         def boom(_self, _token):
-            raise gw_mod.DatabaseUnavailable("api down")
+            raise gw_mod.DatabaseUnavailableError("api down")
 
         prev = GatewayAuthService._fetch_org_from_api
         try:
             GatewayAuthService._fetch_org_from_api = boom
-            with self.assertRaises(gw_mod.DatabaseUnavailable):
+            with self.assertRaises(gw_mod.DatabaseUnavailableError):
                 service.validate_otlp_token("tok")
         finally:
             GatewayAuthService._fetch_org_from_api = prev
 
     def test_validate_endpoint_returns_503_on_database_unavailable(self):
         import ipaddress
+
         from routers import gateway_router
 
         gateway_router.service._networks = [ipaddress.ip_network("127.0.0.1/32")]
 
         def _boom(self, token):
-            raise gateway_router.DatabaseUnavailable("db down")
+            raise gateway_router.DatabaseUnavailableError("db down")
 
         prev = GatewayAuthService.validate_otlp_token
         try:
@@ -130,9 +130,11 @@ class GatewayRateLimitTests(unittest.TestCase):
             req = Request(scope)
             import asyncio
 
-            with self.assertLogs("routers.gateway_router", level="WARNING") as log_ctx:
-                with self.assertRaises(HTTPException) as cm:
-                    asyncio.run(gateway_router.validate_otlp_token(req))
+            with (
+                self.assertLogs("routers.gateway_router", level="WARNING") as log_ctx,
+                self.assertRaises(HTTPException) as cm,
+            ):
+                asyncio.run(gateway_router.validate_otlp_token(req))
             self.assertEqual(cm.exception.status_code, 503)
             self.assertEqual(cm.exception.detail, "Auth backend unavailable")
             log_output = "\n".join(log_ctx.output)
@@ -187,9 +189,9 @@ class GatewayRateLimitTests(unittest.TestCase):
             tc_mod.redis = prev_redis
 
     def test_strict_rate_limiter_requires_redis(self):
-        import settings as cfg
         import services.rate_limit as rl_mod
-        from services.rate_limit import make_default_rate_limiter, RedisTokenRateLimiter
+        import settings as cfg
+        from services.rate_limit import RedisTokenRateLimiter, make_default_rate_limiter
 
         prev_strict_cfg = cfg.GATEWAY_RATE_LIMIT_STRICT
         prev_strict_rl = rl_mod.settings.GATEWAY_RATE_LIMIT_STRICT

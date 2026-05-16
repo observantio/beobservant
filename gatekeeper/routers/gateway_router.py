@@ -10,12 +10,11 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 import logging
 
-from fastapi import APIRouter, Request, Response, HTTPException, Security, status
+from fastapi import APIRouter, HTTPException, Request, Response, Security, status
 from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
+from models.exceptions import DatabaseUnavailableError
 from pydantic import BaseModel, Field
-
-from models.exceptions import DatabaseUnavailable
 from services.gateway_service import GatewayAuthService
 
 logger = logging.getLogger(__name__)
@@ -53,7 +52,7 @@ def _validate_otlp_token_request(request: Request, otlp_token: str | None) -> Re
 
     try:
         org_id = service.validate_otlp_token(token)
-    except DatabaseUnavailable as exc:
+    except DatabaseUnavailableError as exc:
         logger.warning("Auth backend unavailable")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -61,7 +60,7 @@ def _validate_otlp_token_request(request: Request, otlp_token: str | None) -> Re
         ) from exc
 
     if not org_id:
-        logger.warning("OTLP token validation failed – token_prefix=%s", token_prefix)
+        logger.warning("OTLP token validation failed - token_prefix=%s", token_prefix)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or disabled OTLP token")
 
     response = JSONResponse(status_code=200, content={"org_id": org_id})

@@ -11,6 +11,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from urllib.parse import urlparse
 
 from services.secrets.provider import EnvSecretProvider, SecretProvider
@@ -44,7 +45,7 @@ def _is_weak_secret(value: str | None) -> bool:
 
 
 def _read_secret_id_file(secret_id_file: str) -> str:
-    with open(secret_id_file, encoding="utf-8") as handle:
+    with Path(secret_id_file).open(encoding="utf-8") as handle:
         return handle.read().strip()
 
 
