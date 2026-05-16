@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from sqlalchemy.orm import Session
-
 from db_models import Group
 from services.grafana.grafana_bundles import (
     GrafanaUserScope,
@@ -21,6 +19,7 @@ from services.grafana.grafana_bundles import (
     GroupVisibilityValidation,
     VisibilityGroupResolveContext,
 )
+from sqlalchemy.orm import Session
 
 
 class _GroupVisibilityService(Protocol):

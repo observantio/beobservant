@@ -16,13 +16,10 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import httpx
-from fastapi import HTTPException, status
-from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session, joinedload
-
 from config import config
 from database import get_db_session
 from db_models import GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, Permission, User
+from fastapi import HTTPException, status
 from models.access.auth_models import Role
 from models.access.group_models import Group as GroupSchema
 from models.access.group_models import GroupCreate, GroupUpdate
@@ -49,6 +46,8 @@ from services.auth.delegation import (
     role_to_text as _role_to_text,
 )
 from services.database_auth.audit import AuditLogRecord
+from sqlalchemy import and_, func, or_
+from sqlalchemy.orm import Session, joinedload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService

@@ -17,17 +17,16 @@ from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import jwt
+from config import config
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from sqlalchemy import func
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import joinedload
-
-from config import config
 from database import get_db_session
 from db_models import Group, Tenant, User, UserApiKey
 from models.access.auth_models import Role, Token, TokenData
 from models.access.user_models import UserPasswordUpdate
+from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService

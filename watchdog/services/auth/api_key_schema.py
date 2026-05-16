@@ -13,10 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy.orm import Session, joinedload
-
 from db_models import ApiKeyShare, UserApiKey
 from models.access.api_key_models import ApiKey, ApiKeyShareUser
+from sqlalchemy.orm import Session, joinedload
 
 
 @dataclass(frozen=True, slots=True)

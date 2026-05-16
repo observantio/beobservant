@@ -13,11 +13,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from fastapi import HTTPException, status
-from sqlalchemy.orm import Session, joinedload
-
 from db_models import Group, User
+from fastapi import HTTPException, status
 from models.access.auth_models import Role
+from sqlalchemy.orm import Session, joinedload
 
 if TYPE_CHECKING:
     from services.database_auth_service import DatabaseAuthService

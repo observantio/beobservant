@@ -12,11 +12,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy.orm import Session
-
 from db_models import GrafanaDashboard
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardSearchResult, DashboardUpdate
 from models.grafana.grafana_datasource_models import DatasourceCreate, DatasourceUpdate
+from sqlalchemy.orm import Session
 
 
 @dataclass(frozen=True, slots=True)

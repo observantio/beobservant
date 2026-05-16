@@ -16,16 +16,15 @@ from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 import httpx
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-
 from custom_types.json import JSONDict
 from db_models import GrafanaDashboard, Group
+from fastapi import HTTPException
 from models.grafana.grafana_dashboard_models import DashboardCreate, DashboardSearchResult
 from services.grafana.folder_ops import check_folder_access
 from services.grafana.grafana_bundles import FolderAccessCriteria, GrafanaUserScope, GroupVisibilityValidation
 from services.grafana.grafana_service import GrafanaAPIError
 from services.grafana.visibility import group_share_change_for_scope, resolve_group_share_on_visibility_change
+from sqlalchemy.orm import Session
 
 
 class DashboardComplexityService(Protocol):
