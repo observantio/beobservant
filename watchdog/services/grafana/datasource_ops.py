@@ -25,7 +25,6 @@ from models.grafana.grafana_datasource_models import Datasource, DatasourceCreat
 from services.grafana.datasource_payloads import (
     enrich_datasource_payload,
     is_safe_system_datasource,
-    merge_json_payload,
     normalize_datasource_name,
     sanitize_datasource_payload,
 )
@@ -86,10 +85,6 @@ def _normalize_name(name: str | None) -> str:
 def _build_internal_name(display_name: str, user_id: str) -> str:
     suffix = uuid.uuid4().hex[:6]
     return f"{display_name}__bo_{str(user_id)[:8]}_{suffix}"
-
-
-def _merge_json_payload(existing: JSONDict | None, incoming: JSONDict | None) -> JSONDict:
-    return merge_json_payload(existing, incoming)
 
 
 def _is_safe_system_datasource(datasource: object) -> bool:

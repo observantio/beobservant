@@ -43,26 +43,11 @@ If you do not agree, quit now.
 """
 
 USE_COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
-_locale_hint = (os.environ.get("LC_ALL") or os.environ.get("LC_CTYPE") or os.environ.get("LANG") or "").upper()
-USE_EMOJI = sys.stdout.isatty() and "UTF-8" in _locale_hint
-_emoji_override = os.environ.get("OBSERVANTIO_EMOJI", "auto").strip().lower()
-if _emoji_override == "0":
-    USE_EMOJI = False
-elif _emoji_override == "1":
-    USE_EMOJI = True
 RESET = "\033[0m"
 BOLD = "\033[1m"
-DIM = "\033[2m"
 CYAN = "\033[36m"
-GREEN = "\033[32m"
-YELLOW = "\033[33m"
 RED = "\033[31m"
 MAGENTA = "\033[35m"
-
-EM_INFO = "ⓘ" if USE_EMOJI else "i"
-EM_OK = "✔" if USE_EMOJI else "+"
-EM_WARN = "⚠" if USE_EMOJI else "!"
-EM_ERR = "✖" if USE_EMOJI else "x"
 
 
 def paint(text: str, code: str) -> str:
@@ -591,10 +576,6 @@ def stop_stack(
         ok("Stack stopped and volumes removed")
     else:
         ok("Stack stopped. Volumes preserved.")
-
-
-def purge_stack(workdir: Path, compose_file: Path, compose_cmd: Sequence[str]) -> None:
-    stop_stack(workdir, compose_file, compose_cmd, purge_volumes=True)
 
 
 def resolve_existing_stack() -> tuple[Path, Path]:

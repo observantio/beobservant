@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from custom_types.json import JSONDict
-from db_models import GrafanaDashboard, GrafanaDatasource, GrafanaFolder, Group, User, user_groups
+from db_models import GrafanaFolder, Group, User, user_groups
 from fastapi import HTTPException, Request
 from models.access.auth_models import TokenData
 from models.grafana.grafana_dashboard_models import DashboardSearchResult
@@ -192,23 +192,6 @@ class _GrafanaProxyCore:
 
     def _is_admin_user(self, token_data: TokenData) -> bool:
         return is_admin_user(token_data)
-
-    def _is_resource_accessible(self, resource: object, token_data: TokenData) -> bool:
-        if isinstance(resource, (GrafanaDashboard, GrafanaDatasource, GrafanaFolder)):
-            return is_resource_accessible(resource, token_data)
-        return False
-
-    def _extract_dashboard_uid(self, path: str) -> str | None:
-        return extract_dashboard_uid(path)
-
-    def _extract_datasource_uid(self, path: str) -> str | None:
-        return extract_datasource_uid(path)
-
-    def _extract_datasource_id(self, path: str) -> int | None:
-        return extract_datasource_id(path)
-
-    def _extract_proxy_token(self, request: Request, token: str | None = None) -> str | None:
-        return extract_proxy_token(request, token)
 
     async def authorize_proxy_request(
         self,

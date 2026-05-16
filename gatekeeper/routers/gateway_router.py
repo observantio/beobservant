@@ -34,11 +34,6 @@ class ValidateTokenResponse(BaseModel):
     org_id: str = Field(..., description="Resolved organization identifier for the OTLP token.")
 
 
-class GatewayHealthResponse(BaseModel):
-    status: str
-    service: str
-
-
 def _validate_otlp_token_request(request: Request, otlp_token: str | None) -> Response:
     service.enforce_ip_allowlist(request)
     service.enforce_rate_limit(request)
