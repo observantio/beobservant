@@ -10,6 +10,8 @@ All notable changes to this project are documented here.
 
 * Other UI updates, more or so related to the aesthetic and user experience 
 
+* Grouped the latest resolver, notifier, watchdog, and gatekeeper fixes into clean repo-specific commits, and verified the full workspace with pytest, mypy, and ruff.
+
 ## [v0.0.6] - 2026-04-24
 
 ### Fixes
